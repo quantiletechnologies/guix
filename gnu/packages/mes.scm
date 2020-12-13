@@ -194,17 +194,17 @@ Guile.")
 (define-public mes
   (package
     (inherit mes-0.19)
-    (version "0.22")
+    (version "0.22-305-g2ab4c5c67")
     (source (origin
               (method url-fetch)
-              (uri (string-append "mirror://gnu/mes/"
+              (uri (string-append "https://lilypond.org/janneke/mes/"
                                   "mes-" version ".tar.gz"))
               (sha256
                (base32
-                "0p1jsrrmcbc0zrvbvnjbb6iyxr0in71km293q8qj6gnar6bw09av"))))
+                "10qrzmyb1jibxgbx369jffk1l46xf9j9la9zffdbrid0slp4afar"))))
     (propagated-inputs
      `(("mescc-tools" ,mescc-tools)
-       ("nyacc" ,nyacc-0.99)))
+       ("nyacc" ,nyacc-1.00.2)))
     (native-search-paths
      (list (search-path-specification
             (variable "C_INCLUDE_PATH")
