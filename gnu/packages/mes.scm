@@ -291,23 +291,41 @@ get_machine.")
 
 (define-public mescc-tools
   (package
-    (inherit mescc-tools-0.5.2)
     (name "mescc-tools")
-    (version "0.6.1")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url "https://git.savannah.nongnu.org/r/mescc-tools.git")
-                    (commit (string-append "Release_" version))))
-              (file-name (string-append "mescc-tools-" version "-checkout"))
-              (sha256
-               (base32
-                "1cgxcdza6ws725x84i31la7jxmlk5a3nsij5shz1zljg0i36kj99"))))
+    (version "1.1.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append
+             "https://git.savannah.nongnu.org/cgit/mescc-tools.git/snapshot/"
+             name "-Release_" version
+             ".tar.gz"))
+       (file-name (string-append name "-" version ".tar.gz"))
+       (sha256
+        (base32
+         "12cjryqfd6m6j807pvhk7i4vr2q0jiibpfrpnq5s67iq9l4rrc6b"))))
+    (build-system gnu-build-system)
+    (supported-systems
+     '("aarch64-linux" "armhf-linux" "i686-linux" "x86_64-linux"))
     (arguments
-     (substitute-keyword-arguments (package-arguments mescc-tools-0.5.2)
-       ((#:make-flags _)
-        `(list (string-append "PREFIX=" (assoc-ref %outputs "out"))
-               "CC=gcc"))))))
+     `(#:make-flags (list (string-append "PREFIX=" (assoc-ref %outputs "out"))
+                          (string-append "CC=" ,(cc-for-target)))
+       #:test-target "test"
+       #:phases (modify-phases %standard-phases
+                  (delete 'configure)
+                  (add-after 'unpack 'patch-prefix
+                    (lambda _
+                      (substitute* "sha256.sh"
+                        (("\\$\\(which sha256sum\\)") (which "sha256sum")))
+                      #t)))))
+    (synopsis "Tools for the full source bootstrapping process")
+    (description
+     "Mescc-tools is a collection of tools for use in a full source
+bootstrapping process.  It consists of the M1 macro assembler, the hex2
+linker, the blood-elf symbol table generator, the kaem shell, exec_enable and
+get_machine.")
+    (home-page "https://savannah.nongnu.org/projects/mescc-tools")
+    (license gpl3+)))
 
 (define-public m2-planet
   (let ((commit "b87ddb0051b168ea45f8d49a610dcd069263336a")
