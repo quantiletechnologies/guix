@@ -298,6 +298,97 @@ aarch64-linux 526 bytes.  These can be used to build stage0: hex0, hex1, hex2,
 M1, and M2-Planet.")
     (license license:gpl3+)))
 
+(define m2-planet-boot
+  ;; The initial bootstrap package: no binary inputs except for a 357 byte
+  ;; binary seed: `x86/hex0-seed'.
+  (let ((mescc-tools-seed-version "1.2-71-g689bc23")
+        (mescc-tools-version "1.1.0"))
+    (package
+      (inherit m2-planet)
+      (name "m2-planet-boot")
+      (version "1.7.0-31-g358b6cf")
+      (source (bootstrap-origin
+               (origin
+                 (method url-fetch)
+                 (uri (string-append
+                       "https://lilypond.org/janneke/guix/20210101/"
+                       "m2-planet-" version ".tar.gz"))
+                 (sha256
+                  (base32
+                   "1l20drk9pgxxqbbz635p7cb26s6cw70qlgrzmf46p2vfs3pyalks")))))
+      (native-inputs
+       `(("bootstrap-seeds" ,bootstrap-seeds)
+         ("mescc-tools-seed"
+          ,(bootstrap-origin
+            (origin
+              (method url-fetch)
+              (uri (string-append
+                    "https://lilypond.org/janneke/guix/20210101/"
+                    "mescc-tools-seed-" mescc-tools-seed-version ".tar.gz"))
+              (sha256
+               (base32
+                "1flazkxf3xqgrsf572c35m6a0wdyhkjm86s0sczwspdpa60vg2z7")))))
+         ("mescc-tools"
+          ,(bootstrap-origin
+            (origin
+              (method url-fetch)
+              (uri (string-append
+                    "https://lilypond.org/janneke/guix/20210101/"
+                    "mescc-tools-" mescc-tools-version ".tar.gz"))
+              (sha256
+               (base32
+                "07v1bbacwn4c13syswr626yi1gcbk31h3qlc196fa5psjzmixi96")))))
+         ,@(%boot-gash-inputs)))
+      (build-system trivial-build-system)
+      (arguments
+       `(#:guile ,%bootstrap-guile
+         #:modules ((guix build utils))
+         #:builder
+         (begin
+           (use-modules (guix build utils))
+           (let* ((bootstrap-seeds (assoc-ref %build-inputs "bootstrap-seeds"))
+                  (mescc-tools-seed (assoc-ref %build-inputs "mescc-tools-seed"))
+                  (mescc-tools (assoc-ref %build-inputs "mescc-tools"))
+                  (source (assoc-ref %build-inputs "source"))
+                  (tar (assoc-ref %build-inputs "bootar"))
+                  (bash (assoc-ref %build-inputs "bash"))
+                  (coreutils (assoc-ref %build-inputs "coreutils"))
+                  (guile (assoc-ref %build-inputs "guile"))
+                  (out (assoc-ref %outputs "out"))
+                  (bindir (string-append out "/bin")))
+             (setenv "PATH" (string-append tar "/bin:"
+                                           coreutils "/bin:"
+                                           bash "/bin"))
+             (invoke "tar" "xvf" mescc-tools-seed)
+             (chdir
+              (string-append "mescc-tools-seed-" ,mescc-tools-seed-version))
+             (copy-recursively bootstrap-seeds "bootstrap-seeds")
+             (invoke "tar" "xvf" mescc-tools)
+             (rmdir "mescc-tools")
+             (symlink (string-append "mescc-tools-" ,mescc-tools-version)
+                      "mescc-tools")
+             (invoke "tar" "xvf" source)
+             (rmdir "M2-Planet")
+             (symlink (string-append "m2-planet-" ,version) "M2-Planet")
+             (mkdir-p bindir)
+             ;; XXX TODO: Update mescc-tools-seed
+             (copy-file "M2-Planet/test/common_x86/x86_defs.M1" "x86/x86_defs.M1")
+             (with-directory-excursion "x86"
+               (invoke "../bootstrap-seeds/POSIX/x86/kaem-optional-seed"
+                       "mescc-tools-seed-kaem.kaem")
+               (invoke "../bootstrap-seeds/POSIX/x86/kaem-optional-seed"
+                       "mescc-tools-mini-kaem.kaem")
+               (invoke "../bootstrap-seeds/POSIX/x86/kaem-optional-seed"
+                       "mescc-tools-full-kaem.kaem"))
+             (with-directory-excursion "bin"
+               (install-file "hex2" bindir)
+               (install-file "M1" bindir)
+               (install-file "blood-elf" bindir)
+               (install-file "kaem" bindir)
+               (install-file "get_machine" bindir)
+               (install-file "M2-Planet" bindir))
+             #t)))))))
+
 (define %bootstrap-mes-rewired
   (package
     (inherit mes)
