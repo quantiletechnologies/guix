@@ -5,7 +5,7 @@
 ;;; Copyright © 2014, 2015, 2017 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2017, 2018, 2019 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2018 Tobias Geerinckx-Rice <me@tobias.gr>
-;;; Copyright © 2018, 2019, 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
+;;; Copyright © 2018, 2019, 2020, 2021 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2019, 2020 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2020 Timothy Sample <samplet@ngyro.com>
 ;;; Copyright © 2020 Guy Fleury Iteriteka <gfleury@disroot.org>
@@ -257,6 +257,46 @@ pure Scheme to Tar and decompression in one easy step.")
     ("coreutils" , gash-utils-boot)
     ("bootar" ,bootar)
     ("guile" ,%bootstrap-guile)))
+
+(define bootstrap-seeds
+  (package
+    (name "bootstrap-seeds")
+    (version "1.0.0")
+    (source
+     (bootstrap-origin
+      (origin
+        (method url-fetch)
+        (uri (string-append
+              "https://lilypond.org/janneke/guix/20210101/"
+              "bootstrap-seeds-1.0.0.tar.gz"))
+        (sha256
+         (base32
+          "0scz2bx8fd8c821h6y1j3x6ywgxxns7iinyn9z32dnkiacfdcpfn")))))
+    (native-inputs `(("bootar" ,bootar)))
+    (build-system trivial-build-system)
+    (arguments
+     `(#:guile ,%bootstrap-guile
+       #:modules ((guix build utils))
+       #:builder
+       (begin
+         (use-modules (guix build utils))
+         (let ((source (assoc-ref %build-inputs "source"))
+               (tar (assoc-ref %build-inputs "bootar"))
+               (out (assoc-ref %outputs "out")))
+           (setenv "PATH" (string-append tar "/bin:"))
+           (invoke "tar" "xvf" source)
+           (mkdir-p out)
+           (copy-recursively "bootstrap-seeds" out)
+           #t))))
+    (home-page "https://github.com/oriansj/bootstrap-seeds")
+    (synopsis "The initial bootstrap seeds: 357-byte hex0 and kaem shell")
+    (description
+     "A prebuilt version of the initial bootstrap seeds.  It contains a
+hex0-seed and an optional kaem-minimal shell.  The size of the hex0 seeds are
+for knight: 250 bytes, x86-linux:(357 bytes, x86_64-linux: 431 bytes, and
+aarch64-linux 526 bytes.  These can be used to build stage0: hex0, hex1, hex2,
+M1, and M2-Planet.")
+    (license license:gpl3+)))
 
 (define %bootstrap-mes-rewired
   (package
