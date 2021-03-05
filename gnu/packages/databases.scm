@@ -1036,15 +1036,14 @@ and high-availability (HA).")
 (define-public postgresql-13
   (package
     (name "postgresql")
-    (replacement postgresql-13.3)
-    (version "13.1")
+    (version "13.3")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://ftp.postgresql.org/pub/source/v"
                                   version "/postgresql-" version ".tar.bz2"))
               (sha256
                (base32
-                "07z6zwr58dckaa97yl9ml240z83d1lhgaxw9aq49i8lsp21mqd0j"))
+                "18dliq7h2l8irffhyyhdmfwx3si515q6gds3cxdjb9n7m17lbn9w"))
               (patches (search-patches "postgresql-disable-resolve_symlinks.patch"))))
     (build-system gnu-build-system)
     (arguments
@@ -1084,20 +1083,6 @@ types, including INTEGER, NUMERIC, BOOLEAN, CHAR, VARCHAR, DATE, INTERVAL, and
 TIMESTAMP.  It also supports storage of binary large objects, including
 pictures, sounds, or video.")
     (license (license:x11-style "file://COPYRIGHT"))))
-
-(define-public postgresql-13.3
-  (package
-    (inherit postgresql-13)
-    (name "postgresql")
-    (version "13.3")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append "https://ftp.postgresql.org/pub/source/v"
-                                  version "/postgresql-" version ".tar.bz2"))
-              (sha256
-               (base32
-                "18dliq7h2l8irffhyyhdmfwx3si515q6gds3cxdjb9n7m17lbn9w"))
-              (patches (search-patches "postgresql-disable-resolve_symlinks.patch"))))))
 
 (define-public postgresql-11
   (package
