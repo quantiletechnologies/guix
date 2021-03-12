@@ -172,7 +172,6 @@ shared NFS home directories.")
   (package
    (name "glib")
    (version "2.62.6")
-   (replacement glib/fixed)
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnome/sources/"
@@ -181,7 +180,27 @@ shared NFS home directories.")
             (sha256
              (base32
               "174bsmbmcvaw69ff9g60q5sx0fn23rkhqcwqz17h5s7sprps4kqh"))
-            (patches (search-patches "glib-appinfo-watch.patch"
+            (patches (search-patches "glib-CVE-2021-27218.patch"
+                                     "glib-CVE-2021-27219-01.patch"
+                                     "glib-CVE-2021-27219-02.patch"
+                                     "glib-CVE-2021-27219-03.patch"
+                                     "glib-CVE-2021-27219-04.patch"
+                                     "glib-CVE-2021-27219-05.patch"
+                                     "glib-CVE-2021-27219-06.patch"
+                                     "glib-CVE-2021-27219-07.patch"
+                                     "glib-CVE-2021-27219-08.patch"
+                                     "glib-CVE-2021-27219-09.patch"
+                                     "glib-CVE-2021-27219-10.patch"
+                                     "glib-CVE-2021-27219-11.patch"
+                                     "glib-CVE-2021-27219-12.patch"
+                                     "glib-CVE-2021-27219-13.patch"
+                                     "glib-CVE-2021-27219-14.patch"
+                                     "glib-CVE-2021-27219-15.patch"
+                                     "glib-CVE-2021-27219-16.patch"
+                                     "glib-CVE-2021-27219-17.patch"
+                                     "glib-CVE-2021-27219-18.patch"
+                                     "glib-CVE-2021-28153.patch"
+                                     "glib-appinfo-watch.patch"
                                      "glib-tests-timer.patch"))
             (modules '((guix build utils)))
             (snippet
@@ -390,34 +409,6 @@ and interfaces for such runtime functionality as an event loop, threads,
 dynamic loading, and an object system.")
    (home-page "https://developer.gnome.org/glib/")
    (license license:lgpl2.1+)))
-
-(define glib/fixed
-  (package
-    (inherit glib)
-    (source (origin
-              (inherit (package-source glib))
-              (patches
-               (append (search-patches "glib-CVE-2021-27218.patch"
-                                       "glib-CVE-2021-27219-01.patch"
-                                       "glib-CVE-2021-27219-02.patch"
-                                       "glib-CVE-2021-27219-03.patch"
-                                       "glib-CVE-2021-27219-04.patch"
-                                       "glib-CVE-2021-27219-05.patch"
-                                       "glib-CVE-2021-27219-06.patch"
-                                       "glib-CVE-2021-27219-07.patch"
-                                       "glib-CVE-2021-27219-08.patch"
-                                       "glib-CVE-2021-27219-09.patch"
-                                       "glib-CVE-2021-27219-10.patch"
-                                       "glib-CVE-2021-27219-11.patch"
-                                       "glib-CVE-2021-27219-12.patch"
-                                       "glib-CVE-2021-27219-13.patch"
-                                       "glib-CVE-2021-27219-14.patch"
-                                       "glib-CVE-2021-27219-15.patch"
-                                       "glib-CVE-2021-27219-16.patch"
-                                       "glib-CVE-2021-27219-17.patch"
-                                       "glib-CVE-2021-27219-18.patch"
-                                       "glib-CVE-2021-28153.patch")
-                       (origin-patches (package-source glib))))))))
 
 (define-public glib-with-documentation
   ;; glib's doc must be built in a separate package since it requires gtk-doc,
