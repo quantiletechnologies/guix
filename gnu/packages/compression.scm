@@ -1446,9 +1446,9 @@ or junctions, and always follows hard links.")
        (method url-fetch)
        (uri (string-append "https://github.com/facebook/zstd/releases/download/"
                            "v" version "/zstd-" version ".tar.gz"))
+       (patches (search-patches "zstd-CVE-2021-24031_CVE-2021-24032.patch"))
        (sha256
         (base32 "05ckxap00qvc0j51d3ci38150cxsw82w7s9zgd5fgzspnzmp1vsr"))))
-    (replacement zstd/fixed)
     (build-system gnu-build-system)
     (outputs '("out"                    ;1.2MiB executables and documentation
                "lib"                    ;1.2MiB shared library and headers
@@ -1507,17 +1507,6 @@ speed.")
                    license:expat         ; lib/dictBuilder/divsufsort.[ch]
                    license:public-domain ; zlibWrapper/examples/fitblk*
                    license:zlib))))      ; zlibWrapper/{gz*.c,gzguts.h}
-
-(define zstd/fixed
-  (package
-    (inherit zstd)
-    (source
-     (origin
-       (inherit (package-source zstd))
-       (patches
-        (search-patches
-         ;; From Ubuntu focal-security
-         "zstd-CVE-2021-24031_CVE-2021-24032.patch"))))))
 
 (define-public pzstd
   (package/inherit zstd
