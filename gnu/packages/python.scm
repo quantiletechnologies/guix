@@ -374,6 +374,7 @@ data types.")
                         "python-CVE-2020-26116.patch"
                         "python-3.8-CVE-2021-3177.patch"
                         "python-3-fix-tests.patch"
+                        "python-3-fix-sqlite-tests.patch"
                         "python-3.8-fix-tests.patch"
                         "python-3-deterministic-build-info.patch"
                         "python-3-search-paths.patch"))

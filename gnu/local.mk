@@ -1584,6 +1584,7 @@ dist_patch_DATA =						\
   %D%/packages/patches/python-3-deterministic-build-info.patch	\
   %D%/packages/patches/python-3-search-paths.patch		\
   %D%/packages/patches/python-3-fix-tests.patch			\
+  %D%/packages/patches/python-3-fix-sqlite-tests.patch		\
   %D%/packages/patches/python-3.8-fix-tests.patch		\
   %D%/packages/patches/python-3.8-CVE-2021-3177.patch		\
   %D%/packages/patches/python-3.9-fix-tests.patch		\
