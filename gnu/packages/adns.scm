@@ -65,7 +65,7 @@ scripts.")
 (define-public c-ares
   (package
     (name "c-ares")
-    (version "1.16.0")
+    (version "1.17.1")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -73,9 +73,10 @@ scripts.")
                     ".tar.gz"))
               (sha256
                (base32
-                "129sm0wzij0mp8vdv68v18hnykcjb6ivi66wnqnnw598q7bql1fy"))))
-    (replacement c-ares/fixed)
+                "0h7wjfnk2092glqcp9mqaax7xx0s13m501z1gi0gsjl2vvvd0gfp"))))
     (build-system gnu-build-system)
+    (arguments
+     `(#:tests? #f)) ; The test suite requires network access
     (native-inputs
      `(("pkg-config" ,pkg-config)))
     (home-page "https://c-ares.haxx.se/")
@@ -87,23 +88,6 @@ queries without blocking, or need to perform multiple DNS queries in parallel.
 The primary examples of such applications are servers which communicate with
 multiple clients and programs with graphical user interfaces.")
     (license (x11-style "https://c-ares.haxx.se/license.html"))))
-
-(define-public c-ares/fixed
-  (package
-    (inherit c-ares)
-    (name "c-ares")
-    (version "1.17.1")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append
-                    "https://c-ares.haxx.se/download/" name "-" version
-                    ".tar.gz"))
-              (sha256
-               (base32
-                "0h7wjfnk2092glqcp9mqaax7xx0s13m501z1gi0gsjl2vvvd0gfp"))))
-    (arguments
-     `(;; FIXME: Some tests require network access
-       #:tests? #f))))
 
 ;; gRPC requires a c-ares built with CMake in order to get the .cmake modules.
 ;; We can not build c-ares itself with CMake because that would introduce a
