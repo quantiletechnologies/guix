@@ -62,13 +62,13 @@
 (define-public graphviz
   (package
     (name "graphviz")
-    (replacement graphviz/fixed)
     (version "2.42.3")
     (source (origin
               (method url-fetch)
               (uri (string-append
                     "https://www2.graphviz.org/Packages/stable/portable_source/"
                     "graphviz-" version ".tar.gz"))
+              (patches (search-patches "graphviz-CVE-2020-18032.patch"))
               (sha256
                (base32
                 "1pbswjbx3fjdlsxcm7cmlsl5bvaa3d6gcnr0cr8x3c8pag13zbwg"))))
@@ -126,15 +126,6 @@ networks.  It has important applications in networking, bioinformatics,
 software engineering, database and web design, machine learning, and in visual
 interfaces for other technical domains.")
     (license license:epl1.0)))
-
-(define-public graphviz/fixed
-  (hidden-package
-    (package
-      (inherit graphviz)
-      (source (origin
-                (inherit (package-source graphviz))
-                (patches (append (search-patches "graphviz-CVE-2020-18032.patch")
-                                 (origin-patches (package-source graphviz)))))))))
 
 ;; Older Graphviz needed for pygraphviz.  See
 ;; https://github.com/pygraphviz/pygraphviz/issues/175
