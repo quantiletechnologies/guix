@@ -1760,79 +1760,29 @@ timestamps in the file header with a fixed time (1 January 2008).
 (define-public zziplib
   (package
     (name "zziplib")
-    (version "0.13.69")
-    (home-page "https://github.com/gdraheim/zziplib")
+    (version "0.13.72")
     (source (origin
               (method git-fetch)
-              (uri (git-reference (url home-page)
+              (uri (git-reference (url "https://github.com/gdraheim/zziplib")
                                   (commit (string-append "v" version))))
               (file-name (git-file-name name version))
-              (patches (search-patches "zziplib-CVE-2018-16548.patch"))
               (sha256
                (base32
-                "0fbk9k7ryas2wh2ykwkvm1pbi40i88rfvc3dydh9xyd7w2jcki92"))))
-    (replacement zziplib/fixed)
-    (build-system gnu-build-system)
-    (arguments
-     `(#:phases (modify-phases %standard-phases
-                  (add-before 'check 'make-files-writable
-                    (lambda _
-                      (for-each make-file-writable
-                                (find-files "test" #:directories? #t))
-                      #t)))
-
-       ;; XXX: The default test target attempts to download external resources and
-       ;; fails without error: <https://github.com/gdraheim/zziplib/issues/53>.
-       ;; To prevent confusing log messages, just run a simple zip test that works.
-       #:test-target "check-readme"))
+                "0i6bpa2b13z19alm6ig80364dnin1w28cvif18k6wkkb0w3dzp8y"))))
+    (build-system cmake-build-system)
     (inputs
      `(("zlib" ,zlib)))
     (native-inputs `(("perl" ,perl)     ; for the documentation
                      ("pkg-config" ,pkg-config)
-                     ;; for the documentation; Python 3 not supported,
-                     ;; http://forums.gentoo.org/viewtopic-t-863161-start-0.html
-                     ("python" ,python-2)
+                     ("python" ,python)
                      ("zip" ,zip))) ; to create test files
+    (home-page "https://github.com/gdraheim/zziplib")
     (synopsis "Library for accessing zip files")
     (description
      "ZZipLib is a library based on zlib for accessing zip files.")
     ;; zziplib is dual licensed under LGPL2.0+ and MPL1.1.  Some example source
     ;; files carry the Zlib license; see "docs/copying.html" for details.
     (license (list license:lgpl2.0+ license:mpl1.1))))
-
-(define-public zziplib/fixed
-  (package
-    (inherit zziplib)
-    (name "zziplib")
-    (version "0.13.72")
-    (home-page "https://github.com/gdraheim/zziplib")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference (url home-page)
-                                  (commit (string-append "v" version))))
-              (file-name (git-file-name name version))
-              (sha256
-               (base32
-                "0i6bpa2b13z19alm6ig80364dnin1w28cvif18k6wkkb0w3dzp8y"))))
-    (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-after 'install 'install-compatibility-symlinks
-           (lambda* (#:key outputs #:allow-other-keys)
-             (with-directory-excursion
-               (string-append (assoc-ref outputs "out") "/lib")
-               (map (lambda (lib new-symlink)
-                      (symlink lib new-symlink))
-                    (list "libzzip.so.13" "libzzipfseeko.so.13"
-                          "libzzipmmapped.so.13" "libzzipwrap.so.13")
-                    (list "libzzip-0.so.13" "libzzipfseeko-0.so.13"
-                          "libzzipmmapped-0.so.13" "libzzipwrap-0.so.13")))
-             #t)))))
-    (native-inputs
-     `(("python" ,python)
-       ,@(alist-delete "python"
-                       (package-native-inputs zziplib))))
-    (build-system cmake-build-system)))
 
 (define-public libzip
   (package
