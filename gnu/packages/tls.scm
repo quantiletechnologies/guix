@@ -165,8 +165,7 @@ living in the same process.")
 (define-public gnutls
   (package
     (name "gnutls")
-    (version "3.6.15")
-    (replacement gnutls-3.6.16)
+    (version "3.6.16")
     (source (origin
               (method url-fetch)
               ;; Note: Releases are no longer on ftp.gnu.org since the
@@ -175,12 +174,10 @@ living in the same process.")
                                   (version-major+minor version)
                                   "/gnutls-" version ".tar.xz"))
               (patches (search-patches "gnutls-skip-trust-store-test.patch"
-                                       "gnutls-cross.patch"
-                                       "gnutls-CVE-2021-20231.patch"
-                                       "gnutls-CVE-2021-20232.patch"))
+                                       "gnutls-cross.patch"))
               (sha256
                (base32
-                "0n0m93ymzd0q9hbknxc2ycanz49sqlkyyf73g9fk7n787llc7a0f"))))
+                "1czk511pslz367shf32f2jvvkp7y1323bcv88c2qng98mj0v6y8v"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? ,(not (or (%current-target-system)
@@ -259,22 +256,6 @@ required structures.")
     (license license:lgpl2.1+)
     (properties '((ftp-server . "ftp.gnutls.org")
                   (ftp-directory . "/gcrypt/gnutls")))))
-
-;; Replacement package to fix CVE-2021-20305.
-(define gnutls-3.6.16
-  (package
-    (inherit gnutls)
-    (version "3.6.16")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append "mirror://gnupg/gnutls/v"
-                                  (version-major+minor version)
-                                  "/gnutls-" version ".tar.xz"))
-              (patches (search-patches "gnutls-skip-trust-store-test.patch"
-                                       "gnutls-cross.patch"))
-              (sha256
-               (base32
-                "1czk511pslz367shf32f2jvvkp7y1323bcv88c2qng98mj0v6y8v"))))))
 
 (define-public gnutls/guile-2.0
   ;; GnuTLS for Guile 2.0.
