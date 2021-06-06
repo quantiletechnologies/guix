@@ -53,15 +53,14 @@
 (define-public curl
   (package
    (name "curl")
-   (replacement curl-7.77.0)
-   (version "7.74.0")
+   (version "7.77.0")
    (source (origin
              (method url-fetch)
              (uri (string-append "https://curl.haxx.se/download/curl-"
                                  version ".tar.xz"))
              (sha256
               (base32
-               "12w7gskrglg6qrmp822j37fmbr0icrcxv7rib1fy5xiw80n5z7cr"))
+               "0jsrc97vbghvljic997r9nypc9qqddcil2lzvv032br8ahn5hr0g"))
              (patches (search-patches "curl-use-ssl-cert-env.patch"))))
    (build-system gnu-build-system)
    (outputs '("out"
@@ -151,20 +150,6 @@ tunneling, and so on.")
     curl
     (name "curl-minimal")
     (inputs (alist-delete "openldap" (package-inputs curl))))))
-
-(define-public curl-7.77.0
-  (package
-    (inherit curl)
-    (version "7.77.0")
-    (source
-     (origin
-       (inherit (package-source curl))
-       (uri (string-append "https://curl.haxx.se/download/curl-"
-                           version ".tar.xz"))
-       (patches (search-patches "curl-7.76-use-ssl-cert-env.patch"))
-       (sha256
-        (base32
-         "0jsrc97vbghvljic997r9nypc9qqddcil2lzvv032br8ahn5hr0g"))))))
 
 (define-public kurly
   (package
