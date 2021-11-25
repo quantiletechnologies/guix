@@ -137,9 +137,7 @@ and decompression by implementing Python bindings for the ISA-L library.")
     (propagated-inputs
      (list python-cffi))
     (native-inputs
-     (list python-setuptools
-           python-setuptools-scm
-           python-pep517
+     (list python-setuptools-scm
            python-coverage
            python-pytest
            python-pytest-cov))
