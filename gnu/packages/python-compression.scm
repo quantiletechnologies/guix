@@ -56,8 +56,7 @@
          "0j46wab4b09s3favjzp3zs1cn2sn8pr7qyngs5wn31hpqqxbbz76"))))
     (build-system python-build-system)
     (native-inputs
-     (list python-pep517
-           python-setuptools
+     (list python-setuptools
            python-setuptools-scm
            python-coverage
            python-coveralls
