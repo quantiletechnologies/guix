@@ -23851,14 +23851,9 @@ scripts to load entry points more quickly.")
         (base32
          "07f9cgjr3h4j2m67fhwapn8fja87vazl58zsj4yppf9y3an2x6dp"))))
     (native-inputs
-     (list python-tox))
-    (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (replace 'check
-           (lambda _
-             (invoke "tox"))))))
+     (list python-nose))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; Tests use Python 2 syntax.
     (home-page
      "https://github.com/vlasovskikh/funcparserlib")
     (synopsis
