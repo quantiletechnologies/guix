@@ -21758,7 +21758,7 @@ validation testing and application logic.")
     (propagated-inputs
      (list python-llvmlite python-numpy python-singledispatch))
     (native-inputs                      ;for tests
-     (list python-jinja2 python-pygments))
+     (list python-jinja2 python-pygments python-pip))
     (home-page "https://numba.pydata.org")
     (synopsis "Compile Python code using LLVM")
     (description "Numba gives you the power to speed up your applications with
