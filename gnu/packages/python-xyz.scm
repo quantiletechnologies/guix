@@ -15455,7 +15455,7 @@ docstring and colored output.")
         (base32 "062n694sfv24ylda6nh8228y2q9hrvy554kqx84y7czsjfbg4mxc"))))
     (build-system python-build-system)
     (native-inputs
-     (list python-pytest python-pyyaml))
+     (list python-pytest python-pyyaml python-poetry-core))
     (home-page "https://github.com/sdispater/tomlkit")
     (synopsis "Style-preserving TOML library")
     (description
