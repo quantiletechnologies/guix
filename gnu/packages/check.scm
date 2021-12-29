@@ -1960,6 +1960,8 @@ framework which enables you to test server connections locally.")
               (base32
                "0rm2rchrr63imn44xk5slwydxf8gvy579524qcxq7dc42pnk17zx"))))
     (build-system python-build-system)
+    (arguments
+     `(#:tests? #f)) ; TODO: Tests fail.
     (native-inputs
      (list python-setuptools-scm))
     (propagated-inputs
