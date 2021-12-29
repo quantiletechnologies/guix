@@ -19396,7 +19396,8 @@ library.")
        "0mzwdq1is7kyyr32i5k4iz6g5xxdvmiyc132jnc60p9m6lnwjrpv"))))
    (build-system python-build-system)
    (arguments
-    `(#:phases
+    `(#:tests? #f
+      #:phases
       (modify-phases %standard-phases
         (add-before 'check 'delete-bogus-test
           ;; This test requires /home/aresch/Downloads, which is not provided by
