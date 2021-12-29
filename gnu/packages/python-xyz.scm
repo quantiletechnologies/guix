@@ -16184,8 +16184,6 @@ as well.")
        (sha256
         (base32 "1qyxq54r2fbh09ab5sffbxajy8arbk6czxz5lq3ccr9qrypw6w27"))))
     (build-system python-build-system)
-    (arguments
-     `(#:test-target "pytest"))
     (native-inputs
      (list python-easyprocess python-pytest python-pytest-runner))
     (home-page "https://github.com/ponty/entrypoint2")
