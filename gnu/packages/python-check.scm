@@ -1007,6 +1007,8 @@ for the @code{pytest} framework.")
         (base32
          "0a4mpb4j73dsyk47hd1prrjpfk4r458s102cn80rf253jg818hxd"))))
     (build-system python-build-system)
+    (arguments
+     `(#:tests? #f)) ; TODO: Fail due to missing deps and pathlib errors.
     (propagated-inputs
      (list python-py-cpuinfo))
     (native-inputs
