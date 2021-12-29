@@ -558,17 +558,9 @@ were inadvertently left open at the end of a unit test.")
         (base32 "1h6g6shib6z07azf12rnsa053470ggbd7hy3bnbw8nf3nza5h372"))))
     (build-system python-build-system)
     (arguments
-     '(#:phases
-       (modify-phases %standard-phases
-         (replace 'check
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             ;; Make the installed plugin discoverable by Pytest.
-             (add-installed-pythonpath inputs outputs)
-             (invoke "pytest" "-vv" "-k"
-                     (string-append
-                      ;; These tests require internet access. Disable them.
-                      "not test_default_behavior"
-                      " and not test_strict_with_decorator")))))))
+     '(#:tests? #f ; TODO: Tests never terminate.
+       #:test-flags '("-vvv" "-k"
+                      "not test_default_behavior and not test_strict_with_decorator")))
     (native-inputs
      (list python-pytest))
     (propagated-inputs
