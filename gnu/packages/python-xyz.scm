@@ -21377,6 +21377,7 @@ user-space file systems in Python.")
     (build-system cmake-build-system)
     (native-inputs
      `(("python" ,python-wrapper)
+       ("python-setuptools" ,python-setuptools)
 
        ;; The following dependencies are used for tests.
        ("python-pytest" ,python-pytest)
