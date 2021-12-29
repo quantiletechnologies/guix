@@ -8768,7 +8768,14 @@ distance between two or more sequences by many algorithms.")
            "1y1vysx7jg0vbrarlsykhf7nmr8fc6k1fva1q3i98xq2m30s6r68"))))
     (build-system python-build-system)
     (arguments
-     '(#:tests? #f)) ; no tests
+     '(#:tests? #f ; no tests
+       #:phases
+       (modify-phases %standard-phases
+         ;; mock is a false runtime dependency and can be removed.
+         (add-after 'unpack 'remove-mock-runtime-dependency
+           (lambda _
+             (substitute* "setup.py"
+               (("'mock',?") "")))))))
     (propagated-inputs (list python-urwid))
     (home-page "https://github.com/pazz/urwidtrees")
     (synopsis "Tree widgets for urwid")
