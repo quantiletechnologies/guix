@@ -17556,7 +17556,7 @@ multitouch applications.")
     ;; TODO: Unundle picosat. http://fmv.jku.at/picosat/
     (build-system python-build-system)
     (native-inputs
-     (list unzip))
+     (list unzip python-pytest))
     (home-page "https://github.com/ContinuumIO/pycosat")
     (synopsis "Bindings to picosat (a SAT solver)")
     (description
