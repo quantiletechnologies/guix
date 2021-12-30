@@ -5375,7 +5375,6 @@ major web browsers.")
      `(("python-pytest" ,python-pytest)
        ("python-runner" ,python-pytest-runner)
        ("python-pytest-cov" ,python-pytest-cov)))
-    (arguments '(#:test-target "pytest"))
     (home-page "https://docs.pylonsproject.org/projects/venusian")
     (synopsis "Library for deferring decorator actions")
     (description
