@@ -2837,8 +2837,6 @@ and to spawn subprocesses to handle requests.")
        (sha256
         (base32 "05s88qdjdwd9d9qs13fap7nqgxs7qs5qfzzjbrc5va13k2mxdskd"))))
     (build-system python-build-system)
-    (arguments
-     '(#:test-target "pytest"))
     (native-inputs
      (list python-pytest python-pytest-runner))
     (home-page "https://pylonsproject.org/")
