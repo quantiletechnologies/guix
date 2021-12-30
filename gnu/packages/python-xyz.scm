@@ -8459,6 +8459,8 @@ installing @code{kernelspec}s for use with Jupyter frontends.")
         (base32
          "07jy4562lvnhkk6kfr3cphmizy88anlhmbwb8kdzlz2ypqkvzgaw"))))
     (build-system python-build-system)
+    (native-inputs
+     (list python-flit-core python-pytest))
     (home-page "https://github.com/takluyver/backcall/")
     (synopsis "Specifications for callback functions passed in to an API")
     (description
