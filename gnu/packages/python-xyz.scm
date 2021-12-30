@@ -6827,7 +6827,6 @@ the OleFileIO module from PIL, the Python Image Library.")
      `(#:tests? #false))                ;require python-xmp-toolkit
     (native-inputs
      (list pybind11
-           python-setuptools
            python-setuptools-scm
            python-setuptools-scm-git-archive
            python-toml
