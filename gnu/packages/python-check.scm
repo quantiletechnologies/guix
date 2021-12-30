@@ -1032,8 +1032,7 @@ rounds that are calibrated to the chosen timer.")
         (base32 "1kyq5rg27dsnj7dc6x9y7r8vwf8rc88y2ppnnw6r96alw0nn9fn4"))))
     (build-system python-build-system)
     (arguments
-     `(#:test-target "pytest"
-       #:phases
+     `(#:phases
        (modify-phases %standard-phases
          (add-before 'build 'prepare-tests
            (lambda _
