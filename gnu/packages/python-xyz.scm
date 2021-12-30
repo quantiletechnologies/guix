@@ -3791,6 +3791,7 @@ e.g. filters, callbacks and errbacks can all be promises.")
         (base32
          "1nbhnpzswcf3lmzn5xabmfdd7ki8r2w2i37y6wml54di6qi1l48c"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; Tests require network connection.
     (native-inputs
      (list python-mock python-pytest python-setuptools-scm))
     (propagated-inputs
