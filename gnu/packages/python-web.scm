@@ -5480,7 +5480,6 @@ according to the standard set by PasteDeploy ")
                (base32
                 "1nbc648d110jx6ziji980cdmzsd14p8fqrcarsdvr1vm5jvm2vyd"))))
     (build-system python-build-system)
-    (arguments '(#:test-target "pytest"))
     (native-inputs
      (list python-pytest python-pytest-runner python-watchdog python-mock
            python-pytest-cov))
