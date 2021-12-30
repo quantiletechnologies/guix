@@ -1383,8 +1383,6 @@ approximate nearest neighbor search with Python bindings.")
        (sha256
         (base32 "0cjf0mjn156qp0x6md6mncs31hdpzfim769c2lixaczhyzwywqnj"))))
     (build-system python-build-system)
-    (arguments
-     `(#:test-target "pytest"))
     (propagated-inputs
      (list python-black python-language-server python-toml))
     (native-inputs
