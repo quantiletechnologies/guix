@@ -10090,6 +10090,10 @@ first-class forward references that stub files use.")
        (sha256
         (base32 "0kgipl5gljlp7aa7ykx15pswpzkd0d0qiznihb2z0d9a73181dyd"))))
     (build-system python-build-system)
+    (arguments
+     `(#:tests? #f ; No tests exist.
+       #:build-backend "poetry.core.masonry.api"))
+    (native-inputs (list python-poetry-core))
     (home-page "https://github.com/sbdchd/flake8-pie")
     (synopsis "Flake8 extension that implements lints")
     (description
