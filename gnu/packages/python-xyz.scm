@@ -9188,8 +9188,6 @@ algorithm.")
        (sha256
         (base32 "1fw28swh6jq4myr09j7gv68l241b8vwg470ak5xv0x4xwh2a1m86"))))
     (build-system python-build-system)
-    (arguments
-     `(#:test-target "pytest"))
     (propagated-inputs
      (list python-diff-match-patch))
     (native-inputs
