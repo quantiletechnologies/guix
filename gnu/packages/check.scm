@@ -2343,6 +2343,7 @@ pytest report.")
         (base32
          "1w7wxh27sbqwm4jgwrjr9c2gy384aca5jzw9c0wzhl0pmk2mvqab"))))
     (build-system python-build-system)
+    (arguments '(#:tests? #f))
     (native-inputs
      (list unzip))
     (propagated-inputs
