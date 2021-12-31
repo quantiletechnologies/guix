@@ -15865,6 +15865,7 @@ until the object is actually required, and caches the result of said call.")
     (build-system python-build-system)
     (arguments
      `(#:tests? #f                      ; XXX: requires internet access
+       #:build-backend "poetry.core.masonry.api"
        #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'patch-getprotobyname-calls
@@ -15877,7 +15878,7 @@ until the object is actually required, and caches the result of said call.")
                 "6")
                (("socket.getprotobyname\\('udp'\\)")
                 "17")))))))
-    (native-inputs (list unzip))
+    (native-inputs (list unzip python-poetry-core))
     (home-page "https://www.dnspython.org")
     (synopsis "DNS toolkit for Python")
     (description
