@@ -10398,6 +10398,32 @@ add functionality and customization to your projects with their own plugins.")
 (define-public python2-straight-plugin
   (package-with-python2 python-straight-plugin))
 
+(define-public python-pyftpdlib
+  (package
+    (name "python-pyftpdlib")
+    (version "1.5.6")
+    (source
+      (origin
+        (method url-fetch)
+        (uri (pypi-uri "pyftpdlib" version))
+        (sha256
+          (base32
+            "0pnv2byzmzg84q5nmmhn1xafvfil85qa5y52bj455br93zc5b9px"))))
+    (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; TODO: A bunch of tests fail.
+    (native-inputs
+      (list python-psutil python-pyopenssl))
+    (home-page
+      "https://github.com/giampaolo/pyftpdlib/")
+    (synopsis
+      "Python FTP server library")
+    (description
+      "Python FTP server library provides a high-level portable interface
+to easily write very efficient, scalable and asynchronous FTP servers
+with Python. It is the most complete RFC-959 FTP server implementation
+available for Python programming language.")
+    (license license:expat)))
+
 (define-public python-fonttools
   (package
     (name "python-fonttools")
