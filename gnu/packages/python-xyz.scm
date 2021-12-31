@@ -24042,6 +24042,7 @@ tests.")
         (base32
          "1j2idrbrbczykzlb56q1bn0ivc9c0rjjljpk4yz86xn3gxfkpv8n"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; Fails to find C extensions.
     (propagated-inputs
      (list python-decorator python-six))
     (inputs
