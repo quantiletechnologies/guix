@@ -22283,6 +22283,7 @@ data.")
         (base32
          "1d4z2zngrpqkrfhnd4yhysh66kjn4mblys2l06sh5dix2p0n7vhz"))))
     (build-system python-build-system)
+    (native-inputs (list python-nose))
     (home-page "https://github.com/mwilliamson/locket.py")
     (synopsis "File-based locks for Python")
     (description
