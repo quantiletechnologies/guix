@@ -10424,6 +10424,39 @@ with Python. It is the most complete RFC-959 FTP server implementation
 available for Python programming language.")
     (license license:expat)))
 
+(define-public python-fs
+  (package
+    (name "python-fs")
+    (version "2.4.12")
+    (source
+      (origin
+        (method url-fetch)
+        (uri (pypi-uri "fs" version))
+        (sha256
+          (base32
+            "0bzl3f1m6mq4y6xq0k199fkbzari940gs3lmrahi6qjdn64a22y1"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (add-before 'check 'set-HOME
+           (lambda _
+             (setenv "HOME" "/tmp"))))))
+    (propagated-inputs
+      (list python-appdirs python-pytz python-six))
+    (native-inputs
+      (list python-pytest python-pyftpdlib python-psutil))
+    (home-page
+      "https://github.com/PyFilesystem/pyfilesystem2")
+    (synopsis
+      "Python filesystem abstraction layer")
+    (description
+      "Work with files and directories in archives, memory, the cloud etc. as
+easily as your local drive. Write code now, decide later where the data
+will be stored; unit test without writing real files; upload files to the
+cloud without learning a new API; sandbox your file writing code.")
+    (license license:expat)))
+
 (define-public python-fonttools
   (package
     (name "python-fonttools")
