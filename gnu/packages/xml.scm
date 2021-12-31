@@ -320,7 +320,10 @@ formulas and hyperlinks to multiple worksheets in an Excel 2007+ XLSX file.")
                  (format #f "ROOT = r'~a'" libxml2))
                 ;; For 'iconv.h'.
                 (("/opt/include")
-                 (string-append glibc "/include")))))))))
+                 (string-append glibc "/include"))
+                ;; Fails to build a wheel with call to sys.exit().
+                (("sys\\.exit\\(0\\)") "")))
+            #t)))))
     (inputs `(("libxml2" ,libxml2)))
     (synopsis "Python bindings for the libxml2 library")))
 
