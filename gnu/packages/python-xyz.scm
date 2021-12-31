@@ -27692,6 +27692,29 @@ keyboard-friendly package.")
      "This package provides a Python interface to iw wireless tools.")
     (license license:gpl2)))
 
+(define-public python-u-msgpack
+  (package
+    (name "python-u-msgpack")
+    (version "2.7.1")
+    (source
+      (origin
+        (method url-fetch)
+        (uri (pypi-uri "u-msgpack-python" version))
+        (sha256
+          (base32
+            "0lcmlr7gc4dydpxn6l5bdcq40c3ghf8mv1sjqyj72wdpr8rx9rxp"))))
+    (build-system python-build-system)
+    (home-page
+      "https://github.com/vsergeev/u-msgpack-python")
+    (synopsis
+      "Portable, lightweight MessagePack serializer and deserializer")
+    (description
+      "A portable, lightweight MessagePack serializer and deserializer written
+in pure Python.  u-msgpack-python is fully compliant with the latest MessagePack
+specification. In particular, it supports the new binary, UTF-8 string,
+application-defined ext, and timestamp types.")
+    (license license:expat)))
+
 (define-public python-tomli-w
   (package
     (name "python-tomli-w")
