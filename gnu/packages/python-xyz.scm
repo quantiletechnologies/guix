@@ -11852,20 +11852,11 @@ Jupyter Notebook format and Python APIs for working with notebooks.")
         (base32
          "0lc4si3xb7hza424414rdqdc3vng3kcrph8jbvjqb32spqddf3f7"))))
     (build-system python-build-system)
-    ;; The package does not come with a setup.py file, so we have to generate
-    ;; one ourselves.
     (arguments
-     `(#:tests? #f
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'create-setup.py
-           (lambda _
-             (call-with-output-file "setup.py"
-               (lambda (port)
-                 (format port "\
-from setuptools import setup
-setup(name='entrypoints', version='~a', py_modules=['entrypoints'])
-" ,version))))))))
+     `(;; The project uses an old entrypoint, which pulls in the entire flit
+       ;; project. flit_core is sufficient to build though.
+       #:build-backend "flit_core.buildapi"))
+    (native-inputs (list python-flit-core python-pytest))
     (home-page "https://github.com/takluyver/entrypoints")
     (synopsis "Discover and load entry points from installed Python packages")
     (description "Entry points are a way for Python packages to advertise
