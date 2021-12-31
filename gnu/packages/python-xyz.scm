@@ -10462,12 +10462,17 @@ cloud without learning a new API; sandbox your file writing code.")
     (name "python-fonttools")
     (version "4.6.0")
     (source (origin
-              (method url-fetch)
-              (uri (pypi-uri "fonttools" version ".zip"))
+              ;; The PyPI release is missing some test files.
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/fonttools/fonttools")
+                    (commit version)))
+              (file-name (git-file-name name version))
               (sha256
                (base32
-                "1mq9kdzhcsp96bhv7smnrpdg1s4z5wh70bsl99c0jmcrahqdisqq"))))
+                "0gmqxl7xwpwzk6dp68iiv7xz81cavzb7976aqm04n1pq6xc90k70"))))
     (build-system python-build-system)
+    (propagated-inputs (list python-fs python-brotli))
     (native-inputs
      (list unzip python-pytest python-pytest-runner))
     (home-page "https://github.com/fonttools/fonttools")
