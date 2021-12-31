@@ -12686,8 +12686,7 @@ for atomic file system operations.")
         (base32 "0zvkn6g1dn51kkw33v8qrlnwlmf5h6sw1ay3bh14ifjr8b9xsjjz"))))
     (build-system python-build-system)
     (arguments
-     `(#:test-target "pytest"
-       #:phases
+     `(#:phases
        (modify-phases %standard-phases
          (add-before 'build 'set-pbr-version
            (lambda _
