@@ -9773,18 +9773,26 @@ plugin for flake8 to check PEP-8 naming conventions.")
     (inherit python-pep517-bootstrap)
     (name "python-pep517")
     (arguments
-     '(#:phases
+     '(#:modules ((ice-9 ftw)
+                  (srfi srfi-1)
+                  (srfi srfi-26)
+                  (guix build utils)
+                  (guix build python-build-system))
+       #:phases
        (modify-phases %standard-phases
-         (replace 'check
+         (add-after 'unpack 'remove-failing-tests
            (lambda* (#:key tests? #:allow-other-keys)
              (delete-file "pytest.ini")
              ;; This test tries to connect to the internet
-             (delete-file "tests/test_meta.py")
-             (if tests?
-               (invoke "pytest")
-               #t))))))
+             (delete-file "tests/test_meta.py")))
+         (add-after 'unpack 'set-source-file-times-to-1980
+           (lambda _
+             (let ((circa-1980 (* 10 366 24 60 60)))
+               (ftw "." (lambda (file stat flag)
+                          (utime file circa-1980 circa-1980)
+                          #t))))))))
     (native-inputs
-     (list python-mock python-pytest python-testpath))
+     (list python-mock python-pytest python-testpath python-flit-core))
     (properties `((python2-variant . ,(delay python2-pep517))))))
 
 ;; Skip the tests so we don't create a cyclical dependency with pytest.
