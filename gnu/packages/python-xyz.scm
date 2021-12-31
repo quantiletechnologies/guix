@@ -19812,7 +19812,8 @@ services.")
          "1nii1sz5jq75ilf18bjnr11l9rz1lvdmyk66bxl7q90qan85yhjj"))))
     (build-system python-build-system)
     (arguments
-     '(#:phases (modify-phases %standard-phases
+     '(#:tests? #f ; No tests available.
+       #:phases (modify-phases %standard-phases
                   (add-after 'unpack 'dont-install-defunct-egginfo
                     (lambda _
                       ;; When a ".git" directory is missing, the setup.py
