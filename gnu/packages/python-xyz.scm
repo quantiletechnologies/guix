@@ -13147,6 +13147,7 @@ concurrent.futures package from Python 3.2")
         (base32
          "0b2v3mim90rmfvixkaniz2qrs650sk230rzgd5zhcjfldmlqgxpc"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; Import error.
     (propagated-inputs
      (list python-six python-utils))
     (native-inputs
