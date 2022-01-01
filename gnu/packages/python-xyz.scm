@@ -10983,7 +10983,7 @@ printing of sub-tables by specifying a row range.")
     (arguments
      `(#:test-flags `("-vv" "-k"
                      ;; Tries to open an outgoing connection.
-                     (string-append "not test_ssl_outgoing "
+                     ,(string-append "not test_ssl_outgoing "
                                     ;; Fail for unknown reasons.
                                     "and not test_cpu "
                                     "and not test_worker_cancel "
