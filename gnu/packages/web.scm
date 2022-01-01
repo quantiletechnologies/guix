@@ -6114,6 +6114,7 @@ JSON-encoded.")
         (base32
          "1y0v2v7xpzpyd4djwp7ad8ifnlxp8r1y6dfbxg5ckzvllkgridn5"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; No tests.
     (propagated-inputs
      (list python-six python-httpbin python-pytest))
     (home-page
