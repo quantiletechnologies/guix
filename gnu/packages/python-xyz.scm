@@ -7400,7 +7400,8 @@ support for Python 3 and PyPy.  It is based on cffi.")
     (propagated-inputs
      (list python-xcffib)) ; used at run time
     (arguments
-     `(#:phases
+     `(#:tests? #f ; C modules cannot be imported.
+       #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'patch-paths
            (lambda* (#:key inputs #:allow-other-keys)
