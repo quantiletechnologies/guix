@@ -3332,7 +3332,7 @@ with sensible defaults out of the box.")
        (uri (pypi-uri "click" version))
        (sha256
         (base32 "0njsm0wn31l21bi118g5825ma5sa3rwn7v2x4wjd7yiiahkri337"))))
-    (arguments `())))
+    (arguments `(#:test-flags '("-vv" "-k" "not test_legacy_callbacks")))))
 
 (define-public python-cligj
   (package
