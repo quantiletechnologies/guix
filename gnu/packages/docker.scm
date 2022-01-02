@@ -148,7 +148,8 @@ created and all the services are started as specified in the configuration.")
           "1m44smrggnqghxkqfl7vhapdw89m1p3vdr177r6cq17lr85jgqvc"))))
     (build-system python-build-system)
     (arguments
-     `(#:phases
+     `(#:tests? #f ; Needs a docker credentials store.
+       #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'fix-versioning
            (lambda _
