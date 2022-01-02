@@ -1832,8 +1832,9 @@ your Web app.")
         (base32
           "026i3z99nr3px75isa9mbnky5i7rffiv4d124h5kxfjjsxz92fma"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; Thread.isAlive() is not available with Python >=3.9.
     (native-inputs
-      (list python-nose))
+      (list python-pytest))
     (home-page "https://webob.org/")
     (synopsis "WSGI request and response object")
     (description
