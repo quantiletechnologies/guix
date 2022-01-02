@@ -2740,6 +2740,7 @@ file formats including SAM/BAM, Wiggle/BigWig, BED, GFF/GTF, VCF.")
         (base32
          "14v5yyasq2bz34j38wi3xfcp06jj7l35ppibjcn95l2n73hz3zwi"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; No tests available.
     (native-inputs
      (list python-cython python-pytest python-xopen))
     (home-page "https://github.com/marcelm/dnaio/")
