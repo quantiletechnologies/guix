@@ -1729,7 +1729,8 @@ Python.")
                   ((guix build python-build-system)
                    #:select (python-version)))
        #:imported-modules (,@%cmake-build-system-modules
-                           (guix build python-build-system))
+                           (guix build python-build-system)
+                           (guix build json))
        #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'set-source-file-times-to-1980
