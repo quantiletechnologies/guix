@@ -129,7 +129,6 @@
     (build-system python-build-system)
     (arguments
      `(#:tests? #f
-       #:use-setuptools? ,use-setuptools?
        #:phases
        (modify-phases %standard-phases
          (replace 'unpack
