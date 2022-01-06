@@ -983,9 +983,7 @@ optimize toolbar for portrait / landscape
                 "0i17qgm7gzy7pzp240mkpsx9rn8rr67jh5npp5bylv3sd41g48cw"))))
     (build-system python-build-system)
     (arguments
-     '(;; FIXME: There is one test failure, building the pdf manual from source,
-       ;; but it does not cause the build to fail.
-       #:configure-flags (list "--use-system-libart")
+     '(#:configure-flags '(@ ("--use-system-libart" . ""))
        #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'find-libraries
