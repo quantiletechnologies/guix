@@ -742,9 +742,7 @@ Duperemove can also take input from the @command{fdupes} program.")
            ;; For tests.
            python-pytest))
     (arguments
-     '( ;; The 'test' target runs developer tools like pylint, which fail.
-       #:test-target "test_pytest"
-       #:phases
+     '(#:phases
        (modify-phases %standard-phases
          (add-after 'configure 'wrap-program
            ;; Tell 'ranger' where 'w3mimgdisplay' is.

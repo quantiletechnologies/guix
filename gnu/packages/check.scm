@@ -2425,8 +2425,6 @@ backported from Python 2.7 for Python 2.4+.")
            python-pytest))
     (propagated-inputs
      (list python-parse python-parse-type))
-    (arguments
-     '(#:test-target "behave_test"))
     (home-page "https://github.com/behave/behave")
     (synopsis "Python behavior-driven development")
     (description

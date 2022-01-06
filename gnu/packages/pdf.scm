@@ -985,7 +985,6 @@ optimize toolbar for portrait / landscape
     (arguments
      '(;; FIXME: There is one test failure, building the pdf manual from source,
        ;; but it does not cause the build to fail.
-       #:test-target "tests"
        #:configure-flags (list "--use-system-libart")
        #:phases
        (modify-phases %standard-phases
