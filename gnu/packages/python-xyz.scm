@@ -24565,29 +24565,8 @@ replacement for dictionaries where immutability is desired.")
     (name "python-unpaddedbase64")
     (version "2.1.0")
     (source
+     ;; The PyPi release comes without tests.
      (origin
-       (method url-fetch)
-       (uri (pypi-uri "unpaddedbase64" version))
-       (sha256
-        (base32 "01ghlmw63fgslwj8j74vkpf1kqvr7a4agm6nyn89vqwx106ccwvj"))))
-    (build-system python-build-system)
-    (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (replace 'check
-           (lambda* (#:key inputs tests? #:allow-other-keys)
-             (when tests?
-               (copy-recursively (string-append
-                                  (assoc-ref inputs "tests") "/tests")
-                                 "tests")
-               (invoke "python" "-m" "pytest" "-vv")))))))
-    (native-inputs
-     `(("python-pytest" ,python-pytest)
-       ("tests"
-        ;; The release on pypi comes without tests.  We can't build from this
-        ;; checkout, though, because installation requires an invocation of
-        ;; poetry.
-        ,(origin
            (method git-fetch)
            (uri (git-reference
                  (url "https://github.com/matrix-org/python-unpaddedbase64")
@@ -24595,7 +24574,10 @@ replacement for dictionaries where immutability is desired.")
            (file-name (git-file-name name version))
            (sha256
             (base32
-             "1n6har8pxv0mqb96lanzihp1xf76aa17jw3977drb1fgz947pnmz"))))))
+             "1n6har8pxv0mqb96lanzihp1xf76aa17jw3977drb1fgz947pnmz"))))
+    (build-system python-build-system)
+    (native-inputs
+     (list python-pytest python-poetry-core))
     (home-page "https://github.com/matrix-org/python-unpaddedbase64")
     (synopsis "Encode and decode Base64 without “=” padding")
     (description
