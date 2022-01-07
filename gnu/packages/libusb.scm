@@ -47,6 +47,7 @@
   #:use-module (gnu packages mp3)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages tls)
   #:use-module (gnu packages xiph))
@@ -318,7 +319,8 @@ wrapper for accessing libusb-1.0.")
          "1priic4iq2vn1rc711kzxwhxrwa508rkxrr193qdz2lw26kdhvix"))))
     (build-system python-build-system)
     (arguments
-     `(#:phases
+     `(#:build-backend "poetry.core.masonry.api"
+       #:phases
        (modify-phases %standard-phases
          (add-after 'install 'install-udev-rules
            (lambda* (#:key outputs #:allow-other-keys)
@@ -331,6 +333,7 @@ wrapper for accessing libusb-1.0.")
                #t))))))
     (propagated-inputs
      (list python-click python-construct python-pyusb python-pyyaml))
+    (native-inputs (list python-poetry-core))
     (home-page
      "https://github.com/CapableRobot/CapableRobot_USBHub_Driver")
     (synopsis
