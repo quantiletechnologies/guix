@@ -491,7 +491,7 @@ as functions or string constants to form colored terminal output.")
         (base32 "1iirah0kydrdp505qnjj6gi54avcr7z0hbkfx9vmh8myr30rpz6q"))))
     (build-system python-build-system)
     (native-inputs
-     (list python-pytest))
+     (list python-pytest python-poetry-core))
     (home-page "https://github.com/pavdmyt/yaspin")
     (synopsis "Yet Another Terminal Spinner")
     (description "Yaspin provides a terminal spinner to indicate the progress
