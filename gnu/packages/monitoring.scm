@@ -390,7 +390,8 @@ historical data.")
          "1wb91fipk1niciffq5xwqbh8g7rl7ghdam4m97cjbig12i5qr4cm"))))
     (build-system python-build-system)
     (arguments
-     `(#:phases
+     `(#:tests? #f ; No unit tests.
+       #:phases
        (modify-phases %standard-phases
          ;; Don't install to /opt
          (add-after 'unpack 'do-not-install-to-/opt
