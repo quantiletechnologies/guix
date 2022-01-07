@@ -20649,15 +20649,15 @@ based on the CPython 2.7 and 3.7 parsers.")
     (version "0.3.2")
     (source
      (origin
-       ;; Building `python-typer` from the git repository requires the `flit-core`
-       ;; Python package that is not installed by `python-flit`.
        (method url-fetch)
        (uri (pypi-uri "typer" version))
        (sha256
         (base32 "00v3h63dq8yxahp9vg3yb9r27l2niwv8gv0dbds9dzrc298dfmal"))))
     (build-system python-build-system)
     (arguments
-     `(#:phases
+     `(#:test-flags `("-vv" "-k" ,(string-append "not test_show_completion "
+                            "and not test_install_completion"))
+       #:phases
        (modify-phases %standard-phases
          ;; Unfortunately, this doesn't seem to be enough to fix these two
          ;; tests, but we'll patch this anyway.
@@ -20666,7 +20666,7 @@ based on the CPython 2.7 and 3.7 parsers.")
              (substitute* "tests/test_completion/test_completion.py"
                (("\"bash\"") (string-append "\"" (which "bash") "\""))
                (("\"/bin/bash\"") (string-append "\"" (which "bash") "\"")))))
-         (replace 'check
+         (add-before 'check 'set-HOME
            (lambda* (#:key tests? #:allow-other-keys)
              (when tests?
                (setenv "HOME" "/tmp") ; some tests need it
@@ -20676,18 +20676,11 @@ based on the CPython 2.7 and 3.7 parsers.")
 
                (setenv "GUIX_PYTHONPATH"
                        (string-append (getcwd) ":"
-                                      (getenv "GUIX_PYTHONPATH")))
-               (let ((disabled-tests (list "test_show_completion"
-                                           "test_install_completion")))
-                 (invoke "python" "-m" "pytest" "tests/"
-                         "-k"
-                         (string-append "not "
-                                        (string-join disabled-tests
-                                                     " and not "))))))))))
+                                      (getenv "GUIX_PYTHONPATH")))))))))
     (propagated-inputs
      (list python-click))
     (native-inputs
-     (list python-coverage python-pytest python-shellingham))
+     (list python-coverage python-pytest python-shellingham python-flit-core))
     (home-page "https://github.com/tiangolo/typer")
     (synopsis
       "Typer builds CLI based on Python type hints")
