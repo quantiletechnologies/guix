@@ -14585,33 +14585,8 @@ is made as zipfile like as possible.")
   (package
     (name "python-rich")
     (version "10.2.2")
+    ;; PyPi tarball has no tests.
     (source (origin
-              (method url-fetch)
-              (uri (pypi-uri "rich" version))
-              (sha256
-               (base32
-                "1z5m5brcdf3vndpavcqj5nl35xby4x5rfj48klhwqycfqf3g9cqp"))))
-    (build-system python-build-system)
-    (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (replace 'check
-           (lambda* (#:key inputs tests? #:allow-other-keys)
-             (when tests?
-               (copy-recursively (string-append
-                                  (assoc-ref inputs "tests") "/tests")
-                                 "tests")
-               (invoke "python" "-m" "pytest" "-vv")))))))
-    (propagated-inputs
-     (list python-attrs python-colorama python-commonmark python-pygments
-           python-typing-extensions))
-    (native-inputs
-     `(("python-pytest" ,python-pytest)
-       ("tests"
-        ;; The release on pypi comes without tests.  We can't build from this
-        ;; checkout, though, because installation requires an invocation of
-        ;; poetry.
-        ,(origin
            (method git-fetch)
            (uri (git-reference
                  (url "https://github.com/willmcgugan/rich")
@@ -14619,7 +14594,13 @@ is made as zipfile like as possible.")
            (file-name (git-file-name name version))
            (sha256
             (base32
-             "19f4svb363sn5708qkpa6lakmiwzyb25h8kmh7bqrsbbrvi9hr70"))))))
+             "19f4svb363sn5708qkpa6lakmiwzyb25h8kmh7bqrsbbrvi9hr70"))))
+    (build-system python-build-system)
+    (propagated-inputs
+     (list python-attrs python-colorama python-commonmark python-pygments
+           python-typing-extensions))
+    (native-inputs
+     (list python-pytest python-poetry-core))
     (home-page "https://github.com/willmcgugan/rich")
     (synopsis "Render rich text and more to the terminal")
     (description
