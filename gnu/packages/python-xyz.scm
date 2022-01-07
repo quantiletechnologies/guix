@@ -15095,6 +15095,9 @@ graphviz.")
                   (srfi srfi-26)
                   (guix build utils)
                   (guix build python-build-system))
+       ;; Override, because python-build-system does not support colon-separated
+       ;; specifications.
+       #:build-backend "setuptools.build_meta"
        #:phases (modify-phases %standard-phases
                   (add-before 'patch-source-shebangs 'patch-hard-coded-paths
                     (lambda _
