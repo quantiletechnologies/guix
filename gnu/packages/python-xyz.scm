@@ -15582,6 +15582,7 @@ more, possibly remote, memcached servers.")
     (arguments '(#:tests? #f))  ; no test in the PyPI tarball
     (propagated-inputs
      (list python-crashtest python-pastel python-pylev))
+    (native-inputs (list python-poetry-core))
     (home-page "https://github.com/sdispater/clikit")
     (synopsis "Group of utilities to build command line interfaces")
     (description
