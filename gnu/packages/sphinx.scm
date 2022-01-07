@@ -231,8 +231,10 @@ to code blocks.")
         (base32
          "1x9af78vamjjcdrrhiah3wg613jv7gm8yh9vvqfrmf4vam6mimyg"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; No tests.
     (propagated-inputs
      (list python-docutils python-sphinx))
+    (native-inputs (list python-flit-core))
     (home-page "https://github.com/jupyter/sphinxcontrib_github_alt")
     (synopsis "Link to GitHub pages from Sphinx docs")
     (description
