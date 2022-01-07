@@ -9684,7 +9684,7 @@ applications.")
     (arguments
      `(#:tests? #f)) ; no tests in PyPI release and no setup.py in GitHub
     (native-inputs
-     (list python-pytest))
+     (list python-pytest python-poetry-core))
     (home-page "https://github.com/corenting/immutabledict")
     (synopsis "Immutable wrapper around dictionaries")
     (description
