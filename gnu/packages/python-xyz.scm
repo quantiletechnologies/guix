@@ -25662,13 +25662,13 @@ By default it uses the open Python vulnerability database Safety DB.")
     (propagated-inputs
      `(("wheel" ,python-wheel)))
     (native-inputs
-     `(("texlive" ,(texlive-updmap.cfg (list texlive-amsfonts
+     (list python-pip (texlive-updmap.cfg (list texlive-amsfonts
                                         texlive-fonts-ec
                                         texlive-generic-iftex
                                         texlive-hyperref
                                         texlive-oberdiek
                                         texlive-lm
-                                        texlive-xcolor)))))
+                                        texlive-xcolor))))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
