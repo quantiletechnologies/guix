@@ -791,6 +791,7 @@ of a loop structure or other iterative computation.")
                (base32
                 "118zm25c8mlajfl0pzssnwz4b8lamj9dgymla9rn4nla7l244a0r"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; No tests exist.
     (native-inputs
      (list pkg-config))
     (inputs
