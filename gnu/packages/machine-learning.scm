@@ -1036,17 +1036,9 @@ data analysis.")
          (base32
           "0szsxcm2fbxrn83iynn42bnvrdh7mfsmkhfn8pdn7swblfb7rifx"))))
     (build-system python-build-system)
-    (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (replace 'check
-           (lambda* (#:key tests? inputs outputs #:allow-other-keys)
-             (when tests?
-               (add-installed-pythonpath inputs outputs)
-               (invoke "pytest"))
-             #t)))))
+    (arguments `(#:build-backend "flit_core.buildapi"))
     (native-inputs
-     (list python-pytest))
+     (list python-pytest python-flit-core))
     (home-page "https://github.com/joblib/threadpoolctl")
     (synopsis "Python helpers for common threading libraries")
     (description "Thread-pool Controls provides Python helpers to limit the
