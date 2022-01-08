@@ -617,8 +617,9 @@ symmetries written in C.  Spglib can be used to:
         (base32 "08zmfgclkbjkqjpq8xs1mphs1i8rpqj76mcw7m2mrhvma5qj1nr5"))))
     (build-system python-build-system)
     (arguments
-     '(#:configure-flags
-       (list "--glut" "--testing")
+     '(#:tests? #f ; TODO: Needs external test data.
+       #:configure-flags
+       `(@ ("--glut" . "") ("--testing" . ""))
        #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'make-reproducible
@@ -632,14 +633,7 @@ symmetries written in C.  Spglib can be used to:
                                     "/include/freetype2:"
                                     (assoc-ref inputs "libxml2")
                                     "/include/libxml2:"
-                                    (getenv "CPLUS_INCLUDE_PATH")))))
-         ;; The setup.py script does not support one of the Python build
-         ;; system's default flags, "--single-version-externally-managed".
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (invoke "python" "setup.py" "install"
-                     (string-append "--prefix=" (assoc-ref outputs "out"))
-                     "--root=/"))))))
+                                    (getenv "CPLUS_INCLUDE_PATH"))))))))
     (inputs
      (list freetype
            libpng
