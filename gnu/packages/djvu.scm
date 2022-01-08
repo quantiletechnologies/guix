@@ -356,7 +356,7 @@ It is able to:
                   ((guix build python-build-system) #:prefix python:)
                   (guix build utils))
        #:imported-modules (,@%gnu-build-system-modules
-                           (guix build python-build-system))
+                           ,@%python-build-system-modules)
        #:test-target "test"
        #:phases
        (modify-phases %standard-phases

@@ -224,7 +224,7 @@ classification.")
       (build-system gnu-build-system)
       (arguments
        `(#:imported-modules (,@%gnu-build-system-modules
-                             (guix build python-build-system))
+                             ,@%python-build-system-modules)
          #:modules          ((guix build python-build-system)
                              ,@%gnu-build-system-modules)
          #:phases
@@ -1729,7 +1729,7 @@ Python.")
                   ((guix build python-build-system)
                    #:select (python-version)))
        #:imported-modules (,@%cmake-build-system-modules
-                           (guix build python-build-system)
+                           ,@%python-build-system-modules
                            (guix build json))
        #:phases
        (modify-phases %standard-phases

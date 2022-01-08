@@ -2016,7 +2016,7 @@ module provides support functions to the automatically generated code.")
     (propagated-inputs `())
     (arguments
      `(#:tests? #f ; no check target
-       #:imported-modules ((guix build python-build-system)
+       #:imported-modules (,@%python-build-system-modules
                            ,@%gnu-build-system-modules)
        #:modules ((srfi srfi-1)
                   ((guix build python-build-system) #:select (python-version))
@@ -2081,8 +2081,7 @@ module provides support functions to the automatically generated code.")
      `(#:modules ((srfi srfi-1)
                   ((guix build python-build-system) #:select (python-version))
                   ,@%gnu-build-system-modules)
-       #:imported-modules ((guix build python-build-system)
-                           (guix build json)
+       #:imported-modules (,@%python-build-system-modules
                            ,@%gnu-build-system-modules)
        #:phases
        (modify-phases %standard-phases
@@ -2183,7 +2182,7 @@ contain over 620 classes.")
      `(#:modules ((srfi srfi-1)
                   ((guix build python-build-system) #:select (python-version))
                   ,@%gnu-build-system-modules)
-       #:imported-modules ((guix build python-build-system)
+       #:imported-modules (,@%python-build-system-modules
                            ,@%gnu-build-system-modules)
        #:phases
        (modify-phases %standard-phases

@@ -218,7 +218,7 @@ servers from Python programs.")
                   ((guix build python-build-system)
                    #:select (add-installed-pythonpath python-version))
                   (guix build utils))
-       #:imported-modules ((guix build python-build-system)
+       #:imported-modules (,@%python-build-system-modules
                            ,@%gnu-build-system-modules)
        #:configure-flags
        (list (string-append "--with-db="

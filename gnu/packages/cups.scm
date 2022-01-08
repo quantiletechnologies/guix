@@ -571,8 +571,7 @@ should only be used as part of the Guix cups-pk-helper service.")
                          (assoc-ref %outputs "out") "/etc/xdg")
          "--enable-qt5" "--disable-qt4")
 
-       #:imported-modules ((guix build python-build-system)
-                           (guix build json)
+       #:imported-modules (,@%python-build-system-modules
                            ,@%gnu-build-system-modules)
        #:modules ((guix build gnu-build-system)
                   (guix build utils)

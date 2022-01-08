@@ -541,7 +541,7 @@ transformed into common image formats for display or printing.")
     (build-system gnu-build-system)
     (arguments
      `(#:imported-modules (,@%gnu-build-system-modules
-                           (guix build python-build-system))
+                           ,@%python-build-system-modules)
        #:modules (,@%gnu-build-system-modules
                   ((guix build python-build-system) #:select (site-packages)))
        #:configure-flags

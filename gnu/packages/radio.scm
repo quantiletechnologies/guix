@@ -539,7 +539,7 @@ used by RDS Spy, and audio files containing @dfn{multiplex} signals (MPX).")
                   (ice-9 match))
        #:imported-modules (,@%cmake-build-system-modules
                            (guix build glib-or-gtk-build-system)
-                           (guix build python-build-system))
+                           ,@%python-build-system-modules)
        #:configure-flags
        (list (string-append "-DMATHJAX2_ROOT="
                             (assoc-ref %build-inputs "js-mathjax")
@@ -669,7 +669,7 @@ environment.")
                     ((guix build python-build-system) #:prefix python:)
                     (guix build utils))
          #:imported-modules (,@%cmake-build-system-modules
-                             (guix build python-build-system))
+                             ,@%python-build-system-modules)
          #:phases
          (modify-phases %standard-phases
            (add-after 'install 'wrap-python
@@ -801,7 +801,7 @@ to the fix block above.
                   ((guix build python-build-system) #:prefix python:)
                   (guix build utils))
        #:imported-modules (,@%cmake-build-system-modules
-                           (guix build python-build-system))
+                           ,@%python-build-system-modules)
        #:phases
        (modify-phases %standard-phases
          (add-before 'check 'set-test-environment

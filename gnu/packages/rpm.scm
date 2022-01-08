@@ -23,6 +23,7 @@
   #:use-module (guix packages)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system meson)
+  #:use-module (guix build-system python)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
@@ -90,7 +91,7 @@ applying deltarpms, compatible with the original deltarpm packages.")
        (list (string-append "-Dgobject_overrides_dir_py3="
                             (python:site-packages %build-inputs %outputs)))
        #:imported-modules (,@%meson-build-system-modules
-                           (guix build python-build-system))
+                           ,@%python-build-system-modules)
        #:modules ((guix build meson-build-system)
                   ((guix build python-build-system) #:prefix python:)
                   (guix build utils))
@@ -160,7 +161,7 @@ information on multiple streams, default data and translations).")
     (build-system cmake-build-system)
     (arguments
      `(#:imported-modules (,@%cmake-build-system-modules
-                           (guix build python-build-system))
+                           ,@%python-build-system-modules)
        #:modules ((guix build cmake-build-system)
                   ((guix build python-build-system) #:prefix python:)
                   (guix build utils))

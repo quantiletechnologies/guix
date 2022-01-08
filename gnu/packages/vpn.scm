@@ -111,7 +111,7 @@
      `(#:imported-modules
        ((guix build cmake-build-system)
         (guix build copy-build-system)
-        (guix build python-build-system)
+        ,@%python-build-system-modules
         (guix build qt-build-system)
         (guix build qt-utils)
         ,@%go-build-system-modules)

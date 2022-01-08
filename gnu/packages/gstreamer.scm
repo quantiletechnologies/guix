@@ -34,6 +34,7 @@
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system meson)
+  #:use-module (guix build-system python)
   #:use-module (guix build-system trivial)
   #:use-module (guix utils)
   #:use-module (gnu packages)
@@ -1073,7 +1074,7 @@ given, also pass them to the build system instead of the ones used by PKG."
                   (guix build utils)
                   ((guix build python-build-system) #:prefix python:))
        #:imported-modules (,@%meson-build-system-modules
-                           (guix build python-build-system))
+                           ,@%python-build-system-modules)
        #:configure-flags
        (list (string-append
               "-Dpygi-overrides-dir="

@@ -536,7 +536,7 @@ firmware blobs.  You can
     (arguments
      `(#:imported-modules (,@%gnu-build-system-modules
                            (guix build haskell-build-system)
-                           (guix build python-build-system))
+                           ,@%python-build-system-modules)
        #:modules (,@%gnu-build-system-modules
                   ((guix build haskell-build-system) #:prefix haskell:)
                   ((guix build python-build-system) #:select (site-packages))

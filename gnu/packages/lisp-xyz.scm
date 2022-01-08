@@ -62,6 +62,7 @@
   #:use-module (guix utils)
   #:use-module (guix build-system asdf)
   #:use-module (guix build-system gnu)
+  #:use-module (guix build-system python)
   #:use-module (guix build-system trivial)
   #:use-module (gnu packages base)
   #:use-module (gnu packages c)
@@ -5283,7 +5284,7 @@ high-level way.  This library provides such operators.")
        `(#:tests? #f
          #:modules (((guix build python-build-system) #:select (python-version))
                     ,@%asdf-build-system-modules)
-         #:imported-modules ((guix build python-build-system)
+         #:imported-modules (,@%python-build-system-modules
                              ,@%asdf-build-system-modules)
          #:phases
          (modify-phases (@ (guix build asdf-build-system) %standard-phases)

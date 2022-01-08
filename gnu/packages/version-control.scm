@@ -1843,7 +1843,7 @@ history.  It implements the changeset evolution concept for Mercurial.")
                   "059gm66q06m6ayl4brsc517zkw3ahmz249b6xm1m32ac5y24wb9x"))))
       (build-system copy-build-system)
       (arguments
-       `(#:imported-modules ((guix build python-build-system)
+       `(#:imported-modules (,@%python-build-system-modules
                              ,@%copy-build-system-modules)
          #:modules ((srfi srfi-1)
                     (guix build python-build-system)

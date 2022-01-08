@@ -3398,7 +3398,7 @@ and targeted primarily for asynchronous processing of HTTP-requests.")
              libtool
              cppunit))
       (arguments
-       `(#:imported-modules ((guix build python-build-system) ;for site-packages
+       `(#:imported-modules (,@%python-build-system-modules ;for site-packages
                              ,@%cmake-build-system-modules)
          #:modules (((guix build python-build-system) #:prefix python:)
                     (guix build cmake-build-system)

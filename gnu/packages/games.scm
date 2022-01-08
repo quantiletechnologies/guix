@@ -3731,8 +3731,8 @@ Widgets, and allows users to create more.")
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #f            ; TODO The test running fails to run some tests.
-       #:imported-modules ,(cons '(guix build python-build-system)
-                                 %cmake-build-system-modules)
+       #:imported-modules (,@%python-build-system-modules
+                           ,@%cmake-build-system-modules)
        #:modules ((guix build cmake-build-system)
                   ((guix build python-build-system) #:select (guix-pythonpath))
                   (guix build utils)

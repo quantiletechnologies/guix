@@ -1354,7 +1354,7 @@ the X.Org X Server version 1.7 and later (X11R7.5 or later).")
     (build-system gnu-build-system)
     (arguments
      `(#:imported-modules (,@%gnu-build-system-modules
-                           (guix build python-build-system))
+                           ,@%python-build-system-modules)
        #:phases
        (modify-phases %standard-phases
          (add-after 'install 'split-outputs

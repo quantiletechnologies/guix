@@ -42,6 +42,7 @@
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix build-system gnu)
+  #:use-module (guix build-system python)
   #:use-module (guix build-system trivial)
   #:use-module (gnu packages)
   #:use-module (gnu packages compression)
@@ -86,8 +87,7 @@
              `(("python" ,python-minimal-wrapper)))
        ("tcsh" ,tcsh)))
     (arguments
-     `(#:imported-modules ((guix build python-build-system)
-                           (guix build json)
+     `(#:imported-modules (,@%python-build-system-modules
                            ,@%gnu-build-system-modules)
        #:modules (((guix build python-build-system) #:select (python-version))
                   ,@%gnu-build-system-modules)

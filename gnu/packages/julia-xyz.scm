@@ -27,6 +27,7 @@
   #:use-module (guix packages)
   #:use-module (guix git-download)
   #:use-module (guix build-system julia)
+  #:use-module (guix build-system python)
   #:use-module (gnu packages gcc)
   #:use-module (gnu packages julia-jll)
   #:use-module (gnu packages python)
@@ -3630,7 +3631,7 @@ human-readable format.")
           "1fj5d1ihnhnm0pl4hbx6hcd2bpdyhm8jiaqah2axsbd069j70saf"))))
     (build-system julia-build-system)
     (arguments
-     `(#:imported-modules ((guix build python-build-system)
+     `(#:imported-modules (,@%python-build-system-modules
                            ,@%julia-build-system-modules)
        #:modules ((guix build julia-build-system)
                   (guix build utils)

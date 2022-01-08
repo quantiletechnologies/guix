@@ -319,7 +319,7 @@ and dynamically with report tools based on filtering and graphical charts.")
      `(#:modules (,@%cmake-build-system-modules
                   ((guix build python-build-system) #:select (python-version)))
        #:imported-modules (,@%cmake-build-system-modules
-                           (guix build python-build-system))
+                           ,@%python-build-system-modules)
        #:configure-flags
        `("-DBUILD_DOCS:BOOL=ON"
          "-DBUILD_WEB_DOCS:BOOL=ON"
