@@ -2651,6 +2651,7 @@ coroutine-specific markup.")
        (sha256
         (base32 "1in0q6iffpl8ag6ady4bvwnn40igh10cpp4xgm426j1lqdis0byx"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; Cannot find C extension.
     (propagated-inputs (list python-typing-extensions))
     (native-inputs
      (list postgresql
