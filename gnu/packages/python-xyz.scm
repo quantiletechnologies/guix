@@ -16045,6 +16045,7 @@ YAML-serialized data.")
         (base32
          "14rq1mvm0jda90lcx9gyyby9dvq4x3js2cmxvd6vl4686ixwyqh1"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; No tests.
     (native-inputs
      (list python-pytest python-nose python-toml))
     (propagated-inputs
