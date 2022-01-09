@@ -4568,15 +4568,13 @@ in various CSS modules.")
         (base32 "1j2fcr217rsvkipsg6zjq03rl64rxnvb5hqqpx0dv58fhspvkywk"))))
     (build-system python-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (replace 'check
-           (lambda _ (invoke "pytest"))))))
+     `(#:build-backend "flit_core.buildapi"
+       #:test-flags '("-vv" "tests")))
     (propagated-inputs
      (list python-tinycss2))
     (native-inputs
      (list python-pytest-cov python-pytest-flake8 python-pytest-isort
-           python-pytest-runner))
+           python-pytest-runner python-flit-core))
     (home-page "https://cssselect2.readthedocs.io/")
     (synopsis "CSS selectors for Python ElementTree")
     (description "@code{cssselect2} is a straightforward implementation of
