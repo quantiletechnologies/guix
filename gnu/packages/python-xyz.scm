@@ -1221,6 +1221,8 @@ for working with bidirectional mappings in Python.")
                (base32
                 "177fj6wbw5jln54wpp6plcqy2329wjkwqwvgz7022rrg3xfrq49g"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; Cannot find C extension.
+    (native-inputs (list python-pytest))
     (home-page "https://github.com/ilanschnell/bitarray")
     (synopsis "Efficient arrays of booleans")
     (description "This package provides an object type which efficiently
