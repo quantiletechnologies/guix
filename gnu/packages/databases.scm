@@ -3334,7 +3334,7 @@ translate the complete SQLite API into Python.")
     (propagated-inputs
      (list python-typing-extensions))
     (native-inputs
-     (list python-aiounittest))
+     (list python-aiounittest python-flit-core))
     (home-page "https://github.com/jreese/aiosqlite")
     (synopsis
      "Asyncio bridge for sqlite3")
