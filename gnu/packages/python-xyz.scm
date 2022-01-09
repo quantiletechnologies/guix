@@ -21912,31 +21912,12 @@ N-dimensional arrays for Python.")
          "1q30bsfsq9xfqm8nmabg3bjh9gix3yng0170xiiyw1lin4xncf0q"))))
     (build-system python-build-system)
     (arguments
-     `(#:phases
+     `(#:test-flags '("-vv" "-k" "not concatenation.rst") ; needs python-scanpy.
+       #:phases
        (modify-phases %standard-phases
-         (delete 'check)
-         (add-before 'build 'relax-dependency-requirements
+         (add-before 'build 'set-version
            (lambda _
-             ;; We need to upgrade python-pandas to avoid
-             ;; https://github.com/pandas-dev/pandas/issues/35446
-             (substitute* "pyproject.toml"
-               (("pandas>=1.1.1") "pandas>=1.0.5"))))
-         (replace 'build
-           (lambda _
-             (setenv "SETUPTOOLS_SCM_PRETEND_VERSION" ,version)
-             ;; ZIP does not support timestamps before 1980.
-             (setenv "SOURCE_DATE_EPOCH" "315532800")
-             (invoke "flit" "build")))
-         (replace 'install
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (add-installed-pythonpath inputs outputs)
-             (let ((out (assoc-ref outputs "out")))
-               (for-each (lambda (wheel)
-                           (format #true wheel)
-                           (invoke "python" "-m" "pip" "install"
-                                   wheel (string-append "--prefix=" out)))
-                         (find-files "dist" "\\.whl$")))
-             #t)))))
+             (setenv "SETUPTOOLS_SCM_PRETEND_VERSION" ,version))))))
     (propagated-inputs
      (list python-h5py
            python-importlib-metadata
@@ -21945,10 +21926,13 @@ N-dimensional arrays for Python.")
            python-packaging
            python-pandas
            python-scipy
+           python-pytoml
            python-zarr))
     (native-inputs
-     (list python-joblib python-pytest python-toml python-flit
-           python-setuptools-scm))
+     ;; Missing: python-scanpy, which is part of bioinformatics module,
+     ;; which cannot be imported here.
+     (list python-joblib python-pytest python-toml python-flit-core
+           python-setuptools-scm python-boltons))
     (home-page "https://github.com/theislab/anndata")
     (synopsis "Annotated data for data analysis pipelines")
     (description "Anndata is a package for simple (functional) high-level APIs
