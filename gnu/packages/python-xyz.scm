@@ -26958,6 +26958,7 @@ symbolic expressions in pure Python using the technique of logical unification."
         (base32
          "0w9giq196wps7mbm47c4shdzs5yvwvqajqzkim2p92i51sm5qgvm"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; No tests.
     (native-inputs
      (list python-pytest-6 python-toml))
     (propagated-inputs
