@@ -22926,6 +22926,7 @@ functions that aim to reduce boilerplate when working with data.")
         (base32
          "1rxn6snn0r32r07g45hdjhh8aa1xzx6fjrm8g62d8vzp46z7rzrp"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; Cannot find C extension.
     (native-inputs
      (list python-nose))
     (home-page "https://github.com/spotify/annoy/")
