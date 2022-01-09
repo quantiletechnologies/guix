@@ -2264,6 +2264,7 @@ off-target reads for a capture method that targets CpG-rich region.")
                (base32
                 "0mclahslz34vq9x424jmzsxk0nmpm1j716fa8h3zwr9ssvch7skc"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; Cannot find C extension.
     (propagated-inputs
      (list python-numpy))
     (inputs
