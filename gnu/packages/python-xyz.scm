@@ -26857,6 +26857,7 @@ Generalized Mark-up Language}.")
         (base32
          "1azrphpkcyggg38xvkfb9dpc4xmmm90p02kf8dkqd4d6j5w96aj8"))))
     (build-system python-build-system)
+    (arguments `(#:tests? #f)) ; Cannot find C extension.
     (native-inputs
      (list python-cython python-pytest python-setuptools-scm python-toml
            python-wheel))
