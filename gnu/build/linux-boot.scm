@@ -540,6 +540,8 @@ upon error."
              (root-fs*    (find root-mount-point? mounts))
              (fsck.mode (find-long-option "fsck.mode" args)))
 
+        (format #t "initrd command-line parameters: ~a~%" args)
+
         (unless (or root-fs* (and root-device rootfstype))
           (error "no root file system or 'root' and 'rootfstype' parameters"))
 
