@@ -499,12 +499,12 @@ LINUX-MODULE-DIRECTORY, then installing KEYMAP-FILE with 'loadkeys' (if
 KEYMAP-FILE is true), then setting up QEMU guest networking if
 QEMU-GUEST-NETWORKING? is true, calling PRE-MOUNT, mounting the file systems
 specified in MOUNTS, and finally booting into the new root if any.  The initrd
-supports kernel command-line options '--load', '--root', and '--repl'.  It
-also honors a subset of the documented Linux kernel command-line parameters
-such as 'fsck.mode', 'resume' and 'rootdelay'.
+supports kernel command-line options '--load' and '--repl'.  It also honors a
+subset of the Linux kernel command-line parameters such as 'fsck.mode',
+'resume', 'root' and 'rootdelay'.
 
-Mount the root file system, specified by the '--root' command-line argument,
-if any.
+Mount the root file system, specified by the 'root' command-line argument, if
+any.
 
 MOUNTS must be a list of <file-system> objects.
 
@@ -517,9 +517,9 @@ upon error."
     (string=? (file-system-mount-point fs) "/"))
 
   (define (device-string->file-system-device device-string)
-    ;; The "--root=SPEC" kernel command-line option always provides a
-    ;; string, but the string can represent a device, an nfs-root, a UUID, or a
-    ;; label.  So check for all four.
+    ;; The "root=SPEC" kernel command-line option always provides a string,
+    ;; but the string can represent a device, an nfs-root, a UUID, or a label.
+    ;; So check for all four.
     (cond ((string-prefix? "/" device-string) device-string)
           ((string-contains device-string ":/") device-string) ; nfs-root
           ((uuid device-string) => identity)
@@ -533,9 +533,9 @@ upon error."
       (mount-essential-file-systems)
       (let* ((args    (linux-command-line))
              (to-load (find-long-option "--load" args))
-             ;; If present, ‘--root’ on the kernel command line takes precedence
+             ;; If present, ‘root’ on the kernel command line takes precedence
              ;; over the ‘device’ field of the root <file-system> record.
-             (root-device (and=> (find-long-option "--root" args)
+             (root-device (and=> (find-long-option "root" args)
                                  device-string->file-system-device))
              (root-fs (or (find root-mount-point? mounts)
                           ;; Fall back to fictitious defaults.

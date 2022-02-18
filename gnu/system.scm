@@ -187,9 +187,9 @@
 
 (define (bootable-kernel-arguments system root-device)
   "Return a list of kernel arguments (gexps) to boot SYSTEM from ROOT-DEVICE."
-  (list (string-append "--root="
+  (list (string-append "root="
                        ;; Note: Always use the DCE format because that's what
-                       ;; (gnu build linux-boot) expects for the '--root'
+                       ;; (gnu build linux-boot) expects for the 'root'
                        ;; kernel command-line option.
                        (file-system-device->string root-device
                                                    #:uuid-type 'dce))
@@ -1441,7 +1441,7 @@ a list of <menu-entry>, to populate the \"old entries\" menu."
                                            #:key system-kernel-arguments?)
   "Return a monadic <boot-parameters> record that describes the boot
 parameters of OS.  When SYSTEM-KERNEL-ARGUMENTS? is true, add kernel arguments
-such as '--root' and '--load' to <boot-parameters>."
+such as 'root' and '--load' to <boot-parameters>."
   (let* ((initrd          (and (not (operating-system-hurd os))
                                (operating-system-initrd-file os)))
          (store           (operating-system-store-file-system os))
@@ -1487,7 +1487,7 @@ such as '--root' and '--load' to <boot-parameters>."
    "Return a file that describes the boot parameters of OS.  The primary use of
 this file is the reconstruction of GRUB menu entries for old configurations.
 
-When SYSTEM-KERNEL-ARGUMENTS? is true, add kernel arguments such as '--root'
+When SYSTEM-KERNEL-ARGUMENTS? is true, add kernel arguments such as 'root'
 and '--load' to the returned file (since the returned file is then usually
 stored into the content-addressed \"system\" directory, it's usually not a
 good idea to give it because the content hash would change by the content hash
