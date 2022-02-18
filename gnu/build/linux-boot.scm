@@ -501,7 +501,7 @@ QEMU-GUEST-NETWORKING? is true, calling PRE-MOUNT, mounting the file systems
 specified in MOUNTS, and finally booting into the new root if any.  The initrd
 supports kernel command-line options '--load' and '--repl'.  It also honors a
 subset of the Linux kernel command-line parameters such as 'fsck.mode',
-'resume', 'root' and 'rootdelay'.
+'resume', 'root', 'rootdelay', rootflags and rootfstype.
 
 Mount the root file system, specified by the 'root' command-line argument, if
 any.
@@ -533,16 +533,31 @@ upon error."
       (mount-essential-file-systems)
       (let* ((args    (linux-command-line))
              (to-load (find-long-option "--load" args))
-             ;; If present, ‘root’ on the kernel command line takes precedence
-             ;; over the ‘device’ field of the root <file-system> record.
              (root-device (and=> (find-long-option "root" args)
                                  device-string->file-system-device))
-             (root-fs (or (find root-mount-point? mounts)
-                          ;; Fall back to fictitious defaults.
-                          (file-system (device (or root-device "/dev/root"))
-                                       (mount-point "/")
-                                       (type "ext4"))))
+             (rootfstype  (find-long-option "rootfstype" args))
+             (rootflags   (find-long-option "rootflags" args))
+             (root-fs*    (find root-mount-point? mounts))
              (fsck.mode (find-long-option "fsck.mode" args)))
+
+        (unless (or root-fs* (and root-device rootfstype))
+          (error "no root file system or 'root' and 'rootfstype' parameters"))
+
+        ;; If present, ‘root’ on the kernel command line takes precedence over
+        ;; the ‘device’ field of the root <file-system> record; likewise for
+        ;; the 'rootfstype' and 'rootflags' arguments.
+        (define root-fs
+          (if root-fs*
+              (file-system
+                (inherit root-fs*)
+                (device (or root-device (file-system-device root-fs*)))
+                (type (or rootfstype (file-system-type root-fs*)))
+                (options (or rootflags (file-system-options root-fs*))))
+              (file-system
+                (device root-device)
+                (mount-point "/")
+                (type rootfstype)
+                (options rootflags))))
 
         (define (check? fs)
           (match fsck.mode
@@ -615,18 +630,19 @@ the root file system...\n" root-delay)
 
         (setenv "EXT2FS_NO_MTAB_OK" "1")
 
-        (if root-device
-            (mount-root-file-system (canonicalize-device-spec root-device)
-                                    (file-system-type root-fs)
-                                    #:volatile-root? volatile-root?
-                                    #:flags (mount-flags->bit-mask
-                                             (file-system-flags root-fs))
-                                    #:options (file-system-options root-fs)
-                                    #:check? (check? root-fs)
-                                    #:skip-check-if-clean?
-                                    (skip-check-if-clean? root-fs)
-                                    #:repair (repair root-fs))
-            (mount "none" "/root" "tmpfs"))
+        ;; Mount the root file system.
+        (mount-root-file-system (canonicalize-device-spec
+                                 (file-system-device root-fs))
+                                (file-system-type root-fs)
+                                #:volatile-root? volatile-root?
+                                #:flags (mount-flags->bit-mask
+                                         (file-system-flags root-fs))
+                                #:options (file-system-options root-fs)
+                                #:check? (check? root-fs)
+                                #:skip-check-if-clean?
+                                (skip-check-if-clean? root-fs)
+                                #:repair (repair root-fs))
+        (mount "none" "/root" "tmpfs")
 
         ;; Mount the specified non-root file systems.
         (for-each (lambda (fs)
