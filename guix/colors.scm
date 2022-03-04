@@ -139,8 +139,9 @@ that subsequent output will not have any colors in effect."
 
 (define (color-output? port)
   "Return true if we should write colored output to PORT."
-  (and (not (getenv "NO_COLOR"))
-       (isatty?* port)))
+  (or (getenv "GUIX_COLOR_OUTPUT")
+      (and (not (getenv "NO_COLOR"))
+           (isatty?* port))))
 
 (define (coloring-procedure color)
   "Return a procedure that applies COLOR to the given string."
