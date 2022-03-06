@@ -463,9 +463,8 @@ it unchanged."
           (repository    (if cache-exists?
                              (repository-open cache-directory)
                              (clone/swh-fallback url ref cache-directory))))
-     ;; Only fetch remote if it has not been cloned just before.
-     (when (and cache-exists?
-                (not (reference-available? repository ref)))
+     ;; Always fetch remote, even if it has been cloned just before.
+     (when (not (reference-available? repository ref))
        (remote-fetch (remote-lookup repository "origin")
                      #:fetch-options (make-default-fetch-options)))
      (when recursive?
