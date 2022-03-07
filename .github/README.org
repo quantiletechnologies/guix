@@ -1,8 +1,8 @@
 #+TITLE: Quantile Technologies Guix Fork
 
-Patches to the [[https://savannah.gnu.org/git/?group=guix][Guix project]], but not either not yet available upstream (eg pending patch approval) or not appropriate for upstream (eg temporary workarounds).
+Patches to the [[https://savannah.gnu.org/git/?group=guix][Guix Repo]], but either not yet available upstream (eg pending patch approval) or not appropriate for upstream (eg temporary workarounds).
 
-Our fork has an extra branch named =quantile= which contains a lagged version of the official Guix system with our patches in place.
+Our fork has an extra branch named =quantile= which contains a lagged version of the official [[https://guix.gnu.org/][Guix]] project with our patches in place.
 Other branches are kept identical to upstream.
 
 Periodically we pull in updates from Github's [[https://github.com/guix-mirror/guix][Guix Mirror]], and merge with our =quantile= branch.
