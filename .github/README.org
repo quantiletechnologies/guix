@@ -1,0 +1,30 @@
+#+TITLE: Quantile Technologies Guix Fork
+
+Patches to the [[https://savannah.gnu.org/git/?group=guix][Guix project]], but not either not yet available upstream (eg pending patch approval) or not appropriate for upstream (eg temporary workarounds).
+
+Our fork has an extra branch named =quantile= which contains a lagged version of the official Guix system with our patches in place.
+Other branches are kept identical to upstream.
+
+Periodically we pull in updates from Github's [[https://github.com/guix-mirror/guix][Guix Mirror]], and merge with our =quantile= branch.
+
+We also push patches upstream to [[https://lists.gnu.org/mailman/listinfo/guix-patches][Guix Patches]] where appropriate.
+
+* Channel Setup
+
+You can add the following to your channel.scm file - usually stored under =/etc/guix/channel.scm= or =~/.config/guix/channel.scm=.
+
+#+BEGIN_SRC scheme
+(channel
+  (name 'guix)
+  (url "https://github.com/quantiletechnologies/qt-guix.git")
+  (branch "quantile")
+  (introduction
+    (make-channel-introduction
+       "06fae09eb46ddef70136cf326fb8a689fd651e55"
+       (openpgp-fingerprint
+         "5882 6D44 7BDD 52B4 EA6B  1202 7967 2059 1212 FEC5"))))
+#+END_SRC
+
+* Standard Guix README
+
+This file is stored under the =.github= directory so that it overrides the [[../README][Offical README]] which is kept pristine from the parent project.
