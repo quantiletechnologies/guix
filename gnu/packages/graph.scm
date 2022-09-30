@@ -1,13 +1,15 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2017, 2018, 2019, 2020 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2017, 2018, 2019, 2020, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2018 Joshua Sierles, Nextjournal <joshua@nextjournal.com>
-;;; Copyright © 2018, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
-;;; Copyright © 2019, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2018, 2020, 2022 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2019, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2019 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2020 Alexander Krotov <krotov@iitp.ru>
 ;;; Copyright © 2020 Pierre Langlois <pierre.langlos@gmx.com>
 ;;; Copyright © 2021 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2021 Alexandre Hannud Abdo <abdo@member.fsf.org>
+;;; Copyright © 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Marius Bakke <marius@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,6 +28,7 @@
 
 (define-module (gnu packages graph)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix packages)
   #:use-module (guix utils)
@@ -35,7 +38,6 @@
   #:use-module (guix build-system r)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (gnu packages)
-  #:use-module (gnu packages gcc)
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages bioconductor)
   #:use-module (gnu packages bioinformatics)
@@ -53,6 +55,7 @@
   #:use-module (gnu packages ncurses)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-science)
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
@@ -61,31 +64,72 @@
   #:use-module (gnu packages time)
   #:use-module (gnu packages xml))
 
+(define-public plfit
+  (package
+    (name "plfit")
+    (version "0.9.3")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/ntamas/plfit")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "03x5jbvg8vwr92682swy58ljxrhqwmga1xzd0cpfbfmda41gm2fb"))))
+    (build-system cmake-build-system)
+    (arguments
+     '(#:configure-flags (list "-DBUILD_SHARED_LIBS=ON")))
+    (home-page "https://github.com/ntamas/plfit")
+    (synopsis "Tool for fitting power-law distributions to empirical data")
+    (description "The @command{plfit} command fits power-law distributions to
+empirical (discrete or continuous) data, according to the method of Clauset,
+Shalizi and Newman (@cite{Clauset A, Shalizi CR and Newman MEJ: Power-law
+distributions in empirical data.  SIAM Review 51, 661-703 (2009)}).")
+    (license license:gpl2+)))
+
 (define-public igraph
   (package
     (name "igraph")
-    (version "0.8.4")
+    (version "0.9.8")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://github.com/igraph/igraph/releases/"
                            "download/" version "/igraph-" version ".tar.gz"))
+       (modules '((guix build utils)))
+       (snippet '(begin
+                   ;; Fully unbundle igraph (see:
+                   ;; https://github.com/igraph/igraph/issues/1897).
+                   (delete-file-recursively "vendor")
+                   (substitute* "CMakeLists.txt"
+                     (("add_subdirectory\\(vendor\\).*")
+                      ""))
+                   ;; Help CMake to find our plfit headers.
+                   (substitute* "etc/cmake/FindPLFIT.cmake"
+                     (("^  NAMES plfit.h.*" all)
+                      (string-append all
+                                     "  PATH_SUFFIXES plfit")))
+                   (substitute* '("src/CMakeLists.txt"
+                                  "etc/cmake/benchmark_helpers.cmake")
+                     ;; Remove bundling related variables.
+                     ((".*_IS_VENDORED.*")
+                      ""))))
        (sha256
-        (base32 "127q6q40kbmvd62yhbz6dlfk370qiq98s1iscyagpgbpjwb4xvyf"))))
-    (build-system gnu-build-system)
+        (base32 "15v3ydq95gahnas37cip637hvc2nwrmk76xp0nv3gq53rrrk9a7r"))))
+    (build-system cmake-build-system)
     (arguments
-     `(#:configure-flags
-       (list "--disable-static"
-             "--with-external-glpk"
-             "--with-external-blas"
-             "--with-external-lapack")))
+     '(#:configure-flags (list "-DBUILD_SHARED_LIBS=ON")))
+    (native-inputs (list pkg-config))
     (inputs
-     `(("gmp" ,gmp)
-       ("glpk" ,glpk)
-       ("libxml2" ,libxml2)
-       ("lapack" ,lapack)
-       ("openblas" ,openblas)
-       ("zlib" ,zlib)))
+     (list arpack-ng
+           gmp
+           glpk
+           libxml2
+           lapack
+           openblas
+           plfit
+           suitesparse))
     (home-page "https://igraph.org")
     (synopsis "Network analysis and visualization")
     (description
@@ -96,37 +140,47 @@ more.")
     (license license:gpl2+)))
 
 (define-public python-igraph
-  (package (inherit igraph)
+  (package
+    (inherit igraph)
     (name "python-igraph")
-    (version "0.8.2")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (pypi-uri "python-igraph" version))
-       (sha256
-        (base32 "0wkxrs28qdvnrz7d4jzcf2bh6v2yqzx3wyfziihfgsi2gn6n60a6"))))
+    (version "0.9.11")
+    (source (origin
+              (method git-fetch)
+              ;; The PyPI archive lacks tests.
+              (uri (git-reference
+                    (url "https://github.com/igraph/python-igraph")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1xlr0cnf3a1vs9n2psvgrmjhld4n1xr79kkjqzby4pxxyzk1bydn"))))
     (build-system python-build-system)
     (arguments
-     '(#:configure-flags
-       (list "--use-pkg-config")
-       #:phases
-       (modify-phases %standard-phases
-         (replace 'build
-           (lambda _
-             (invoke "python" "./setup.py" "build" "--use-pkg-config")))
-         (delete 'check)
-         (add-after 'install 'check
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (add-installed-pythonpath inputs outputs)
-             (invoke "pytest" "-v"))))))
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'specify-libigraph-location
+            (lambda _
+              (let ((igraph #$(this-package-input "igraph")))
+                (substitute* "setup.py"
+                  (("(LIBIGRAPH_FALLBACK_INCLUDE_DIRS = ).*" _ var)
+                   (string-append
+                    var (format #f "[~s]~%" (string-append igraph
+                                                           "/include/igraph"))))
+                  (("(LIBIGRAPH_FALLBACK_LIBRARY_DIRS = ).*" _ var)
+                   (string-append
+                    var (format #f "[~s]~%" (string-append igraph "/lib"))))))))
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                (invoke "pytest" "-v")))))))
     (inputs
-     `(("igraph" ,igraph)))
+     (list igraph))
     (propagated-inputs
-     `(("python-texttable" ,python-texttable)))
+     (list python-texttable))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("python-pytest" ,python-pytest)))
-    (home-page "https://pypi.org/project/python-igraph/")
+     (list python-pytest))
+    (home-page "https://igraph.org/python/")
     (synopsis "Python bindings for the igraph network analysis library")))
 
 (define-public r-rbiofabric
@@ -146,7 +200,7 @@ more.")
                   "1yahqrcrqpbcywv73y9rlmyz8apdnp08afialibrr93ch0p06f8z"))))
       (build-system r-build-system)
       (propagated-inputs
-       `(("r-igraph" ,r-igraph)))
+       (list r-igraph))
       (home-page "http://www.biofabric.org/")
       (synopsis "BioFabric network visualization")
       (description "This package provides an implementation of the function
@@ -158,7 +212,7 @@ lines.")
 (define-public python-plotly
   (package
     (name "python-plotly")
-    (version "4.14.3")
+    (version "5.6.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -167,11 +221,15 @@ lines.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "02wlgy7gf3v5ckiq9ab3prm53cckxkavlghqgkk9xw2sfmmrn61q"))))
+                "0kc9v5ampq2paw6sls6zdchvqvis7b1z8xhdvlhz5xxdr1vj5xnn"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
        (modify-phases %standard-phases
+          (add-before 'build 'skip-npm
+            ;; npm is not packaged so build without it
+            (lambda _
+              (setenv "SKIP_NPM" "T")))
          (add-after 'unpack 'chdir
            (lambda _
              (chdir "packages/python/plotly")
@@ -183,32 +241,24 @@ lines.")
                (invoke "pytest" "-x" "plotly/tests/test_io")
                ;; FIXME: Add optional dependencies and enable their tests.
                ;; (invoke "pytest" "-x" "plotly/tests/test_optional")
-               (invoke "pytest" "_plotly_utils/tests"))
-             #t))
-         (add-before 'reset-gzip-timestamps 'make-files-writable
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (for-each (lambda (file) (chmod file #o644))
-                 (find-files out "\\.gz"))
-               #t))))))
+               (invoke "pytest" "_plotly_utils/tests")))))))
     (native-inputs
-     `(("python-ipywidgets" ,python-ipywidgets)
-       ("python-pytest" ,python-pytest)
-       ("python-xarray" ,python-xarray)))
+     (list python-ipywidgets python-pytest python-xarray))
     (propagated-inputs
-     `(("python-ipython" ,python-ipython)
-       ("python-pandas" ,python-pandas)
-       ("python-pillow" ,python-pillow)
-       ("python-requests" ,python-requests)
-       ("python-retrying" ,python-retrying)
-       ("python-six" ,python-six)
-       ("python-statsmodels" ,python-statsmodels)))
+     (list python-ipython
+           python-pandas
+           python-pillow
+           python-requests
+           python-retrying
+           python-six
+           python-tenacity
+           python-statsmodels))
     (home-page "https://plotly.com/python/")
     (synopsis "Interactive plotting library for Python")
     (description "Plotly's Python graphing library makes interactive,
 publication-quality graphs online.  Examples of how to make line plots, scatter
 plots, area charts, bar charts, error bars, box plots, histograms, heatmaps,
-subplots, multiple-axes, polar charts, and bubble charts. ")
+subplots, multiple-axes, polar charts, and bubble charts.")
     (license license:expat)))
 
 (define-public python-plotly-2.4.1
@@ -223,29 +273,30 @@ subplots, multiple-axes, polar charts, and bubble charts. ")
           "0s9gk2fl53x8wwncs3fwii1vzfngr0sskv15v3mpshqmrqfrk27m"))))
    (native-inputs '())
    (propagated-inputs
-    `(("python-decorator" ,python-decorator)
-      ("python-nbformat" ,python-nbformat)
-      ("python-pandas" ,python-pandas)
-      ("python-pytz" ,python-pytz)
-      ("python-requests" ,python-requests)
-      ("python-six" ,python-six)))
+    (list python-decorator
+          python-nbformat
+          python-pandas
+          python-pytz
+          python-requests
+          python-six))
     (arguments
      '(#:tests? #f)))) ; The tests are not distributed in the release
 
 (define-public python-louvain
   (package
     (name "python-louvain")
-    (version "0.15")
+    (version "0.16")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "python-louvain" version))
        (sha256
-        (base32 "1sqp97fwh4asx0jr72x8hil8z8fcg2xq92jklmh2m599pvgnx19a"))))
+        (base32 "0sx53l555rwq0z7if8agirjgw4ddp8r9b949wwz8vlig03sjvfmp"))))
     (build-system python-build-system)
+    (native-inputs
+     (list python-setuptools))          ;for use_2to3 support
     (propagated-inputs
-     `(("python-networkx" ,python-networkx)
-       ("python-numpy" ,python-numpy)))
+     (list python-networkx python-numpy))
     (home-page "https://github.com/taynaud/python-louvain")
     (synopsis "Louvain algorithm for community detection")
     (description
@@ -253,10 +304,10 @@ subplots, multiple-axes, polar charts, and bubble charts. ")
 algorithm for community detection in large networks.")
     (license license:bsd-3)))
 
-(define-public python-louvain-0.6
+(define-public python-louvain-0.7
   (package
     (name "python-louvain")
-    (version "0.6.1")
+    (version "0.7.1")
     ;; The tarball on Pypi does not include the tests.
     (source (origin
               (method git-fetch)
@@ -266,16 +317,34 @@ algorithm for community detection in large networks.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0w31537sifkf65sck1iaip5i6d8g64pa3wdwad83d6p9jwkck57k"))))
+                "1g6b5c2jgwagnhnqh859g61h7x6a81d8hm3g6mkin6kzwafww3g2"))))
     (build-system python-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-before 'build 'pretend-version
+            ;; The version string is usually derived via setuptools-scm, but
+            ;; without the git metadata available this fails.
+            (lambda _
+              (setenv "SETUPTOOLS_SCM_PRETEND_VERSION" #$version)))
+          (add-before 'build 'find-igraph
+            (lambda* (#:key inputs #:allow-other-keys)
+              (setenv "IGRAPH_EXTRA_INCLUDE_PATH"
+                      (string-append (assoc-ref inputs "igraph")
+                                     "/include/igraph:"
+                                     (getenv "C_INCLUDE_PATH")))
+              (setenv "IGRAPH_EXTRA_LIBRARY_PATH"
+                      (getenv "LIBRARY_PATH")))))))
     (propagated-inputs
-     `(("python-ddt" ,python-ddt)
-       ("python-igraph" ,python-igraph)))
+     (list python-ddt python-igraph))
     (inputs
-     `(("igraph" ,igraph)))
+     (list igraph))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("python-pytest" ,python-pytest)))
+     (list pkg-config
+           python-pytest
+           python-setuptools-scm
+           python-wheel))
     (home-page "https://github.com/vtraag/louvain-igraph")
     (synopsis "Algorithm for methods of community detection in large networks")
     (description
@@ -366,9 +435,9 @@ install(TARGETS ${faiss_lib}_static ARCHIVE DESTINATION lib)
                              "/test"))
              #t)))))
     (inputs
-     `(("openblas" ,openblas)))
+     (list openblas))
     (native-inputs
-     `(("googletest" ,googletest)))
+     (list googletest))
     (home-page "https://github.com/facebookresearch/faiss")
     (synopsis "Efficient similarity search and clustering of dense vectors")
     (description "Faiss is a library for efficient similarity search and
@@ -392,8 +461,8 @@ contains supporting code for evaluation and parameter tuning.")
                (lambda ()
                  (let ((python-version ,(version-major+minor (package-version python))))
                    (format #t "\
-PYTHONCFLAGS =-I~a/include/python~am/ -I~a/lib/python~a/site-packages/numpy/core/include
-LIBS = -lpython~am -lfaiss
+PYTHONCFLAGS =-I~a/include/python~a/ -I~a/lib/python~a/site-packages/numpy/core/include
+LIBS = -lpython~a -lfaiss
 SHAREDFLAGS = -shared -fopenmp
 CXXFLAGS = -fpermissive -fopenmp -fPIC
 CPUFLAGS = ~{~a ~}~%"
@@ -418,8 +487,7 @@ CPUFLAGS = ~{~a ~}~%"
        ("python*" ,python)
        ("swig" ,swig)))
     (propagated-inputs
-     `(("python-matplotlib" ,python-matplotlib)
-       ("python-numpy" ,python-numpy)))
+     (list python-matplotlib python-numpy))
     (description "Faiss is a library for efficient similarity search and
 clustering of dense vectors.  This package provides Python bindings to the
 Faiss library.")))
@@ -427,22 +495,33 @@ Faiss library.")))
 (define-public python-leidenalg
   (package
     (name "python-leidenalg")
-    (version "0.7.0")
+    (version "0.8.10")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "leidenalg" version))
        (sha256
         (base32
-         "15fwld9hdw357rd026mzcwpah5liy4f33vc9x9kwy37g71b2rjf1"))))
+         "1hbvagp1yyazvl7cid7mii5263qi48lpkq543n5w71qysgz1f0v7"))))
     (build-system python-build-system)
-    (arguments '(#:tests? #f)) ; tests are not included
+    (arguments
+     '(#:tests? #f                      ;tests are not included
+       #:phases (modify-phases %standard-phases
+                  (add-after 'unpack 'fix-requirements
+                    (lambda _
+                      (substitute* "setup.py"
+                        (("self.external = False")
+                         "self.external = True")
+                        (("self.use_pkgconfig = False")
+                         "self.use_pkgconfig = True")
+                        (("python-igraph >=")
+                         "igraph >=")))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config python-setuptools-scm))
     (inputs
-     `(("igraph" ,igraph)))
+     (list igraph))
     (propagated-inputs
-     `(("python-igraph" ,python-igraph)))
+     (list python-igraph))
     (home-page "https://github.com/vtraag/leidenalg")
     (synopsis "Community detection in large networks")
     (description
@@ -458,7 +537,7 @@ of the Louvain algorithm, for a number of different methods.")
 (define-public edge-addition-planarity-suite
   (package
     (name "edge-addition-planarity-suite")
-    (version "3.0.0.5")
+    (version "3.0.2.0")
     (source
      (origin
        (method git-fetch)
@@ -469,12 +548,10 @@ of the Louvain algorithm, for a number of different methods.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "01cm7ay1njkfsdnmnvh5zwc7wg7x189hq1vbfhh9p3ihrbnmqzh8"))))
+         "1c7bnxgiz28mqsq3a3msznmjq629w0qqjynm2rqnnjn2qpc22h3i"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (synopsis "Embedding of planar graphs")
     (description "The package provides a reference implementation of the
 linear time edge addition algorithm for embedding planar graphs and
@@ -498,9 +575,9 @@ isolating planarity obstructions.")
          "1rv2v42x2506x7f10349m1wpmmfxrv9l032bkminni2gbip9cjg0"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("igraph" ,igraph)))
+     (list igraph))
     (home-page "https://sourceforge.net/projects/rankwidth/")
     (synopsis "Rank-width and rank-decomposition of graphs")
     (description "rw computes rank-width and rank-decompositions
@@ -521,9 +598,9 @@ of graphs.")
          "08yw3maxhn5fl1lff81gmcrpa4j9aas4mmby1g9w5qcr0np82d1w"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("gd" ,gd)))
+     (list gd))
     (home-page "http://www.mcternan.me.uk/mscgen/")
     (synopsis "Message Sequence Chart Generator")
     (description "Mscgen is a small program that parses Message Sequence Chart
@@ -539,7 +616,7 @@ transformed into common image formats for display or printing.")
 (define-public python-graph-tool
   (package
     (name "python-graph-tool")
-    (version "2.43")
+    (version "2.45")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -547,39 +624,31 @@ transformed into common image formats for display or printing.")
                     version ".tar.bz2"))
               (sha256
                (base32
-                "0v58in4rwk9fhjarjw6xfxpx5zz2z13sy3yvd14b5kr0884yw6sz"))))
+                "0s46qqg454kwq2px7x1a4ckryclkxnrz1r7gj6bv40nsrynafbgr"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:configure-flags
+     `(#:imported-modules (,@%gnu-build-system-modules
+                           (guix build python-build-system))
+       #:modules (,@%gnu-build-system-modules
+                  ((guix build python-build-system) #:select (site-packages)))
+       #:configure-flags
        (list (string-append "--with-boost="
                             (assoc-ref %build-inputs "boost"))
              (string-append "--with-python-module-path="
-                            (assoc-ref %outputs "out")
-                            "/lib/python"
-                            ,(version-major+minor
-                              (package-version
-                               (car (assoc-ref
-                                     (package-inputs this-package)
-                                     "python"))))
-                            "/site-packages/"))))
+                            (site-packages %build-inputs %outputs)))))
     (native-inputs
-     `(("gcc-10" ,gcc-10)
-       ("ncurses" ,ncurses)
-       ("pkg-config" ,pkg-config)))
+     (list ncurses pkg-config))
     (inputs
-     `(("boost" ,boost)
-       ("cairomm" ,cairomm)
-       ("cgal" ,cgal)
-       ("expat" ,expat)
-       ("gmp" ,gmp)
-       ("gtk+" ,gtk+)
-       ("python" ,python-wrapper)
-       ("sparsehash" ,sparsehash)))
+     (list boost
+           cairomm-1.14
+           cgal
+           expat
+           gmp
+           gtk+
+           python-wrapper
+           sparsehash))
     (propagated-inputs
-     `(("python-matplotlib" ,python-matplotlib)
-       ("python-numpy" ,python-numpy)
-       ("python-pycairo" ,python-pycairo)
-       ("python-scipy" ,python-scipy)))
+     (list python-matplotlib python-numpy python-pycairo python-scipy))
     (synopsis "Manipulate and analyze graphs with Python efficiently")
     (description "Graph-tool is an efficient Python module for manipulation
 and statistical analysis of graphs (a.k.a. networks).  Contrary to most other

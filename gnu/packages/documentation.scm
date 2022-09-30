@@ -11,6 +11,7 @@
 ;;; Copyright © 2020 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2020, 2021 Michael Rohleder <mike@rohleder.de>
 ;;; Copyright © 2021 Marius Bakke <marius@gnu.org>
+;;; Copyright © 2022 Maxim Cournoyer <maxim.counoyer@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -31,9 +32,11 @@
   #:use-module (guix licenses)
   #:use-module (guix packages)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system cmake)
+  #:use-module (guix build-system python)
   #:use-module (guix build-system qt)
   #:use-module (guix deprecation)
   #:use-module (gnu packages)
@@ -41,7 +44,9 @@
   #:use-module (gnu packages backup)
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
+  #:use-module (gnu packages check)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages bison)
   #:use-module (gnu packages kde-frameworks)
   #:use-module (gnu packages docbook)
@@ -53,6 +58,7 @@
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages qt)
   #:use-module (gnu packages sqlite)
+  #:use-module (gnu packages sphinx)
   #:use-module (gnu packages xml)
   #:use-module (gnu packages xorg))
 
@@ -93,7 +99,7 @@
                 (assoc-ref outputs "out")))
              #t)))))
     (inputs
-     `(("perl" ,perl)))
+     (list perl))
     (synopsis "LaTeX documents to HTML")
     (description "LaTeX2HTML is a utility that converts LaTeX documents to web
 pages in HTML.")
@@ -160,13 +166,9 @@ release/xsl/current")
                                          "/xml/dtd/docbook/docbookx.dtd")))
                        #t)))))
     (native-inputs
-     `(("autoconf" ,autoconf)))
+     (list autoconf))
     (inputs
-     `(("python" ,python)
-       ("docbook-xml" ,docbook-xml)
-       ("docbook-xsl" ,docbook-xsl)
-       ("libxml2" ,libxml2)
-       ("libxslt" ,libxslt)))
+     (list python docbook-xml docbook-xsl libxml2 libxslt))
     (home-page "https://asciidoc.org/")
     (synopsis "Text-based document generation system")
     (description
@@ -185,8 +187,8 @@ markup) can be customized and extended by the user.")
 (define-public doxygen
   (package
     (name "doxygen")
-    (version "1.8.17")
-    (home-page "http://www.doxygen.nl/")
+    (version "1.9.1")
+    (home-page "https://www.doxygen.nl/")
     (source (origin
              (method url-fetch)
              (uri (list (string-append home-page "files/doxygen-"
@@ -196,15 +198,11 @@ markup) can be customized and extended by the user.")
                                        ".src.tar.gz")))
              (sha256
               (base32
-               "16dmv0gm1x8rvbm82fmjvi213q8fxqxinm75pcf595flya59ific"))
-             (patches (search-patches "doxygen-test.patch"
-                                      "doxygen-1.8.17-runtests.patch"))))
+               "1lcif1qi20gf04qyjrx7x367669g17vz2ilgi4cmamp1whdsxbk7"))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("bison" ,bison)
-       ("flex" ,flex)
-       ("libxml2" ,libxml2)             ;provides xmllint for the tests
-       ("python" ,python)))             ;for creating the documentation
+     (list bison flex libxml2 ;provides xmllint for the tests
+           python))             ;for creating the documentation
     (inputs
      `(("bash" ,bash-minimal)))
     (arguments
@@ -218,6 +216,12 @@ markup) can be customized and extended by the user.")
              '())
        #:test-target "tests"
        #:phases (modify-phases %standard-phases
+                  (add-after 'unpack 'disable-bibtex-test
+                    (lambda _
+                      ;; Disable test that requires bibtex to avoid a
+                      ;; circular dependency.
+                      (for-each delete-file-recursively
+                                '("testing/012" "testing/012_cite.dox"))))
                   (add-before 'configure 'patch-sh
                               (lambda* (#:key inputs #:allow-other-keys)
                                 (substitute* "src/portable.cpp"
@@ -248,8 +252,7 @@ and to some extent D.")
                                        "doc++-segfault-fix.patch"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("flex" ,flex)
-       ("gettext" ,gettext-minimal)))
+     (list flex gettext-minimal))
     (home-page "http://docpp.sourceforge.net/")
     (synopsis "Documentation system for C, C++, IDL, and Java")
     (description
@@ -258,6 +261,57 @@ generate both TeX output for high-quality hardcopies or HTML output for online
 browsing.  The documentation is extracted directly from the C/C++/IDL source
 or Java class files.")
     (license gpl2+)))
+
+(define-public python-docrepr
+  (package
+    (name "python-docrepr")
+    (version "0.2.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/spyder-ide/docrepr")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1ma5gwy93m1djd3zdlnqfrwhgr8ic1qbsz5kkrb9f987ax40lfkd"))))
+    (build-system python-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'patch-sources
+            (lambda _
+              ;; XXX: This fixes an issue where shutil.copytree would fail
+              ;; merging directories with same files copied by Sphinx from the
+              ;; store (hence read-only, throwing a Permission denied error).
+              ;; In the case this happens, it falls back to a manual copy
+              ;; routine that omits overwriting same-named files (see:
+              ;; https://github.com/spyder-ide/docrepr/issues/54).
+              (substitute* "docrepr/utils.py"
+                (("except TypeError")
+                 "except (TypeError, shutil.Error)"))))
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                (invoke "pytest" "-p" "no:warnings" "-vv")))))))
+    (native-inputs
+     (list python-ipython
+           python-matplotlib
+           python-numpy
+           python-pytest
+           python-pytest-asyncio))
+    (propagated-inputs
+     (list python-docutils
+           python-jinja2
+           python-matplotlib
+           python-sphinx))
+    (home-page "https://github.com/spyder-ide/docrepr/")
+    (synopsis "Python docstrings to HTML renderer")
+    (description "Docrepr renders Python docstrings to HTML with Sphinx.  It
+can generate rich and plain representations of docstrings, alongside
+additional metadata about the object to which the docstring belongs.")
+    (license bsd-3)))
 
 (define-public scrollkeeper
   (package
@@ -277,21 +331,19 @@ or Java class files.")
                             (assoc-ref %build-inputs "docbook-xml")
                             "/xml/dtd/docbook/catalog.xml"))))
     (inputs
-     `(("perl" ,perl)
-       ("libxml2" ,libxml2)
-       ("libxslt" ,libxslt)
-       ;; The configure script checks for either version 4.2 or 4.1.2.
-       ("docbook-xml" ,docbook-xml-4.2)))
+     (list perl libxml2 libxslt
+           ;; The configure script checks for either version 4.2 or 4.1.2.
+           docbook-xml-4.2))
     (native-inputs
-     `(("intltool" ,intltool)))
+     (list intltool))
     (home-page "http://scrollkeeper.sourceforge.net/")
     (synopsis "Open Documentation Cataloging Project")
-    (description "ScrollKeeper is a cataloging system for documentation on open
-systems.  It manages documentation metadata as specified by the Open Source
-Metadata Framework and provides a simple API to allow help browsers to find,
-sort, and search the document catalog.  It will also be able to communicate
-with catalog servers on the Net to search for documents which are not on the
-local system.")
+    (description
+     "ScrollKeeper is a cataloging system for documentation.  It manages
+documentation metadata as specified by the Open Source Metadata Framework and
+provides a simple API to allow help browsers to find, sort, and search the
+document catalog.  It will also be able to communicate with catalog servers on
+the Net to search for documents which are not on the local system.")
     (license lgpl2.1+)))
 
 (define-public zeal
@@ -319,22 +371,21 @@ local system.")
                (let* ((out (assoc-ref outputs "out"))
                       (bin (string-append out "/bin/zeal"))
                       (qt-process-path (string-append
-                                        (assoc-ref inputs "qtwebengine")
+                                        (assoc-ref inputs "qtwebengine-5")
                                         "/lib/qt5/libexec/QtWebEngineProcess")))
                  (wrap-program bin
                    `("QTWEBENGINEPROCESS_PATH" = (,qt-process-path)))
                  #t))))))
       (native-inputs
-       `(("extra-cmake-modules" ,extra-cmake-modules)
-         ("pkg-config" ,pkg-config)))
+       (list extra-cmake-modules pkg-config))
       (inputs
        `(("libarchive" ,libarchive)
          ("sqlite" ,sqlite)
          ("qtbase" ,qtbase-5)
-         ("qtdeclarative" ,qtdeclarative)
-         ("qtwebchannel" ,qtwebchannel)
-         ("qtwebengine" ,qtwebengine)
-         ("qtquickcontrols" ,qtquickcontrols)
+         ("qtdeclarative-5" ,qtdeclarative-5)
+         ("qtwebchannel-5" ,qtwebchannel-5)
+         ("qtwebengine-5" ,qtwebengine-5)
+         ("qtquickcontrols-5" ,qtquickcontrols-5)
          ("qtx11extras" ,qtx11extras)
          ("xcb-util-keyms" ,xcb-util-keysyms)))
       (home-page "https://zealdocs.org/")

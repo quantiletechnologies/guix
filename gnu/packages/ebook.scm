@@ -6,9 +6,10 @@
 ;;; Copyright © 2017 Roel Janssen <roel@gnu.org>
 ;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2020 Marius Bakke <mbakke@fastmail.com>
-;;; Copyright © 2020, 2021 Vinicius Monego <monego@posteo.net>
+;;; Copyright © 2020, 2021, 2022 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2020 Zheng Junjie <873216071@qq.com>
 ;;; Copyright © 2021 la snesne <lasnesne@lagunposprasihopre.org>
+;;; Copyright © 2021 Petr Hodina <phodina@protonmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -30,13 +31,16 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix utils)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system meson)
   #:use-module (guix build-system python)
+  #:use-module (guix build-system qt)
   #:use-module (gnu packages)
   #:use-module (gnu packages autotools)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages curl)
   #:use-module (gnu packages databases)
@@ -54,6 +58,7 @@
   #:use-module (gnu packages icu4c)
   #:use-module (gnu packages image)
   #:use-module (gnu packages javascript)
+  #:use-module (gnu packages language)
   #:use-module (gnu packages libusb)
   #:use-module (gnu packages libreoffice)
   #:use-module (gnu packages music)
@@ -108,7 +113,7 @@
          "0wpn9ijlsmrpyiwg3drmgz4dms1i1i347adgqw37bkrh3vn6yq16"))))
     (build-system python-build-system)
     (inputs
-     `(("chmlib" ,chmlib)))
+     (list chmlib))
     (home-page "https://github.com/dottedmag/pychm")
     (synopsis "Handle CHM files")
     (description "This package provides a Python module for interacting
@@ -118,217 +123,218 @@ with Microsoft Compiled HTML (CHM) files")
 (define-public calibre
   (package
     (name "calibre")
-    (version "5.21.0")
+    (version "5.36.0")
     (source
-      (origin
-        (method url-fetch)
-        (uri (string-append "http://download.calibre-ebook.com/"
-                            version "/calibre-"
-                            version ".tar.xz"))
-        (sha256
-         (base32
-          "0mq2w8blq6ykaml812axakwkqcw85qcpfwijdikn7kvbrhnnp2s5"))
-        (modules '((guix build utils)))
-        (snippet
-          '(begin
-             ;; Unbundle python2-odfpy.
-             (delete-file-recursively "src/odf")
-             ;; Disable test that attempts to load it.
-             (substitute* "setup/test.py"
-               ((".*SRC, 'odf'.*")
-                ""))
-
-             ;; Remove unneeded resources.
-             (delete-file "resources/mozilla-ca-certs.pem")
-             (delete-file "resources/calibre-portable.bat")
-             (delete-file "resources/calibre-portable.sh")
-             #t))
-        (patches (search-patches "calibre-no-updates-dialog.patch"
-                                 "calibre-remove-test-sqlite.patch" ; TODO: fix test.
-                                 "calibre-remove-test-unrar.patch"))))
+     (origin
+       (method url-fetch)
+       (uri (string-append "http://download.calibre-ebook.com/"
+                           version "/calibre-"
+                           version ".tar.xz"))
+       (sha256
+        (base32
+         "1c036qmn7lxq0899c2xzzs6whz7z0557frnfqisbvfxa13b2sadk"))
+       (modules '((guix build utils)))
+       (snippet
+        '(begin
+           ;; Unbundle python2-odfpy.
+           (delete-file-recursively "src/odf")
+           ;; Disable test that attempts to load it.
+           (substitute* "setup/test.py"
+             ((".*SRC, 'odf'.*") ""))
+           ;; Remove unneeded resources.
+           (delete-file "resources/mozilla-ca-certs.pem")
+           (delete-file "resources/calibre-portable.bat")
+           (delete-file "resources/calibre-portable.sh")))
+       (patches (search-patches "calibre-no-updates-dialog.patch"
+                                "calibre-remove-test-sqlite.patch" ; TODO: fix test.
+                                "calibre-remove-test-unrar.patch"))))
     (build-system python-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("qtbase" ,qtbase-5) ; for qmake
-       ("python-flake8" ,python-flake8)
-       ("python-pyqt-builder" ,python-pyqt-builder)
-       ("xdg-utils" ,xdg-utils)))
+     (list bash-minimal
+           pkg-config
+           python-flake8
+           python-pyqt-builder
+           qtbase-5                     ; for qmake
+           xdg-utils))
     (inputs
-     `(("fontconfig" ,fontconfig)
-       ("font-liberation" ,font-liberation)
-       ("glib" ,glib)
-       ("hunspell" ,hunspell)
-       ("hyphen" ,hyphen)
-       ("icu4c" ,icu4c)
-       ("libmtp" ,libmtp)
-       ("libpng" ,libpng)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libjxr" ,libjxr)
-       ("libusb" ,libusb)
-       ("openssl" ,openssl)
-       ("optipng" ,optipng)
-       ("podofo" ,podofo)
-       ("poppler" ,poppler)
-       ("python-apsw" ,python-apsw)
-       ("python-beautifulsoup4" ,python-beautifulsoup4)
-       ("python-cchardet" ,python-cchardet)
-       ("python-css-parser" ,python-css-parser)
-       ("python-cssselect" ,python-cssselect)
-       ("python-dateutil" ,python-dateutil)
-       ("python-dbus" ,python-dbus)
-       ("python-dnspython" ,python-dnspython-1.16)
-       ("python-dukpy" ,python-dukpy)
-       ("python-feedparser" ,python-feedparser)
-       ("python-html2text" ,python-html2text)
-       ("python-html5-parser" ,python-html5-parser)
-       ("python-html5lib" ,python-html5lib)
-       ("python-lxml" ,python-lxml)
-       ("python-markdown" ,python-markdown)
-       ("python-mechanize" ,python-mechanize)
-       ;; python-msgpack is needed for the network content server to work.
-       ("python-msgpack" ,python-msgpack)
-       ("python-netifaces" ,python-netifaces)
-       ("python-odfpy" ,python-odfpy)
-       ("python-pillow" ,python-pillow)
-       ("python-psutil" ,python-psutil)
-       ("python-py7zr" ,python-py7zr)
-       ("python-pychm" ,python-pychm)
-       ("python-pycryptodome" ,python-pycryptodome)
-       ("python-pygments" ,python-pygments)
-       ("python-pyqt" ,python-pyqt)
-       ("python-pyqtwebengine" ,python-pyqtwebengine)
-       ("python-regex" ,python-regex)
-       ("python-speechd" ,speech-dispatcher)
-       ("python-zeroconf" ,python-zeroconf)
-       ("qtwebengine" ,qtwebengine)
-       ("sqlite" ,sqlite)))
+     (list fontconfig
+           font-liberation
+           glib
+           hunspell
+           hyphen
+           icu4c
+           libmtp
+           libpng
+           libjpeg-turbo
+           libjxr
+           libstemmer
+           libusb
+           openssl
+           optipng
+           podofo
+           poppler
+           python-apsw
+           python-beautifulsoup4
+           python-cchardet
+           python-css-parser
+           python-cssselect
+           python-dateutil
+           python-dnspython-1.16
+           python-feedparser
+           python-html2text
+           python-html5-parser
+           python-html5lib
+           python-jeepney
+           python-lxml
+           python-markdown
+           python-mechanize
+           ;; python-msgpack is needed for the network content server to work.
+           python-msgpack
+           python-netifaces
+           python-odfpy
+           python-pillow
+           python-psutil
+           python-py7zr
+           python-pychm
+           python-pygments
+           python-pyqt-without-qtwebkit
+           python-pyqtwebengine
+           python-regex
+           speech-dispatcher
+           python-zeroconf
+           qtwebengine-5
+           sqlite))
     (arguments
-     `(;; Calibre is using setuptools by itself, but the setup.py is not
-       ;; compatible with the shim wrapper (taken from pip) we are using.
-       #:use-setuptools? #f
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'patch-source
-           (lambda _
-             (substitute* "src/calibre/linux.py"
-               ;; We can't use the uninstaller in Guix. Don't build it.
-               (("self\\.create_uninstaller()") ""))
-             #t))
-         (add-after 'patch-source-shebangs 'patch-more-shebangs
-           (lambda _
-             ;; Patch various inline shebangs.
-             (substitute* '("src/calibre/gui2/preferences/tweaks.py"
-                            "src/calibre/gui2/dialogs/custom_recipes.py"
-                            "setup/install.py"
-                            "setup/linux-installer.sh")
-               (("#!/usr/bin/env python")
-                (string-append "#!" (which "python")))
-               (("#!/bin/sh")
-                (string-append "#!" (which "sh"))))
-             #t))
-         (add-after 'unpack 'dont-load-remote-icons
-           (lambda _
-             (substitute* "setup/plugins_mirror.py"
-               (("href=\"//calibre-ebook.com/favicon.ico\"")
-                "href=\"favicon.ico\""))
-             #t))
-         (add-before 'build 'configure
-          (lambda* (#:key inputs outputs #:allow-other-keys)
-            (let ((podofo (assoc-ref inputs "podofo"))
-                  (pyqt (assoc-ref inputs "python-pyqt"))
-                  (python-sip (assoc-ref inputs "python-sip"))
-                  (out (assoc-ref outputs "out")))
+     (list
+      ;; Calibre is using setuptools by itself, but the setup.py is not
+      ;; compatible with the shim wrapper (taken from pip) we are using.
+      #:use-setuptools? #f
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'patch-source
+            (lambda _
+              (substitute* "src/calibre/linux.py"
+                ;; We can't use the uninstaller in Guix. Don't build it.
+                (("self\\.create_uninstaller()") ""))))
+          (add-after 'patch-source-shebangs 'patch-more-shebangs
+            (lambda* (#:key inputs native-inputs #:allow-other-keys)
+              ;; Patch various inline shebangs.
+              (substitute* '("src/calibre/gui2/preferences/tweaks.py"
+                             "src/calibre/gui2/dialogs/custom_recipes.py"
+                             "setup/install.py"
+                             "setup/linux-installer.sh")
+                (("#!/usr/bin/env python")
+                 (string-append "#!" (search-input-file inputs "/bin/python")))
+                (("#!/bin/sh")
+                 (string-append "#!"
+                                (search-input-file native-inputs "/bin/sh"))))))
+          (add-after 'unpack 'dont-load-remote-icons
+            (lambda _
+              (substitute* "setup/plugins_mirror.py"
+                (("href=\"//calibre-ebook.com/favicon.ico\"")
+                 "href=\"favicon.ico\""))))
+          (add-before 'build 'configure
+            (lambda* (#:key inputs #:allow-other-keys)
               (substitute* "setup/build.py"
                 (("\\[tool.sip.bindings.pictureflow\\]")
                  "[tool.sip.bindings.pictureflow]
 tags = [\"WS_X11\"]")
                 (("\\[tool.sip.project\\]")
                  (string-append "[tool.sip.project]
-sip-include-dirs = [\"" pyqt "/share/sip" "\"]")))
+sip-include-dirs = [\""
+                                #$(this-package-input
+                                   "python-pyqt-without-qtwebkit")
+                                "/share/sip\"]")))
               (substitute* "src/calibre/ebooks/pdf/pdftohtml.py"
                 (("PDFTOHTML = 'pdftohtml'")
-                 (string-append "PDFTOHTML = \"" (assoc-ref inputs "poppler")
-                                "/bin/pdftohtml\"")))
-              ;; get_exe_path looks in poppler's output for these binaries. Make
-              ;; it not do that.
+                 (string-append "PDFTOHTML = \""
+                                (search-input-file inputs "/bin/pdftohtml")
+                                "\"")))
+              ;; get_exe_path looks in poppler's output for these
+              ;; binaries. Make it not do that.
               (substitute* "src/calibre/utils/img.py"
-                (("get_exe_path..jpegtran..") (string-append "'" (which "jpegtran") "'"))
-                (("get_exe_path..cjpeg..") (string-append "'" (which "cjpeg") "'"))
-                (("get_exe_path..optipng..") (string-append "'" (which "optipng") "'"))
-                (("get_exe_path..JxrDecApp..") (string-append "'" (which "JxrDecApp") "'")))
+                (("get_exe_path..jpegtran..")
+                 (string-append "'"
+                                (search-input-file inputs "/bin/jpegtran")
+                                "'"))
+                (("get_exe_path..cjpeg..")
+                 (string-append "'"
+                                (search-input-file inputs "/bin/cjpeg")
+                                "'"))
+                (("get_exe_path..optipng..")
+                 (string-append "'"
+                                (search-input-file inputs "/bin/optipng")
+                                "'"))
+                (("get_exe_path..JxrDecApp..")
+                 (string-append "'"
+                                (search-input-file inputs "/bin/JxrDecApp")
+                                "'")))
               ;; Calibre thinks we are installing desktop files into a home
               ;; directory, but here we butcher the script in to installing
               ;; to calibres /share directory.
-              (setenv "XDG_DATA_HOME" (string-append out "/share"))
+              (setenv "XDG_DATA_HOME" (string-append #$output "/share"))
               (substitute* "src/calibre/linux.py"
                 (("'~/.local/share'") "''"))
-
               ;; 'python setup.py rapydscript' uses QtWebEngine, which
               ;; needs to create temporary files in $HOME.
               (setenv "HOME" "/tmp")
-
               ;; XXX: QtWebEngine will fail if no fonts are available.  This
               ;; can likely be removed when fontconfig has been patched to
               ;; include TrueType fonts by default.
-              (symlink (string-append (assoc-ref inputs "font-liberation")
+              (symlink (string-append #$(this-package-input "font-liberation")
                                       "/share/fonts")
                        "/tmp/.fonts")
-
-              (setenv "PODOFO_INC_DIR" (string-append podofo "/include/podofo"))
-              (setenv "PODOFO_LIB_DIR" (string-append podofo "/lib"))
+              (let ((podofo #$(this-package-input "podofo")))
+                (setenv "PODOFO_INC_DIR"
+                        (string-append podofo "/include/podofo"))
+                (setenv "PODOFO_LIB_DIR" (string-append podofo "/lib")))
               ;; This informs the tests we are a continuous integration
               ;; environment and thus have no networking.
               (setenv "CI" "true")
-              ;; The Qt test complains about being unable to load all image plugins, and I
-              ;; notice the available plugins list it shows lacks 'svg'. Adding qtsvg doesn't
-              ;; fix it, so I'm not sure how to fix it.  TODO: Fix test and remove this.
-              (setenv "SKIP_QT_BUILD_TEST" "true")
-              #t)))
-         (add-after 'install 'install-rapydscript
-           (lambda* (#:key inputs #:allow-other-keys)
+              ;; The Qt test complains about being unable to load all image
+              ;; plugins, and I notice the available plugins list it shows
+              ;; lacks 'svg'. Adding qtsvg-5 doesn't fix it, so I'm not sure how
+              ;; to fix it.  TODO: Fix test and remove this.
+              (setenv "SKIP_QT_BUILD_TEST" "true")))
+          (add-after 'install 'install-rapydscript
+            (lambda _
               ;; Unset so QtWebengine doesn't dump temporary files here.
-             (unsetenv "XDG_DATA_HOME")
-             (invoke "python" "setup.py" "rapydscript")
-             #t))
-         (add-after 'install 'install-man-pages
-           (lambda* (#:key outputs #:allow-other-keys)
-             (copy-recursively
-              "man-pages"
-              (string-append (assoc-ref outputs "out") "/share/man"))
-             #t))
-         ;; The font TTF files are used in some miscellaneous tests, so we
-         ;; unbundle them here to avoid patching the tests.
-         (add-after 'install 'unbundle-font-liberation
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let ((font-dest (string-append (assoc-ref outputs "out")
-                                             "/share/calibre/fonts/liberation"))
-                   (font-src (string-append (assoc-ref inputs "font-liberation")
-                                            "/share/fonts/truetype")))
-               (delete-file-recursively font-dest)
-               (symlink font-src font-dest))
-             #t))
-         ;; Make run-time dependencies available to the binaries.
-         (add-after 'wrap 'wrap-program
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out"))
-                   (qtwebengine (assoc-ref inputs "qtwebengine")))
-               (with-directory-excursion (string-append out "/bin")
-                 (for-each
-                  (lambda (binary)
-                    (wrap-program binary
-                      ;; Make QtWebEngineProcess available.
-                      `("QTWEBENGINEPROCESS_PATH" =
-                        ,(list (string-append
-                                qtwebengine
-                                "/lib/qt5/libexec/QtWebEngineProcess")))))
-                  ;; Wrap all the binaries shipping with the package, except
-                  ;; for the wrappings created during the 'wrap standard
-                  ;; phase.  This extends existing .calibre-real wrappers
-                  ;; rather than create ..calibre-real-real-s.  For more
-                  ;; information see: https://issues.guix.gnu.org/43249.
-                  (find-files "." (lambda (file stat)
-                                    (not (wrapper? file)))))))
-             #t)))))
+              (unsetenv "XDG_DATA_HOME")
+              (invoke "python" "setup.py" "rapydscript")))
+          (add-after 'install 'install-man-pages
+            (lambda _
+              (copy-recursively "man-pages"
+                                (string-append #$output "/share/man"))))
+          ;; The font TTF files are used in some miscellaneous tests, so we
+          ;; unbundle them here to avoid patching the tests.
+          (add-after 'install 'unbundle-font-liberation
+            (lambda _
+              (let ((font-dest
+                     (string-append #$output "/share/calibre/fonts/liberation"))
+                    (font-src
+                     (string-append #$(this-package-input "font-liberation")
+                                    "/share/fonts/truetype")))
+                (delete-file-recursively font-dest)
+                (symlink font-src font-dest))))
+          ;; Make run-time dependencies available to the binaries.
+          (add-after 'wrap 'wrap-program
+            (lambda* (#:key inputs #:allow-other-keys)
+              (with-directory-excursion (string-append #$output "/bin")
+                (for-each
+                 (lambda (binary)
+                   (wrap-program binary
+                     ;; Make QtWebEngineProcess available.
+                     `("QTWEBENGINEPROCESS_PATH" =
+                       ,(list
+                         (search-input-file
+                          inputs "/lib/qt5/libexec/QtWebEngineProcess")))))
+                 ;; Wrap all the binaries shipping with the package, except
+                 ;; for the wrappings created during the 'wrap standard
+                 ;; phase.  This extends existing .calibre-real wrappers
+                 ;; rather than create ..calibre-real-real-s.  For more
+                 ;; information see: https://issues.guix.gnu.org/43249.
+                 (find-files "." (lambda (file stat)
+                                   (not (wrapped-program? file)))))))))))
     (home-page "https://calibre-ebook.com/")
     (synopsis "E-book library management software")
     (description "Calibre is an e-book library manager.  It can view, convert
@@ -366,15 +372,50 @@ e-books for convenient reading.")
      `(#:tests? #f)) ; No 'test' target
     (build-system cmake-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("libzip" ,libzip)
-       ("libxml2" ,libxml2)))
+     (list libzip libxml2))
     (home-page "http://ebook-tools.sourceforge.net")
     (synopsis "Tools and library for dealing with various ebook file formats")
     (description "This package provides command-line tools and a library for
 accessing and converting various ebook file formats.")
     (license license:expat)))
+
+(define-public inkbox
+  (package
+    (name "inkbox")
+    (version "1.7")
+    (source
+     (origin
+       (method git-fetch)
+       (uri
+        (git-reference
+         (url "https://alpinekobox.ddns.net/InkBox/inkbox/")
+         (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "126cqn0ixcn608lv2hd9f7zmzj4g448bnpxc7wv9cvg83qqajh5n"))))
+    (build-system qt-build-system)
+    (arguments
+     '(#:tests? #f                      ; no test suite
+       #:make-flags
+       (list (string-append "PREFIX="
+                            (assoc-ref %outputs "out")))
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'prefix-opt
+           (lambda* (#:key outputs #:allow-other-keys)
+             (substitute* "inkbox.pro"
+               (("/opt/\\$\\$\\{TARGET\\}") (string-append (assoc-ref outputs "out"))))))
+         (replace 'configure
+           (lambda* (#:key make-flags #:allow-other-keys)
+             (apply invoke (cons "qmake" make-flags)))))))
+    (native-inputs
+     (list qtbase-5))
+    (home-page "https://alpinekobox.ddns.net/InkBox/inkbox/")
+    (synopsis "EBook reader")
+    (description "This package provides InkBox eBook reader.")
+    (license license:gpl3)))
 
 (define-public liblinebreak
   (package
@@ -477,7 +518,7 @@ following formats:
 (define-public cozy
   (package
     (name "cozy")
-    (version "1.1.2")
+    (version "1.2.1")
     (source
      (origin
        (method git-fetch)
@@ -486,7 +527,7 @@ following formats:
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0hifzzhhf0ww6iar9gswjfndy3i54s6jc41zaazlx4scc7r6fhs0"))))
+        (base32 "0qky885fl63d5ih5d3rggm8rhp00sk6lny26qljyz3gga8n9y6ki"))))
     (build-system meson-build-system)
     (arguments
      `(#:glib-or-gtk? #t
@@ -514,41 +555,42 @@ following formats:
                     (libmagic-path     (string-append
                                         (assoc-ref %build-inputs "file")
                                         "/lib"))
-                    (python-path     (getenv "PYTHONPATH")))
+                    (python-path     (getenv "GUIX_PYTHONPATH")))
                (wrap-program (string-append out "/bin/cozy")
                  `("LD_LIBRARY_PATH" ":" prefix (,libmagic-path))
                  `("GI_TYPELIB_PATH" ":" prefix (,gi-typelib-path))
                  `("GST_PLUGIN_SYSTEM_PATH" ":" prefix (,gst-plugin-path))
-                 `("PYTHONPATH" ":" prefix (,python-path ,pylib)))))))))
+                 `("GUIX_PYTHONPATH" ":" prefix (,python-path ,pylib)))))))))
     (native-inputs
-     `(("desktop-file-utils" ,desktop-file-utils)
-       ("gettext" ,gettext-minimal)
-       ("glib:bin" ,glib "bin")
-       ("gobject-introspection" ,gobject-introspection)
-       ("gtk+:bin" ,gtk+ "bin")
-       ("pkg-config" ,pkg-config)
-       ("python" ,python-wrapper)))
+     (list desktop-file-utils
+           gettext-minimal
+           `(,glib "bin")
+           gobject-introspection
+           `(,gtk+ "bin")
+           pkg-config
+           python-wrapper))
     (inputs
-     `(("file" ,file)
-       ("granite" ,granite)
-       ("gsettings-desktop-schemas" ,gsettings-desktop-schemas)
-       ("gst-libav" ,gst-libav)
-       ("gst-plugins-bad" ,gst-plugins-bad)
-       ("gst-plugins-good" ,gst-plugins-good)
-       ("gst-plugins-ugly" ,gst-plugins-ugly)
-       ("gtk+" ,gtk+)
-       ("libdazzle" ,libdazzle)
-       ("libgee" ,libgee)
-       ("libhandy" ,libhandy)
-       ("python-distro" ,python-distro)
-       ("python-gst" ,python-gst)
-       ("python-mutagen" ,python-mutagen)
-       ("python-packaging" ,python-packaging)
-       ("python-peewee" ,python-peewee)
-       ("python-pycairo" ,python-pycairo)
-       ("python-pygobject" ,python-pygobject)
-       ("python-pytz" ,python-pytz)
-       ("python-requests" ,python-requests)))
+     (list bash-minimal
+           file
+           granite
+           gsettings-desktop-schemas
+           gst-libav
+           gst-plugins-bad
+           gst-plugins-good
+           gst-plugins-ugly
+           gtk+
+           libdazzle
+           libgee
+           libhandy
+           python-distro
+           python-gst
+           python-mutagen
+           python-packaging
+           python-peewee
+           python-pycairo
+           python-pygobject
+           python-pytz
+           python-requests))
     (home-page "https://cozy.geigi.de/")
     (synopsis "Modern audiobook player using GTK+")
     (description
@@ -570,13 +612,13 @@ Some of the current features:
 @item Mpris integration (Media keys & playback info for desktop environment)
 @end itemize")
     ;; TODO: Unbundle python-inject.
-    (license (list license:gpl3+ ;cozy
+    (license (list license:gpl3+        ;cozy
                    license:asl2.0)))) ;python-inject (bundled dependency)
 
 (define-public xchm
   (package
     (name "xchm")
-    (version "1.32")
+    (version "1.33")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://github.com/rzvncj/xCHM"
@@ -584,13 +626,12 @@ Some of the current features:
                                   version "/xchm-" version ".tar.gz"))
               (sha256
                (base32
-                "0b12ym7cn65wy268kbksyhakicwb053c8xfn76q2dawrvbras9dj"))))
+                "0an09shap2wj9gzj5fsw5sc2i6paq3kc3mc52fnwg2bb2dan5qxk"))))
     (build-system gnu-build-system)
     (inputs
-     `(("wxwidgets" ,wxwidgets)
-       ("chmlib" ,chmlib)))
+     (list wxwidgets chmlib))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (home-page "https://github.com/rzvncj/xCHM")
     (synopsis "CHM file viewer")
     (description "xCHM is a graphical CHM file viewer.  It is a frontend to
@@ -612,12 +653,9 @@ the CHM library CHMLIB.")
                 "0yps72cm609xn2k7alflkdhp9kgr1w7zzyxjygz0n1kqrdcplihh"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (inputs
-     `(("zlib" ,zlib)
-       ("libxml2" ,libxml2)))
+     (list zlib libxml2))
     (home-page "https://github.com/bfabiszewski/libmobi/")
     (synopsis "C library for handling MOBI formats")
     (description "Libmobi is a C library for handling MOBI ebook

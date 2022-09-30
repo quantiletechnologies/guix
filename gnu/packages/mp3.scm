@@ -9,6 +9,9 @@
 ;;; Copyright © 2019 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2020 Michael Rohleder <mike@rohleder.de>
 ;;; Copyright © 2021 Simon Streit <simon@netpanic.org>
+;;; Copyright © 2021 Guillaume Le Vaillant <glv@posteo.net>
+;;; Copyright © 2022 John Kehayias <john.kehayias@protonmail.com>
+;;; Copyright © 2022 Joeke de Graaf <joeke@posteo.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -31,12 +34,15 @@
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages base)
   #:use-module (gnu packages gcc)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages boost)
   #:use-module (gnu packages cdrom)
   #:use-module (gnu packages check)
+  #:use-module (gnu packages cmake)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages ghostscript)
+  #:use-module (gnu packages gnome)
   #:use-module (gnu packages ncurses)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gtk)
@@ -53,9 +59,11 @@
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix utils)
+  #:use-module (guix build-system copy)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system python)
-  #:use-module (guix build-system cmake))
+  #:use-module (guix build-system cmake)
+  #:use-module (guix build-system meson))
 
 (define-public libmad
   (package
@@ -154,7 +162,7 @@ This package contains the library.")
                            Libs: -L${libdir} -lid3tag -lz~@
                            Cflags: -I${includedir}~%"
                           out ,version)))))))))
-   (inputs `(("zlib" ,zlib)))
+   (inputs (list zlib))
    (synopsis "Library for reading ID3 tags")
    (description
     "Libid3tag is a library for reading ID3 tags, both ID3v1 and the various
@@ -179,7 +187,7 @@ versions of ID3v2.")
             (patches (search-patches "id3lib-CVE-2007-4460.patch"
                                      "id3lib-UTF16-writing-bug.patch"))))
    (build-system gnu-build-system)
-   (inputs `(("zlib" ,zlib)))
+   (inputs (list zlib))
    (arguments
     `(#:phases
       (modify-phases %standard-phases
@@ -234,7 +242,7 @@ a highly stable and efficient implementation.")
                                          (assoc-ref inputs "zlib")
                                          "/lib -lz\")")))
                        #t)))))
-    (inputs `(("zlib" ,zlib)))
+    (inputs (list zlib))
     (home-page "https://taglib.org")
     (synopsis "Library to access audio file meta-data")
     (description
@@ -245,6 +253,35 @@ Speex, WavPack TrueAudio, WAV, AIFF, MP4 and ASF files.")
 
     ;; Dual-licensed: user may choose between LGPLv2.1 or MPLv1.1.
     (license (list license:lgpl2.1 license:mpl1.1))))
+
+(define-public minimp3
+  ;; The latest commit is used as there is no release.
+  (let ((commit   "afb604c06bc8beb145fecd42c0ceb5bda8795144")
+        (revision "0"))
+    (package
+      (name "minimp3")
+      (version (git-version "0.0.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/lieff/minimp3")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0brgrbij8swhp7lac21xnnrr5l0371lkr5vz6h9x0dbz1qq2xhsj"))))
+      ;; TODO: minimp3 has many more files for at least tests with scripts to
+      ;; run them, although it is unclear how to easily package them.
+      (build-system copy-build-system)
+      (arguments
+       '(#:install-plan
+         '(("minimp3.h" "include/")
+           ("minimp3_ex.h" "include/"))))
+      (home-page "https://github.com/lieff/minimp3")
+      (synopsis "Minimalistic MP3 decoder header library")
+      (description
+       "Minimp3 is a header-only MP3 decoder library.")
+      (license license:cc0))))
 
 (define-public mp3info
   (package
@@ -296,10 +333,9 @@ Speex, WavPack TrueAudio, WAV, AIFF, MP4 and ASF files.")
              #t)))
         #:tests? #f))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("gtk+" ,gtk+-2)
-       ("ncurses" ,ncurses)))
+     (list gtk+-2 ncurses))
     (home-page "https://www.ibiblio.org/mp3info/")
     (synopsis "MP3 technical info viewer and ID3 1.x tag editor")
     (description
@@ -322,15 +358,15 @@ pre-defined or user-specifiable output format.")
              (base32
               "1p1mn2hsmj5cp40fnc8g1yfvk72p8pjxi866gjdkgjsqrr7xdvih"))))
    (build-system gnu-build-system)
-   (inputs `(("flac" ,flac)
-             ("libid3tag" ,libid3tag)
-             ("libmad" ,libmad)
-             ("libogg" ,libogg)
-             ("libltdl" ,libltdl)
-             ("libvorbis" ,libvorbis)
-             ("pcre" ,pcre)))
+   (inputs (list flac
+                 libid3tag
+                 libmad
+                 libogg
+                 libltdl
+                 libvorbis
+                 pcre))
    (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
    (synopsis "Library for splitting mp3 and ogg vorbis files")
    (description
     "Mp3splt is a utility to split mp3 and ogg vorbis files selecting a begin
@@ -356,8 +392,8 @@ This package contains the library.")
              (base32
               "1aiv20gypb6r84qabz8gblk8vi42cg3x333vk2pi3fyqvl82phry"))))
    (build-system gnu-build-system)
-   (native-inputs `(("pkg-config" ,pkg-config)))
-   (inputs `(("libmp3splt" ,libmp3splt)))
+   (native-inputs (list pkg-config))
+   (inputs (list libmp3splt))
    (synopsis "Utility for splitting mp3 and ogg vorbis files")
    (description
     "Mp3splt is a utility to split mp3 and ogg vorbis files selecting a begin
@@ -387,10 +423,9 @@ This package contains the binary.")
     (build-system gnu-build-system)
     (arguments '(#:configure-flags '("--with-default-audio=pulse")))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("pulseaudio" ,pulseaudio)))
+     (list alsa-lib pulseaudio))
     (home-page "https://www.mpg123.org/")
     (synopsis "Console MP3 player and decoder library")
     (description
@@ -412,7 +447,8 @@ command-line tool as well as a C library, libmpg123.")
               (base32
                "0ki8mh76bbmdh77qsiw682dvi8y468yhbdabqwg05igmwc1wqvq5"))
              (patches
-              (search-patches "mpg321-CVE-2019-14247.patch"))))
+              (search-patches "mpg321-CVE-2019-14247.patch"
+                              "mpg321-gcc-10.patch"))))
     (build-system gnu-build-system)
     (arguments '(#:configure-flags '("--disable-alsa")))
     (inputs
@@ -481,18 +517,11 @@ use with CD-recording software).")
             (patches (search-patches "ripperx-missing-file.patch"))))
    (build-system gnu-build-system)
    (propagated-inputs
-    `(("gs-fonts" ,gs-fonts)
-      ("cdparanoia" ,cdparanoia)
-      ("flac" ,flac)
-      ("lame" ,lame)
-      ("vorbis-tools" ,vorbis-tools)))
+    (list font-ghostscript cdparanoia flac lame vorbis-tools))
    (inputs
-    `(("glib" ,glib)
-      ("gtk+" ,gtk+-2)
-      ("id3lib" ,id3lib)
-      ("taglib" ,taglib)))
+    (list glib gtk+-2 id3lib taglib))
    (native-inputs
-    `(("pkg-config" ,pkg-config)))
+    (list pkg-config))
    (synopsis "GTK program to rip and encode CD audio tracks")
    (description
     "RipperX is a GTK program to rip CD audio tracks and encode them to the
@@ -544,7 +573,9 @@ format.")
            (lambda _
              (substitute* "Makefile"
                (("CC[[:blank:]]*:=.*")
-                "CC := gcc\n"))))
+                "CC := gcc\n"))
+
+             (setenv "CFLAGS" "-fcommon -g")))  ;allow compilation with GCC 10
          (replace 'install
            (lambda* (#:key outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
@@ -566,21 +597,23 @@ compression format (.mpc files).")
 (define-public eyed3
   (package
     (name "eyed3")
-    (version "0.8.12")
+    (version "0.9.6")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "eyeD3" version))
        (sha256
-        (base32 "0vabr7hh6vy1w8gn35vmx9qwiyrfv734d5ahifg7x3pv0c5fqkp5"))))
+        (base32 "063mpg5bks9dgggjyag8968z5r7z4x50s0m0rja956dk1zn68l2b"))))
     (build-system python-build-system)
     (arguments
      `(#:tests? #f))    ; the required test data contains copyrighted material
     (propagated-inputs
-     `(("python-grako" ,python-grako)
-       ("python-magic" ,python-magic)
-       ("python-pathlib" ,python-pathlib)
-       ("python-six" ,python-six)))
+     (list python-deprecation
+           python-filetype
+           python-grako
+           python-magic
+           python-pathlib
+           python-six))
     (synopsis "MP3 tag ID3 metadata editor")
     (description "eyeD3 is a Python tool for working with audio files,
 specifically mp3 files containing ID3 metadata (i.e. song info).  It provides a
@@ -593,15 +626,14 @@ command-line tool.")
 (define-public chromaprint
   (package
     (name "chromaprint")
-    (version "1.5.0")
+    (version "1.5.1")
     (source (origin
       (method url-fetch)
       (uri (string-append
             "https://github.com/acoustid/chromaprint/releases/download/v"
             version "/chromaprint-" version ".tar.gz"))
       (sha256
-       (base32
-        "0sknmyl5254rc55bvkhfwpl4dfvz45xglk1rq8zq5crmwq058fjp"))))
+       (base32 "072y6c7ijkm6r674f6z089rbdazrmxzpdcsm6y6vf64b7gxdiam1"))))
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #f ; tests require googletest *sources*
@@ -611,8 +643,7 @@ command-line tool.")
     (inputs
      ;; requires one of FFmpeg (prefered), FFTW3 or vDSP
      ;; use the same ffmpeg version as for acoustid-fingerprinter
-     `(("ffmpeg" ,ffmpeg)
-       ("boost" ,boost)))
+     (list ffmpeg boost))
     (home-page "https://acoustid.org/chromaprint")
     (synopsis "Audio fingerprinting library")
     (description "Chromaprint is a library for calculating audio
@@ -633,8 +664,7 @@ is to provide an accurate identifier for record tracks.")
     (build-system python-build-system)
     (arguments `(#:tests? #f)) ; there is no "audiofile" fixture
     (native-inputs
-     `(("python-pytest" ,python-pytest)
-       ("python-pytest-runner" ,python-pytest-runner)))
+     (list python-pytest python-pytest-runner))
     (home-page "https://github.com/sampsyo/audioread")
     (synopsis "Decode audio files using whichever backend is available")
     (description
@@ -669,10 +699,9 @@ FFmpeg, etc.")
                 (string-append "'" (assoc-ref inputs "chromaprint")
                                "/bin/fpcalc'")))
              #t)))))
-    (inputs `(("chromaprint" ,chromaprint)))
+    (inputs (list chromaprint))
     (propagated-inputs
-     `(("python-audioread" ,python-audioread)
-       ("python-requests" ,python-requests)))
+     (list python-audioread python-requests))
     (home-page "https://github.com/beetbox/pyacoustid")
     (synopsis "Bindings for Chromaprint acoustic fingerprinting")
     (description
@@ -705,10 +734,9 @@ fingerprinting library and the Acoustid API.")
            (lambda _
              (setenv "PYTAGLIB_CYTHONIZE" "1"))))))
     (native-inputs
-     `(("python-cython" ,python-cython)
-       ("python-pytest" ,python-pytest)))
+     (list python-cython python-pytest))
     (inputs
-     `(("taglib" ,taglib)))
+     (list taglib))
     (home-page
      "https://github.com/supermihi/pytaglib")
     (synopsis
@@ -718,3 +746,70 @@ fingerprinting library and the Acoustid API.")
 cross-platform, works with all Python versions, and is very
 simple to use yet fully featured.")
     (license license:gpl3)))
+
+(define-public wavbreaker
+  (package
+    (name "wavbreaker")
+    (version "0.15")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/thp/wavbreaker/")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32 "16h0sfcb8av6a368giizzwv9m0lq5c3bnf4b9vyyh9nkbbsc7c3j"))))
+    (build-system meson-build-system)
+    (arguments
+     '(#:modules
+       ((guix build utils)
+        (guix build meson-build-system))
+
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'install 'wrap-program
+           ;; This wrapping is necessary to make wavbreaker find things it
+           ;; needs in pure environments.
+           (lambda* (#:key inputs outputs #:allow-other-keys)
+             (let ((out (assoc-ref outputs "out"))
+                   (adwaita-icons (assoc-ref inputs "adwaita-icon-theme"))
+                   (hicolor-icons (assoc-ref inputs "hicolor-icon-theme"))
+                   (shared-mime (assoc-ref inputs "shared-mime-info")))
+               (wrap-program (string-append out "/bin/wavbreaker")
+                 ;; Needed in order for wavbreakere to find the icons it needs
+                 `("XDG_DATA_DIRS" ":" prefix
+                   ,(map (lambda (package)
+                           (string-append package "/share"))
+                         `(,out                   ;for wavbreaker's icon
+                           ,adwaita-icons
+                           ,hicolor-icons
+                           ,shared-mime)))
+                 ;; This is necessary to load some pixbufs like Adwaita's
+                 ;; check-symbolic.svg and wavbreaker's own logo in the
+                 ;; 'about' section.
+                 `("GDK_PIXBUF_MODULE_FILE" =
+                   (,(getenv "GDK_PIXBUF_MODULE_FILE")))
+                 ;; Needed for GTK's file chooser to not crash.
+                 `("GSETTINGS_SCHEMA_DIR" =
+                 (,(string-append (assoc-ref inputs "gtk+")
+                                  "/share/glib-2.0/schemas"))))))))))
+    (native-inputs
+     (list pkg-config cmake))
+    (inputs
+     (list glib
+           gtk+
+           ao
+           bash-minimal
+           adwaita-icon-theme
+           shared-mime-info
+           hicolor-icon-theme
+           gsettings-desktop-schemas))
+    (home-page "https://wavbreaker.sourceforge.io/")
+    (synopsis "WAV and MP3 file splitter with a GUI")
+    (description
+     "Wavbreaker is a WAV and MP3 file splitter.  It can be used to break up a
+WAV or MP3 audio file into multiple WAV files.  Wavbreaker contains a helpful
+waveform display of the audio file being edited, to help the user in splitting
+the file at the right point.  Wavbreaker also supports splitting MP3 files
+without re-encoding them, to preserve their original audio quality.")
+    (license license:gpl2+)))

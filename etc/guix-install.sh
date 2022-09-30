@@ -345,11 +345,11 @@ sys_create_store()
     mv "${tmp_path}/gnu" /
 
     _msg "${INF}Linking the root user's profile"
-    mkdir -p "~root/.config/guix"
+    mkdir -p ~root/.config/guix
     ln -sf /var/guix/profiles/per-user/root/current-guix \
-       "~root/.config/guix/current"
+       ~root/.config/guix/current
 
-    GUIX_PROFILE="~root/.config/guix/current"
+    GUIX_PROFILE=~root/.config/guix/current
     # shellcheck disable=SC1090
     source "${GUIX_PROFILE}/etc/profile"
     _msg "${PAS}activated root profile at ${GUIX_PROFILE}"
@@ -405,7 +405,7 @@ sys_enable_guix_daemon()
     case "$INIT_SYS" in
         upstart)
             { initctl reload-configuration;
-              cp "~root/.config/guix/current/lib/upstart/system/guix-daemon.conf" \
+              cp ~root/.config/guix/current/lib/upstart/system/guix-daemon.conf \
                  /etc/init/ &&
                   configure_substitute_discovery /etc/init/guix-daemon.conf &&
                   start guix-daemon; } &&
@@ -415,15 +415,15 @@ sys_enable_guix_daemon()
             { # systemd .mount units must be named after the target directory.
               # Here we assume a hard-coded name of /gnu/store.
               # XXX Work around <https://issues.guix.gnu.org/41356> until next release.
-              if [ -f "~root/.config/guix/current/lib/systemd/system/gnu-store.mount" ]; then
-                  cp "~root/.config/guix/current/lib/systemd/system/gnu-store.mount" \
+              if [ -f ~root/.config/guix/current/lib/systemd/system/gnu-store.mount ]; then
+                  cp ~root/.config/guix/current/lib/systemd/system/gnu-store.mount \
                      /etc/systemd/system/;
                   chmod 664 /etc/systemd/system/gnu-store.mount;
                   systemctl daemon-reload &&
                       systemctl enable gnu-store.mount;
               fi
 
-              cp "~root/.config/guix/current/lib/systemd/system/guix-daemon.service" \
+              cp ~root/.config/guix/current/lib/systemd/system/guix-daemon.service \
                  /etc/systemd/system/;
               chmod 664 /etc/systemd/system/guix-daemon.service;
 
@@ -447,7 +447,7 @@ sys_enable_guix_daemon()
             ;;
         sysv-init)
             { mkdir -p /etc/init.d;
-              cp "~root/.config/guix/current/etc/init.d/guix-daemon" \
+              cp ~root/.config/guix/current/etc/init.d/guix-daemon \
                  /etc/init.d/guix-daemon;
               chmod 775 /etc/init.d/guix-daemon;
 
@@ -460,7 +460,7 @@ sys_enable_guix_daemon()
             ;;
         openrc)
             { mkdir -p /etc/init.d;
-              cp "~root/.config/guix/current/etc/openrc/guix-daemon" \
+              cp ~root/.config/guix/current/etc/openrc/guix-daemon \
                  /etc/init.d/guix-daemon;
               chmod 775 /etc/init.d/guix-daemon;
 
@@ -492,7 +492,7 @@ sys_authorize_build_farms()
     if prompt_yes_no "Permit downloading pre-built package binaries from the \
 project's build farm? (yes/no)"; then
         guix archive --authorize \
-             < "~root/.config/guix/current/share/guix/ci.guix.gnu.org.pub" \
+             < ~root/.config/guix/current/share/guix/ci.guix.gnu.org.pub \
             && _msg "${PAS}Authorized public key for ci.guix.gnu.org"
         else
             _msg "${INF}Skipped authorizing build farm public keys"
@@ -504,6 +504,16 @@ sys_create_init_profile()
   # This will not take effect until the next shell or desktop session!
     [ -d "/etc/profile.d" ] || mkdir /etc/profile.d # Just in case
     cat <<"EOF" > /etc/profile.d/guix.sh
+# Explicitly initialize XDG base directory variables to ease compatibility
+# with Guix System: see <https://issues.guix.gnu.org/56050#3>.
+export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+export XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share/:/usr/share/}"
+export XDG_CONFIG_DIRS="${XDG_CONFIG_DIRS:-/etc/xdg}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+# no default for XDG_RUNTIME_DIR (depends on foreign distro for semantics)
+
 # _GUIX_PROFILE: `guix pull` profile
 _GUIX_PROFILE="$HOME/.config/guix/current"
 export PATH="$_GUIX_PROFILE/bin${PATH:+:}$PATH"
@@ -514,7 +524,9 @@ export PATH="$_GUIX_PROFILE/bin${PATH:+:}$PATH"
 export INFOPATH="$_GUIX_PROFILE/share/info:$INFOPATH"
 
 # GUIX_PROFILE: User's default profile
-GUIX_PROFILE="$HOME/.guix-profile"
+# Prefer the one from 'guix home' if it exists.
+GUIX_PROFILE="$HOME/.guix-home/profile"
+[ -L $GUIX_PROFILE ] || GUIX_PROFILE="$HOME/.guix-profile"
 [ -L $GUIX_PROFILE ] || return
 GUIX_LOCPATH="$GUIX_PROFILE/lib/locale"
 export GUIX_LOCPATH
@@ -522,7 +534,7 @@ export GUIX_LOCPATH
 [ -f "$GUIX_PROFILE/etc/profile" ] && . "$GUIX_PROFILE/etc/profile"
 
 # set XDG_DATA_DIRS to include Guix installations
-export XDG_DATA_DIRS="$GUIX_PROFILE/share:${XDG_DATA_DIRS:-/usr/local/share/:/usr/share/}"
+export XDG_DATA_DIRS="$GUIX_PROFILE/share:$XDG_DATA_DIRS"
 EOF
 }
 

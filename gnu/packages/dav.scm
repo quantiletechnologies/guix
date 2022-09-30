@@ -1,8 +1,10 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2015, 2016, 2017 Leo Famulari <leo@famulari.name>
-;;; Copyright © 2018, 2019 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2018, 2019, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2020 Vinicius Monego <monego@posteo.net>
+;;; Copyright © 2021 Tanguy Le Carrour <tanguy@bioneland.org>
+;;; Copyright © 2022 Jonathan Brielmaier <jonathan.brielmaier@web.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -28,6 +30,7 @@
   #:use-module (gnu packages)
   #:use-module (gnu packages check)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-check)
   #:use-module (gnu packages python-crypto)
   #:use-module (gnu packages python-web)
@@ -39,30 +42,33 @@
 (define-public radicale
   (package
     (name "radicale")
-    (version "3.0.6")
+    (version "3.1.7")
     (source
      (origin
        ;; There are no tests in the PyPI tarball.
        (method git-fetch)
        (uri (git-reference
              (url "https://github.com/Kozea/Radicale")
-             (commit version)))
+             (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1xlsvrmx6jhi71j6j8z9sli5vwxasivzjyqf8zq8r0l5p7350clf"))))
+        (base32 "1mv1w9qazbis9ir5shr1ybsfn4cxd3rmxa3ns6kbk23yramlzwhg"))))
     (build-system python-build-system)
+    (arguments
+      (list
+       ;; TODO: enable again when https://github.com/Kozea/Radicale/issues/1184
+       ;; is fixed
+       #:tests? #f))
     (native-inputs
-     `(("python-pytest" ,python-pytest)
-       ("python-pytest-cov" ,python-pytest-cov)
-       ("python-pytest-flake8" ,python-pytest-flake8)
-       ("python-pytest-isort" ,python-pytest-isort)
-       ("python-pytest-runner" ,python-pytest-runner)
-       ("python-waitress" ,python-waitress)))
+     (list python-pytest
+           python-pytest-cov
+           python-pytest-flake8
+           python-pytest-isort
+           python-pytest-runner
+           python-waitress))
     (propagated-inputs
-     `(("python-dateutil" ,python-dateutil)
-       ("python-defusedxml" ,python-defusedxml)
-       ("python-passlib" ,python-passlib)
-       ("python-vobject" ,python-vobject)))
+     (list python-dateutil python-defusedxml python-passlib
+           python-vobject))
     (synopsis "Basic CalDAV and CardDAV server")
     (description "Radicale is a CalDAV and CardDAV server for UNIX-like
 platforms.  Calendars and address books are available for both local and remote
@@ -87,12 +93,12 @@ clients.")
         (base32 "13ikmcja9p42azb5ccqj2bw98zybna6zlflj10hqy0kvbib70l94"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-aiohttp" ,python-aiohttp)
-       ("python-defusedxml" ,python-defusedxml)
-       ("python-dulwich" ,python-dulwich)
-       ("python-icalendar" ,python-icalendar)
-       ("python-jinja2" ,python-jinja2)
-       ("python-multidict" ,python-multidict)))
+     (list python-aiohttp
+           python-defusedxml
+           python-dulwich
+           python-icalendar
+           python-jinja2
+           python-multidict))
     (home-page "https://www.xandikos.org/")
     (synopsis "Lightweight CalDAV/CardDAV server")
     (description
@@ -117,13 +123,13 @@ efficient syncing
   (package
     (name "vdirsyncer")
     ;; When updating, check whether python-click-5 can be removed entirely.
-    (version "0.16.8")
+    (version "0.18.0")
     (source (origin
              (method url-fetch)
              (uri (pypi-uri name version))
              (sha256
               (base32
-               "1i8kp9j99rs8xdhrc1vx749zd9wznlzj0pb3s05xdm71a8pl5nxz"))))
+               "00f2bw1a2jbbd1sbci0swnd67kylr341aa9rpbxkajbp3zakxg17"))))
     (build-system python-build-system)
     (arguments
      `(#:tests? #f ; The test suite is very flakey.
@@ -152,24 +158,22 @@ efficient syncing
                 "/share/man/man1"))
             #t)))))
     (native-inputs
-     `(("python-setuptools-scm" ,python-setuptools-scm)
-       ("python-sphinx" ,python-sphinx)
-       ;; Required for testing
-       ("python-hypothesis" ,python-hypothesis)
-       ("python-pytest" ,python-pytest)
-       ("python-pytest-localserver" ,python-pytest-localserver)
-       ("python-pytest-subtesthack" ,python-pytest-subtesthack)
-       ("python-urllib3" ,python-urllib3)
-       ("python-wsgi-intercept" ,python-wsgi-intercept)
-       ("radicale" ,radicale)))
+     (list python-setuptools-scm
+           python-sphinx
+           ;; Required for testing
+           python-hypothesis
+           python-pytest
+           python-pytest-localserver
+           python-pytest-subtesthack
+           python-urllib3
+           python-wsgi-intercept
+           radicale))
     (inputs
-     `(;; XXX https://github.com/mitsuhiko/click/issues/200
-       ("python-click" ,python-click-5)))
+     (list ;; XXX https://github.com/mitsuhiko/click/issues/200
+           python-click-5))
     (propagated-inputs
-     `(("python-atomicwrites" ,python-atomicwrites)
-       ("python-click-log" ,python-click-log)
-       ("python-click-threading" ,python-click-threading)
-       ("python-requests-toolbelt" ,python-requests-toolbelt)))
+     (list python-atomicwrites python-click-log python-click-threading
+           python-requests-toolbelt))
     (synopsis "Synchronize calendars and contacts")
     (description "Vdirsyncer synchronizes your calendars and addressbooks
 between two storage locations.  The most popular purpose is to

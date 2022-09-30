@@ -114,11 +114,7 @@ type generated and used by Transmission clients, suitable for passing to the
 ;; name-value pair for the JSON builder.
 (set! serialize-maybe-string
   (lambda (field-name val)
-    (serialize-string field-name
-                      (if (and (symbol? val)
-                               (eq? val 'disabled))
-                          ""
-                          val))))
+    (serialize-string field-name (maybe-value val ""))))
 
 (define (string-list? val)
   (and (list? val)
@@ -181,10 +177,9 @@ type generated and used by Transmission clients, suitable for passing to the
 (define-maybe file-object)
 (set! serialize-maybe-file-object
   (lambda (field-name val)
-    (if (and (symbol? val)
-             (eq? val 'disabled))
-        (serialize-string field-name "")
-        (serialize-file-object field-name val))))
+    (if (maybe-value-set? val)
+        (serialize-file-object field-name val)
+        (serialize-string field-name ""))))
 
 (define (file-object-list? val)
   (and (list? val)
@@ -259,7 +254,7 @@ type generated and used by Transmission clients, suitable for passing to the
 (define-configuration transmission-daemon-configuration
   ;; Settings internal to this service definition.
   (transmission
-   (package transmission)
+   (file-like transmission)
    "The Transmission package to use.")
   (stop-wait-period
    (non-negative-integer 10)
@@ -281,7 +276,7 @@ torrent is being downloaded, then moved to @code{download-dir} once the
 torrent is complete.  Otherwise, files for all torrents (including those still
 being downloaded) will be placed in @code{download-dir}.")
   (incomplete-dir
-   (maybe-string 'disabled)
+   maybe-string
    "The directory in which files from incompletely downloaded torrents will be
 held when @code{incomplete-dir-enabled?} is @code{#t}.")
   (umask
@@ -305,7 +300,7 @@ for new @file{.torrent} files and the torrents they describe added
 automatically (and the original files removed, if
 @code{trash-original-torrent-files?} is @code{#t}).")
   (watch-dir
-   (maybe-string 'disabled)
+   maybe-string
    "The directory to be watched for @file{.torrent} files indicating new
 torrents to be added, when @code{watch-dir-enabled} is @code{#t}.")
   (trash-original-torrent-files?
@@ -401,11 +396,11 @@ upstream gateway automatically using @acronym{UPnP} and @acronym{NAT-PMP}.")
 @code{prefer-unencrypted-connections}, @code{prefer-encrypted-connections} or
 @code{require-encrypted-connections}.")
   (peer-congestion-algorithm
-   (maybe-string 'disabled)
+   maybe-string
    "The TCP congestion-control algorithm to use for peer connections,
 specified using a string recognized by the operating system in calls to
-@code{setsockopt} (or set to @code{disabled}, in which case the
-operating-system default is used).
+@code{setsockopt} (or leave it unset, in which case the operating-system
+default is used).
 
 Note that on GNU/Linux systems, the kernel must be configured to allow
 processes to use a congestion-control algorithm not in the default set;
@@ -465,7 +460,7 @@ torrent before it is regenerated.")
    "When @code{#t}, the daemon will ignore peers mentioned in the blocklist it
 has most recently downloaded from @code{blocklist-url}.")
   (blocklist-url
-   (maybe-string 'disabled)
+   maybe-string
    "The URL of a peer blocklist (in @acronym{P2P}-plaintext or eMule
 @file{.dat} format) to be periodically downloaded and applied when
 @code{blocklist-enabled?} is @code{#t}.")
@@ -564,11 +559,11 @@ which allows remote control of the daemon via its Web interface, the
 the side effect of disabling host-name whitelisting (see
 @code{rpc-host-whitelist-enabled?}.")
   (rpc-username
-   (maybe-string 'disabled)
+   maybe-string
    "The username required by clients to access the @acronym{RPC} interface
 when @code{rpc-authentication-required?} is @code{#t}.")
   (rpc-password
-   (maybe-transmission-password-hash 'disabled)
+   maybe-transmission-password-hash
    "The password required by clients to access the @acronym{RPC} interface
 when @code{rpc-authentication-required?} is @code{#t}.  This must be specified
 using a password hash in the format recognized by Transmission clients, either
@@ -613,7 +608,7 @@ they are added in ``paused'' state.")
 @code{script-torrent-done-filename} will be invoked each time a torrent
 completes.")
   (script-torrent-done-filename
-   (maybe-file-object 'disabled)
+   maybe-file-object
    "A file name or file-like object specifying a script to run each time a
 torrent completes, when @code{script-torrent-done-enabled?} is @code{#t}.")
   (scrape-paused-torrents-enabled?

@@ -70,20 +70,20 @@
        (file-name (git-file-name name version))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("eigen" ,eigen)
-       ("mmtf-cpp" ,mmtf-cpp)
-       ("msgpack" ,msgpack)
-       ("googletest" ,googletest)
-       ("pkg-config" ,pkg-config)
-       ("pybind11" ,pybind11)))
+     (list eigen
+           mmtf-cpp
+           msgpack
+           googletest
+           pkg-config
+           pybind11))
     (inputs
-     `(("glew" ,glew)
-       ("libarchive" ,libarchive)
-       ("libmsym" ,libmsym)
-       ("molequeue" ,molequeue)
-       ("python" ,python)
-       ("spglib" ,spglib)
-       ("qtbase" ,qtbase-5)))
+     (list glew
+           libarchive
+           libmsym
+           molequeue
+           python
+           spglib
+           qtbase-5))
     (arguments
      '(#:configure-flags (list "-DENABLE_TESTING=ON"
                                (string-append "-DSPGLIB_INCLUDE_DIR="
@@ -113,13 +113,9 @@ bioinformatics, materials science, and related areas.")
        (file-name (git-file-name name version))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("eigen" ,eigen)
-       ("pkg-config" ,pkg-config)))
+     (list eigen pkg-config))
     (inputs
-     `(("avogadrolibs" ,avogadrolibs)
-       ("hdf5" ,hdf5)
-       ("molequeue" ,molequeue)
-       ("qtbase" ,qtbase-5)))
+     (list avogadrolibs hdf5 molequeue qtbase-5))
     ;; TODO: Enable tests with "-DENABLE_TESTING" configure flag.
     (arguments
      '(#:tests? #f))
@@ -131,35 +127,6 @@ in computational chemistry, molecular modeling, bioinformatics, materials
 science, and related areas.  It offers flexible high quality rendering and a
 powerful plugin architecture.")
     (license license:bsd-3)))
-
-(define-public domainfinder
-  (package
-    (name "domainfinder")
-    (version "2.0.5")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "https://bitbucket.org/khinsen/"
-                           "domainfinder/downloads/DomainFinder-"
-                           version ".tar.gz"))
-       (sha256
-        (base32
-         "1z26lsyf7xwnzwjvimmbla7ckipx6p734w7y0jk2a2fzci8fkdcr"))))
-    (build-system python-build-system)
-    (inputs
-     `(("python-mmtk" ,python2-mmtk)))
-    (arguments
-     `(#:python ,python-2
-       ;; No test suite
-       #:tests? #f))
-    (home-page "http://dirac.cnrs-orleans.fr/DomainFinder.html")
-    (synopsis "Analysis of dynamical domains in proteins")
-    (description "DomainFinder is an interactive program for the determination
-and characterization of dynamical domains in proteins.  It can infer dynamical
-domains by comparing two protein structures, or from normal mode analysis on a
-single structure.  The software is currently not actively maintained and works
-only with Python 2 and NumPy < 1.9.")
-    (license license:cecill-c)))
 
 (define-public inchi
   (package
@@ -195,8 +162,7 @@ only with Python 2 and NumPy < 1.9.")
                     (include-dir (string-append out "/include/inchi"))
                     (lib (string-append out "/lib/inchi"))
                     (inchi-doc (assoc-ref inputs "inchi-doc"))
-                    (unzip (string-append (assoc-ref inputs "unzip")
-                                          "/bin/unzip")))
+                    (unzip (search-input-file inputs "/bin/unzip")))
                (chdir "../../..")
                ;; Install binary.
                (with-directory-excursion "INCHI_EXE/bin/Linux"
@@ -304,7 +270,7 @@ biological structures.")
          "1w1fgxzqrb5yxvpmnc3c9ymnvixy0z1nfafkd9whg9zw8nbgl998"))))
     (build-system cmake-build-system)
     (inputs
-     `(("qtbase" ,qtbase-5)))
+     (list qtbase-5))
     (arguments
      '(#:configure-flags '("-DENABLE_TESTING=ON")
        #:phases
@@ -337,71 +303,6 @@ with templates to facilitate the execution of the program.  Input files can be
 staged, and output files collected using a standard interface.")
     (license license:bsd-3)))
 
-(define with-numpy-1.8
-  (package-input-rewriting `((,python2-numpy . ,python2-numpy-1.8))))
-
-(define-public nmoldyn
-  (package
-    (name "nmoldyn")
-    (version "3.0.11")
-    (source
-     (origin
-       (method git-fetch)
-       (uri (git-reference
-             (url "https://github.com/khinsen/nMOLDYN3")
-             (commit (string-append "v" version))))
-       (file-name (git-file-name name version))
-       (sha256
-        (base32
-         "016h4bqg419p6s7bcx55q5iik91gqmk26hbnfgj2j6zl0j36w51r"))))
-    (build-system python-build-system)
-    (inputs
-     `(("python-matplotlib" ,(with-numpy-1.8 python2-matplotlib))
-       ("python-scientific" ,python2-scientific)
-       ("netcdf" ,netcdf)
-       ("gv" ,gv)))
-    (propagated-inputs
-     `(("python-mmtk" ,python2-mmtk)))
-    (arguments
-     `(#:python ,python-2
-       #:tests? #f  ; No test suite
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'create-linux2-directory
-           (lambda _
-             (mkdir-p "nMOLDYN/linux2")))
-         (add-before 'build 'change-PDF-viewer
-           (lambda* (#:key inputs #:allow-other-keys)
-             (substitute* "nMOLDYN/Preferences.py"
-               ;; Set the paths for external executables, substituting
-               ;; gv for acroread.
-               ;; There is also vmd_path, but VMD is not free software
-               ;; and Guix contains currently no free molecular viewer that
-               ;; could be substituted.
-               (("PREFERENCES\\['acroread_path'\\] = ''")
-                (format #f "PREFERENCES['acroread_path'] = '~a'"
-                        (which "gv")))
-               (("PREFERENCES\\['ncdump_path'\\] = ''")
-                (format #f "PREFERENCES['ncdump_path'] = '~a'"
-                        (which "ncdump")))
-               (("PREFERENCES\\['ncgen_path'\\] = ''")
-                (format #f "PREFERENCES['ncgen_path'] = '~a'"
-                        (which "ncgen3")))
-               (("PREFERENCES\\['task_manager_path'\\] = ''")
-                (format #f "PREFERENCES['task_manager_path'] = '~a'"
-                        (which "task_manager")))
-               ;; Show documentation as PDF
-               (("PREFERENCES\\['documentation_style'\\] = 'html'")
-                "PREFERENCES['documentation_style'] = 'pdf'") ))))))
-    (home-page "http://dirac.cnrs-orleans.fr/nMOLDYN.html")
-    (synopsis "Analysis software for Molecular Dynamics trajectories")
-    (description "nMOLDYN is an interactive analysis program for Molecular Dynamics
-simulations.  It is especially designed for the computation and decomposition of
-neutron scattering spectra, but also computes other quantities.  The software
-is currently not actively maintained and works only with Python 2 and
-NumPy < 1.9.")
-    (license license:cecill)))
-
 (define-public tng
   (package
     (name "tng")
@@ -417,7 +318,7 @@ NumPy < 1.9.")
                 "1apf2n8nb34z09xarj7k4jgriq283l769sakjmj5aalpbilvai4q"))))
     (build-system cmake-build-system)
     (inputs
-     `(("zlib" ,zlib)))
+     (list zlib))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -503,13 +404,13 @@ stored with user-specified precision.")
        ("python-pygments" ,python-pygments)
        ("python-sphinx" ,python-sphinx)))
     (inputs
-     `(("fftwf" ,fftwf)
-       ("hwloc" ,hwloc-2 "lib")
-       ("lmfit" ,lmfit)
-       ("openblas" ,openblas)
-       ("perl" ,perl)
-       ("tinyxml2" ,tinyxml2)
-       ("tng" ,tng)))
+     (list fftwf
+           `(,hwloc-2 "lib")
+           lmfit
+           openblas
+           perl
+           tinyxml2
+           tng))
     (home-page "http://www.gromacs.org/")
     (synopsis "Molecular dynamics software package")
     (description "GROMACS is a versatile package to perform molecular dynamics,
@@ -550,12 +451,9 @@ usual algorithms you expect from a modern molecular dynamics implementation.")
                             (assoc-ref %build-inputs "inchi") "/include/inchi"))
        #:test-target "test"))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("eigen" ,eigen)
-       ("inchi" ,inchi)
-       ("libxml2" ,libxml2)
-       ("zlib" ,zlib)))
+     (list eigen inchi libxml2 zlib))
     (home-page "http://openbabel.org/wiki/Main_Page")
     (synopsis "Chemistry data manipulation toolbox")
     (description
@@ -650,19 +548,18 @@ symmetries written in C.  Spglib can be used to:
                      (string-append "--prefix=" (assoc-ref outputs "out"))
                      "--root=/"))))))
     (inputs
-     `(("freetype" ,freetype)
-       ("libpng" ,libpng)
-       ("freeglut" ,freeglut)
-       ("glew" ,glew)
-       ("libxml2" ,libxml2)
-       ("mmtf-cpp" ,mmtf-cpp)
-       ("msgpack" ,msgpack)
-       ("python-pyqt" ,python-pyqt)
-       ("glm" ,glm)
-       ("netcdf" ,netcdf)))
+     (list freetype
+           libpng
+           freeglut
+           glew
+           libxml2
+           mmtf-cpp
+           msgpack
+           python-pyqt
+           glm
+           netcdf))
     (native-inputs
-     `(("catch2" ,catch-framework2)
-       ("python-setuptools" ,python-setuptools)))
+     (list catch-framework2 python-setuptools))
     (home-page "https://pymol.org")
     (synopsis "Molecular visualization system")
     (description "PyMOL is a capable molecular viewer and renderer.  It can be

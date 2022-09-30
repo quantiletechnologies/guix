@@ -8,6 +8,7 @@
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2021 Chris Marusich <cmmarusich@gmail.com>
 ;;; Copyright © 2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2022 Oleg Pykhalov <go.wigust@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -49,6 +50,7 @@
             MS_RELATIME
             MS_BIND
             MS_MOVE
+            MS_SHARED
             MS_LAZYTIME
             MNT_FORCE
             MNT_DETACH
@@ -70,6 +72,11 @@
 
             mounts
             mount-points
+
+            SWAP_FLAG_PREFER
+            SWAP_FLAG_PRIO_MASK
+            SWAP_FLAG_PRIO_SHIFT
+            SWAP_FLAG_DISCARD
 
             swapon
             swapoff
@@ -120,11 +127,14 @@
             with-file-lock
             with-file-lock/no-wait
 
+            set-child-subreaper!
+
             set-thread-name
             thread-name
 
             CLONE_CHILD_CLEARTID
             CLONE_CHILD_SETTID
+            CLONE_NEWCGROUP
             CLONE_NEWNS
             CLONE_NEWUTS
             CLONE_NEWIPC
@@ -180,6 +190,8 @@
             terminal-window-size
             terminal-columns
             terminal-rows
+            openpty
+            login-tty
 
             utmpx?
             utmpx-login-type
@@ -422,15 +434,21 @@ expansion-time error is raised if FIELD does not exist in TYPE."
   "Evaluate EXPR and restart upon EINTR.  Return the value of EXPR."
   (call-with-restart-on-EINTR (lambda () expr)))
 
-(define (syscall->procedure return-type name argument-types)
+(define* (syscall->procedure return-type name argument-types
+                             #:key library)
   "Return a procedure that wraps the C function NAME using the dynamic FFI,
-and that returns two values: NAME's return value, and errno.
+and that returns two values: NAME's return value, and errno.  When LIBRARY is
+specified, look up NAME in that library rather than in the global symbol name
+space.
 
 If an error occurs while creating the binding, defer the error report until
 the returned procedure is called."
   (catch #t
     (lambda ()
-      (let ((ptr (dynamic-func name (dynamic-link))))
+      (let ((ptr (dynamic-func name
+                               (if library
+                                   (dynamic-link library)
+                                   (dynamic-link)))))
         ;; The #:return-errno? facility was introduced in Guile 2.0.12.
         (pointer->procedure return-type ptr argument-types
                             #:return-errno? #t)))
@@ -521,6 +539,7 @@ the last argument of `mknod'."
 (define MS_NOATIME         1024)
 (define MS_BIND            4096)
 (define MS_MOVE            8192)
+(define MS_SHARED       1048576)
 (define MS_RELATIME     2097152)
 (define MS_STRICTATIME 16777216)
 (define MS_LAZYTIME    33554432)
@@ -676,6 +695,13 @@ current process."
 (define (mount-points)
   "Return the mounts points for currently mounted file systems."
   (map mount-point (mounts)))
+
+;; Pulled from glibc's sysdeps/unix/sysv/linux/sys/swap.h
+
+(define SWAP_FLAG_PREFER     #x8000) ;; Set if swap priority is specified.
+(define SWAP_FLAG_PRIO_MASK  #x7fff)
+(define SWAP_FLAG_PRIO_SHIFT 0)
+(define SWAP_FLAG_DISCARD    #x10000) ;; Discard swap cluster after use.
 
 (define swapon
   (let ((proc (syscall->procedure int "swapon" (list '* int))))
@@ -1003,6 +1029,7 @@ caller lacks root privileges."
 ;; Linux clone flags, from linux/sched.h
 (define CLONE_CHILD_CLEARTID #x00200000)
 (define CLONE_CHILD_SETTID   #x01000000)
+(define CLONE_NEWCGROUP      #x02000000)
 (define CLONE_NEWNS          #x00020000)
 (define CLONE_NEWUTS         #x04000000)
 (define CLONE_NEWIPC         #x08000000)
@@ -1413,6 +1440,11 @@ handler if the lock is already held by another process."
 
 (define PR_SET_NAME 15)                           ;<linux/prctl.h>
 (define PR_GET_NAME 16)
+(define PR_SET_CHILD_SUBREAPER 36)
+
+(define (set-child-subreaper!)
+  "Set the CHILD_SUBREAPER capability for the current process."
+  (%prctl PR_SET_CHILD_SUBREAPER 1 0 0 0))
 
 (define %max-thread-name-length
   ;; Maximum length in bytes of the process name, including the terminating
@@ -2285,6 +2317,41 @@ always a positive integer."
 PORT, trying to guess a reasonable value if all else fails.  The result is
 always a positive integer."
   (terminal-dimension window-size-rows port (const 25)))
+
+(define openpty
+  (let ((proc (syscall->procedure int "openpty" '(* * * * *)
+                                  #:library "libutil")))
+    (lambda ()
+      "Return two file descriptors: one for the pseudo-terminal control side,
+and one for the controlled side."
+      (let ((head     (make-bytevector (sizeof int)))
+            (inferior (make-bytevector (sizeof int))))
+        (let-values (((ret err)
+                      (proc (bytevector->pointer head)
+                            (bytevector->pointer inferior)
+                            %null-pointer %null-pointer %null-pointer)))
+          (unless (zero? ret)
+            (throw 'system-error "openpty" "~A"
+                   (list (strerror err))
+                   (list err))))
+
+        (let ((* (lambda (bv)
+                   (bytevector-sint-ref bv 0 (native-endianness)
+                                        (sizeof int)))))
+          (values (* head) (* inferior)))))))
+
+(define login-tty
+  (let* ((proc (syscall->procedure int "login_tty" (list int)
+                                   #:library "libutil")))
+    (lambda (fd)
+      "Make FD the controlling terminal of the current process (with the
+TIOCSCTTY ioctl), redirect standard input, standard output and standard error
+output to this terminal, and close FD."
+      (let-values (((ret err) (proc fd)))
+        (unless (zero? ret)
+          (throw 'system-error "login-pty" "~A"
+                 (list (strerror err))
+                 (list err)))))))
 
 
 ;;;

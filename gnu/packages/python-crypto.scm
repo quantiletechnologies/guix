@@ -2,7 +2,7 @@
 ;;; Copyright © 2015 Eric Dvorsak <eric@dvorsak.fr>
 ;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2015, 2016, 2017, 2019 Leo Famulari <leo@famulari.name>
-;;; Copyright © 2016, 2017, 2020 Marius Bakke <mbakke@fastmail.com>
+;;; Copyright © 2016, 2017, 2020, 2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2017 Ben Sturmfels <ben@sturm.com.au>
 ;;; Copyright © 2016 Sou Bunnbu <iyzsong@gmail.com>
 ;;; Copyright © 2015 Cyril Roelandt <tipecaml@gmail.com>
@@ -11,7 +11,7 @@
 ;;; Copyright © 2016, 2017, 2018, 2019, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2016, 2017 Nikita <nikita@n0.is>
 ;;; Copyright © 2014, 2015 Mark H Weaver <mhw@netris.org>
-;;; Copyright © 2015, 2016, 2017, 2019 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2015, 2016, 2017, 2019, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2016 Danny Milosavljevic <dannym+a@scratchpost.org>
 ;;; Copyright © 2016, 2017, 2020 Arun Isaac <arunisaac@systemreboot.net>
 ;;; Copyright © 2017 Carlo Zancanaro <carlo@zancanaro.id.au>
@@ -24,8 +24,9 @@
 ;;; Copyright © 2020 Alexandros Theodotou <alex@zrythm.org>
 ;;; Copyright © 2020 Justus Winter <justus@sequoia-pgp.org>
 ;;; Copyright © 2020, 2021 Vinicius Monego <monego@posteo.net>
-;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Maxime Devos <maximedevos@telenet.be>
+;;; Copyright © 2022 Antero Mejr <antero@mailbox.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -47,9 +48,11 @@
   #:use-module (guix download)
   #:use-module (guix gexp)
   #:use-module (guix git-download)
+  #:use-module (guix build-system cargo)
   #:use-module (guix build-system python)
   #:use-module (gnu packages)
   #:use-module (gnu packages check)
+  #:use-module (gnu packages crates-io)
   #:use-module (gnu packages crypto)
   #:use-module (gnu packages kerberos)
   #:use-module (gnu packages libffi)
@@ -62,6 +65,7 @@
   #:use-module (gnu packages python-compression)
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
+  #:use-module (gnu packages rust)
   #:use-module (gnu packages swig)
   #:use-module (gnu packages time)
   #:use-module (gnu packages tls)
@@ -86,7 +90,7 @@
         (base32 "1hzw6h01fm216nmipyylgz0zybd80w1xsk12m7djycnhqrnrvvv1"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-pycrypto" ,python-pycrypto)))
+     (list python-pycrypto))
     (synopsis "Python OTR Implementation")
     (description "Python OTR is an Off-The-Record Protocol Implementation in
 Python.  It does not bind to libotr.")
@@ -96,17 +100,22 @@ Python.  It does not bind to libotr.")
 (define-public python-base58
   (package
     (name "python-base58")
-    (version "2.0.1")
+    (version "2.1.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "base58" version))
        (sha256
         (base32
-         "0yfaqp76kbdb62hikr5n4jkkfjfmii89grwfy6sw3fmsv5hrap1n"))))
+         "1317ly0db7nnjg5k58f6nqa0svfcvn446xd5bpiyi0bfbczwpl65"))))
     (build-system python-build-system)
+    (arguments
+     '(#:phases (modify-phases %standard-phases
+                  (replace 'check
+                    (lambda* (#:key tests? #:allow-other-keys)
+                      (when tests? (invoke "pytest" "-vv")))))))
     (native-inputs
-     `(("python-pyhamcrest" ,python-pyhamcrest)))
+     (list python-pyhamcrest python-pytest python-pytest-benchmark))
     (home-page "https://github.com/keis/base58")
     (synopsis "Base58 and Base58Check implementation")
     (description "Base58 and Base58Check implementation compatible
@@ -125,11 +134,9 @@ with what is used by the Bitcoin network.")
         (base32 "0agvzdn7r7jx5y4scl5gjmrmr6njvizwmr9n7h1kmaahdrrc34sv"))))
     (build-system python-build-system)
     (native-inputs
-     `(("python-pycparser" ,python-pycparser)
-       ("python-pytest" ,python-pytest)))
+     (list python-pycparser python-pytest))
     (propagated-inputs
-     `(("python-cffi" ,python-cffi)
-       ("python-six" ,python-six)))
+     (list python-cffi python-six))
     (home-page "https://github.com/pyca/bcrypt/")
     (synopsis
      "Modern password hashing library")
@@ -152,9 +159,9 @@ Password Scheme\"} by Niels Provos and David Mazieres.")
         (base32 "015y5qaw9qnxr29lg60dml1g5rbqd4586wy5n8m41ib55gvm1zfy"))))
     (build-system python-build-system)
     (native-inputs
-     `(("python-nose" ,python-nose)))
+     (list python-nose))
     (propagated-inputs
-     `(("python-bcrypt" ,python-bcrypt)))
+     (list python-bcrypt))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -212,10 +219,7 @@ This package provides a Python interface for BLAKE2.")
      `(;; FIXME: Tests require many unpackaged libraries, see dev-requirements.txt.
        #:tests? #f))
     (propagated-inputs
-     `(("python-bcrypt" ,python-bcrypt)
-       ("python-pyasn1" ,python-pyasn1)
-       ("python-pynacl" ,python-pynacl)
-       ("python-cryptography" ,python-cryptography)))
+     (list python-bcrypt python-pyasn1 python-pynacl python-cryptography))
     (home-page "https://www.paramiko.org/")
     (synopsis "SSHv2 protocol library")
     (description "Paramiko is a python implementation of the SSHv2 protocol,
@@ -227,24 +231,27 @@ Python interface around SSH networking concepts.")
 (define-public python-ecdsa
   (package
     (name "python-ecdsa")
-    (version "0.14.1")
+    (version "0.17.0")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "ecdsa" version))
        (sha256
-        (base32 "13nx5cbfxc0gnax5zwdmp9xc40qd1llk62mv85jyrvqkbw017ik4"))))
+        (base32 "1ak8xa2r660d85abrlffp0bqvwdadg9ga4066g856hcy8fxh1xdr"))))
     (build-system python-build-system)
     (arguments
      '(#:phases
        (modify-phases %standard-phases
          (replace 'check
-           (lambda _ (invoke "pytest"))))))
+           (lambda _ (invoke
+                      "pytest"
+                      "-vv"
+                      "-k"
+                      "not test_multithreading_with_interrupts"))))))
     (propagated-inputs
-     `(("python-six" ,python-six)))
+     (list python-six))
     (native-inputs
-     `(("openssl" ,openssl)
-       ("python-pytest" ,python-pytest)))
+     (list openssl python-pytest))
     (home-page "https://github.com/warner/python-ecdsa")
     (synopsis "ECDSA cryptographic signature library (pure python)")
     (description
@@ -254,9 +261,6 @@ library, you can quickly create key pairs (signing key and verifying key), sign
 messages, and verify the signatures.  The keys and signatures are very short,
 making them easy to handle and incorporate into other protocols.")
     (license license:expat)))
-
-(define-public python2-ecdsa
-  (package-with-python2 python-ecdsa))
 
 ;;; Pycrypto is abandoned upstream:
 ;;;
@@ -278,8 +282,7 @@ making them easy to handle and incorporate into other protocols.")
         "0g0ayql5b9mkjam8hym6zyg6bv77lbh66rv1fyvgqb17kfc1xkpj"))))
     (build-system python-build-system)
     (inputs
-     `(("python" ,python)
-       ("gmp" ,gmp)))
+     (list python gmp))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -294,15 +297,6 @@ and RIPEMD160), and various encryption algorithms (AES, DES, RSA, ElGamal,
 etc.).  The package is structured to make adding new modules easy.")
     (license license:public-domain)))
 
-(define-public python2-pycrypto
-  (let ((pycrypto (package-with-python2 python-pycrypto)))
-    (package/inherit pycrypto
-      (inputs
-       `(("python" ,python-2)
-         ,@(alist-delete
-            "python"
-            (package-inputs pycrypto)))))))
-
 (define-public python-kerberos
   (package
     (name "python-kerberos")
@@ -316,7 +310,7 @@ etc.).  The package is structured to make adding new modules easy.")
          "19663qxmma0i8bfbjc2iwy5hgq0g4pfb75r023v5dps68zfvffgh"))))
     (build-system python-build-system)
     (inputs
-     `(("mit-krb5" ,mit-krb5)))
+     (list mit-krb5))
     (home-page "https://github.com/apple/ccs-pykerberos")
     (synopsis
      "Python Kerberos library used by CalendarServer")
@@ -346,18 +340,14 @@ do what is needed for client/server Kerberos authentication based on
          (replace 'check
            (lambda* (#:key tests? #:allow-other-keys)
              (when tests?
-               (invoke "pytest"))
-             #t)))))
+               (invoke "pytest" "-vv" "-c" "/dev/null" "tests")))))))
     (native-inputs
-     `(("python-toml" ,python-toml)
-       ("python-pytest" ,python-pytest)
-       ("python-pytest-checkdocs" ,python-pytest-checkdocs)
-       ("python-pytest-cov" ,python-pytest-cov)
-       ("python-pytest-flake8" ,python-pytest-flake8)
-       ("python-setuptools" ,python-setuptools)
-       ("python-setuptools-scm" ,python-setuptools-scm)))
+     (list python-toml
+           python-pytest
+           python-setuptools
+           python-setuptools-scm))
     (propagated-inputs
-     `(("python-secretstorage" ,python-secretstorage)))
+     (list python-secretstorage))
     (home-page "https://github.com/jaraco/keyring")
     (synopsis "Store and access your passwords safely")
     (description
@@ -365,31 +355,7 @@ do what is needed for client/server Kerberos authentication based on
 service from python.  It can be used in any application that needs safe
 password storage.")
     ;; "MIT" and PSF dual license
-    (properties `((python2-variant . ,(delay python2-keyring))))
     (license license:x11)))
-
-(define-public python2-keyring
-  (let ((keyring (package-with-python2
-                   (strip-python2-variant python-keyring))))
-    (package
-      (inherit keyring)
-      (name "python2-keyring")
-      (version "8.7")
-      (source
-        (origin
-          (method url-fetch)
-          (uri (pypi-uri "keyring" version))
-          (sha256
-           (base32
-            "0482rmi2x6p78wl2kz8qzyq21xz1sbbfwnv5x7dggar4vkwxhzfx"))))
-      (arguments
-       `(#:python ,python-2))
-      (native-inputs
-       `(("python2-pytest" ,python2-pytest)
-         ("python2-pytest-runner" ,python2-pytest-runner)
-         ("python2-setuptools-scm" ,python2-setuptools-scm)))
-      (propagated-inputs
-       `(("python2-pycrypto" ,python2-pycrypto))))))
 
 (define-public python-keyrings.alt
   (package
@@ -418,9 +384,7 @@ password storage.")
             #t))))
     (build-system python-build-system)
     (native-inputs
-     `(("python-keyring" ,python-keyring)
-       ("python-pytest" ,python-pytest)
-       ("python-setuptools-scm" ,python-setuptools-scm)))
+     (list python-keyring python-pytest python-setuptools-scm))
     (home-page "https://github.com/jaraco/keyrings.alt")
     (synopsis "Alternate keyring implementations")
     (description "Keyrings in this package may have security risks or other
@@ -443,10 +407,9 @@ risk.")
          "1yxqfb5131wahjyw9pxz03bq476rcfx62s6k53xx4cqbzzgdaqkq"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-pyopenssl" ,python-pyopenssl)
-       ("python-tldextract" ,python-tldextract)))
+     (list python-pyopenssl python-tldextract))
     (native-inputs
-     `(("python-pytest-cov" ,python-pytest-cov)))
+     (list python-pytest-cov))
     (home-page "https://github.com/ikreymer/certauth")
     (synopsis "Certificate authority creation tool")
     (description "This package provides a small library, built on top of
@@ -459,13 +422,13 @@ for example, for recording or replaying web content.")
 (define-public python-certifi
   (package
     (name "python-certifi")
-    (version "2020.12.5")
+    (version "2021.10.8")
     (source (origin
               (method url-fetch)
               (uri (pypi-uri "certifi" version))
               (sha256
                (base32
-                "177mdbw0livdjvp17sz6wsfrc32838m9y59v871gpgv2888raj8s"))))
+                "0wl8ln7acd797i1q7mmb430l6hqwhmk4bd37x8ycw02b3my4x23q"))))
     (build-system python-build-system)
     (arguments '(#:tests? #f))          ;no tests
     (home-page "https://certifi.io/")
@@ -475,20 +438,17 @@ for example, for recording or replaying web content.")
 is used by the Requests library to verify HTTPS requests.")
     (license license:asl2.0)))
 
-(define-public python2-certifi
-  (package-with-python2 python-certifi))
-
-(define-public python-cryptography-vectors
+(define-public python-cryptography-vectors-next
   (package
     (name "python-cryptography-vectors")
-    (version "3.3.1")
+    (version "36.0.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "cryptography_vectors" version))
        (sha256
         (base32
-         "192wix3sr678x21brav5hgc6j93l7ab1kh69p2scr3fsblq9qy03"))))
+         "166mvhhmgglqai1sjkkb76mpdkad2yykam11d2w44hs2snpr117w"))))
     (build-system python-build-system)
     (home-page "https://github.com/pyca/cryptography")
     (synopsis "Test vectors for the cryptography package")
@@ -497,35 +457,125 @@ is used by the Requests library to verify HTTPS requests.")
     ;; Distributed under either BSD-3 or ASL2.0
     (license (list license:bsd-3 license:asl2.0))))
 
-(define-public python2-cryptography-vectors
-  (package-with-python2 python-cryptography-vectors))
+(define-public python-cryptography-vectors
+  (package
+    (inherit python-cryptography-vectors-next)
+    (version "3.4.8")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "cryptography_vectors" version))
+              (sha256
+               (base32 "1wl0ynh3lzhc6q59g8mybvijmnp195x7fjxlb3h3sgcraw14312c"))))))
 
-(define-public python-cryptography
+(define-public python-cryptography-next
   (package
     (name "python-cryptography")
-    (version "3.3.1")
+    (version "36.0.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "cryptography" version))
        (sha256
         (base32
-         "1ribd1vxq9wwz564mg60dzcy699gng54admihjjkgs9dx95pw5vy"))))
+         "0f1n8bvngarhsssm60xc59xfzkh7yqpyyyypaph3v5bs7pfc3rak"))))
     (build-system python-build-system)
+    (arguments
+     (list
+      #:imported-modules (append %cargo-build-system-modules
+                                 %python-build-system-modules)
+      #:modules `(((guix build cargo-build-system) #:prefix cargo:)
+                  ,@%python-build-system-modules
+                  (srfi srfi-1)
+                  (ice-9 match))
+      #:phases
+      #~(modify-phases (@ (guix build python-build-system) %standard-phases)
+          (add-after 'unpack 'loosen-ouroboros-version
+            (lambda _
+              (substitute* "src/rust/Cargo.toml"
+                (("ouroboros = \"0\\.13\"")
+                 "ouroboros = \"0.14\""))))
+          (add-before 'build 'configure-cargo
+            (lambda* (#:key inputs #:allow-other-keys)
+              ;; Hide irrelevant inputs from cargo-build-system so it does
+              ;; not try to unpack sanity-check.py, etc.
+              (let ((cargo-inputs (filter (match-lambda
+                                            ((name . path)
+                                             (or (string-prefix? "rust-" name)
+                                                 (string=? "gcc" name))))
+                                          inputs)))
+                (with-directory-excursion "src/rust"
+                  ((assoc-ref cargo:%standard-phases 'unpack-rust-crates)
+                   #:inputs cargo-inputs
+                   #:vendor-dir "guix-vendor")
+                  ((assoc-ref cargo:%standard-phases 'configure)
+                   #:inputs cargo-inputs)
+                  ((assoc-ref cargo:%standard-phases 'patch-cargo-checksums)
+                   #:vendor-dir "guix-vendor"))
+                (rename-file "src/rust/.cargo" ".cargo"))))
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                (invoke "pytest" "-vv" "tests")))))))
     (inputs
-     `(("openssl" ,openssl)))
+     (list openssl
+           rust-aliasable-0.1
+           rust-asn1-0.8
+           rust-asn1-derive-0.8
+           rust-autocfg-1
+           rust-base64-0.13
+           rust-bitflags-1
+           rust-cfg-if-0.1
+           rust-cfg-if-1
+           rust-chrono-0.4
+           rust-cloudabi-0.1
+           rust-lazy-static-1
+           rust-libc-0.2
+           rust-indoc-0.3
+           rust-indoc-impl-0.3
+           rust-inflector-0.11
+           rust-instant-0.1
+           rust-lock-api-0.4
+           rust-num-integer-0.1
+           rust-num-traits-0.2
+           rust-once-cell-1
+           rust-ouroboros-0.14
+           rust-ouroboros-macro-0.14
+           rust-parking-lot-0.11
+           rust-parking-lot-core-0.8
+           rust-paste-0.1
+           rust-paste-impl-0.1
+           rust-pem-1
+           rust-proc-macro-error-1
+           rust-proc-macro-error-attr-1
+           rust-proc-macro-hack-0.5
+           rust-proc-macro2-1
+           rust-pyo3-0.15
+           rust-pyo3-build-config-0.15
+           rust-pyo3-macros-0.15
+           rust-pyo3-macros-backend-0.15
+           rust-quote-1
+           rust-redox-syscall-0.2
+           rust-scopeguard-1
+           rust-smallvec-1
+           rust-stable-deref-trait-1
+           rust-syn-1
+           rust-unicode-xid-0.2
+           rust-unindent-0.1
+           rust-version-check-0.9
+           rust-winapi-0.3))
     (propagated-inputs
-     `(("python-asn1crypto" ,python-asn1crypto)
-       ("python-cffi" ,python-cffi)
-       ("python-six" ,python-six)
-       ("python-idna" ,python-idna)
-       ("python-iso8601" ,python-iso8601)))
+     (list python-asn1crypto python-cffi python-six python-idna
+           python-iso8601))
     (native-inputs
-     `(("python-cryptography-vectors" ,python-cryptography-vectors)
-       ("python-hypothesis" ,python-hypothesis)
-       ("python-pretend" ,python-pretend)
-       ("python-pytz" ,python-pytz)
-       ("python-pytest" ,python-pytest)))
+     (list python-cryptography-vectors-next
+           python-hypothesis
+           python-pretend
+           python-pytz
+           python-pytest
+           python-pytest-subtests
+           python-setuptools-rust
+           rust
+           `(,rust "cargo")))
     (home-page "https://github.com/pyca/cryptography")
     (synopsis "Cryptographic recipes and primitives for Python")
     (description
@@ -535,73 +585,80 @@ library” for Python.  The package includes both high level recipes, and low
 level interfaces to common cryptographic algorithms such as symmetric ciphers,
 message digests and key derivation functions.")
     ;; Distributed under either BSD-3 or ASL2.0
-    (license (list license:bsd-3 license:asl2.0))
-    (properties `((python2-variant . ,(delay python2-cryptography))))))
+    (license (list license:bsd-3 license:asl2.0))))
 
-(define-public python2-cryptography
-  (let ((crypto (package-with-python2
-                 (strip-python2-variant python-cryptography))))
-    (package/inherit crypto
-      (propagated-inputs
-       `(("python2-ipaddress" ,python2-ipaddress)
-         ("python2-backport-ssl-match-hostname"
-          ,python2-backport-ssl-match-hostname)
-         ("python2-enum34" ,python2-enum34)
-         ,@(package-propagated-inputs crypto))))))
+(define-public python-cryptography
+  (package
+    (inherit python-cryptography-next)
+    (version "3.4.8")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "cryptography" version))
+              (sha256
+               (base32 "072awar70cwfd2hnx0pvp1dkc7gw45mbm3wcyddvxz5frva5xk4l"))))
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'set-no-rust
+                 (lambda _
+                   (setenv "CRYPTOGRAPHY_DONT_BUILD_RUST" "1"))))))
+    (inputs (list openssl))
+    (native-inputs
+     (list python-cryptography-vectors
+           python-hypothesis
+           python-pretend
+           python-pytz
+           python-pytest
+           python-setuptools-rust))))
 
+;; This is the last version which is compatable with python-cryptography < 35.
 (define-public python-pyopenssl
   (package
     (name "python-pyopenssl")
-    (version "20.0.0")
+    (version "21.0.0")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "pyOpenSSL" version))
        (sha256
         (base32
-         "1i8ab5zn9i9iq2ksizp3rd42v157kacddzz88kviqw3kpp68xw4j"))))
+         "1cqcc20fwl521z3fxsc1c98gbnhb14q55vrvjfp6bn6h8rg8qbay"))
+       (patches (search-patches "python2-pyopenssl-openssl-compat.patch"))))
     (build-system python-build-system)
     (arguments
-     '(#:phases
-       (modify-phases %standard-phases
-         (delete 'check)
-         (add-after 'install 'check
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (add-installed-pythonpath inputs outputs)
-             ;; PyOpenSSL runs tests against a certificate with a fixed
-             ;; expiry time.  To ensure successful builds in the future,
-             ;; set the time to roughly the release date.
-             (invoke "faketime" "2020-12-01" "py.test" "-v" "-k"
-                     (string-append
-                      ;; This test tries to look up certificates from
-                      ;; the compiled-in default path in OpenSSL, which
-                      ;; does not exist in the build environment.
-                      "not test_fallback_default_verify_paths "
-                      ;; This test attempts to make a connection to
-                      ;; an external web service.
-                      "and not test_set_default_verify_paths "
-                      ;; Fails on i686-linux and possibly other 32-bit platforms
-                      ;; https://github.com/pyca/pyopenssl/issues/974
-                      "and not test_verify_with_time")))))))
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                ;; PyOpenSSL runs tests against a certificate with a fixed
+                ;; expiry time.  To ensure successful builds in the future,
+                ;; set the time to roughly the release date.
+                (invoke "faketime" "2022-02-01" "py.test" "-v" "-k"
+                        (string-append
+                         ;; This test tries to look up certificates from
+                         ;; the compiled-in default path in OpenSSL, which
+                         ;; does not exist in the build environment.
+                         "not test_fallback_default_verify_paths "
+                         ;; This test attempts to make a connection to
+                         ;; an external web service.
+                         "and not test_set_default_verify_paths "
+                         ;; Fails on i686-linux and possibly other 32-bit platforms
+                         ;; https://github.com/pyca/pyopenssl/issues/974
+                         "and not test_verify_with_time"))))))))
     (propagated-inputs
-     `(("python-cryptography" ,python-cryptography)
-       ("python-six" ,python-six)))
+     (list python-cryptography python-six))
     (inputs
-     `(("openssl" ,openssl)))
+     (list openssl))
     (native-inputs
-     `(("libfaketime" ,libfaketime)
-       ("python-flaky" ,python-flaky)
-       ("python-pretend" ,python-pretend)
-       ("python-pytest" ,python-pytest)))
+     (list libfaketime python-flaky python-pretend python-pytest))
     (home-page "https://github.com/pyca/pyopenssl")
     (synopsis "Python wrapper module around the OpenSSL library")
     (description
       "PyOpenSSL is a high-level wrapper around a subset of the OpenSSL
 library.")
     (license license:asl2.0)))
-
-(define-public python2-pyopenssl
-  (package-with-python2 python-pyopenssl))
 
 (define-public python-ed25519
   (package
@@ -619,9 +676,6 @@ library.")
     (synopsis "Ed25519 public-key signatures")
     (description "Ed25519 public-key signatures")
     (license license:expat)))
-
-(define-public python2-ed25519
-  (package-with-python2 python-ed25519))
 
 (define-public python-axolotl-curve25519
   (package
@@ -643,9 +697,6 @@ libaxolotl-android.  At the moment this wrapper is meant for use by
 python-axolotl.")
     (license (list license:gpl3    ; Most files
                    license:bsd-3)))) ; curve/curve25519-donna.c
-
-(define-public python2-axolotl-curve25519
-  (package-with-python2 python-axolotl-curve25519))
 
 (define-public python-axolotl
   (package
@@ -669,9 +720,7 @@ python-axolotl.")
                        '("axolotl/tests" "build/lib/axolotl/tests"))
              #t)))))
     (propagated-inputs
-     `(("python-axolotl-curve25519" ,python-axolotl-curve25519)
-       ("python-cryptography" ,python-cryptography)
-       ("python-protobuf" ,python-protobuf)))
+     (list python-axolotl-curve25519 python-cryptography python-protobuf))
     (home-page "https://github.com/tgalal/python-axolotl")
     (synopsis "Python port of libaxolotl-android")
     (description "This is a python port of libaxolotl-android.  This
@@ -679,29 +728,6 @@ is a ratcheting forward secrecy protocol that works in synchronous and
 asynchronous messaging environments.")
     (license license:gpl3)))
 
-(define-public python2-axolotl
-  (package-with-python2 python-axolotl))
-
-;; SlowAES isn't compatible with Python 3.
-(define-public python2-slowaes
-  (package
-    (name "python2-slowaes")
-    (version "0.1a1")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (pypi-uri "slowaes" version))
-       (sha256
-        (base32
-         "02dzajm83a7lqgxf6r3hgj64wfmcxz8gs4nvgxpvj5n19kjqlrc3"))))
-    (build-system python-build-system)
-    (arguments `(#:python ,python-2))
-    (home-page "http://code.google.com/p/slowaes/")
-    (synopsis "Implementation of AES in Python")
-    (description "This package contains an implementation of AES in Python.
-This implementation is slow (hence the project name) but still useful when
-faster ones are not available.")
-    (license license:asl2.0)))
 
 (define-public python-pyaes
   (package
@@ -721,9 +747,6 @@ faster ones are not available.")
 AES block cipher algorithm and the common modes of operation (CBC, CFB, CTR,
 ECB and OFB).")
     (license license:expat)))
-
-(define-public python2-pyaes
-  (package-with-python2 python-pyaes))
 
 (define-public python-asn1crypto
   (package
@@ -752,9 +775,6 @@ for private keys, public keys, certificates, CRL, OCSP, CMS, PKCS#3, PKCS#7,
 PKCS#8, PKCS#12, PKCS#5, X.509 and TSP.")
     (license license:expat)))
 
-(define-public python2-asn1crypto
-  (package-with-python2 python-asn1crypto))
-
 (define-public python-pynacl
   (package
     (name "python-pynacl")
@@ -771,38 +791,24 @@ PKCS#8, PKCS#12, PKCS#5, X.509 and TSP.")
            (substitute* "setup.py"
              (("\"wheel\"") ""))
            ;; Remove bundled libsodium.
-           (delete-file-recursively "src/libsodium")
-           #t))
+           (delete-file-recursively "src/libsodium")))
        (sha256
         (base32
          "01b56hxrbif3hx8l6rwz5kljrgvlbj7shmmd2rjh0hn7974a5sal"))))
     (build-system python-build-system)
     (arguments
-     `(#:modules (,@%python-build-system-modules
-                  (guix build utils)
-                  (ice-9 ftw)
-                  (srfi srfi-26))
-       #:phases
-       (modify-phases (@ (guix build python-build-system) %standard-phases)
+     `(#:phases
+       (modify-phases %standard-phases
          (add-before 'build 'use-system-sodium
            (lambda _
-             (setenv "SODIUM_INSTALL" "system")
-             #t))
+             (setenv "SODIUM_INSTALL" "system")))
          (replace 'check
            (lambda _
-             (let ((build-directory
-                    (car (scandir "build" (cut string-prefix? "lib" <>)))))
-               (setenv "PYTHONPATH"
-                       (string-append "./build/" build-directory ":"
-                                      (getenv "PYTHONPATH")))
-               (invoke "pytest" "-vv")))))))
+             (invoke "pytest" "-vv"))))))
     (native-inputs
-     `(("python-hypothesis" ,python-hypothesis)
-       ("python-pytest" ,python-pytest)))
+     (list python-hypothesis python-pytest))
     (propagated-inputs
-     `(("python-cffi" ,python-cffi)
-       ("python-six" ,python-six)
-       ("libsodium" ,libsodium)))
+     (list python-cffi python-six libsodium))
     (home-page "https://github.com/pyca/pynacl/")
     (synopsis "Python bindings to libsodium")
     (description
@@ -835,9 +841,7 @@ of improving usability, security and speed.")
              (delete-file "setup.cfg")
              (invoke "pytest"))))))
     (native-inputs
-     `(("python-numpy" ,python-numpy)
-       ("python-pillow" ,python-pillow)
-       ("python-pytest" ,python-pytest)))
+     (list python-numpy python-pillow python-pytest))
     (home-page "https://github.com/halcy/blurhash-python")
     (synopsis
      "Pure-Python implementation of the blurhash algorithm")
@@ -858,52 +862,34 @@ of improving usability, security and speed.")
             "1gc3i5s93zq6x1nkaxkq1dvmsc12vmrw0hns9f5s1hcb78ni52c8"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-future" ,python-future)))
+     (list python-future))
     (home-page "https://github.com/ubinity/ECPy")
     (synopsis "Pure Python Elliptic Curve Library")
     (description "This package provides a Elliptic Curve Library in pure
 Python.")
     (license license:asl2.0)))
 
-(define-public python2-ecpy
-  (package-with-python2 python-ecpy))
-
 (define-public python-josepy
   (package
     (name "python-josepy")
-    (version "1.1.0")
+    (version "1.13.0")
     (source (origin
               (method url-fetch)
               (uri (pypi-uri "josepy" version))
               (sha256
                (base32
-                "11khz8malzrv375b27jjkv66z6z6khdx1v5mkkr4vq16gp3n4p7v"))))
+                "1jaxqyp53paks2z8zyzr50gqvzfxbar7r2qf98kqak4aizrxlcc9"))))
     (build-system python-build-system)
     (arguments
-     ;; The tests require flake8 >= 3.5, which is not yet packaged.
+     ;; TODO: some test dependencies are missing (see pyproject.toml).
      '(#:tests? #f))
     (propagated-inputs
-     `(("python-cryptography" ,python-cryptography)
-       ("python-pyopenssl" ,python-pyopenssl)
-       ("python-six" ,python-six)))
-;; TODO Enable when we have flake8 >= 3.5.
-;    (native-inputs
-;     `(("python-coverage" ,python-coverage)
-;       ("python-flake8" ,python-flake8)
-;       ("python-isort" ,python-isort)
-;       ("python-mock" ,python-mock)
-;       ("python-pytest" ,python-pytest)
-;       ("python-pytest-cov" ,python-pytest-cov)
-;       ("python-pytest-cache" ,python-pytest-cache)
-;       ("python-pytest-flake8" ,python-pytest-flake8)))
+     (list python-cryptography python-pyopenssl))
     (home-page "https://github.com/certbot/josepy")
     (synopsis "JOSE protocol implementation in Python")
     (description "This package provides a Python implementation of the JOSE
 protocol (Javascript Object Signing and Encryption).")
     (license license:asl2.0)))
-
-(define-public python2-josepy
-  (package-with-python2 python-josepy))
 
 (define pycryptodome-unbundle-tomcrypt-snippet
   #~(begin
@@ -936,8 +922,7 @@ protocol (Javascript Object Signing and Encryption).")
        (snippet pycryptodome-unbundle-tomcrypt-snippet)))
     (build-system python-build-system)
     (inputs
-     `(("libtomcrypt" ,libtomcrypt)
-       ("libtommath" ,libtommath)))
+     (list libtomcrypt libtommath))
     (home-page "https://www.pycryptodome.org")
     (synopsis "Low-level cryptographic Python library")
     (description
@@ -977,9 +962,6 @@ This package provides drop-in compatibility with PyCrypto.  It is one of two
 PyCryptodome variants, the other being python-pycryptodomex.")
     (license (list license:bsd-2
                    license:public-domain)))) ; code inherited from PyCrypto
-
-(define-public python2-pycryptodome
-  (package-with-python2 python-pycryptodome))
 
 (define-public python-pycryptodomex
   (package (inherit python-pycryptodome)
@@ -1044,8 +1026,8 @@ provides drop-in compatibility with PyCrypto.")))
      `(;; FIXME: Tests start failing with time due to date checks in TLS
        ;; certificates.
        #:tests? #f))
-    (inputs `(("openssl" ,openssl)))
-    (native-inputs `(("swig" ,swig)))
+    (inputs (list openssl))
+    (native-inputs (list swig))
     (home-page "https://gitlab.com/m2crypto/m2crypto")
     (synopsis "Python crypto and TLS toolkit")
     (description "@code{M2Crypto} is a complete Python wrapper for OpenSSL
@@ -1055,15 +1037,7 @@ extensions to Python's httplib, urllib, and xmlrpclib; unforgeable HMAC'ing
 AuthCookies for web session management; FTP/TLS client and server; S/MIME;
 M2Crypto can also be used to provide TLS for Twisted.  Smartcards supported
 through the Engine interface.")
-    (properties `((python2-variant . ,(delay python2-m2crypto))))
     (license license:expat)))
-
-(define-public python2-m2crypto
-  (let ((m2crypto (package-with-python2
-                   (strip-python2-variant python-m2crypto))))
-    (package/inherit m2crypto
-             (propagated-inputs
-              `(("python2-typing" ,python2-typing))))))
 
 (define-public python-pykeepass
   (package
@@ -1097,12 +1071,12 @@ through the Engine interface.")
                (("==") ">="))
              #t)))))
     (propagated-inputs
-     `(("python-argon2-cffi" ,python-argon2-cffi)
-       ("python-construct" ,python-construct)
-       ("python-dateutil" ,python-dateutil)
-       ("python-future" ,python-future)
-       ("python-lxml" ,python-lxml)
-       ("python-pycryptodomex" ,python-pycryptodomex)))
+     (list python-argon2-cffi
+           python-construct
+           python-dateutil
+           python-future
+           python-lxml
+           python-pycryptodomex))
     (home-page "https://github.com/libkeepass/pykeepass")
     (synopsis "Python library to interact with keepass databases")
     (description
@@ -1142,7 +1116,7 @@ supports KDBX3 and KDBX4.")
     ;; requires "hashlib.scrypt", provided by Python 3.6+ built with OpenSSL
     ;; 1.1+.  Use that as soon as Guix provides it.
     (inputs
-     `(("libscrypt" ,libscrypt)))
+     (list libscrypt))
     (home-page "https://github.com/jvarho/pylibscrypt")
     (synopsis "Scrypt for Python")
     (description "There are a lot of different scrypt modules for Python, but
@@ -1169,13 +1143,11 @@ none of them have everything that I'd like, so here's one more.  It uses
            (lambda* (#:key inputs #:allow-other-keys)
              (substitute* "libnacl/__init__.py"
                (("/usr/local/lib/libsodium.so")
-                (string-append (assoc-ref inputs "libsodium")
-                               "/lib/libsodium.so")))
-             #t)))))
+                (search-input-file inputs "/lib/libsodium.so"))))))))
     (native-inputs
-     `(("python-pyhamcrest" ,python-pyhamcrest)))
+     (list python-pyhamcrest))
     (inputs
-     `(("libsodium" ,libsodium)))
+     (list libsodium))
     (home-page "https://libnacl.readthedocs.org/")
     (synopsis "Python bindings for libsodium based on ctypes")
     (description "@code{libnacl} is used to gain direct access to the
@@ -1217,7 +1189,7 @@ require users to log in.")
          "0hjk71k3mgnl8siikm9lii9im8kv0rb7inkjzx78rnancra48xxr"))))
     (build-system python-build-system)
     (inputs
-     `(("openssl" ,openssl)))
+     (list openssl))
     (home-page "https://bitbucket.org/mhallin/py-scrypt")
     (synopsis "Bindings for the scrypt key derivation function library")
     (description "This is a set of Python bindings for the scrypt key
@@ -1237,10 +1209,8 @@ derivation function.")
          "0b9f5qiqjy8ralzgwjgkhx82h6h8sa7532psmb8mkd65md5aan08"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-attrs" ,python-attrs)
-       ("python-pyasn1" ,python-pyasn1)
-       ("python-pyasn1-modules" ,python-pyasn1-modules)
-       ("python-pyopenssl" ,python-pyopenssl)))
+     (list python-attrs python-pyasn1 python-pyasn1-modules
+           python-pyopenssl))
     (home-page "https://service-identity.readthedocs.io/")
     (synopsis "Service identity verification for PyOpenSSL")
     (description
@@ -1250,9 +1220,6 @@ In the simplest case, this means host name verification.  However,
 service_identity implements RFC 6125 fully and plans to add other
 relevant RFCs too.")
     (license license:expat)))
-
-(define-public python2-service-identity
-  (package-with-python2 python-service-identity))
 
 (define-public python-hkdf
   (package
@@ -1267,7 +1234,7 @@ relevant RFCs too.")
           "1jhxk5vhxmxxjp3zj526ry521v9inzzl8jqaaf0ma65w6k332ak2"))))
     (build-system python-build-system)
     (native-inputs
-     `(("python-nose" ,python-nose)))
+     (list python-nose))
     (home-page "https://github.com/casebeer/python-hkdf")
     (synopsis "HMAC-based Extract-and-Expand Key Derivation Function (HKDF)")
     (description "This package provides a Python implementation of the HMAC Key
@@ -1287,7 +1254,7 @@ Derivation function (HKDF) defined in RFC 5869.")
           "1x16r7lrbklvfzbacb66qv9iiih6liq1y612dqh2chgf555n2yn1"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-hkdf" ,python-hkdf)))
+     (list python-hkdf))
     (home-page "https://github.com/warner/python-spake2")
     (synopsis "SPAKE2 password-authenticated key exchange in Python")
     (description "This package provides a Python implementation of the SPAKE2
@@ -1311,12 +1278,12 @@ Password-Authenticated Key Exchange algorithm.")
       ;; <https://github.com/meejah/txtorcon/issues/330>
      `(#:tests? #f))
     (propagated-inputs
-     `(("python-automat" ,python-automat)
-       ("python-idna" ,python-idna)
-       ("python-incremental" ,python-incremental)
-       ("python-service-identity" ,python-service-identity)
-       ("python-twisted" ,python-twisted)
-       ("python-zope-interface" ,python-zope-interface)))
+     (list python-automat
+           python-idna
+           python-incremental
+           python-service-identity
+           python-twisted
+           python-zope-interface))
     (home-page "https://github.com/meejah/txtorcon")
     (synopsis "Twisted-based Tor controller client")
     (description "This package provides a Twisted-based Tor controller client,
@@ -1336,10 +1303,9 @@ with state-tracking and configuration abstractions.")
          "0lipygpzhwzzsq2k5imb1jgkmj8y4khxdwhzadjs3bd56g6bmkx9"))))
     (build-system python-build-system)
     (native-inputs
-     `(("python-pytest" ,python-pytest)
-       ("python-pytest-runner" ,python-pytest-runner)))
+     (list python-pytest python-pytest-runner))
     (inputs
-     `(("keyutils" ,keyutils)))
+     (list keyutils))
     (arguments
      '(#:tests? #f))
     (home-page "https://github.com/sassoftware/python-keyutils")
@@ -1378,9 +1344,7 @@ storing and retrieving sensitive information in your programs.")
              (chdir "scripts")
              #t)))))
     (propagated-inputs
-     `(("python-click" ,python-click)
-       ("python-intelhex" ,python-intelhex)
-       ("python-cryptography" ,python-cryptography)))
+     (list python-click python-intelhex python-cryptography))
     (home-page "https://mcuboot.com")
     (synopsis "Tool to securely sign firmware images for booting by MCUboot")
     (description "MCUboot is a secure bootloader for 32-bit MCUs.  This
@@ -1401,7 +1365,7 @@ MCUboot.")
          "16mavidki4ma5ip8srqalr19gz4f5yn3cnmmgps1fmgfr24j63rm"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-cryptography" ,python-cryptography)))
+     (list python-cryptography))
     (home-page "https://github.com/jborean93/ntlm-auth")
     (synopsis
      "Calculates NTLM Authentication codes")
@@ -1432,8 +1396,7 @@ and Backlog for a list of what is and is not currently supported.")
     (arguments
      '(#:tests? #f)) ; Tests require a running dbus service.
     (propagated-inputs
-     `(("python-cryptography" ,python-cryptography)
-       ("python-jeepney" ,python-jeepney)))
+     (list python-cryptography python-jeepney))
     (home-page "https://github.com/mitya57/secretstorage")
     (synopsis "Python bindings to FreeDesktop.org Secret Service API")
     (description
@@ -1464,14 +1427,14 @@ items and collections, editing items, locking and unlocking collections
              (add-installed-pythonpath inputs outputs)
              (invoke "pytest" "-vv"))))))
     (native-inputs
-     `(("python-more-itertools" ,python-more-itertools)
-       ("python-pyopenssl" ,python-pyopenssl)
-       ("python-pytest" ,python-pytest)
-       ("python-pytest-cov" ,python-pytest-cov)
-       ("python-service-identity" ,python-service-identity)
-       ("python-zipp" ,python-zipp)))
+     (list python-more-itertools
+           python-pyopenssl
+           python-pytest
+           python-pytest-cov
+           python-service-identity
+           python-zipp))
     (propagated-inputs
-     `(("python-cryptography" ,python-cryptography)))
+     (list python-cryptography))
     (home-page "https://github.com/python-trio/trustme")
     (synopsis "Fake a certificate authority for tests")
     (description
@@ -1494,9 +1457,9 @@ use in your tests.")
           "0n980gqpzh0fm58h3i4mi2i10wgj606lscm1r5sk60vbf6vh8mv9"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-pyopenssl" ,python-pyopenssl)))
+     (list python-pyopenssl))
     (native-inputs
-     `(("python-pytest" ,python-pytest)))
+     (list python-pytest))
     (home-page "https://github.com/LLNL/certipy")
     (synopsis "Utility to create and sign CAs and certificates")
     (description
@@ -1517,11 +1480,8 @@ certificates, signing and building trust bundles.")
          (base32 "0mw6ch5s4czpmsiwqwhcidgk27858pl8vlvb7acrxjkm4ribcnbx"))))
     (build-system python-build-system)
     (native-inputs
-     `(("python-testpath" ,python-testpath)
-       ("python-tornado" ,python-tornado)
-       ("python-trio" ,python-trio)
-       ("python-pytest" ,python-pytest)
-       ("python-pytest-trio" ,python-pytest-trio)))
+     (list python-testpath python-tornado python-trio python-pytest
+           python-pytest-trio))
     (home-page "https://gitlab.com/takluyver/jeepney")
     (synopsis "Low-level, pure Python DBus protocol wrapper")
     (description
@@ -1558,12 +1518,10 @@ I/O-free core, and integration modules for different event loops.")
              ;; see tox.ini
              (invoke "python" "-m" "argon2" "-n" "1" "-t" "1" "-m" "8" "-p" "1"))))))
     (propagated-inputs
-     `(("python-cffi" ,python-cffi)
-       ("python-six" ,python-six)))
-    (inputs `(("argon2" ,argon2)))
+     (list python-cffi python-six))
+    (inputs (list argon2))
     (native-inputs
-     `(("python-hypothesis" ,python-hypothesis)
-       ("python-pytest" ,python-pytest)))
+     (list python-hypothesis python-pytest))
     (home-page "https://argon2-cffi.readthedocs.io/")
     (synopsis "Secure Password Hashes for Python")
     (description
@@ -1595,10 +1553,9 @@ can decide how long it takes to hash a password and how much memory is required.
            (lambda _
              (invoke "python" "-m" "pytest"))))))
     (native-inputs
-     `(("python-pytest" ,python-pytest)))
+     (list python-pytest))
     (propagated-inputs
-     `(("python-argon2-cffi" ,python-argon2-cffi)
-       ("python-cryptography" ,python-cryptography)))
+     (list python-argon2-cffi python-cryptography))
     (home-page "https://www.dropbox.com/developers")
     (synopsis "Library to password-protect your data")
     (description
@@ -1626,12 +1583,10 @@ signatures.")
              (when tests?
                (invoke "pytest")))))))
     (native-inputs
-     `(("python-cryptography" ,python-cryptography)
-       ("python-pyasn1" ,python-pyasn1)
-       ("python-pytest" ,python-pytest)
-       ("python-singledispatch" ,python-singledispatch)
-       ("python-six" ,python-six)
-       ("python-wheel" ,python-wheel)))
+     (list python-pytest
+           python-wheel))
+    (propagated-inputs (list python-cryptography python-pyasn1
+                             python-singledispatch python-six))
     (home-page "https://github.com/SecurityInnovation/PGPy")
     (synopsis "Python implementation of OpenPGP")
     (description
@@ -1641,6 +1596,26 @@ armored and binary formats.
 It can create and verify RSA, DSA, and ECDSA signatures, at the moment.  It
 can also encrypt and decrypt messages using RSA and ECDH.")
     (license license:bsd-3)))
+
+(define-public python-pyu2f
+  (package
+    (name "python-pyu2f")
+    (version "0.1.5")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "pyu2f" version))
+       (sha256
+        (base32 "0srhzdbgdsqwpcw7awqm19yg3xbabqckfvrp8rbpvz2232hs7jm3"))))
+    (build-system python-build-system)
+    (arguments '(#:tests? #f))          ;none included
+    (propagated-inputs (list python-six))
+    (home-page "https://github.com/google/pyu2f/")
+    (synopsis "U2F host library for interacting with a U2F device over USB")
+    (description
+     "Pyu2f is a Python-based U2F host library.  It provides functionality for
+interacting with a U2F device over USB.")
+    (license license:asl2.0)))
 
 (define-public python-sop
   (package
@@ -1672,3 +1647,29 @@ It does not provide such an implementation itself -- this is just the
 scaffolding for the command line, which should make it relatively easy to
 supply a handful of python functions as methods to a class.")
     (license license:expat))) ; MIT license
+
+(define-public python-starkbank-ecdsa
+  (package
+    (name "python-starkbank-ecdsa")
+    (version "2.0.3")
+    (home-page "https://github.com/starkbank/ecdsa-python")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url home-page)
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1k9h4p0frkgj76vrqfjim4mik98g09mivdxxcmxr6raa5jwr83sh"))))
+    (arguments
+     (list #:phases #~(modify-phases %standard-phases
+                        (add-after 'unpack 'remove-broken-test
+                          (lambda _
+                            (delete-file "tests/testOpenSSL.py"))))))
+    (build-system python-build-system)
+    (native-inputs (list python-pytest))
+    (synopsis "Python ECDSA library")
+    (description "This package provides a Python ECDSA library, optimized for
+speed but without C extensions.")
+    (license license:expat)))

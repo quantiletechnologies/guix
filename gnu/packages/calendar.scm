@@ -2,7 +2,7 @@
 ;;; Copyright © 2015 David Thompson <davet@gnu.org>
 ;;; Copyright © 2015, 2016, 2017 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2016 Kei Kebreau <kkebreau@posteo.net>
-;;; Copyright © 2016, 2017, 2020 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016, 2017, 2020, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016 Troy Sankey <sankeytms@gmail.com>
 ;;; Copyright © 2016, 2021 Stefan Reichoer <stefan@xsteve.at>
 ;;; Copyright © 2018, 2019, 2021 Tobias Geerinckx-Rice <me@tobias.gr>
@@ -10,6 +10,7 @@
 ;;; Copyright © 2020 Brendan Tildesley <mail@brendan.scot>
 ;;; Copyright © 2020 Tanguy Le Carrour <tanguy@bioneland.org>
 ;;; Copyright © 2020 Peng Mei Yu <pengmeiyu@riseup.net>
+;;; Copyright © 2021 Wamm K. D. <jaft.r@outlook.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -36,6 +37,7 @@
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system python)
   #:use-module (gnu packages admin)
+  #:use-module (gnu packages autotools)
   #:use-module (gnu packages base)
   #:use-module (gnu packages check)
   #:use-module (gnu packages dav)
@@ -48,6 +50,7 @@
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages qt)
   #:use-module (gnu packages sphinx)
@@ -78,7 +81,7 @@
           ;; Install pkg-config files
           ;; https://github.com/HowardHinnant/date/pull/538
           (search-patches "date-output-pkg-config-files.patch"))))
-      (inputs `(("tzdata" ,tzdata)))
+      (inputs (list tzdata))
       (build-system cmake-build-system)
       (arguments
        '(#:configure-flags (list "-DUSE_SYSTEM_TZ_DB=ON"
@@ -96,8 +99,8 @@
              (lambda* (#:key inputs #:allow-other-keys)
                (substitute* "src/tz.cpp"
                  (("/usr/share/zoneinfo")
-                  (string-append (assoc-ref inputs "tzdata") "/share/zoneinfo")))
-               #t))
+                  (search-input-directory inputs
+                                          "share/zoneinfo")))))
            (replace 'check
              (lambda _
                ;; Disable test that requires checking timezone that
@@ -116,7 +119,7 @@ the <tz.h> library for handling time zones and leap seconds.")
 (define-public libical
   (package
     (name "libical")
-    (version "3.0.8")
+    (version "3.0.10")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -124,7 +127,7 @@ the <tz.h> library for handling time zones and leap seconds.")
                     version "/libical-" version ".tar.gz"))
               (sha256
                (base32
-                "0vr8s7hn8204lyc4ys5bs3j5qss4lmc9ffly2m1a59avyz5cmzh9"))))
+                "1d1nqcfilb4k8bc5x85fhnd26l1ski58wpk2nmds6mlxrzkb6czr"))))
     (build-system cmake-build-system)
     (arguments
      '(#:tests? #f ; test suite appears broken
@@ -156,19 +159,17 @@ the <tz.h> library for handling time zones and leap seconds.")
                  (("\\\"/usr/share/lib/zoneinfo\\\"") "")))
              #t)))))
     (native-inputs
-     `(("docbook-xml" ,docbook-xml-4.3)
-       ("gobject-introspection" ,gobject-introspection)
-       ("gtk-doc" ,gtk-doc/stable)
-       ("perl" ,perl)
-       ("pkg-config" ,pkg-config)
-       ("vala" ,vala)))
+     (list docbook-xml-4.3
+           gobject-introspection
+           gtk-doc/stable
+           perl
+           pkg-config
+           vala))
     (inputs
-     `(("glib" ,glib)
-       ("libxml2" ,libxml2)
-       ("tzdata" ,tzdata)))
+     (list glib libxml2 tzdata))
     (propagated-inputs
      ;; In Requires.private of libical.pc.
-     `(("icu4c" ,icu4c)))
+     (list icu4c))
     (home-page "https://libical.github.io/libical/")
     (synopsis "iCalendar protocols and data formats implementation")
     (description
@@ -180,13 +181,13 @@ data units.")
 (define-public khal
   (package
     (name "khal")
-    (version "0.10.4")
+    (version "0.10.5")
     (source (origin
               (method url-fetch)
               (uri (pypi-uri "khal" version))
               (sha256
                (base32
-                "17qj1n2l39pnzk4vjrmql90z7908nivnzcc2g9nj1h31k859inrz"))))
+                "0xhcrx7lcjk126i2xgqmgb199vd4hxsq34mkdmhdh9ia62nbgvsf"))))
     (build-system python-build-system)
     (arguments
      `(#:tests? #f ; The test suite is unreliable. See <https://bugs.gnu.org/44197>
@@ -199,26 +200,24 @@ data units.")
             (invoke "make" "--directory=doc/" "man")
             (install-file
              "doc/build/man/khal.1"
-             (string-append (assoc-ref outputs "out") "/share/man/man1"))
-            #t)))))
+             (string-append (assoc-ref outputs "out") "/share/man/man1")))))))
     (native-inputs
-     `(("python-setuptools-scm" ,python-setuptools-scm)
-       ;; Required to build manpage
-       ("python-sphinxcontrib-newsfeed" ,python-sphinxcontrib-newsfeed)
-       ("python-sphinx" ,python-sphinx)))
+     (list python-setuptools-scm
+           ;; Required to build manpage
+           python-sphinxcontrib-newsfeed python-sphinx))
     (inputs
-     `(("sqlite" ,sqlite)
-       ("python-configobj" ,python-configobj)
-       ("python-dateutil" ,python-dateutil)
-       ("python-icalendar" ,python-icalendar)
-       ("python-tzlocal" ,python-tzlocal)
-       ("python-urwid" ,python-urwid)
-       ("python-pytz" ,python-pytz)
-       ("python-setproctitle" ,python-setproctitle)
-       ("python-atomicwrites" ,python-atomicwrites)
-       ("python-click" ,python-click)
-       ("python-click-log" ,python-click-log)
-       ("python-pyxdg" ,python-pyxdg)))
+     (list sqlite
+           python-configobj
+           python-dateutil
+           python-icalendar
+           python-tzlocal
+           python-urwid
+           python-pytz
+           python-setproctitle
+           python-atomicwrites
+           python-click
+           python-click-log
+           python-pyxdg))
     (synopsis "Console calendar program")
     (description "Khal is a standards based console calendar program,
 able to synchronize with CalDAV servers through vdirsyncer.")
@@ -273,10 +272,7 @@ able to synchronize with CalDAV servers through vdirsyncer.")
                 (list "bin/cm2rem.tcl"
                       "bin/tkremind"))))))))
     (inputs
-     `(("inetutils" ,inetutils)
-       ("tcl" ,tcl)
-       ("tcllib" ,tcllib)
-       ("tk" ,tk)))
+     (list inetutils tcl tcllib tk))
     (home-page "https://dianne.skoll.ca/projects/remind/")
     (synopsis "Sophisticated calendar and alarm program")
     (description
@@ -345,9 +341,9 @@ and ruby.  It includes two illustrative command-line programs, @code{hcal} and
                #t))))
        #:tests? #f)) ; no tests
     (native-inputs
-     `(("perl" ,perl))) ; pod2man
+     (list perl)) ; pod2man
     (inputs
-     `(("qtbase" ,qtbase-5)))
+     (list qtbase-5))
     (home-page "https://www.toastfreeware.priv.at/confclerk")
     (synopsis "Offline conference schedule application")
     (description
@@ -405,3 +401,29 @@ traditional Chinese characters.")
     ;; COPYING.LESSER specifies LGPL 3.0, but all source files say
     ;; 'Lesser GPL version 2 or later'.
     (license (list license:gpl2+ license:lgpl2.1+))))
+
+(define-public gsimplecal
+  (let ((version "2.2"))
+    (package
+      (name "gsimplecal")
+      (version version)
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/dmedvinsky/gsimplecal/")
+                      (commit (string-append "v" version))))
+                (file-name (git-file-name name version))
+                (sha256 (base32
+                         "1qyf65l088dqsz25hm6s1cv18j52yaias0llqvpqwjfnvssa5cxg"))
+                (modules '((guix build utils)))))
+      (build-system gnu-build-system)
+      (inputs (list gtk+))
+      (native-inputs
+       (list autoconf automake pkg-config))
+      (home-page "https://dmedvinsky.github.io/gsimplecal/")
+      (synopsis "Lightweight calendar applet")
+      (description "@command{gsimplecal} is a lightweight calendar application
+written in C++ using GTK.  Launched once, it pops up a small calendar applet,
+launched again it closes the running instance.  It can additionally be
+configured to show the current time in different timezones.")
+      (license license:bsd-3))))

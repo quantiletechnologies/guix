@@ -5,6 +5,7 @@
 ;;; Copyright © 2017, 2020, 2021 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2017, 2019, 2020 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2018 Clément Lassieur <clement@lassieur.org>
+;;; Copyright © 2022 Arun Isaac <arunisaac@systemreboot.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -28,6 +29,7 @@
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix download)
+  #:use-module ((guix search-paths) #:select ($SSL_CERT_DIR))
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages base)
   #:use-module (gnu packages boost)
@@ -52,29 +54,12 @@
   #:use-module (gnu packages web)
   #:use-module (gnu packages xml)
   #:use-module (guix build-system cmake)
-  #:use-module (guix build-system gnu))
-
-(define-public guile-squee-dev
-  (let ((commit "e0614273ad4067af82f508db51c8a100131151ea")
-        (revision "3"))
-    (package
-      (inherit guile-squee)
-      (name "guile-squee")
-      (version (string-append "0-" revision "." (string-take commit 7)))
-      (home-page "https://notabug.org/mothacehe/guile-squee.git")
-      (source (origin
-                (method git-fetch)
-                (uri (git-reference
-                      (url home-page)
-                      (commit commit)))
-                (sha256
-                 (base32
-                  "1jps14z8653ah2kr367iayzyi3ql2s55l77xrafz7gk3mzcvgrrg"))
-                (file-name (string-append name "-" version "-checkout")))))))
+  #:use-module (guix build-system gnu)
+  #:use-module ((guix search-paths) #:select ($SSL_CERT_DIR)))
 
 (define-public cuirass
-  (let ((commit "60190401ce4ccc890629ec3cb22a84a8ab8c2645")
-        (revision "4"))
+  (let ((commit "9f08035f942a1e78f92e2db886d7837b0ab98b2f")
+        (revision "11"))
     (package
       (name "cuirass")
       (version (git-version "1.1.0" revision commit))
@@ -87,7 +72,7 @@
          (file-name (git-file-name name version))
          (sha256
           (base32
-           "0b0bs32lzk5ck7lw8ac9dj2h70sqc5y430vhi7rcnwj48mdrchma"))))
+           "0jrp0hngbmlg5vmfr93j86lxgk2zm5d424dx0c29ldgfr8i7bwcz"))))
       (build-system gnu-build-system)
       (arguments
        `(#:modules ((guix build utils)
@@ -114,14 +99,12 @@
              (lambda* (#:key inputs #:allow-other-keys)
                (let ((pg (assoc-ref inputs "ephemeralpg"))
                      (path (getenv "PATH")))
-                 (setenv "PATH" (string-append pg "/bin:" path))
-                 #t)))
+                 (setenv "PATH" (string-append pg "/bin:" path)))))
            ;; Disable the remote tests that require a Guix daemon connection.
            (add-before 'check 'disable-remote-tests
              (lambda _
                (substitute* "Makefile.am"
-                 (("tests/remote.scm") ""))
-               #t))
+                 (("tests/remote.scm") ""))))
            (add-after 'install 'wrap-program
              (lambda* (#:key inputs outputs #:allow-other-keys)
                ;; Wrap the 'cuirass' command to refer to the right modules.
@@ -165,31 +148,33 @@
                  (wrap-program (string-append out "/bin/cuirass")
                    `("PATH" ":" prefix (,(string-append out "/bin")))
                    `("GUILE_LOAD_PATH" ":" prefix (,mods))
-                   `("GUILE_LOAD_COMPILED_PATH" ":" prefix (,objs)))
-                 #t))))))
+                   `("GUILE_LOAD_COMPILED_PATH" ":" prefix (,objs)))))))))
       (inputs
-       `(("guile" ,guile-3.0/libgc-7)
-         ("guile-avahi" ,guile-avahi)
-         ("guile-fibers" ,guile-fibers)
-         ("guile-gcrypt" ,guile-gcrypt)
-         ("guile-json" ,guile-json-4)
-         ("guile-simple-zmq" ,guile-simple-zmq)
-         ("guile-squee" ,guile-squee-dev)
-         ("guile-git" ,guile-git)
-         ("guile-zlib" ,guile-zlib)
-         ("guile-mastodon" ,guile-mastodon)
-         ("gnutls" ,gnutls)
-         ("mailutils" ,mailutils)
-         ;; FIXME: this is propagated by "guile-git", but it needs to be among
-         ;; the inputs to add it to GUILE_LOAD_PATH.
-         ("guile-bytestructures" ,guile-bytestructures)
-         ("guix" ,guix)))
+       (list guile-3.0-latest
+             guile-avahi
+             guile-fibers
+             guile-gcrypt
+             guile-json-4
+             guile-simple-zmq
+             guile-squee
+             guile-git
+             guile-zlib
+             guile-mastodon
+             gnutls
+             mailutils
+             ;; FIXME: this is propagated by "guile-git", but it needs to be among
+             ;; the inputs to add it to GUILE_LOAD_PATH.
+             guile-bytestructures
+
+             ;; FIXME: The 'cuirass evaluate' command is multithreaded, but it
+             ;; uses 'open-inferior', which calls 'primitive-fork', thus
+             ;; potentially creating child processes that deadlock.  To work
+             ;; around that, use the last revision of Guix where
+             ;; 'open-inferior' was using 'open-pipe*' rather than
+             ;; 'primitive-fork'.  See <https://issues.guix.gnu.org/55441>.
+             guix-for-cuirass))
       (native-inputs
-       `(("autoconf" ,autoconf)
-         ("automake" ,automake)
-         ("pkg-config" ,pkg-config)
-         ("texinfo" ,texinfo)
-         ("ephemeralpg" ,ephemeralpg)))
+       (list autoconf automake pkg-config texinfo ephemeralpg))
       (native-search-paths
        ;; For HTTPS access, Cuirass itself honors these variables, with the
        ;; same semantics as Git and OpenSSL (respectively).
@@ -198,9 +183,7 @@
               (file-type 'regular)
               (separator #f)                      ;single entry
               (files '("etc/ssl/certs/ca-certificates.crt")))
-             (search-path-specification
-              (variable "SSL_CERT_DIR")
-              (files '("etc/ssl/certs")))))
+             $SSL_CERT_DIR))
       (synopsis "Continuous integration system")
       (description
        "Cuirass is a continuous integration tool using GNU Guix.  It is
@@ -211,16 +194,16 @@ intended as a replacement for Hydra.")
 (define-public laminar
   (package
     (name "laminar")
-    (version "1.0")
+    (version "1.2")
     (source
-     (origin (method url-fetch)
-             (uri (string-append "https://github.com/ohwgiles/laminar/archive/"
-                                 version
-                                 ".tar.gz"))
-             (file-name (string-append name "-" version ".tar.gz"))
+     (origin (method git-fetch)
+             (uri (git-reference
+                   (url "https://github.com/ohwgiles/laminar")
+                   (commit version)))
+             (file-name (git-file-name name version))
              (sha256
               (base32
-               "11m6h3rdmj2rsmsryy7r40gqccj4gg1cnqwy6blscs87gx4s423g"))))
+               "1sg0kccp3nczkn2vxcsqv10vyvmjnhpaykc1nfhh55jyda4xzf9w"))))
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #f                      ; TODO Can't build tests
@@ -241,8 +224,7 @@ intended as a replacement for Hydra.")
                (("install\\(FILES \\$\\{CMAKE\\_CURRENT\\_BINARY\\_DIR\\}\\/laminar\\.service DESTINATION \\$\\{SYSTEMD\\_UNITDIR\\}\\)")
                 "")
                (("install\\(FILES etc/laminar\\.conf DESTINATION \\/etc\\)") "")
-               (("\\/usr\\/") ""))
-             #t))
+               (("\\/usr\\/") ""))))
          (add-after 'configure 'copy-in-javascript-and-css
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (use-modules (ice-9 popen))
@@ -271,15 +253,9 @@ intended as a replacement for Hydra.")
 
              ;; ansi_up.js isn't minified
              (copy-file (assoc-ref inputs "ansi_up.js")
-                        "../build/js/ansi_up.js")
-
-             #t)))))
+                        "../build/js/ansi_up.js"))))))
     (inputs
-     `(("capnproto" ,capnproto)
-       ("rapidjson" ,rapidjson)
-       ("sqlite" ,sqlite)
-       ("boost" ,boost)
-       ("zlib" ,zlib)))
+     (list capnproto rapidjson sqlite boost zlib))
     (native-inputs
      `(("googletest" ,googletest)
        ("uglifyjs" ,node-uglify-js)
@@ -301,10 +277,10 @@ intended as a replacement for Hydra.")
        ("ansi_up.js"
         ,(origin (method url-fetch)
                  (uri (string-append "https://raw.githubusercontent.com/"
-                                     "drudru/ansi_up/v1.3.0/ansi_up.js"))
+                                     "drudru/ansi_up/v4.0.4/ansi_up.js"))
                  (sha256
                   (base32
-                   "1993dywxqi2ylnxybwk7m0s0bg2bq7kfllpyr0s8ck6chd0p8i6r"))))
+                   "1dx8wn38ds8d01kkih26fx1yrisg3kpz61qynjr4zil03ap0hrlr"))))
        ("Chart.js"
         ,(origin (method url-fetch)
                  (uri (string-append "https://github.com/chartjs/Chart.js/"

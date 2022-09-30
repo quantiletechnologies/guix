@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2017, 2018 Clément Lassieur <clement@lassieur.org>
 ;;; Copyright © 2017 Mathieu Othacehe <m.othacehe@gmail.com>
-;;; Copyright © 2015, 2017, 2018, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015, 2017-2020, 2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2018 Pierre-Antoine Rouby <contact@parouby.fr>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -20,19 +20,23 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu services messaging)
-  #:use-module (gnu packages messaging)
   #:use-module (gnu packages admin)
+  #:use-module (gnu packages base)
   #:use-module (gnu packages irc)
+  #:use-module (gnu packages messaging)
   #:use-module (gnu packages tls)
   #:use-module (gnu services)
   #:use-module (gnu services shepherd)
   #:use-module (gnu services configuration)
   #:use-module (gnu system shadow)
+  #:autoload   (gnu build linux-container) (%namespaces)
+  #:use-module ((gnu system file-systems) #:select (file-system-mapping))
   #:use-module (guix gexp)
   #:use-module (guix modules)
   #:use-module (guix records)
   #:use-module (guix packages)
   #:use-module (guix deprecation)
+  #:use-module (guix least-authority)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-35)
   #:use-module (ice-9 match)
@@ -72,6 +76,7 @@
       (lambda (field target)
         (and (memq (syntax->datum target) `(common ,arg)) field)))
     (syntax-case stx ()
+      ;; TODO Also handle (field-type) form, without a default.
       ((_ stem (field (field-type def) doc target) ...)
        (with-syntax (((new-field-type ...)
                       (map (lambda (field-type target)
@@ -85,7 +90,12 @@
                      ((new-def ...)
                       (map (lambda (def target)
                              (if (eq? 'common (syntax->datum target))
-                                 #''disabled def))
+                                 ;; TODO Use the %unset-value variable, or
+                                 ;; even better just simplify this so that it
+                                 ;; doesn't interfere with
+                                 ;; define-configuration and define-maybe
+                                 ;; internals.
+                                 #''%unset-marker% def))
                            #'(def ...) #'(target ...)))
                      ((new-doc ...)
                       (map (lambda (doc target)
@@ -180,7 +190,7 @@
   (and (list? val) (and-map file-name? val)))
 (define (serialize-file-name-list field-name val)
   (serialize-string-list field-name val))
-(define-maybe file-name)
+(define-maybe file-name-list)
 
 (define (file-object? val)
   (or (file-like? val) (file-name? val)))
@@ -192,10 +202,10 @@
   (and (list? val) (and-map file-object? val)))
 (define (serialize-file-object-list field-name val)
   (serialize-string-list field-name val))
-(define-maybe file-object)
+(define-maybe file-object-list)
 
 (define (raw-content? val)
-  (not (eq? val 'disabled)))
+  (maybe-value-set? val))
 (define (serialize-raw-content field-name val)
   val)
 (define-maybe raw-content)
@@ -223,15 +233,15 @@ just joined the room."))
 
 (define-configuration ssl-configuration
   (protocol
-   (maybe-string 'disabled)
+   maybe-string
    "This determines what handshake to use.")
 
   (key
-   (maybe-file-name 'disabled)
+   maybe-file-name
    "Path to your private key file.")
 
   (certificate
-   (maybe-file-name 'disabled)
+   maybe-file-name
    "Path to your certificate file.")
 
   (capath
@@ -240,48 +250,48 @@ just joined the room."))
 trust when verifying the certificates of remote servers.")
 
   (cafile
-   (maybe-file-object 'disabled)
+   maybe-file-object
    "Path to a file containing root certificates that you wish Prosody to trust.
 Similar to @code{capath} but with all certificates concatenated together.")
 
   (verify
-   (maybe-string-list 'disabled)
+   maybe-string-list
    "A list of verification options (these mostly map to OpenSSL's
 @code{set_verify()} flags).")
 
   (options
-   (maybe-string-list 'disabled)
+   maybe-string-list
    "A list of general options relating to SSL/TLS.  These map to OpenSSL's
 @code{set_options()}.  For a full list of options available in LuaSec, see the
 LuaSec source.")
 
   (depth
-   (maybe-non-negative-integer 'disabled)
+   maybe-non-negative-integer
    "How long a chain of certificate authorities to check when looking for a
 trusted root certificate.")
 
   (ciphers
-   (maybe-string 'disabled)
+   maybe-string
    "An OpenSSL cipher string.  This selects what ciphers Prosody will offer to
 clients, and in what order.")
 
   (dhparam
-   (maybe-file-name 'disabled)
+   maybe-file-name
    "A path to a file containing parameters for Diffie-Hellman key exchange.  You
 can create such a file with:
 @code{openssl dhparam -out /etc/prosody/certs/dh-2048.pem 2048}")
 
   (curve
-   (maybe-string 'disabled)
+   maybe-string
    "Curve for Elliptic curve Diffie-Hellman. Prosody's default is
 @samp{\"secp384r1\"}.")
 
   (verifyext
-   (maybe-string-list 'disabled)
+   maybe-string-list
    "A list of \"extra\" verification options.")
 
   (password
-   (maybe-string 'disabled)
+   maybe-string
    "Password for encrypted private keys."))
 (define (serialize-ssl-configuration field-name val)
   #~(format #f "ssl = {\n~a};\n"
@@ -333,7 +343,7 @@ can create such a file with:
 
   (define-all-configurations prosody-configuration
     (prosody
-     (package prosody)
+     (file-like prosody)
      "The Prosody package."
      global)
 
@@ -469,12 +479,12 @@ by the Prosody service.  See @url{https://prosody.im/doc/logging}."
      global)
 
     (http-max-content-size
-     (maybe-non-negative-integer 'disabled)
+     (maybe-non-negative-integer %unset-value)
      "Maximum allowed size of the HTTP body (in bytes)."
      common)
 
     (http-external-url
-     (maybe-string 'disabled)
+     (maybe-string %unset-value)
      "Some modules expose their own URL in various ways.  This URL is built
 from the protocol, host and port used.  If Prosody sits behind a proxy, the
 public URL will be @code{http-external-url} instead.  See
@@ -551,7 +561,7 @@ support.  To add an external component, you simply fill the hostname field.  See
      int-component)
 
     (mod-muc
-     (maybe-mod-muc-configuration 'disabled)
+     (maybe-mod-muc-configuration %unset-value)
      "Multi-user chat (MUC) is Prosody's module for allowing you to create
 hosted chatrooms/conferences for XMPP users.
 
@@ -568,7 +578,7 @@ See also @url{https://prosody.im/doc/modules/mod_muc}."
      ext-component)
 
     (raw-content
-     (maybe-raw-content 'disabled)
+     (maybe-raw-content %unset-value)
      "Raw content that will be added to the configuration file."
      common)))
 
@@ -623,7 +633,7 @@ See also @url{https://prosody.im/doc/modules/mod_muc}."
 
 (define-configuration opaque-prosody-configuration
   (prosody
-   (package prosody)
+   (file-like prosody)
    "The prosody package.")
 
   (prosody.cfg.lua
@@ -821,7 +831,23 @@ string, you could instantiate a prosody service like this:
   DaemonInterface = " interface "
   DaemonPort = " (number->string port) "
   PluginDir = " plugins "/lib/bitlbee
-" extra-settings)))
+" extra-settings))
+            (bitlbee* (least-authority-wrapper
+                       (file-append bitlbee "/sbin/bitlbee")
+                       #:name "bitlbee"
+                       #:preserved-environment-variables
+                       '("PURPLE_PLUGIN_PATH" "GUIX_LOCPATH" "LC_ALL")
+                       #:mappings (list (file-system-mapping
+                                         (source "/var/lib/bitlbee")
+                                         (target source)
+                                         (writable? #t))
+                                        (file-system-mapping
+                                         (source "/run/current-system/locale")
+                                         (target source))
+                                        (file-system-mapping
+                                         (source conf)
+                                         (target conf)))
+                       #:namespaces (delq 'net %namespaces))))
 
        (with-imported-modules (source-module-closure
                                '((gnu build shepherd)
@@ -836,21 +862,41 @@ string, you could instantiate a prosody service like this:
 
                 (modules '((gnu build shepherd)
                            (gnu system file-systems)))
-                (start #~(make-forkexec-constructor/container
-                          (list #$(file-append bitlbee "/sbin/bitlbee")
-                                "-n" "-F" "-u" "bitlbee" "-c" #$conf)
+                (start #~(if (defined? 'make-inetd-constructor)
 
-                          ;; Allow 'bitlbee-purple' to use libpurple plugins.
-                          #:environment-variables
-                          (list (string-append "PURPLE_PLUGIN_PATH="
-                                               #$plugins "/lib/purple-2"))
+                             (make-inetd-constructor
+                              (list #$bitlbee* "-I" "-c" #$conf)
+                              (addrinfo:addr
+                               (car (getaddrinfo #$interface
+                                                 #$(number->string port)
+                                                 (logior AI_NUMERICHOST
+                                                         AI_NUMERICSERV))))
+                              #:service-name-stem "bitlbee"
+                              #:user "bitlbee" #:group "bitlbee"
 
-                          #:pid-file "/var/run/bitlbee.pid"
-                          #:mappings (list (file-system-mapping
-                                            (source "/var/lib/bitlbee")
-                                            (target source)
-                                            (writable? #t)))))
-                (stop  #~(make-kill-destructor)))))))))
+                              ;; Allow 'bitlbee-purple' to use libpurple plugins.
+                              #:environment-variables
+                              (list (string-append "PURPLE_PLUGIN_PATH="
+                                                   #$plugins "/lib/purple-2")
+                                    "GUIX_LOCPATH=/run/current-system/locale"))
+
+                             (make-forkexec-constructor/container
+                              (list #$(file-append bitlbee "/sbin/bitlbee")
+                                    "-n" "-F" "-u" "bitlbee" "-c" #$conf)
+
+                              ;; Allow 'bitlbee-purple' to use libpurple plugins.
+                              #:environment-variables
+                              (list (string-append "PURPLE_PLUGIN_PATH="
+                                                   #$plugins "/lib/purple-2"))
+
+                              #:pid-file "/var/run/bitlbee.pid"
+                              #:mappings (list (file-system-mapping
+                                                (source "/var/lib/bitlbee")
+                                                (target source)
+                                                (writable? #t))))))
+                (stop  #~(if (defined? 'make-inetd-destructor)
+                             (make-inetd-destructor)
+                             (make-kill-destructor))))))))))
 
 (define %bitlbee-accounts
   ;; User group and account to run BitlBee.
@@ -908,29 +954,31 @@ a gateway between IRC and chat networks.")))
 (define quassel-shepherd-service
   (match-lambda
     (($ <quassel-configuration> quassel interface port loglevel)
-     (with-imported-modules (source-module-closure
-                              '((gnu build shepherd)
-                                (gnu system file-systems)))
+     (let ((quassel (least-authority-wrapper
+                     (file-append quassel "/bin/quasselcore")
+                     #:name "quasselcore"
+                     #:mappings (list (file-system-mapping
+                                       (source "/var/lib/quassel")
+                                       (target source)
+                                       (writable? #t))
+                                      (file-system-mapping
+                                       (source "/var/log/quassel")
+                                       (target source)
+                                       (writable? #t)))
+                     ;; XXX: The daemon needs to live in the main user
+                     ;; namespace, as root, so it can access /var/lib/quassel
+                     ;; owned by "quasselcore".
+                     #:namespaces (fold delq %namespaces '(net user)))))
        (list (shepherd-service
                (provision '(quassel))
                (requirement '(user-processes networking))
-               (modules '((gnu build shepherd)
-                          (gnu system file-systems)))
-               (start #~(make-forkexec-constructor/container
-                          (list #$(file-append quassel "/bin/quasselcore")
-                                "--configdir=/var/lib/quassel"
-                                "--logfile=/var/log/quassel/core.log"
-                                (string-append "--loglevel=" #$loglevel)
-                                (string-append "--port=" (number->string #$port))
-                                (string-append "--listen=" #$interface))
-                          #:mappings (list (file-system-mapping
-                                             (source "/var/lib/quassel")
-                                             (target source)
-                                             (writable? #t))
-                                           (file-system-mapping
-                                             (source "/var/log/quassel")
-                                             (target source)
-                                             (writable? #t)))))
+               (start #~(make-forkexec-constructor
+                         (list #$quassel
+                               "--configdir=/var/lib/quassel"
+                               "--logfile=/var/log/quassel/core.log"
+                               (string-append "--loglevel=" #$loglevel)
+                               (string-append "--port=" (number->string #$port))
+                               (string-append "--listen=" #$interface))))
                (stop  #~(make-kill-destructor))))))))
 
 (define %quassel-account

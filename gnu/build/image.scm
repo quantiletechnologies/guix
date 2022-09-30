@@ -3,8 +3,10 @@
 ;;; Copyright © 2016 Christine Lemmer-Webber <cwebber@dustycloud.org>
 ;;; Copyright © 2016, 2017 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2017 Marius Bakke <mbakke@fastmail.com>
-;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2020, 2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2020 Mathieu Othacehe <m.othacehe@gmail.com>
+;;; Copyright © 2022 Pavel Shlyak <p.shlyak@pantherx.org>
+;;; Copyright © 2022 Denis 'GNUtoo' Carikli <GNUtoo@cyberdimension.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,6 +28,7 @@
   #:use-module (guix build syscalls)
   #:use-module (guix build utils)
   #:use-module (guix store database)
+  #:use-module (guix utils)
   #:use-module (gnu build bootloader)
   #:use-module (gnu build install)
   #:use-module (gnu build linux-boot)
@@ -40,6 +43,7 @@
             convert-disk-image
             genimage
             initialize-efi-partition
+            initialize-efi32-partition
             initialize-root-partition
 
             make-iso9660-image))
@@ -48,12 +52,13 @@
   "Take SEXP, a tuple as returned by 'partition->gexp', and turn it into a
 <partition> record."
   (match sexp
-    ((size file-system file-system-options label uuid)
+    ((size file-system file-system-options label uuid flags)
      (partition (size size)
                 (file-system file-system)
                 (file-system-options file-system-options)
                 (label label)
-                (uuid uuid)))))
+                (uuid uuid)
+                (flags flags)))))
 
 (define (size-in-kib size)
   "Convert SIZE expressed in bytes, to kilobytes and return it as a string."
@@ -62,8 +67,10 @@
 
 (define (estimate-partition-size root)
   "Given the ROOT directory, evaluate and return its size.  As this doesn't
-take the partition metadata size into account, take a 25% margin."
-  (* 1.25 (file-size root)))
+take the partition metadata size into account, take a 25% margin.  As this in
+turn doesn't take any constant overhead into account, force a 1-MiB minimum."
+  (max (ash 1 20)
+       (* 1.25 (file-size root))))
 
 (define* (make-ext-image partition target root
                          #:key
@@ -76,6 +83,7 @@ take the partition metadata size into account, take a 25% margin."
         (fs-options (partition-file-system-options partition))
         (label (partition-label partition))
         (uuid (partition-uuid partition))
+        (flags (partition-flags partition))
         (journal-options "lazy_itable_init=1,lazy_journal_init=1"))
     (apply invoke
            `("fakeroot" "mke2fs" "-t" ,fs "-d" ,root
@@ -90,16 +98,18 @@ take the partition metadata size into account, take a 25% margin."
                            (estimate-partition-size root)
                            size)))))))
 
-(define* (make-vfat-image partition target root)
+(define* (make-vfat-image partition target root fs-bits)
   "Handle the creation of VFAT partition images.  See 'make-partition-image'."
   (let ((size (partition-size partition))
-        (label (partition-label partition)))
-    (invoke "fakeroot" "mkdosfs" "-n" label "-C" target
-            "-F" "16" "-S" "1024"
-            (size-in-kib
-             (if (eq? size 'guess)
-                 (estimate-partition-size root)
-                 size)))
+        (label (partition-label partition))
+        (flags (partition-flags partition)))
+    (apply invoke "fakeroot" "mkdosfs" "-n" label "-C" target
+                          "-F" (number->string fs-bits)
+                          (size-in-kib
+                           (if (eq? size 'guess)
+                               (estimate-partition-size root)
+                               size))
+                    (if (member 'esp flags) (list "-S" "1024") '()))
     (for-each (lambda (file)
                 (unless (member file '("." ".."))
                   (invoke "mcopy" "-bsp" "-i" target
@@ -115,8 +125,10 @@ ROOT directory to populate the image."
     (cond
      ((string-prefix? "ext" type)
       (make-ext-image partition target root))
-     ((string=? type "vfat")
-      (make-vfat-image partition target root))
+     ((or (string=? type "vfat") (string=? type "fat16"))
+      (make-vfat-image partition target root 16))
+     ((string=? type "fat32")
+      (make-vfat-image partition target root 32))
      (else
       (raise (condition
               (&message
@@ -160,12 +172,24 @@ produced by #:references-graphs.  Pass WAL-MODE? to call-with-database."
   "Install in ROOT directory, an EFI loader using GRUB-EFI."
   (install-efi-loader grub-efi root))
 
+(define* (initialize-efi32-partition root
+                                     #:key
+                                     grub-efi32
+                                     #:allow-other-keys)
+  "Install in ROOT directory, an EFI 32bit loader using GRUB-EFI32."
+  (install-efi-loader grub-efi32 root
+                      #:targets (cond ((target-x86?)
+                                       '("i386-efi" . "BOOTIA32.EFI"))
+                                      ((target-arm?)
+                                       '("arm-efi" . "BOOTARM.EFI")))))
+
 (define* (initialize-root-partition root
                                     #:key
                                     bootcfg
                                     bootcfg-location
                                     bootloader-package
                                     bootloader-installer
+                                    (copy-closures? #t)
                                     (deduplicate? #t)
                                     references-graphs
                                     (register-closures? #t)
@@ -176,30 +200,50 @@ produced by #:references-graphs.  Pass WAL-MODE? to call-with-database."
   "Initialize the given ROOT directory. Use BOOTCFG and BOOTCFG-LOCATION to
 install the bootloader configuration.
 
-If REGISTER-CLOSURES? is true, register REFERENCES-GRAPHS in the store.  If
+If COPY-CLOSURES? is true, copy all of REFERENCES-GRAPHS to the partition.  If
+REGISTER-CLOSURES? is true, register REFERENCES-GRAPHS in the store.  If
 DEDUPLICATE? is true, then also deduplicate files common to CLOSURES and the
 rest of the store when registering the closures.  SYSTEM-DIRECTORY is the name
 of the directory of the 'system' derivation.  Pass WAL-MODE? to
 register-closure."
+  (define root-store
+    (string-append root (%store-directory)))
+
+  (define tmp-store ".tmp-store")
+
   (populate-root-file-system system-directory root)
-  (populate-store references-graphs root
-                  #:deduplicate? deduplicate?)
+
+  (when copy-closures?
+    (populate-store references-graphs root
+                    #:deduplicate? deduplicate?))
 
   ;; Populate /dev.
   (when make-device-nodes
     (make-device-nodes root))
 
   (when register-closures?
+    (unless copy-closures?
+      ;; XXX: 'register-closure' wants to palpate the things it registers, so
+      ;; create a symlink to the store.
+      (rename-file root-store tmp-store)
+      (symlink (%store-directory) root-store))
+
     (for-each (lambda (closure)
                 (register-closure root closure
                                   #:wal-mode? wal-mode?))
-              references-graphs))
+              references-graphs)
 
-  (when bootloader-installer
-    (display "installing bootloader...\n")
-    (bootloader-installer bootloader-package #f root))
-  (when bootcfg
-    (install-boot-config bootcfg bootcfg-location root)))
+    (unless copy-closures?
+      (delete-file root-store)
+      (rename-file tmp-store root-store)))
+
+  ;; There's no point installing a bootloader if we do not populate the store.
+  (when copy-closures?
+    (when bootloader-installer
+      (display "installing bootloader...\n")
+      (bootloader-installer bootloader-package #f root))
+    (when bootcfg
+      (install-boot-config bootcfg bootcfg-location root))))
 
 (define* (make-iso9660-image xorriso grub-mkrescue-environment
                              grub bootcfg system-directory root target

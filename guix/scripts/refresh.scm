@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;; Copyright © 2014 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2015 Alex Kost <alezost@gmail.com>
@@ -8,6 +8,7 @@
 ;;; Copyright © 2018 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2019 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2020 Simon Tournier <zimon.toutoune@gmail.com>
+;;; Copyright © 2021 Sarah Morgensen <iskarian@mgsn.dev>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,7 +27,6 @@
 
 (define-module (guix scripts refresh)
   #:use-module (guix ui)
-  #:use-module (gcrypt hash)
   #:use-module (guix scripts)
   #:use-module ((guix scripts build) #:select (%standard-build-options))
   #:use-module (guix store)
@@ -38,6 +38,7 @@
   #:use-module (guix scripts graph)
   #:use-module (guix monads)
   #:use-module (guix gnupg)
+  #:use-module (guix hash)
   #:use-module (gnu packages)
   #:use-module ((gnu packages commencement) #:select (%final-inputs))
   #:use-module (ice-9 match)
@@ -45,9 +46,9 @@
   #:use-module (ice-9 vlist)
   #:use-module (ice-9 format)
   #:use-module (srfi srfi-1)
-  #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-37)
+  #:use-module (srfi srfi-71)
   #:use-module (ice-9 binary-ports)
   #:export (guix-refresh))
 
@@ -80,7 +81,10 @@
                          (names (map string->symbol
                                      (string-tokenize arg not-comma))))
                     (alist-cons 'updaters names result))))
-        (option '(#\L "list-updaters") #f #f
+        (find (lambda (option)
+                (member "load-path" (option-names option)))
+              %standard-build-options)
+        (option '("list-updaters") #f #f
                 (lambda args
                   (list-updaters-and-exit)))
         (option '(#\m "manifest") #t #f
@@ -118,19 +122,6 @@
                      (leave (G_ "unsupported policy: ~a~%")
                             arg)))))
 
-        ;; The short option -L is already used by --list-updaters, therefore
-        ;; it needs to be removed from %standard-build-options.
-        (let ((load-path-option (find (lambda (option)
-                                         (member "load-path"
-                                                 (option-names option)))
-                                       %standard-build-options)))
-          (option
-           (filter (lambda (name) (not (equal? #\L name)))
-                   (option-names load-path-option))
-           (option-required-arg? load-path-option)
-           (option-optional-arg? load-path-option)
-           (option-processor     load-path-option)))
-
         (option '(#\h "help") #f #f
                 (lambda args
                   (show-help)
@@ -159,7 +150,7 @@ specified with `--select'.\n"))
   -t, --type=UPDATER,... restrict to updates from the specified updaters
                          (e.g., 'gnu')"))
   (display (G_ "
-  -L, --list-updaters    list available updaters and exit"))
+      --list-updaters    list available updaters and exit"))
   (display (G_ "
   -l, --list-dependent   list top-level dependent packages that would need to
                          be rebuilt as a result of upgrading PACKAGE..."))
@@ -181,7 +172,7 @@ specified with `--select'.\n"))
                          used when 'key-download' is not specified"))
   (newline)
   (display (G_ "
-      --load-path=DIR    prepend DIR to the package module search path"))
+  -L, --load-path=DIR    prepend DIR to the package module search path"))
   (newline)
   (display (G_ "
   -h, --help             display this help and exit"))
@@ -314,14 +305,13 @@ KEY-DOWNLOAD specifies a download policy for missing OpenPGP keys; allowed
 values: 'interactive' (default), 'always', and 'never'.  When WARN? is true,
 warn about packages that have no matching updater."
   (if (lookup-updater package updaters)
-      (let-values (((version tarball source)
-                    (package-update store package updaters
-                                    #:key-download key-download))
-                   ((loc)
-                    (or (package-field-location package 'version)
-                        (package-location package))))
+      (let ((version output source
+                     (package-update store package updaters
+                                     #:key-download key-download))
+            (loc (or (package-field-location package 'version)
+                     (package-location package))))
         (when version
-          (if (and=> tarball file-exists?)
+          (if (and=> output file-exists?)
               (begin
                 (info loc
                       (G_ "~a: updating from version ~a to version ~a...~%")
@@ -363,8 +353,7 @@ warn about packages that have no matching updater."
                       (info loc (G_ "~a: consider removing this propagated input: ~a~%")
                             name change-name))))
                  (upstream-source-input-changes source))
-                (let ((hash (call-with-input-file tarball
-                              port-sha256)))
+                (let ((hash (file-hash* output)))
                   (update-package-source package source hash)))
               (warning (G_ "~a: version ~a could not be \
 downloaded and authenticated; not updating~%")

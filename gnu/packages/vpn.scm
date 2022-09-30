@@ -1,10 +1,10 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
-;;; Copyright © 2013, 2016, 2018, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2016, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2014 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2015 Jeff Mickey <j@codemac.net>
-;;; Copyright © 2016, 2017, 2019, 2021 Efraim Flashner <efraim@flashner.co.il>
-;;; Copyright © 2016–2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2016, 2017, 2019, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2017 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2018, 2020 Pierre Langlois <pierre.langlois@gmx.com>
 ;;; Copyright © 2018 Meiyo Peng <meiyo.peng@gmail.com>
@@ -18,6 +18,11 @@
 ;;; Copyright © 2021 Domagoj Stolfa <ds815@gmx.com>
 ;;; Copyright © 2021 Raghav Gururajan <rg@raghavgururajan.name>
 ;;; Copyright © 2021 jgart <jgart@dismail.de>
+;;; Copyright © 2022 Josselin Poiret <josselin.poiret@protonmail.ch>
+;;; Copyright © 2022 Lu hui <luhux76@gmail.com>
+;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Jean-Pierre De Jesus DIAZ <me@jeandudey.tech>
+;;; Copyright © 2022 Arun Isaac <arunisaac@systemreboot.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -38,6 +43,7 @@
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system copy)
@@ -84,7 +90,7 @@
 (define-public bitmask
   (package
     (name "bitmask")
-    (version "0.21.6")
+    (version "0.21.11")
     (source
      (origin
        (method git-fetch)
@@ -94,7 +100,7 @@
          (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0xmn0pkpn0mcwi1jlgm5skydcnfxk5fawg5hl2inn50m0ikgxk1c"))
+        (base32 "1zphigfrks1j3snbc748b3mk0qb1r7n2v7p7l6w1xiiil4dql6cs"))
        (modules
         '((guix build utils)))
        (snippet
@@ -240,7 +246,7 @@
          (add-after 'python-wrap 'qt-wrap
            (assoc-ref qt:%standard-phases 'qt-wrap)))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
      `(("iproute" ,iproute)
        ("iptables" ,iptables)
@@ -250,23 +256,19 @@
        ("procps" ,procps)
        ("python" ,python)
        ("qtbase" ,qtbase-5)
-       ("qtdeclarative" ,qtdeclarative)
-       ("qtquickcontrols" ,qtquickcontrols)
-       ("qtquickcontrols2" ,qtquickcontrols2)))
+       ("qtdeclarative-5" ,qtdeclarative-5)
+       ("qtgraphicaleffects" ,qtgraphicaleffects)
+       ("qtquickcontrols-5" ,qtquickcontrols-5)
+       ("qtquickcontrols2-5" ,qtquickcontrols2-5)
+       ("qtsvg-5" ,qtsvg-5)))
     (propagated-inputs
-     `(("go-0xacab-org-leap-shapeshifter"
-        ,go-0xacab-org-leap-shapeshifter)
-       ("go-github-com-apparentlymart-go-openvpn-mgmt"
-        ,go-github-com-apparentlymart-go-openvpn-mgmt)
-       ("go-github-com-emersion-go-autostart"
-        ,go-github-com-emersion-go-autostart)
-       ("go-github-com-keybase-go-ps"
-        ,go-github-com-keybase-go-ps)
-       ("go-github-com-rakyll-statik"
-        ,go-github-com-rakyll-statik)
-       ("go-github-com-sevlyar-go-daemon"
-        ,go-github-com-sevlyar-go-daemon)
-       ("go-golang-org-x-sys" ,go-golang-org-x-sys)))
+     (list go-0xacab-org-leap-shapeshifter
+           go-github-com-apparentlymart-go-openvpn-mgmt
+           go-github-com-emersion-go-autostart
+           go-github-com-keybase-go-ps
+           go-github-com-rakyll-statik
+           go-github-com-sevlyar-go-daemon
+           go-golang-org-x-sys))
     (synopsis "Generic VPN client by LEAP")
     (description "Bitmask, by @acronym{LEAP, LEAP Encryption Access Project},
 is an application to provide easy and secure encrypted communication with a
@@ -289,9 +291,8 @@ Networks and The Calyx Institute, where the former is default.")
                 "1cz8n75ksl0l908zc5l3rnfm1hv7130s2w8710799fr5sxrdbszi"))))
     (build-system gnu-build-system)
     (home-page "http://software.schmorp.de/pkg/gvpe.html")
-    (native-inputs `(("pkg-config" ,pkg-config)))
-    (inputs `(("openssl" ,openssl)
-              ("zlib" ,zlib)))
+    (native-inputs (list pkg-config))
+    (inputs (list openssl zlib))
     (synopsis "Secure VPN among multiple nodes over an untrusted network")
     (description
      "The GNU Virtual Private Ethernet creates a virtual network
@@ -300,17 +301,58 @@ by creating encrypted host-to-host tunnels between multiple
 endpoints.")
     (license license:gpl3+)))
 
+(define-public n2n
+  (package
+    (name "n2n")
+    (version "2.8")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/ntop/n2n")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1ph2npvnqh1xnmkp96pdzpxm033jkb8zznd3nc59l9arhn0pq4nv"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:make-flags
+      #~(list (string-append "PREFIX=" #$output)
+              (string-append "CC=" #$(cc-for-target)))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-before 'bootstrap 'move-configure
+            ;; Don't execute configure script in bootstrap.
+            (lambda _
+              (substitute* "autogen.sh"
+                (("./configure") ""))))
+          (add-before 'configure 'fix-configure
+            (lambda* (#:key inputs native-inputs #:allow-other-keys)
+              (substitute* "configure"
+                (("/bin/sh")
+                 (search-input-file (or native-inputs inputs) "/bin/sh"))))))
+      #:tests? #f))                     ;there is no check target
+    (native-inputs
+     (list autoconf automake bash-minimal pkg-config))
+    (home-page "https://github.com/ntop/n2n")
+    (synopsis "Peer-to-peer VPN client and server")
+    (description
+     "n2n is a light VPN software which makes it easy to create virtual
+networks bypassing intermediate firewalls.")
+    (license license:gpl3+)))
+
 (define-public strongswan
   (package
     (name "strongswan")
-    (version "5.9.3")
+    (version "5.9.4")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://download.strongswan.org/strongswan-"
                            version ".tar.bz2"))
        (sha256
-        (base32 "1xy6c9c7bq5a5jmm04r9f9iqn39yrr1dkq81jhvpxsd4l1ban9ck"))))
+        (base32 "063mi0kdlpd7r7s3py35yf80hvrv3nrdfvxpyn7ns25gqajg3za5"))))
     (build-system gnu-build-system)
     (arguments
      `(#:phases
@@ -323,18 +365,16 @@ endpoints.")
                                "/bin/" command)))
              (substitute* "src/libstrongswan/utils/process.c"
                (("/bin/sh")
-                (string-append (assoc-ref inputs "bash") "/bin/sh")))
+                (search-input-file inputs "/bin/sh")))
 
              (substitute* "src/libstrongswan/tests/suites/test_process.c"
                (("/bin/sh") (which "sh"))
                (("/bin/echo") (which "echo"))
-               (("cat") (which "cat")))
-             #t))
+               (("cat") (which "cat")))))
          (add-before 'check 'set-up-test-environment
            (lambda* (#:key inputs #:allow-other-keys)
-             (setenv "TZDIR" (string-append (assoc-ref inputs "tzdata")
-                                            "/share/zoneinfo"))
-             #t)))
+             (setenv "TZDIR"
+                     (search-input-directory inputs "share/zoneinfo")))))
        #:configure-flags
        (list
         "--disable-ldap"
@@ -386,18 +426,16 @@ endpoints.")
         ;; Use libcap by default.
         "--with-capabilities=libcap")))
     (inputs
-     `(("coreutils" ,coreutils)
-       ("curl" ,curl)
-       ("gmp" ,gmp)
-       ("libcap" ,libcap)
-       ("libgcrypt" ,libgcrypt)
-       ("libsoup" ,libsoup)
-       ("linux-pam" ,linux-pam)
-       ("openssl" ,openssl)))
+     (list coreutils
+           curl
+           gmp
+           libcap
+           libgcrypt
+           libsoup-minimal-2
+           linux-pam
+           openssl))
     (native-inputs
-     `(("coreutils" ,coreutils)
-       ("pkg-config" ,pkg-config)
-       ("tzdata" ,tzdata-for-tests)))
+     (list coreutils pkg-config tzdata-for-tests))
     (synopsis "IKEv1/v2 keying daemon")
     (description "StrongSwan is an IPsec implementation originally based upon
 the FreeS/WAN project.  It contains support for IKEv1, IKEv2, MOBIKE, IPv6,
@@ -418,7 +456,7 @@ NAT-T and more.")
            ;; src/libstrongswan/plugins/pkcs11/pkcs11.h
            (license:non-copyleft
             "file://src/libstrongswan/plugins/pkcs11/pkcs11.h"
-            "pkcs11 contains a unknown permissive license. View the specific
+            "pkcs11 contains an unknown permissive license. View the specific
 file for more details.")
            ;; These files are not included in the
            ;; build, they are disabled through
@@ -443,27 +481,68 @@ file for more details.")
             (sha256 (base32
                      "1128860lis89g1s21hqxvap2nq426c9j4bvgghncc1zj0ays7kj6"))))
    (build-system gnu-build-system)
-   (inputs `(("libgcrypt" ,libgcrypt)
-             ("perl" ,perl)
-             ("vpnc-scripts" ,vpnc-scripts)))
+   (native-inputs (append (list perl pkg-config vpnc-scripts)
+                          (if (%current-target-system)
+                            (list this-package)
+                            '())))
+   (inputs (list libgcrypt vpnc-scripts))
    (arguments
-    `(#:tests? #f ; there is no check target
-      #:phases
-      (modify-phases %standard-phases
-        (add-after 'unpack 'use-store-paths
-          (lambda* (#:key inputs outputs #:allow-other-keys)
-            (let ((out          (assoc-ref outputs "out"))
-                  (vpnc-scripts (assoc-ref inputs  "vpnc-scripts")))
-              (substitute* "config.c"
-                (("/etc/vpnc/vpnc-script")
-                 (string-append vpnc-scripts "/etc/vpnc/vpnc-script")))
-              (substitute* "Makefile"
-                (("ETCDIR=.*")
-                 (string-append "ETCDIR=" out "/etc/vpnc\n"))
-                (("PREFIX=.*")
-                 (string-append "PREFIX=" out "\n")))
-              #t)))
-        (delete 'configure))))          ; no configure script
+     (list #:tests? #f ;; There is no check target
+           #:make-flags
+           #~(list (string-append "CC=" #$(cc-for-target))
+                   (string-append "ETCDIR=" #$output "/etc/vpnc")
+                   (string-append "PREFIX=" #$output))
+           #:phases
+           #~(modify-phases %standard-phases
+               (delete 'configure) ;; No configure script.
+               (add-after 'unpack 'use-store-paths
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (let ((vpnc-scripts (assoc-ref inputs  "vpnc-scripts")))
+                     (substitute* "config.c"
+                       (("/etc/vpnc/vpnc-script")
+                        (string-append vpnc-scripts
+                                       "/etc/vpnc/vpnc-script"))))))
+               (add-after 'unpack 'patch-Makefile
+                 (lambda* (#:key target #:allow-other-keys)
+                   (let* ((pkg-config #$(pkg-config-for-target))
+                          (includedir (string-append pkg-config
+                                                     " --variable=includedir"
+                                                     " libgcrypt"))
+                          (cflags (string-append pkg-config
+                                                 " --cflags"
+                                                 " libgcrypt"))
+                          (libdir (string-append pkg-config
+                                                 " --variable=libdir"
+                                                 " libgcrypt"))
+                          (libs (string-append pkg-config
+                                               " --libs"
+                                               " libgcrypt")))
+                     (substitute* "Makefile"
+                       (("\\$\\(shell libgcrypt-config --cflags\\)")
+                        (string-append "-I$(shell " includedir ") "
+                                       "$(shell " cflags ")"))
+                       (("\\$\\(shell libgcrypt-config --libs\\)")
+                        (string-append
+                          "-L$(shell " libdir ") "
+                          "$(shell " libs ")")))
+                     ;; When cross-compiling the manpage can't be generated as the
+                     ;; Makefile needs to execute the resulting `vpnc' binary.
+                     (when target
+                       (substitute* "Makefile"
+                         (("all : \\$\\(BINS\\) vpnc\\.8 vpnc-script")
+                          "all : $(BINS) vpnc-script")
+                         (("install -m644 vpnc\\.8.*") ""))))))
+               (add-after 'unpack 'install-manpage
+                 (lambda* (#:key native-inputs inputs target
+                           #:allow-other-keys)
+                   ;; As the manpage is not generated. Instead install it from
+                   ;; the input vpnc package.
+                   (when target
+                     (let* ((vpnc (assoc-ref native-inputs "vpnc"))
+                            (man (string-append vpnc
+                                                "/share/man/man8/vpnc.8.gz"))
+                            (output (string-append #$output "/share/man/man8")))
+                       (install-file man output))))))))
    (synopsis "Client for Cisco VPN concentrators")
    (description
     "vpnc is a VPN client compatible with Cisco's EasyVPN equipment.
@@ -471,7 +550,7 @@ It supports IPSec (ESP) with Mode Configuration and Xauth.  It supports only
 shared-secret IPSec authentication with Xauth, AES (256, 192, 128), 3DES,
 1DES, MD5, SHA1, DH1/2/5 and IP tunneling.  It runs entirely in userspace.
 Only \"Universal TUN/TAP device driver support\" is needed in the kernel.")
-   (license license:gpl2+) ; some file are bsd-2, see COPYING
+   (license (list license:gpl2+ license:bsd-2))
    (home-page "https://www.unix-ag.uni-kl.de/~massar/vpnc/")))
 
 (define-public vpnc-scripts
@@ -490,13 +569,13 @@ Only \"Universal TUN/TAP device driver support\" is needed in the kernel.")
                  (base32
                   "1pmi4n58q81pmn9arvfixhvv6vkkf3rpwac3hwnwyl882q5q0ccx"))))
       (build-system gnu-build-system)
-      (inputs `(("guile" ,guile-3.0) ; for the wrapper scripts
-                ("coreutils" ,coreutils)
-                ("grep" ,grep)
-                ("iproute2" ,iproute)    ; for ‘ip’
-                ("net-tools" ,net-tools) ; for ‘ifconfig’, ‘route’
-                ("sed" ,sed)
-                ("which" ,which)))
+      (inputs (list guile-3.0 ; for the wrapper scripts
+                    coreutils
+                    grep
+                    iproute ; for ‘ip’
+                    net-tools ; for ‘ifconfig’, ‘route’
+                    sed
+                    which))
       (arguments
        `(#:phases
          (modify-phases %standard-phases
@@ -531,10 +610,12 @@ Only \"Universal TUN/TAP device driver support\" is needed in the kernel.")
              ;; Wrap scripts with paths to their common hard dependencies.
              ;; Optional dependencies will need to be installed by the user.
              (lambda* (#:key inputs outputs #:allow-other-keys)
-               (let ((out (assoc-ref outputs "out")))
+               (let ((out (assoc-ref outputs "out"))
+                     (guile (search-input-file inputs "bin/guile")))
                  (for-each
                   (lambda (script)
                     (wrap-script (string-append out "/etc/vpnc/" script)
+                      #:guile guile
                       `("PATH" ":" prefix
                         ,(map (lambda (name)
                                 (let ((input (assoc-ref inputs name)))
@@ -581,10 +662,9 @@ the entire VPN in a network namespace accessible only through SSH.")
                 "03323nnhb4y9nzwva04mq7xg03dvdrgp689g89f69jqc261skcqx"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)))
+     (list autoconf automake))
     (inputs
-     `(("libevent" ,libevent)))
+     (list libevent))
     (home-page "https://github.com/cernekee/ocproxy")
     (synopsis "OpenConnect proxy")
     (description
@@ -597,21 +677,18 @@ the user specifically asks to proxy, so the @dfn{VPN} interface no longer
 (define-public openconnect
   (package
    (name "openconnect")
-   (version "8.10")
+   (version "9.01")
    (source (origin
             (method url-fetch)
             (uri (string-append "ftp://ftp.infradead.org/pub/openconnect/"
                                 "openconnect-" version ".tar.gz"))
             (sha256
-             (base32 "1cdsx4nsrwawbsisfkldfc9i4qn60g03vxb13nzppr2br9p4rrih"))))
+             (base32 "1iz4j00031a5ircrx30lkiwf58yl9kc827m4ssck4yg963wgmmxk"))))
    (build-system gnu-build-system)
    (propagated-inputs
-    `(("libxml2" ,libxml2)
-      ("gnutls" ,gnutls)
-      ("zlib" ,zlib)))
+    (list libxml2 gnutls zlib))
    (inputs
-    `(("lz4" ,lz4)
-      ("vpnc-scripts" ,vpnc-scripts)))
+    (list lz4 vpnc-scripts))
    (native-inputs
     `(("gettext" ,gettext-minimal)
       ("pkg-config" ,pkg-config)))
@@ -645,44 +722,43 @@ and probably others.")
        #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'patch-openconnect
-           (lambda _
+           (lambda* (#:key inputs #:allow-other-keys)
              (substitute* "openconnect_sso/app.py"
                (("\"openconnect\"")
-                (string-append "\"" (which "openconnect") "\"")))
-             #t))
+                (string-append "\""
+                               (search-input-file inputs "/sbin/openconnect")
+                               "\"")))))
          (replace 'check
            (lambda* (#:key tests? #:allow-other-keys)
              (when tests?
-               (invoke "pytest" "-v"))
-             #t))
+               (invoke "pytest" "-v"))))
          (add-after 'install 'wrap-qt-process-path
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
                     (bin (string-append out "/bin/openconnect-sso"))
-                    (qt-process-path (string-append
-                                       (assoc-ref inputs "qtwebengine")
-                                       "/lib/qt5/libexec/QtWebEngineProcess")))
+                    (qt-process-path
+                     (search-input-file inputs
+                                        "/lib/qt5/libexec/QtWebEngineProcess")))
                (wrap-program bin
-                 `("QTWEBENGINEPROCESS_PATH" = (,qt-process-path)))
-               #t))))))
+                 #:sh (search-input-file inputs "bin/bash")
+                 `("QTWEBENGINEPROCESS_PATH" = (,qt-process-path)))))))))
     (inputs
-     `(("openconnect" ,openconnect)
-       ("python-attrs" ,python-attrs)
-       ("python-colorama" ,python-colorama)
-       ("python-keyring" ,python-keyring)
-       ("python-lxml" ,python-lxml)
-       ("python-prompt-toolkit" ,python-prompt-toolkit)
-       ("python-requests" ,python-requests)
-       ("python-pyqt" ,python-pyqt)
-       ("python-pyqtwebengine" ,python-pyqtwebengine)
-       ("python-pysocks" ,python-pysocks)
-       ("python-pyxdg" ,python-pyxdg)
-       ("python-structlog" ,python-structlog)
-       ("python-toml" ,python-toml)
-       ("qtwebengine" ,qtwebengine)))
+     (list openconnect
+           python-attrs
+           python-colorama
+           python-keyring
+           python-lxml
+           python-prompt-toolkit
+           python-requests
+           python-pyqt-without-qtwebkit
+           python-pyqtwebengine
+           python-pysocks
+           python-pyxdg
+           python-structlog
+           python-toml
+           qtwebengine-5))
     (native-inputs
-     `(("python-pytest" ,python-pytest)
-       ("python-setuptools-scm" ,python-setuptools-scm)))
+     (list python-pytest python-setuptools-scm))
     (home-page "https://github.com/vlaci/openconnect-sso")
     (synopsis "OpenConnect wrapper script supporting Azure AD (SAMLv2)")
     (description
@@ -693,7 +769,7 @@ and probably others.")
 (define-public openfortivpn
   (package
     (name "openfortivpn")
-    (version "1.15.0")
+    (version "1.17.3")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -702,15 +778,12 @@ and probably others.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1qsfgpxg553s8rc9cyrc4k96z0pislxsdxb9wyhp8fdprkak2mw2"))))
+                "0an58f0qcyxdx3d5zb5m8vi45a0251b950b5lh16572n8z2g6s2l"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("autotools" ,automake)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake pkg-config))
     (inputs
-     `(("openssl" ,openssl)
-       ("ppp" ,ppp)))
+     (list openssl ppp))
     (home-page "https://github.com/adrienverge/openfortivpn")
     (synopsis "Client for PPP+SSL VPN tunnel services")
     (description "Openfortivpn is a client for PPP+SSL VPN tunnel services.  It
@@ -721,25 +794,22 @@ this process.  It is compatible with Fortinet VPNs.")
 (define-public openvpn
   (package
     (name "openvpn")
-    (version "2.5.4")
+    (version "2.5.7")
     (source (origin
               (method url-fetch)
               (uri (string-append
                     "https://swupdate.openvpn.org/community/releases/openvpn-"
-                    version ".tar.xz"))
+                    version ".tar.gz"))
               (sha256
                (base32
-                "0di4g48kzh5qgm4ri3z6qdjfy23ligmqd7260ynw8f5rgb9drh2n"))))
+                "0s1yq530j4i4kicgvsxgl532vyn03gfhlxfdnsb43j05k4w0ld08"))))
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags '("--enable-iproute2=yes")))
     (native-inputs
-     `(("iproute2" ,iproute)))
+     (list iproute))
     (inputs
-     `(("lz4" ,lz4)
-       ("lzo" ,lzo)
-       ("openssl" ,openssl)
-       ("linux-pam" ,linux-pam)))
+     (list lz4 lzo openssl linux-pam))
     (home-page "https://openvpn.net/")
     (synopsis "Virtual private network daemon")
     (description
@@ -774,8 +844,9 @@ traversing network address translators (@dfn{NAT}s) and firewalls.")
            ;; Wrap entrypoint with paths to its hard dependencies.
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (let ((entrypoint (string-append (assoc-ref outputs "out")
-                                              "/bin/.protonvpn-real")))
+                                              "/bin/protonvpn")))
                (wrap-program entrypoint
+                            #:sh (search-input-file inputs "bin/bash")
                             `("PATH" ":" prefix
                               ,(map (lambda (name)
                                       (let ((input (assoc-ref inputs name)))
@@ -788,20 +859,24 @@ traversing network address translators (@dfn{NAT}s) and firewalls.")
                                           "openvpn"
                                           "procps"
                                           "which")))))
-             #t)))))
+             #t))
+         ;; The `protonvpn' script wants to write to `~user' to initialize its
+         ;; logger, so simply setting HOME=/tmp won't cut it.  Remove
+         ;; sanity-check.
+         (delete 'sanity-check))))
     (native-inputs
-     `(("python-docopt" ,python-docopt)))
+     (list python-docopt))
     (inputs
-     `(("dialog" ,dialog)
-       ("iproute2" ,iproute)
-       ("iptables" ,iptables)
-       ("ncurses" ,ncurses)
-       ("openvpn" ,openvpn)
-       ("procps" ,procps)
-       ("python-jinja2" ,python-jinja2)
-       ("python-pythondialog" ,python-pythondialog)
-       ("python-requests" ,python-requests)
-       ("which" ,which)))
+     (list dialog
+           iproute
+           iptables
+           ncurses
+           openvpn
+           procps
+           python-jinja2
+           python-pythondialog
+           python-requests
+           which))
     (synopsis "Command-line client for ProtonVPN")
     (description
      "This is the official command-line interface for ProtonVPN, a secure
@@ -827,9 +902,7 @@ VPN.  The gratis tier offers unlimited bandwidth for up to 10 devices.")
      '(#:configure-flags
        '("--sysconfdir=/etc"
          "--localstatedir=/var")))
-    (inputs `(("zlib" ,zlib)
-              ("lzo" ,lzo)
-              ("openssl" ,openssl)))
+    (inputs (list zlib lzo openssl))
     (home-page "https://tinc-vpn.org")
     (synopsis "Virtual Private Network (VPN) daemon")
     (description
@@ -860,12 +933,12 @@ private network between hosts on the internet.")
                (("/bin/sh") "sh"))
              #t)))))
     (native-inputs
-     `(("python-setuptools-scm" ,python-setuptools-scm)
-       ;; For tests only.
-       ("python-flake8" ,python-flake8)
-       ("python-mock" ,python-mock)
-       ("python-pytest-cov" ,python-pytest-cov)
-       ("python-pytest-runner" ,python-pytest-runner)))
+     (list python-setuptools-scm
+           ;; For tests only.
+           python-flake8
+           python-mock
+           python-pytest-cov
+           python-pytest-runner))
     (home-page "https://github.com/sshuttle/sshuttle")
     (synopsis "VPN that transparently forwards connections over SSH")
     (description "sshuttle creates an encrypted virtual private network (VPN)
@@ -881,14 +954,14 @@ DNS domain name queries.")
 (define-public sshoot
   (package
     (name "sshoot")
-    (version "1.2.6")
+    (version "1.5.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri name version))
        (sha256
         (base32
-         "1ccgh0hjyxrwkgy3hnxz3hgbjbs0lmfs25d5l5jam0xbpcpj63h0"))))
+         "05i54nga4vy660yy9yf6dl376yj0jc51303yr295qk3k9w0k96yd"))))
     (build-system python-build-system)
     (arguments
      '(#:phases
@@ -896,17 +969,20 @@ DNS domain name queries.")
          (add-after 'unpack 'patch-paths
            (lambda _
              (substitute* "sshoot/tests/test_manager.py"
-               (("/bin/sh") (which "sh")))
-             #t)))))
+               (("/bin/sh") (which "sh")))))
+         (replace 'check
+           (lambda* (#:key tests? #:allow-other-keys)
+             (when tests?
+               (invoke "pytest" "-vv" "--pyargs" "sshoot")))))))
     (inputs
-     `(("python-argcomplete" ,python-argcomplete)
-       ("python-prettytable" ,python-prettytable)
-       ("python-pyyaml" ,python-pyyaml)))
+     (list python-argcomplete
+           python-prettytable
+           python-pyyaml
+           python-pyxdg
+           python-toolrack))
     ;; For tests only.
     (native-inputs
-     `(("python-fixtures" ,python-fixtures)
-       ("python-pbr" ,python-pbr)
-       ("python-testtools" ,python-testtools)))
+     (list python-pytest python-pytest-mock))
     (home-page "https://github.com/albertodonato/sshoot")
     (synopsis "sshuttle VPN session manager")
     (description "sshoot provides a command-line interface to manage multiple
@@ -931,11 +1007,9 @@ with configuration options for most of @command{sshuttle}’s features.")
     (arguments
      '(#:tests? #f))                    ; no tests
     (inputs
-     `(("nspr" ,nspr)
-       ("nss" ,nss)
-       ("openssl" ,openssl)))
+     (list nspr nss openssl))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (home-page "https://github.com/ambrop72/badvpn")
     (synopsis "Peer-to-peer virtual private network (VPN)")
     (description "@code{BadVPN} is a collection of virtual private
@@ -1062,6 +1136,7 @@ WireGuard was added to Linux 5.6.")
                     (coreutils (string-append (assoc-ref inputs "coreutils")
                                               "/bin")))
                (wrap-program (string-append out "/bin/wg-quick")
+                 #:sh (search-input-file inputs "bin/bash")
                  `("PATH" ":" prefix ,(append inputs-sbin
                                               (list coreutils))))))))))
     (inputs
@@ -1085,13 +1160,10 @@ public keys and can roam across IP addresses.")
      (list license:lgpl2.1+    ; src/netlink.h & contrib/embeddable-wg-library
            license:gpl2))))    ; everything else
 
-(define-public wireguard
-  (deprecated-package "wireguard" wireguard-tools))
-
 (define-public xl2tpd
   (package
     (name "xl2tpd")
-    (version "1.3.16")
+    (version "1.3.17")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1100,26 +1172,25 @@ public keys and can roam across IP addresses.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0is5ccrvijz0pfm45pfrlbb9y8231yz3c4zqs8mkgakl9rxajy6l"))))
+                "06aiidwygywaa1jn8m2pw8l3vnsc2bjnacbjmlsdy1cqgr1f5cc9"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:make-flags (list (string-append "PREFIX=" %output)
-                          "CC=gcc")
-       #:phases (modify-phases %standard-phases
-                  (delete 'configure) ;no configure script
-                  (add-before 'build 'setup-environment
-                    (lambda* (#:key inputs #:allow-other-keys)
-                      (substitute* "l2tp.h"
-                        (("/usr/sbin/pppd")
-                         (string-append (assoc-ref inputs "ppp")
-                                        "/sbin/pppd")))
-                      (setenv "KERNELSRC"
-                              (assoc-ref inputs "linux-libre-headers"))
-                      #t)))
+     (list
+       #:make-flags
+       #~(list (string-append "PREFIX=" #$output)
+               (string-append "CC=" #$(cc-for-target)))
+       #:phases
+       #~(modify-phases %standard-phases
+           (delete 'configure) ;no configure script
+           (add-before 'build 'setup-environment
+             (lambda* (#:key inputs #:allow-other-keys)
+               (substitute* "l2tp.h"
+                 (("/usr/sbin/pppd")
+                  (search-input-file inputs "/sbin/pppd")))
+               (setenv "KERNELSRC"
+                       (assoc-ref inputs "kernel-headers")))))
        #:tests? #f))                    ; no tests provided
-    (inputs `(("libpcap" ,libpcap)
-              ("linux-libre-headers" ,linux-libre-headers)
-              ("ppp" ,ppp)))
+    (inputs (list libpcap ppp))
     (home-page "https://www.xelerance.com/software/xl2tpd/")
     (synopsis "Layer 2 Tunnelling Protocol Daemon (RFC 2661)")
     (description

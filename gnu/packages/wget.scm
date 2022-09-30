@@ -1,10 +1,11 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2012 Nikita Karetnikov <nikita@karetnikov.org>
 ;;; Copyright © 2014, 2015, 2017, 2018 Ludovic Courtès <ludo@gnu.org>
-;;; Copyright © 2016, 2017, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016, 2017, 2019-2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2017 Rutger Helling <rhelling@mykolab.com>
 ;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
+;;; Copyright © 2021 Michael Rohleder <mike@rohleder.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -24,7 +25,7 @@
 (define-module (gnu packages wget)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (gnu packages)
-  #:use-module (gnu packages base)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages documentation)
   #:use-module (gnu packages gnunet)
@@ -45,7 +46,7 @@
 (define-public wget
   (package
     (name "wget")
-    (version "1.20.3")
+    (version "1.21.3")
     (source
      (origin
       (method url-fetch)
@@ -53,19 +54,17 @@
                           version ".tar.lz"))
       (sha256
        (base32
-        "1frajd86ds8vz2hprq30wq8ya89z9dcxnwm8nwk12bbc47l7qq39"))))
+        "19afmyr1i3zwdwr8wkyz8q6z5764ik3dm87as194g78l8xggplnv"))))
     (build-system gnu-build-system)
     (inputs
-     `(("gnutls" ,gnutls)
-       ("libidn2" ,libidn2)
-       ("libpsl" ,libpsl)))
+     (list gnutls libidn2 libpsl))
     (native-inputs
-     `(("lzip" ,lzip)
-       ("pkg-config" ,pkg-config)
-       ("perl" ,perl)
-       ("python" ,python)               ;for testenv suite
-       ("perl-http-daemon" ,perl-http-daemon)
-       ("perl-io-socket-ssl" ,perl-io-socket-ssl)))
+     (list lzip
+           pkg-config
+           perl
+           python ;for testenv suite
+           perl-http-daemon
+           perl-io-socket-ssl))
     (home-page "https://www.gnu.org/software/wget/")
     (synopsis "Non-interactive command-line utility for downloading files")
     (description
@@ -102,16 +101,14 @@ in downloaded documents to relative links.")
              (substitute* "wgetpaste"
                ;; dpaste blocks Tor users.  Use a better default.
                (("DEFAULT_SERVICE:-dpaste")
-                "DEFAULT_SERVICE-bpaste"))
-             #t))
+                "DEFAULT_SERVICE-bpaste"))))
          (replace 'install
            (lambda* (#:key outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
                     (bin (string-append out "/bin"))
                     (zsh (string-append out "/share/zsh/site-functions")))
                (install-file "wgetpaste" bin)
-               (install-file "_wgetpaste" zsh)
-               #t)))
+               (install-file "_wgetpaste" zsh))))
          (add-after 'install 'wrap-program
            ;; /bin/wgetpaste prides itself on relying only on the following
            ;; inputs, and doesn't need to execute arbitrary commands, so
@@ -123,12 +120,10 @@ in downloaded documents to relative links.")
                    ,(delete-duplicates
                      (map (lambda (command) (dirname (which command)))
                           (list "bash" "mktemp" "sed" "sort" "tee" "tr"
-                                "wget" "xclip")))))
-               #t))))
+                                "wget" "xclip")))))))))
        #:tests? #f))                    ; no test target
     (inputs
-     `(("wget" ,wget)
-       ("xclip" ,xclip)))
+     (list bash-minimal wget xclip))
     (home-page "https://wgetpaste.zlin.dk/")
     (synopsis "Script that automates pasting to a number of pastebin services")
     (description
@@ -138,44 +133,40 @@ online pastebin services.")
 
 (define-public wget2
   (package
-   (name "wget2")
-   (version "2.0.0")
-   (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "mirror://gnu/wget/wget2-" version ".tar.gz"))
-       (sha256
-        (base32
-         "0i0m4k6w9smsr2m5mj05zvl1fb110izyl2qqrk0yqlxnmfhgpqjg"))))
-   (build-system gnu-build-system)
-   (arguments
-    `(#:phases
-      (modify-phases %standard-phases
-        (add-after 'unpack 'skip-network-tests
-          (lambda _
-            (substitute* "tests/Makefile.in"
-              (("test-gpg-verify-no-file\\$\\(EXEEXT)") "")
-              (("test-gpg-valid\\$\\(EXEEXT)") "")
-              (("test-gpg-styles\\$\\(EXEEXT)") ""))
-            #t)))
-      #:configure-flags '("--enable-static=no")))
-   (inputs
-    `(("bzip2" ,bzip2)
-      ("gnutls" ,gnutls/dane)
-      ("gpgme" ,gpgme)
-      ("libiconv" ,libiconv)
-      ("libidn2" ,libidn2)
-      ("libmicrohttpd" ,libmicrohttpd)
-      ("libpsl" ,libpsl)
-      ("pcre2" ,pcre2)
-      ("zlib" ,zlib)))
-   ;; TODO: Add libbrotlidec, libnghttp2.
-   (native-inputs
-    `(("pkg-config" ,pkg-config)))
-   (home-page "https://gitlab.com/gnuwget/wget2")
-   (synopsis "Successor of GNU Wget")
-   (description "GNU Wget2 is the successor of GNU Wget, a file and recursive
-website downloader.  Designed and written from scratch it wraps around libwget,
-that provides the basic functions needed by a web client.")
-   (properties '((ftp-directory . "/gnu/wget")))
-   (license (list license:gpl3+ license:lgpl3+))))
+    (name "wget2")
+    (version "2.0.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://gnu/wget/wget2-" version ".tar.gz"))
+              (sha256
+               (base32
+                "1caxhkwk08z3npzw8x2qhkmjc224cfw1aphvbv8bidbvd41zmdqb"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:phases (modify-phases %standard-phases
+                  (add-after 'unpack 'skip-network-tests
+                    (lambda _
+                      (substitute* "tests/Makefile.in"
+                        (("test-gpg-verify-no-file\\$\\(EXEEXT)") "")
+                        (("test-gpg-valid\\$\\(EXEEXT)") "")
+                        (("test-gpg-styles\\$\\(EXEEXT)") "")))))
+       #:configure-flags
+       '("--enable-static=no")))
+    (inputs (list bzip2
+                  gnutls/dane
+                  gpgme
+                  libidn2
+                  libmicrohttpd
+                  libpsl
+                  pcre2
+                  zlib))
+    ;; TODO: Add libbrotlidec, libnghttp2.
+    (native-inputs (list pkg-config))
+    (home-page "https://gitlab.com/gnuwget/wget2")
+    (synopsis "Successor of GNU Wget")
+    (description
+     "GNU Wget2 is the successor of GNU Wget, a file and recursive website
+downloader.  Designed and written from scratch it wraps around libwget, that
+provides the basic functions needed by a web client.")
+    (properties '((ftp-directory . "/gnu/wget")))
+    (license (list license:gpl3+ license:lgpl3+))))

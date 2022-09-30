@@ -38,6 +38,7 @@
   #:use-module (gnu packages lisp)
   #:use-module (gnu packages multiprecision)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages popt)
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-xyz))
 
@@ -55,12 +56,11 @@
          "0ymc4i9y60aazscc1blivirkr1rflzz6akkmvfzyn5l7mgnlbk83"))))
     (build-system python-build-system)
     (native-inputs
-     `(("python-cython" ,python-cython)))
+     (list python-cython))
     (propagated-inputs
-     `(("python-cysignals" ,python-cysignals)))
+     (list python-cysignals))
     (inputs
-     `(("gmp" ,gmp)
-       ("pari-gp" ,pari-gp)))
+     (list gmp pari-gp))
     (home-page "https://cypari2.readthedocs.io/")
     (synopsis
      "Python interface to the number theory library libpari")
@@ -70,32 +70,22 @@ PARI/GP.  It has been spun off from the SageMath mathematics software system,
 but it can be used independently.")
     (license license:gpl2+)))
 
-(define-public python2-cypari2
-  (package-with-python2 python-cypari2))
-
-;; The stable version of the following package is not young enough to be
-;; used with Sage, since it does not support cython; so we use a beta
-;; release.
 (define-public python-gmpy2
   (package
     (name "python-gmpy2")
-    (version "2.1.0b1")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url "https://github.com/aleaxit/gmpy")
-                    (commit (string-append "gmpy2-" version))))
-              (file-name (git-file-name name version))
-              (sha256
-               (base32
-                "0ljvnmhxqdfsp0yy4c2hynhk5sggm63kkqsq4iwq4k9vsnx2xm97"))))
+    (version "2.1.2")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "gmpy2" version))
+       (sha256
+        (base32
+         "1lc29g3s4z5f1qbsc2x9i9sf6wrpni9pwiwmb1wwx3hjr85i8xfs"))))
     (build-system python-build-system)
     (native-inputs
-     `(("unzip" ,unzip)))
+     (list unzip))
     (inputs
-     `(("gmp" ,gmp)
-       ("mpfr" ,mpfr)
-       ("mpc" ,mpc)))
+     (list gmp mpfr mpc))
     (home-page "https://github.com/aleaxit/gmpy")
     (synopsis
      "GMP/MPIR, MPFR, and MPC interface to Python 2.6+ and 3.x")
@@ -103,9 +93,6 @@ but it can be used independently.")
      "This package provides a Python interface to the GNU multiprecision
 libraries GMO, MPFR and MPC.")
     (license license:lgpl3+)))
-
-(define-public python2-gmpy2
-  (package-with-python2 python-gmpy2))
 
 (define-public cliquer
   (package
@@ -150,9 +137,7 @@ function for every found clique.")
          "0l68rikfr7k2l547gb3pp3g8cj5zzxwipm79xrb5r8ffj466ydxg"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (synopsis "Computations with braid groups")
     (description "libbraiding performs computations with braid groups,
 in particular it computes normal forms of group elements.")
@@ -176,11 +161,9 @@ in particular it computes normal forms of group elements.")
          "0sv3cwrf9v9sb5a8wbhjmarxvya13ma3j8y8592f9ymxlk5y0ldk"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (inputs
-     `(("libgc" ,libgc)))
+     (list libgc))
     (synopsis "Computation of homfly polynomials of links")
     (description "libhomfly computes homfly polynomials of links,
 represented as strings.")
@@ -223,15 +206,9 @@ represented as strings.")
         (base32 "09d2p74x1arkydlxy6pw4p4byi7r8q7f29w373h4d8a215kadc6d"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (inputs
-     `(("flint" ,flint)
-       ("gmp" ,gmp)
-       ("python" ,python)
-       ("singular" ,singular)))
+     (list flint gmp python singular))
     (synopsis "Sage fork of GiNaC")
     (description "Pynac is a derivative of the C++ library GiNaC, which
 allows manipulation of symbolic expressions.  It currently provides the
@@ -260,7 +237,7 @@ on numerical types, while GiNaC depends on CLN for this purpose.")
     (native-inputs
      `(("python" ,python-2)))
     (inputs
-     `(("gmp" ,gmp)))
+     (list gmp))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -313,14 +290,9 @@ coefficients of which are modular integers.")
        (base32 "0qhgckd4fvbs40jw14mvw89rccv94d3df27kipd27hxd4cx7y80y"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (inputs
-     `(("boost" ,boost)
-       ("libpng" ,libpng)
-       ("m4ri" ,m4ri)))
+     (list boost libpng m4ri))
     (arguments
     ;; We are missing the boost unit test framework.
      `(#:tests? #f
@@ -338,59 +310,28 @@ used as internal storage type for polynomial structures.")
 (define-public lcalc
   (package
     (name "lcalc")
-    (version "1.23")
-    ;; The original home page of the project has disappeared, as well as
-    ;; code hosted by the original author on Google Code. The latter has
-    ;; been copied to gitlab.com/sagemath and purportedly contains patches
-    ;; for a never released version 1.3, that supposedly follows 1.23.
-    ;; We use the tarball as well as the patches hosted inside the sage
-    ;; package system distributed with the sage tarball.
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "ftp://ftp.fu-berlin.de/unix/misc/sage/spkg/"
-                           "upstream/lcalc/lcalc-1.23.tar.bz2"))
-       (sha256
-        (base32
-         "1c6dsdshgxhqppjxvxhp8yhpxaqvnz3d1mlh26r571gkq8z2bm43"))
-       (patches (search-patches "lcalc-lcommon-h.patch"
-                                "lcalc-default-parameters-1.patch"
-                                "lcalc-default-parameters-2.patch"
-                                "lcalc-using-namespace-std.patch"))))
+    (version "2.0.5")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitlab.com/sagemath/lcalc")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1rwyx292y3jbsp88wagn9nhl9z7wsnl2yrs5imxkbxq87pnrj5a7"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:tests? #f ;no tests
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)
-         (add-before 'build 'prepare-build
-           (lambda* (#:key outputs #:allow-other-keys)
-             (chdir "src")
-             (let ((out (assoc-ref outputs "out")))
-               (substitute* "Makefile"
-                 (("^INSTALL_DIR= /usr/local")
-                  (string-append "INSTALL_DIR=" out))))
-             #t))
-         (add-before 'install 'make-output-dirs
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (bin (string-append out "/bin"))
-                    (lib (string-append out "/lib"))
-                    (include (string-append out "/include")))
-               (mkdir-p bin)
-               (mkdir-p lib)
-               (mkdir-p include))
-             #t)))))
-    ;; FIXME:
-    ;; We need to add pari-gp and probably pari related patches from the
-    ;; sage project, as well as uncomment the line setting PARI_DEFINE in
-    ;; the Makefile to get the full functionality of this package.
-    ;; For the time being, we hope that sage can be compiled without.
-    (synopsis "C++ library for L-functions")
-    (description "Lcalc computes L-functions, in particular the Riemann
-zeta function and its twists by quadratic characters.")
-    (license license:gpl2+)
-    (home-page "https://gitlab.com/sagemath/sage")))
+     (list #:configure-flags '(list "--with-pari")))
+    (inputs (list pari-gp))
+    (native-inputs (list autoconf automake libtool pkg-config gengetopt))
+    (home-page "https://gitlab.com/sagemath/lcalc")
+    (synopsis "C++ library for computing with L-functions")
+    (description
+     "Lcalc computes L-functions, in particular the Riemann zeta function,
+Dirichlet L-functions and L-functions attached to elliptic curves and
+modular forms.")
+    (license license:gpl2+)))
 
 (define-public ratpoints
   (package
@@ -426,7 +367,7 @@ zeta function and its twists by quadratic characters.")
                            '("bin" "include" "lib"))))
              #t)))))
     (inputs
-     `(("gmp" ,gmp)))
+     (list gmp))
     (home-page "http://www.mathe2.uni-bayreuth.de/stoll/programs/")
     (synopsis "Find rational points on hyperelliptic curves")
     (description "Ratpoints tries to find all rational points within

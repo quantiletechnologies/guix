@@ -2,9 +2,9 @@
 ;;; Copyright © 2015, 2016, 2018, 2019 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2016, 2017, 2019–2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018 Meiyo Peng <meiyo.peng@gmail.com>
-;;; Copyright © 2019, 2020 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2019, 2020, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2020 Mark H Weaver <mhw@netris.org>
-;;; Copyright © 2020 Marius Bakke <marius@gnu.org>
+;;; Copyright © 2020, 2022 Marius Bakke <marius@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -25,10 +25,10 @@
   #:use-module (gnu packages)
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages boost)
-  #:use-module (gnu packages build-tools)   ;for meson-0.55
   #:use-module (gnu packages perl)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
+  #:use-module (guix gexp)
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix build-system cmake)
@@ -73,9 +73,7 @@ and heaps.")
         (base32 "1pk6wmi28pa8srb4szybrwfn71jldb61c5vgxsiayxcyg1ya4qqh"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (home-page "https://github.com/s-yata/marisa-trie")
     (synopsis "Trie data structure C++ library")
     (description "@acronym{MARISA, Matching Algorithm with Recursively
@@ -137,20 +135,43 @@ that have sequences of identical bytes in the same order, even though bytes
 in between these sequences may be different in both content and length.")
     (license license:gpl2+)))
 
+(define-public libcuckoo
+  (package
+    (name "libcuckoo")
+    (version "0.3.1")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/efficient/libcuckoo")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0h9yhpkhk813dk66y6bs2csybw3pbpfnp3cakr2xism02vjwy19l"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list #:configure-flags #~'("-DBUILD_TESTS=1")))
+    (home-page "https://efficient.github.io/libcuckoo/")
+    (synopsis "Concurrent hash table")
+    (description
+     "@code{libcuckoo} provides a high-performance, compact hash table that
+allows multiple concurrent reader and writer threads.")
+    (license license:asl2.0)))
+
 (define-public liburcu
   (package
     (name "liburcu")
-    (version "0.13.0")
+    (version "0.13.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://www.lttng.org/files/urcu/"
                                   "userspace-rcu-" version ".tar.bz2"))
               (sha256
                (base32
-                "085s437nig6bdiv9im4k4qwqbrbnc4qw9flqi16jlb493az0vcnb"))))
+                "10rh6v9j13622cjlzx31cfpghjy0kqkvn6pb42whwwcg5cyz64rj"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("perl" ,perl)))                 ; for tests
+     (list perl))                 ; for tests
     (home-page "https://liburcu.org/")
     (synopsis "User-space RCU data synchronisation library")
     (description "liburcu is a user-space @dfn{Read-Copy-Update} (RCU) data
@@ -158,7 +179,7 @@ synchronisation library.  It provides read-side access that scales linearly
 with the number of cores.  liburcu-cds provides efficient data structures
 based on RCU and lock-free algorithms.  These structures include hash tables,
 queues, stacks, and doubly-linked lists.")
-    (license license:lgpl2.1+)))
+    (license (list license:lgpl2.1 license:expat))))
 
 (define-public uthash
   (package
@@ -175,7 +196,7 @@ queues, stacks, and doubly-linked lists.")
         (base32 "0k80bjbb6ss5wpmfmfji6xbyjm990hg9kcshwwnhdnh73vxkcd1m"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("perl" ,perl)))
+     (list perl))
     (arguments
      `(#:make-flags
        (list "CC=gcc")
@@ -269,8 +290,8 @@ to the structure and choosing one or more fields to act as the key.")
                           Cflags: -I${includedir}~%"
                           out ,version)))
               #t))))))
-    (native-inputs
-     `(("libdivsufsort" ,libdivsufsort)))
+    (propagated-inputs
+     (list libdivsufsort))
     (home-page "https://github.com/simongog/sdsl-lite")
     (synopsis "Succinct data structure library")
     (description "The Succinct Data Structure Library (SDSL) is a powerful and
@@ -296,8 +317,6 @@ equivalent succinct data structure are (most of the time) identical.")
                (base32
                 "061mkg6hc9x89zya3bw18ymxlzd8fbhjipxpva8x01lh2vp1d4f0"))))
     (build-system meson-build-system)
-    (arguments
-     `(#:meson ,meson-0.55))
     (synopsis "Typed link list for C")
     (description
      "@code{tllist} is a @dfn{typed linked list} C header file only library
@@ -349,7 +368,7 @@ bytes of memory space, where n is the length of the string.")
                 "1li70vwsksva9c4yly90hjafgqfixi1g6d52qq9p6r60vqc4pkjj"))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("boost" ,boost)))  ; needed for tests
+     (list boost))  ; needed for tests
     (arguments
      `(#:phases
        (modify-phases %standard-phases

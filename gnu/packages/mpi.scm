@@ -1,13 +1,13 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2014, 2015, 2018, 2019 Eric Bavier <bavier@member.fsf.org>
-;;; Copyright © 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2014 Ian Denhardt <ian@zenhack.net>
 ;;; Copyright © 2016 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2017 Dave Love <fx@gnu.org>
-;;; Copyright © 2017 Efraim Flashner <efraim@flashner.co.il>
-;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2017, 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2018–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018 Paul Garlick <pgarlick@tourbillion-technology.com>
-;;; Copyright © 2019 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2019, 2021 Ricardo Wurmus <rekado@elephly.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -57,7 +57,7 @@
   ;; to migrate to 2.0.
   (package
     (name "hwloc")
-    (version "1.11.12")
+    (version "1.11.13")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://www.open-mpi.org/software/hwloc/v"
@@ -65,7 +65,8 @@
                                   "/downloads/hwloc-" version ".tar.bz2"))
               (sha256
                (base32
-                "0za1b9lvrm3rhn0lrxja5f64r0aq1qs4m0pxn1ji2mbi8ndppyyx"))))
+                "1j69p8a1pjpbpwn4w7l4dfxmaxxqikchjzqw1ncw05zmcmvlnjd4"))
+              (patches (search-patches "hwloc-1-test-btrfs.patch"))))
 
     (properties
      ;; Tell the 'generic-html' updater to monitor this URL for updates.
@@ -78,20 +79,13 @@
                "doc"           ;400+ section 3 man pages
                "debug"))
     (inputs
-     `(("libx11" ,libx11)
-       ("cairo" ,cairo)
-       ("ncurses" ,ncurses)
-       ("expat" ,expat)
-       ,@(if (not (string-prefix? "armhf"
-                                  (or (%current-target-system)
-                                      (%current-system))))
-             `(("numactl" ,numactl))
-             '())))
+     (append (list libx11 cairo ncurses expat)
+             (if (target-arm32?) '() (list numactl))))
     (propagated-inputs
      ;; hwloc.pc lists it in 'Requires.private'.
-     `(("libpciaccess" ,libpciaccess)))
+     (list libpciaccess))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (arguments
      `(#:configure-flags '("--localstatedir=/var")
        #:phases
@@ -102,8 +96,7 @@
              ;; machines: <https://github.com/open-mpi/hwloc/issues/213>.
              (substitute* "tests/linux-libnuma.c"
                (("numa_available\\(\\)")
-                "-1"))
-             #t))
+                "-1"))))
          (add-after 'install 'refine-libnuma
            ;; Give -L arguments for libraries to avoid propagation
            (lambda* (#:key inputs outputs #:allow-other-keys)
@@ -120,8 +113,7 @@
                ;; "lib" output doesn't refer to "out".
                (substitute* (string-append lib "/lib/pkgconfig/hwloc.pc")
                  (("^.*prefix=.*$")
-                  ""))
-               #t)))
+                  "")))))
          (add-after 'install 'move-man3-pages
            (lambda* (#:key outputs #:allow-other-keys)
              ;; Move section 3 man pages to the "doc" output.
@@ -129,8 +121,8 @@
                    (doc (assoc-ref outputs "doc")))
                (copy-recursively (string-append out "/share/man/man3")
                                  (string-append doc "/share/man/man3"))
-               (delete-file-recursively (string-append out "/share/man/man3"))
-               #t))))))
+               (delete-file-recursively
+                (string-append out "/share/man/man3"))))))))
     (home-page "https://www.open-mpi.org/projects/hwloc/")
     (synopsis "Abstraction of hardware architectures")
     (description
@@ -151,7 +143,7 @@ bind processes, and much more.")
   ;; Note: 2.x isn't the default yet, see above.
   (package
     (inherit hwloc-1)
-    (version "2.5.0")
+    (version "2.8.0")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://download.open-mpi.org/release/hwloc/v"
@@ -159,10 +151,11 @@ bind processes, and much more.")
                                   "/hwloc-" version ".tar.bz2"))
               (sha256
                (base32
-                "1j2j9wn39a8v91r23xncm1rzls6rjkgkvdvqghbdsnq8ps491kx9"))))
+                "1ha23yqfx9kfxm5fcj9m0fnyf0r2k6p4k88xxqishclcsky752il"))))
 
     ;; libnuma is no longer needed.
-    (inputs (alist-delete "numactl" (package-inputs hwloc-1)))
+    (inputs (modify-inputs (package-inputs hwloc-1)
+              (delete "numactl")))
     (arguments
      (substitute-keyword-arguments (package-arguments hwloc-1)
        ((#:phases phases)
@@ -173,16 +166,14 @@ bind processes, and much more.")
                ;; some machines: <https://github.com/open-mpi/hwloc/issues/213>.
                (substitute* "tests/hwloc/linux-libnuma.c"
                  (("numa_available\\(\\)")
-                  "-1"))
-               #t))
+                  "-1"))))
            (add-before 'check 'skip-test-that-fails-on-qemu
              (lambda _
                ;; Skip test that fails on emulated hardware due to QEMU bug:
                ;; <https://bugs.gnu.org/40342>.
                (substitute* "tests/hwloc/hwloc_get_last_cpu_location.c"
                  (("hwloc_topology_init" all)
-                  (string-append "exit (77);\n" all)))
-               #t))))))))
+                  (string-append "exit (77);\n" all)))))))))))
 
 (define-deprecated hwloc-2.0 hwloc-2)
 
@@ -193,7 +184,7 @@ bind processes, and much more.")
 (define-public openmpi
   (package
     (name "openmpi")
-    (version "4.1.1")
+    (version "4.1.4")
     (source
      (origin
       (method url-fetch)
@@ -201,7 +192,7 @@ bind processes, and much more.")
                           (version-major+minor version)
                           "/downloads/openmpi-" version ".tar.bz2"))
       (sha256
-       (base32 "1nkwq123vvmggcay48snm9qqmrh0bdzpln0l1jnp26niidvplkz2"))
+       (base32 "03ckngrff1cl0l81vfvrfhp99rbgk7s0633kr1l468yibwbjx4cj"))
       (patches (search-patches "openmpi-mtl-priorities.patch"))))
 
     (properties
@@ -211,35 +202,36 @@ bind processes, and much more.")
 
     (build-system gnu-build-system)
     (inputs
-     `(("hwloc" ,hwloc-2 "lib")
-       ("gfortran" ,gfortran)
-       ("libfabric" ,libfabric)
-       ("libevent" ,libevent)
-       ("opensm" ,opensm)
-       ,@(if (and (not (%current-target-system))
-                  (member (%current-system) (package-supported-systems psm)))
-             `(("psm" ,psm))
-             '())
-       ,@(if (and (not (%current-target-system))
-                  (member (%current-system) (package-supported-systems psm2)))
-             `(("psm2" ,psm2))
-             '())
-       ,@(if (and (not (%current-target-system))
-                  (member (%current-system) (package-supported-systems ucx)))
-             `(("ucx" ,ucx))
-             '())
-       ("rdma-core" ,rdma-core)
-       ("valgrind" ,valgrind)
-       ("slurm" ,slurm)))              ;for PMI support (launching via "srun")
+     (let ((if-supported
+            (lambda (package)
+              (if (and (not (%current-target-system))
+                       (member (%current-system)
+                               (package-supported-systems package)))
+                  (list package)
+                  '()))))
+       (append (list `(,hwloc-2 "lib")
+                     gfortran
+                     libfabric
+                     libevent
+                     opensm)
+               (if-supported psm)
+               (if-supported psm2)
+               (if-supported ucx)
+               (if-supported valgrind)
+               (list rdma-core
+                     slurm))))         ;for PMI support (launching via "srun")
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("perl" ,perl)))
+     (list pkg-config perl))
     (outputs '("out" "debug"))
     (arguments
      `(#:configure-flags `("--enable-mpi-ext=affinity" ;cr doesn't work
-                           "--enable-memchecker"
                            "--with-sge"
-                           "--with-valgrind"
+
+                           ,@(if ,(package? (this-package-input "valgrind"))
+                               `("--enable-memchecker"
+                                 "--with-valgrind")
+                               `("--without-valgrind"))
+
                            "--with-hwloc=external"
                            "--with-libevent"
 
@@ -263,12 +255,11 @@ bind processes, and much more.")
                   (add-after 'unpack 'find-opensm-headers
                     (lambda* (#:key inputs #:allow-other-keys)
                       (setenv "C_INCLUDE_PATH"
-                              (string-append (assoc-ref inputs "opensm")
-                                             "/include/infiniband"))
+                              (search-input-directory inputs
+                                                      "/include/infiniband"))
                       (setenv "CPLUS_INCLUDE_PATH"
-                              (string-append (assoc-ref inputs "opensm")
-                                             "/include/infiniband"))
-                      #t))
+                              (search-input-directory inputs
+                                                      "/include/infiniband"))))
                   (add-before 'build 'remove-absolute
                     (lambda _
                       ;; Remove compiler absolute file names (OPAL_FC_ABSOLUTE
@@ -284,20 +275,17 @@ bind processes, and much more.")
                       (substitute*
                           '("./ompi/mca/io/romio321/src/io_romio321_component.c")
                         (("MCA_io_romio321_COMPLETE_CONFIGURE_FLAGS")
-                         "\"[elided to reduce closure]\""))
-                      #t))
+                         "\"[elided to reduce closure]\""))))
                   (add-before 'build 'scrub-timestamps ;reproducibility
                     (lambda _
                       (substitute* '("ompi/tools/ompi_info/param.c"
                                      "orte/tools/orte-info/param.c"
                                      "oshmem/tools/oshmem_info/param.c")
-                        ((".*(Built|Configured) on.*") ""))
-                      #t))
+                        ((".*(Built|Configured) on.*") ""))))
                   (add-after 'install 'remove-logs ;reproducibility
                     (lambda* (#:key outputs #:allow-other-keys)
                       (let ((out (assoc-ref outputs "out")))
-                        (for-each delete-file (find-files out "config.log"))
-                        #t))))))
+                        (for-each delete-file (find-files out "config.log"))))))))
     (home-page "https://www.open-mpi.org")
     (synopsis "MPI-3 implementation")
     (description
@@ -309,6 +297,16 @@ best MPI library available.  Open MPI offers advantages for system and
 software vendors, application developers and computer science researchers.")
     ;; See file://LICENSE
     (license license:bsd-2)))
+
+(define-public openmpi-c++
+  (package/inherit openmpi
+    (name "openmpi-c++")
+    (outputs '("out"))
+    (arguments
+     (substitute-keyword-arguments (package-arguments openmpi)
+       ((#:configure-flags flags)
+        `(cons "--enable-mpi-cxx" ,flags))))
+    (synopsis "C++ bindings for MPI")))
 
 ;; TODO: javadoc files contain timestamps.
 (define-public java-openmpi
@@ -349,8 +347,7 @@ software vendors, application developers and computer science researchers.")
                  (lambda* (#:key inputs #:allow-other-keys)
                    (substitute* "ompi/mpi/java/c/Makefile.in"
                      (("\\$\\(top_builddir\\)/ompi/lib@OMPI_LIBMPI_NAME@.la")
-                      (string-append (assoc-ref inputs "openmpi") "/lib/libmpi.la")))
-                   #t))
+                      (search-input-file inputs "/lib/libmpi.la")))))
                (add-after 'install 'strip-jar-timestamps
                  (assoc-ref ant:%standard-phases 'strip-jar-timestamps)))))))
     (synopsis "Java bindings for MPI")))
@@ -414,7 +411,7 @@ only provides @code{MPI_THREAD_FUNNELED}.")))
                 "unittest.skipMPI('openmpi')"))
              #t)))))
     (inputs
-     `(("openmpi" ,openmpi)))
+     (list openmpi))
     (home-page "https://bitbucket.org/mpi4py/mpi4py/")
     (synopsis "Python bindings for the Message Passing Interface standard")
     (description "MPI for Python (mpi4py) provides bindings of the Message
@@ -441,17 +438,15 @@ arrays) that expose a buffer interface.")
                 "1farz5zfx4cd0c3a0wb9pgfypzw0xxql1j1294z1sxslga1ziyjb"))))
     (build-system gnu-build-system)
     (inputs
-     `(("zlib" ,zlib)
-       ("hwloc" ,hwloc-2 "lib")
-       ("slurm" ,slurm)
+     `(,zlib
+       (,hwloc-2 "lib")
+       ,slurm
        ,@(if (and (not (%current-target-system))
                   (member (%current-system) (package-supported-systems ucx)))
-             `(("ucx" ,ucx))
+             (list ucx)
              '())))
     (native-inputs
-     `(("perl" ,perl)
-       ("which" ,which)
-       ("gfortran" ,gfortran)))
+     (list perl which gfortran))
     (outputs '("out" "debug"))
     (arguments
      `(#:configure-flags
@@ -485,8 +480,7 @@ arrays) that expose a buffer interface.")
                       (substitute* (find-files "." "f77tof90")
                         (("/usr/bin/env") (which "env")))
                       (substitute* (find-files "." "\\.sh$")
-                        (("/bin/sh") (which "sh")))
-                      #t))
+                        (("/bin/sh") (which "sh")))))
                   (add-before 'configure 'fix-makefile
                     (lambda _
                       ;; Remove "@hwloclib@" from 'pmpi_convenience_libs'.
@@ -496,8 +490,30 @@ arrays) that expose a buffer interface.")
                         (("^pmpi_convenience_libs = (.*) @hwloclib@ (.*)$" _
                           before after)
                          (string-append "pmpi_convenience_libs = "
-                                        before " " after)))
-                      #t)))))
+                                        before " " after)))))
+                  (add-before 'configure 'define-gfortran-wrapper
+                    (lambda* (#:key inputs #:allow-other-keys)
+                      ;; 'configure' checks whether the Fortran compiler
+                      ;; allows argument type mismatch.  Since gfortran >= 10
+                      ;; does not, provide a wrapper that passes
+                      ;; '-fallow-argument-mismatch' to get the desired
+                      ;; behavior.
+                      (mkdir-p ".gfortran-wrapper/bin")
+                      (call-with-output-file ".gfortran-wrapper/bin/gfortran"
+                        (lambda (port)
+                          (display (string-append "#!" (which "sh") "\n")
+                                   port)
+                          (display
+                           (string-append "exec \"" (which "gfortran")
+                                          "\" -fallow-argument-mismatch"
+                                          " \"$@\"\n")
+                           port)
+                          (chmod port #o755)))
+
+                      (setenv "PATH"
+                              (string-append (getcwd) "/"
+                                             ".gfortran-wrapper/bin:"
+                                             (getenv "PATH"))))))))
     (home-page "https://www.mpich.org/")
     (synopsis "Implementation of the Message Passing Interface (MPI)")
     (description

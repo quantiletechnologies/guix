@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2014 David Thompson <davet@gnu.org>
 ;;; Copyright © 2015 Cyril Roelandt <tipecaml@gmail.com>
-;;; Copyright © 2015, 2016, 2017, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015-2017, 2019-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2017 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2018 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2019 Maxim Cournoyer <maxim.cournoyer@gmail.com>
@@ -10,6 +10,9 @@
 ;;; Copyright © 2020 Arun Isaac <arunisaac@systemreboot.net>
 ;;; Copyright © 2020 Martin Becze <mjbecze@riseup.net>
 ;;; Copyright © 2021 Xinglu Chen <public@yoctocell.xyz>
+;;; Copyright © 2021 Marius Bakke <marius@gnu.org>
+;;; Copyright © 2022 Vivien Kraus <vivien@planete-kraus.eu>
+;;; Copyright © 2021 Simon Tournier <zimon.toutoune@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -40,6 +43,7 @@
   #:use-module (guix memoization)
   #:use-module (guix diagnostics)
   #:use-module (guix i18n)
+  #:use-module ((guix ui) #:select (display-hint))
   #:use-module ((guix build utils)
                 #:select ((package-name->name+version
                            . hyphen-package-name->name+version)
@@ -58,6 +62,7 @@
             specification->requirement-name
             guix-package->pypi-name
             pypi-recursive-import
+            find-project-url
             pypi->guix-package
             %pypi-updater))
 
@@ -113,7 +118,7 @@
   (url          distribution-url)                  ;string
   (digests      distribution-digests)              ;list of string pairs
   (file-name    distribution-file-name "filename") ;string
-  (has-signature? distribution-has-signature? "hash_sig") ;Boolean
+  (has-signature? distribution-has-signature? "has_sig") ;Boolean
   (package-type distribution-package-type "packagetype") ;"bdist_wheel" | ...
   (python-version distribution-package-python-version
                   "python_version"))
@@ -128,34 +133,39 @@
   missing-source-error?
   (package  missing-source-error-package))
 
-(define (latest-source-release pypi-package)
-  "Return the latest source release for PYPI-PACKAGE."
-  (let ((releases (assoc-ref (pypi-project-releases pypi-package)
-                             (project-info-version
-                              (pypi-project-info pypi-package)))))
+(define (latest-version project)
+  "Return the latest version of PROJECT, a <pypi-project> record."
+  (project-info-version (pypi-project-info project)))
+
+(define* (source-release pypi-package
+                         #:optional (version (latest-version pypi-package)))
+  "Return the source release of VERSION for PYPI-PACKAGE, a <pypi-project>
+record, by default the latest version."
+  (let ((releases (or (assoc-ref (pypi-project-releases pypi-package) version)
+                      '())))
     (or (find (lambda (release)
                 (string=? "sdist" (distribution-package-type release)))
               releases)
         (raise (condition (&missing-source-error
                            (package pypi-package)))))))
 
-(define (latest-wheel-release pypi-package)
+(define* (wheel-release pypi-package
+                        #:optional (version (latest-version pypi-package)))
   "Return the url of the wheel for the latest release of pypi-package,
 or #f if there isn't any."
-  (let ((releases (assoc-ref (pypi-project-releases pypi-package)
-                             (project-info-version
-                              (pypi-project-info pypi-package)))))
-    (or (find (lambda (release)
-                (string=? "bdist_wheel" (distribution-package-type release)))
-              releases)
-        #f)))
+  (let ((releases (assoc-ref (pypi-project-releases pypi-package) version)))
+    (find (lambda (release)
+            (string=? "bdist_wheel" (distribution-package-type release)))
+          releases)))
 
 (define (python->package-name name)
   "Given the NAME of a package on PyPI, return a Guix-compliant name for the
 package."
-  (if (string-prefix? "python-" name)
-      (snake-case name)
-      (string-append "python-" (snake-case name))))
+  (cond
+   ((string-prefix? "python-" name) (snake-case name))
+   ((or (string=? "trytond" name)
+        (string-prefix? "trytond-" name)) (snake-case name))
+   (else (string-append "python-" (snake-case name)))))
 
 (define (guix-package->pypi-name package)
   "Given a Python PACKAGE built from pypi.org, return the name of the
@@ -185,7 +195,7 @@ the input field."
     (()
      '())
     ((package-inputs ...)
-     `((,input-type (,'quasiquote ,package-inputs))))))
+     `((,input-type (list ,@package-inputs))))))
 
 (define %requirement-name-regexp
   ;; Regexp to match the requirement name in a requirement specification.
@@ -404,15 +414,8 @@ return the unaltered list of upstream dependency names."
     (remove (cut string=? "argparse" <>) deps))
 
   (define (requirement->package-name/sort deps)
-    (sort
-     (map (lambda (input)
-            (let ((guix-name (python->package-name input)))
-              (list guix-name (list 'unquote (string->symbol guix-name)))))
-          deps)
-     (lambda args
-       (match args
-         (((a _ ...) (b _ ...))
-          (string-ci<? a b))))))
+    (map string->symbol
+         (sort (map python->package-name deps) string-ci<?)))
 
   (define process-requirements
     (compose requirement->package-name/sort strip-argparse))
@@ -420,6 +423,24 @@ return the unaltered list of upstream dependency names."
   (let ((dependencies (guess-requirements source-url wheel-url archive)))
     (values (map process-requirements dependencies)
             (concatenate dependencies))))
+
+(define (find-project-url name pypi-url)
+  "Try different project name substitution until the result is found in
+pypi-uri.  Downcase is required for \"uWSGI\", and
+underscores are required for flake8-array-spacing."
+  (or (find (cut string-contains pypi-url <>)
+            (list name
+                  (string-downcase name)
+                  (string-replace-substring name "-" "_")))
+      (begin
+        (warning
+         (G_ "project name ~a does not appear verbatim in the PyPI URI~%")
+         name)
+        (display-hint
+         (format #f (G_ "The PyPI URI is: @url{~a}.  You should review the
+pypi-uri declaration in the generated package. You may need to replace ~s with
+a substring of the PyPI URI that identifies the package.")  pypi-url name))
+name)))
 
 (define (make-pypi-sexp name version source-url wheel-url home-page synopsis
                         description license)
@@ -438,9 +459,7 @@ VERSION, SOURCE-URL, HOME-PAGE, SYNOPSIS, DESCRIPTION, and LICENSE."
             (match guix-dependencies
               ((required-inputs native-inputs)
                (when (string-suffix? ".zip" source-url)
-                 (set! native-inputs (cons
-                                     '("unzip" ,unzip)
-                                     native-inputs)))
+                 (set! native-inputs (cons 'unzip native-inputs)))
                (values
                 `(package
                    (name ,(python->package-name name))
@@ -449,15 +468,7 @@ VERSION, SOURCE-URL, HOME-PAGE, SYNOPSIS, DESCRIPTION, and LICENSE."
                     (origin
                       (method url-fetch)
                       (uri (pypi-uri
-                             ;; PyPI URL are case sensitive, but sometimes
-                             ;; a project named using mixed case has a URL
-                             ;; using lower case, so we must work around this
-                             ;; inconsistency.  For actual examples, compare
-                             ;; the URLs of the "Deprecated" and "uWSGI" PyPI
-                             ;; packages.
-                             ,(if (string-contains source-url name)
-                                  name
-                                  (string-downcase name))
+                             ,(find-project-url name source-url)
                              version
                              ;; Some packages have been released as `.zip`
                              ;; instead of the more common `.tar.gz`. For
@@ -474,7 +485,7 @@ VERSION, SOURCE-URL, HOME-PAGE, SYNOPSIS, DESCRIPTION, and LICENSE."
                    ,@(maybe-inputs native-inputs 'native-inputs)
                    (home-page ,home-page)
                    (synopsis ,synopsis)
-                   (description ,description)
+                   (description ,(beautify-description description))
                    (license ,(license->symbol license)))
                 upstream-dependencies))))))))
 
@@ -484,27 +495,43 @@ VERSION, SOURCE-URL, HOME-PAGE, SYNOPSIS, DESCRIPTION, and LICENSE."
      "Fetch the metadata for PACKAGE-NAME from pypi.org, and return the
 `package' s-expression corresponding to that package, or #f on failure."
      (let* ((project (pypi-fetch package-name))
-            (info    (and project (pypi-project-info project))))
-       (and project
-            (guard (c ((missing-source-error? c)
-                       (let ((package (missing-source-error-package c)))
-                         (leave (G_ "no source release for pypi package ~a ~a~%")
-                                (project-info-name info)
-                                (project-info-version info)))))
-              (make-pypi-sexp (project-info-name info)
-                              (project-info-version info)
-                              (and=> (latest-source-release project)
-                                     distribution-url)
-                              (and=> (latest-wheel-release project)
-                                     distribution-url)
-                              (project-info-home-page info)
-                              (project-info-summary info)
-                              (project-info-summary info)
-                              (string->license
-                               (project-info-license info)))))))))
+            (info    (and=> project pypi-project-info))
+            (version (or version (and=> project latest-version))))
+       (if project
+           (guard (c ((missing-source-error? c)
+                      (let ((package (missing-source-error-package c)))
+                        (raise
+                         (apply
+                          make-compound-condition
+                          (formatted-message
+                           (G_ "no source release for pypi package ~a ~a~%")
+                           (project-info-name info) version)
+                          (match (project-info-home-page info)
+                            ((or #f "") '())
+                            (url
+                             (list
+                              (condition
+                               (&fix-hint
+                                (hint (format #f (G_ "This indicates that the
+package is available on PyPI, but only as a \"wheel\" containing binaries, not
+source.  To build it from source, refer to the upstream repository at
+@uref{~a}.")
+                                              url))))))))))))
+             (make-pypi-sexp (project-info-name info) version
+                             (and=> (source-release project version)
+                                    distribution-url)
+                             (and=> (wheel-release project version)
+                                    distribution-url)
+                             (project-info-home-page info)
+                             (project-info-summary info)
+                             (project-info-summary info)
+                             (string->license
+                              (project-info-license info))))
+           (values #f '()))))))
 
-(define (pypi-recursive-import package-name)
+(define* (pypi-recursive-import package-name #:optional version)
   (recursive-import package-name
+                    #:version version
                     #:repo->guix-package pypi->guix-package
                     #:guix-name python->package-name))
 
@@ -537,10 +564,14 @@ VERSION, SOURCE-URL, HOME-PAGE, SYNOPSIS, DESCRIPTION, and LICENSE."
          (guard (c ((missing-source-error? c) #f))
            (let* ((info    (pypi-project-info pypi-package))
                   (version (project-info-version info))
-                  (url     (distribution-url
-                            (latest-source-release pypi-package))))
+                  (dist    (source-release pypi-package))
+                  (url     (distribution-url dist)))
              (upstream-source
               (urls (list url))
+              (signature-urls
+               (if (distribution-has-signature? dist)
+                   (list (string-append url ".asc"))
+                   #f))
               (input-changes
                (changed-inputs package
                                (pypi->guix-package pypi-name)))

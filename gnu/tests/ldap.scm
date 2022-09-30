@@ -58,7 +58,9 @@
                           (guix combinators))))
 
   (define vm
-    (virtual-machine os))
+    (virtual-machine
+     (operating-system os)
+     (memory-size 1024)))
 
   (define test
     (with-imported-modules '((gnu build marionette))
@@ -69,9 +71,7 @@
           (define marionette
             (make-marionette (list #$vm)))
 
-          (mkdir #$output)
-          (chdir #$output)
-
+          (test-runner-current (system-test-runner #$output))
           (test-begin "ldap")
 
           ;; Set up LDAP directory server
@@ -148,8 +148,7 @@ suffix = dc=example,dc=com")))
                               #$(file-append coreutils "/bin/true")))
              marionette))
 
-          (test-end)
-          (exit (= (test-runner-fail-count (test-runner-current)) 0)))))
+          (test-end))))
 
   (gexp->derivation "ldap-test" test))
 

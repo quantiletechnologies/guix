@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2016, 2018, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2016, 2018-2020, 2022 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -18,7 +18,8 @@
 
 (use-modules (gnu tests)
              (gnu packages package-management)
-             ((gnu ci) #:select (channel-source->package))
+             (guix monads)
+             (guix store)
              ((guix git-download) #:select (git-predicate))
              ((guix utils) #:select (current-source-directory))
              (git)
@@ -48,15 +49,19 @@ instance."
   ;; of tests to run in the usual way:
   ;;
   ;;   make check-system TESTS=installed-os
-  (parameterize ((current-guix-package
-                  (channel-source->package source #:commit commit)))
-    (match (getenv "TESTS")
-      (#f
-       (all-system-tests))
-      ((= string-tokenize (tests ...))
-       (filter (lambda (test)
-                 (member (system-test-name test) tests))
-               (all-system-tests))))))
+  (let ((guix (channel-source->package source #:commit commit)))
+    (map (lambda (test)
+           (system-test
+            (inherit test)
+            (value (mparameterize %store-monad ((current-guix-package guix))
+                     (system-test-value test)))))
+         (match (getenv "TESTS")
+           (#f
+            (all-system-tests))
+           ((= string-tokenize (tests ...))
+            (filter (lambda (test)
+                      (member (system-test-name test) tests))
+                    (all-system-tests)))))))
 
 (define (system-test->manifest-entry test)
   "Return a manifest entry for TEST, a system test."

@@ -53,8 +53,7 @@
 
 ;; These are the default inclusion/exclusion regexps for the install phase.
 (define %default-include '("^[^/]*\\.el$" "^[^/]*\\.info$" "^doc/.*\\.info$"))
-(define %default-exclude '("^\\.dir-locals\\.el$" "-pkg\\.el$"
-                           "^[^/]*tests?\\.el$"))
+(define %default-exclude '("^\\.dir-locals\\.el$" "^[^/]*tests?\\.el$"))
 
 (define gnu:unpack (assoc-ref gnu:%standard-phases 'unpack))
 
@@ -111,7 +110,7 @@ environment variable\n" source-directory))
 
 (define* (build #:key outputs inputs #:allow-other-keys)
   "Compile .el files."
-  (let* ((emacs (string-append (assoc-ref inputs "emacs") "/bin/emacs"))
+  (let* ((emacs (search-input-file inputs "/bin/emacs"))
          (out (assoc-ref outputs "out")))
     (setenv "SHELL" "sh")
     (parameterize ((%emacs emacs))
@@ -121,24 +120,10 @@ environment variable\n" source-directory))
   "Substitute the absolute \"/bin/\" directory with the right location in the
 store in '.el' files."
 
-  (define (file-contains-nul-char? file)
-    (call-with-input-file file
-      (lambda (in)
-        (let loop ((line (read-line in 'concat)))
-          (cond
-           ((eof-object? line) #f)
-           ((string-index line #\nul) #t)
-           (else (loop (read-line in 'concat))))))
-      #:binary #t))
-
   (let* ((out (assoc-ref outputs "out"))
          (elpa-name-ver (store-directory->elpa-name-version out))
          (el-dir (string-append out %install-dir "/" elpa-name-ver))
-         ;; (ice-9 regex) uses libc's regexp routines, which cannot deal with
-         ;; strings containing NULs.  Filter out such files.  TODO: Remove
-         ;; this workaround when <https://bugs.gnu.org/30116> is fixed.
-         (el-files (remove file-contains-nul-char?
-                           (find-files (getcwd) "\\.el$"))))
+         (el-files (find-files (getcwd) "\\.el$")))
     (define (substitute-program-names)
       (substitute* el-files
         (("\"/bin/([^.]\\S*)\"" _ cmd-name)
@@ -154,6 +139,79 @@ store in '.el' files."
         (with-fluids ((%default-port-encoding "ISO-8859-1"))
           (substitute-program-names))))
     #t))
+
+(define (find-root-library-file name)
+  (let loop ((parts (string-split
+                     (package-name-version->elpa-name-version name) #\-))
+             (candidate ""))
+    (cond
+     ;; at least one version part is given, so we don't terminate "early"
+     ((null? parts) #f)
+     ((string-null? candidate) (loop (cdr parts) (car parts)))
+     ((file-exists? (string-append candidate ".el")) candidate)
+     (else
+      (loop (cdr parts) (string-append candidate "-" (car parts)))))))
+
+(define* (ensure-package-description #:key outputs #:allow-other-keys)
+  (define (write-pkg-file name)
+    (define summary-regexp
+      "^;;; [^ ]*\\.el ---[ \t]*\\(.*?\\)[ \t]*\\(-\\*-.*-\\*-[ \t]*\\)?$")
+    (define %write-pkg-file-form
+      `(progn
+        (require 'lisp-mnt)
+        (require 'package)
+
+        (defun build-package-desc-from-library (name)
+          (package-desc-from-define
+           name
+           ;; Workaround for malformed version string (for example "24 (beta)"
+           ;; in paredit.el), try to parse version obtained by lm-version,
+           ;; before trying to create package-desc.  Otherwise the whole process
+           ;; of generation -pkg.el will fail.
+           (condition-case
+            nil
+            (let ((version (lm-version)))
+              ;; raises an error if version is invalid
+              (and (version-to-list version) version))
+            (error "0.0.0"))
+           (or (save-excursion
+                (goto-char (point-min))
+                (and (re-search-forward ,summary-regexp nil t)
+                     (match-string-no-properties 1)))
+               package--default-summary)
+           (let ((require-lines (lm-header-multiline "package-requires")))
+             (and require-lines
+                  (package--prepare-dependencies
+                   (package-read-from-string
+                    (mapconcat 'identity require-lines " ")))))
+           :kind       'single
+           :url        (lm-homepage)
+           :keywords   (lm-keywords-list)
+           :maintainer (lm-maintainer)
+           :authors    (lm-authors)))
+
+        (defun generate-package-description-file (name)
+          (package-generate-description-file
+           (build-package-desc-from-library name)
+           (concat name "-pkg.el")))
+
+        (condition-case
+         err
+         (let ((name (file-name-base (buffer-file-name))))
+           (generate-package-description-file name)
+           (message (concat name "-pkg.el file generated.")))
+         (error
+          (message "There are some errors during generation of -pkg.el file:")
+          (message "%s" (error-message-string err))))))
+
+    (unless (file-exists? (string-append name "-pkg.el"))
+      (emacs-batch-edit-file (string-append name ".el")
+        %write-pkg-file-form)))
+
+  (let* ((out (assoc-ref outputs "out"))
+         (elpa-name-ver (store-directory->elpa-name-version out)))
+    (with-directory-excursion (elpa-directory out)
+      (and=> (find-root-library-file elpa-name-ver) write-pkg-file))))
 
 (define* (check #:key tests? (test-command '("make" "check"))
                 (parallel-tests? #t) #:allow-other-keys)
@@ -234,7 +292,7 @@ parallel. PARALLEL-TESTS? is ignored when using a non-make TEST-COMMAND."
 
 (define* (make-autoloads #:key outputs inputs #:allow-other-keys)
   "Generate the autoloads file."
-  (let* ((emacs (string-append (assoc-ref inputs "emacs") "/bin/emacs"))
+  (let* ((emacs (search-input-file inputs "/bin/emacs"))
          (out (assoc-ref outputs "out"))
          (elpa-name-ver (store-directory->elpa-name-version out))
          (elpa-name (package-name->name+version elpa-name-ver))
@@ -294,8 +352,10 @@ for libraries following the ELPA convention."
     (add-after 'make-autoloads 'enable-autoloads-compilation
       enable-autoloads-compilation)
     (add-after 'enable-autoloads-compilation 'patch-el-files patch-el-files)
+    (add-after 'patch-el-files 'ensure-package-description
+      ensure-package-description)
     ;; The .el files are byte compiled directly in the store.
-    (add-after 'patch-el-files 'build build)
+    (add-after 'ensure-package-description 'build build)
     (add-after 'build 'validate-compiled-autoloads validate-compiled-autoloads)
     (add-after 'validate-compiled-autoloads 'move-doc move-doc)))
 

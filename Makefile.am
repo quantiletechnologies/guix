@@ -1,5 +1,5 @@
 # GNU Guix --- Functional package management for GNU
-# Copyright © 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+# Copyright © 2012-2022 Ludovic Courtès <ludo@gnu.org>
 # Copyright © 2013 Andreas Enge <andreas@enge.fr>
 # Copyright © 2015, 2017 Alex Kost <alezost@gmail.com>
 # Copyright © 2016, 2018 Mathieu Lirzin <mthl@gnu.org>
@@ -81,6 +81,7 @@ MODULES =					\
   guix/base64.scm				\
   guix/ci.scm					\
   guix/cpio.scm					\
+  guix/cpu.scm					\
   guix/deprecation.scm				\
   guix/docker.scm	   			\
   guix/records.scm				\
@@ -96,9 +97,9 @@ MODULES =					\
   guix/discovery.scm				\
   guix/android-repo-download.scm		\
   guix/bzr-download.scm            		\
-  guix/extracting-download.scm			\
   guix/git-download.scm				\
   guix/hg-download.scm				\
+  guix/hash.scm					\
   guix/swh.scm					\
   guix/monads.scm				\
   guix/monad-repl.scm				\
@@ -128,16 +129,26 @@ MODULES =					\
   guix/cache.scm				\
   guix/cve.scm					\
   guix/workers.scm				\
+  guix/least-authority.scm			\
+  guix/read-print.scm				\
   guix/ipfs.scm					\
+  guix/platform.scm                             \
+  guix/platforms/arm.scm                        \
+  guix/platforms/mips.scm                       \
+  guix/platforms/powerpc.scm                    \
+  guix/platforms/riscv.scm                      \
+  guix/platforms/x86.scm                        \
   guix/build-system.scm				\
   guix/build-system/android-ndk.scm		\
   guix/build-system/ant.scm			\
   guix/build-system/cargo.scm			\
+  guix/build-system/channel.scm			\
   guix/build-system/chicken.scm			\
   guix/build-system/clojure.scm			\
   guix/build-system/cmake.scm			\
   guix/build-system/dub.scm			\
   guix/build-system/dune.scm			\
+  guix/build-system/elm.scm			\
   guix/build-system/emacs.scm			\
   guix/build-system/font.scm			\
   guix/build-system/go.scm			\
@@ -162,6 +173,7 @@ MODULES =					\
   guix/build-system/waf.scm			\
   guix/build-system/r.scm			\
   guix/build-system/rakudo.scm			\
+  guix/build-system/rebar.scm			\
   guix/build-system/ruby.scm			\
   guix/build-system/scons.scm			\
   guix/build-system/texlive.scm			\
@@ -189,6 +201,7 @@ MODULES =					\
   guix/build/cmake-build-system.scm		\
   guix/build/dub-build-system.scm		\
   guix/build/dune-build-system.scm		\
+  guix/build/elm-build-system.scm		\
   guix/build/emacs-build-system.scm		\
   guix/build/meson-build-system.scm		\
   guix/build/minify-build-system.scm		\
@@ -215,6 +228,7 @@ MODULES =					\
   guix/build/r-build-system.scm			\
   guix/build/renpy-build-system.scm			\
   guix/build/rakudo-build-system.scm		\
+  guix/build/rebar-build-system.scm		\
   guix/build/ruby-build-system.scm		\
   guix/build/scons-build-system.scm		\
   guix/build/texlive-build-system.scm		\
@@ -229,7 +243,6 @@ MODULES =					\
   guix/build/union.scm				\
   guix/build/profiles.scm			\
   guix/build/compile.scm			\
-  guix/build/rpath.scm				\
   guix/build/cvs.scm				\
   guix/build/svn.scm				\
   guix/build/syscalls.scm                       \
@@ -240,6 +253,7 @@ MODULES =					\
   guix/build/emacs-utils.scm			\
   guix/build/java-utils.scm			\
   guix/build/lisp-utils.scm			\
+  guix/build/meson-configuration.scm		\
   guix/build/maven/java.scm			\
   guix/build/maven/plugin.scm			\
   guix/build/maven/pom.scm			\
@@ -254,6 +268,7 @@ MODULES =					\
   guix/import/cran.scm				\
   guix/import/crate.scm				\
   guix/import/egg.scm   			\
+  guix/import/elm.scm				\
   guix/import/elpa.scm   			\
   guix/import/gem.scm				\
   guix/import/git.scm                           \
@@ -262,6 +277,7 @@ MODULES =					\
   guix/import/gnu.scm				\
   guix/import/go.scm				\
   guix/import/hackage.scm			\
+  guix/import/hexpm.scm				\
   guix/import/json.scm				\
   guix/import/kde.scm				\
   guix/import/launchpad.scm   			\
@@ -294,21 +310,26 @@ MODULES =					\
   guix/scripts/refresh.scm			\
   guix/scripts/repl.scm				\
   guix/scripts/describe.scm			\
+  guix/scripts/style.scm			\
   guix/scripts/system.scm			\
-  guix/scripts/system/search.scm		\
+  guix/scripts/system/edit.scm			\
   guix/scripts/system/reconfigure.scm		\
+  guix/scripts/system/search.scm		\
   guix/scripts/home.scm			\
+  guix/scripts/home/edit.scm			\
   guix/scripts/home/import.scm			\
   guix/scripts/lint.scm				\
   guix/scripts/challenge.scm			\
   guix/scripts/import/crate.scm			\
   guix/scripts/import/cran.scm			\
   guix/scripts/import/egg.scm   		\
+  guix/scripts/import/elm.scm			\
   guix/scripts/import/elpa.scm  		\
   guix/scripts/import/gem.scm			\
   guix/scripts/import/gnu.scm			\
   guix/scripts/import/go.scm			\
   guix/scripts/import/hackage.scm		\
+  guix/scripts/import/hexpm.scm			\
   guix/scripts/import/json.scm  		\
   guix/scripts/import/minetest.scm  		\
   guix/scripts/import/opam.scm			\
@@ -316,6 +337,7 @@ MODULES =					\
   guix/scripts/import/stackage.scm		\
   guix/scripts/import/texlive.scm  		\
   guix/scripts/environment.scm			\
+  guix/scripts/shell.scm			\
   guix/scripts/publish.scm			\
   guix/scripts/edit.scm				\
   guix/scripts/size.scm				\
@@ -375,10 +397,14 @@ AUX_FILES =						\
   gnu/packages/aux-files/chromium/master-preferences.json		\
   gnu/packages/aux-files/emacs/guix-emacs.el		\
   gnu/packages/aux-files/guix.vim			\
-  gnu/packages/aux-files/linux-libre/5.14-arm.conf	\
-  gnu/packages/aux-files/linux-libre/5.14-arm64.conf	\
-  gnu/packages/aux-files/linux-libre/5.14-i686.conf	\
-  gnu/packages/aux-files/linux-libre/5.14-x86_64.conf	\
+  gnu/packages/aux-files/linux-libre/5.18-arm.conf	\
+  gnu/packages/aux-files/linux-libre/5.18-arm64.conf	\
+  gnu/packages/aux-files/linux-libre/5.18-i686.conf	\
+  gnu/packages/aux-files/linux-libre/5.18-x86_64.conf	\
+  gnu/packages/aux-files/linux-libre/5.15-arm.conf	\
+  gnu/packages/aux-files/linux-libre/5.15-arm64.conf	\
+  gnu/packages/aux-files/linux-libre/5.15-i686.conf	\
+  gnu/packages/aux-files/linux-libre/5.15-x86_64.conf	\
   gnu/packages/aux-files/linux-libre/5.10-arm.conf	\
   gnu/packages/aux-files/linux-libre/5.10-arm64.conf	\
   gnu/packages/aux-files/linux-libre/5.10-i686.conf	\
@@ -396,9 +422,10 @@ AUX_FILES =						\
   gnu/packages/aux-files/linux-libre/4.14-x86_64.conf	\
   gnu/packages/aux-files/linux-libre/4.9-i686.conf	\
   gnu/packages/aux-files/linux-libre/4.9-x86_64.conf	\
-  gnu/packages/aux-files/linux-libre/4.4-i686.conf	\
-  gnu/packages/aux-files/linux-libre/4.4-x86_64.conf	\
   gnu/packages/aux-files/pack-audit.c			\
+  gnu/packages/aux-files/python/sanity-check.py		\
+  gnu/packages/aux-files/python/sitecustomize.py	\
+  gnu/packages/aux-files/renpy/renpy.in	\
   gnu/packages/aux-files/run-in-namespace.c
 
 # Templates, examples.
@@ -447,6 +474,7 @@ SCM_TESTS =					\
   tests/boot-parameters.scm			\
   tests/bournish.scm				\
   tests/builders.scm				\
+  tests/build-emacs-utils.scm			\
   tests/build-utils.scm			\
   tests/cache.scm				\
   tests/challenge.scm				\
@@ -462,6 +490,7 @@ SCM_TESTS =					\
   tests/derivations.scm			\
   tests/discovery.scm				\
   tests/egg.scm				\
+  tests/elm.scm				\
   tests/elpa.scm				\
   tests/file-systems.scm			\
   tests/gem.scm				\
@@ -474,7 +503,11 @@ SCM_TESTS =					\
   tests/graph.scm				\
   tests/gremlin.scm				\
   tests/hackage.scm				\
+  tests/home-import.scm				\
+  tests/home-services.scm			\
+  tests/http-client.scm				\
   tests/import-git.scm				\
+  tests/import-github.scm			\
   tests/import-utils.scm			\
   tests/inferior.scm				\
   tests/lint.scm				\
@@ -493,6 +526,7 @@ SCM_TESTS =					\
   tests/profiles.scm				\
   tests/publish.scm				\
   tests/pypi.scm				\
+  tests/read-print.scm				\
   tests/records.scm				\
   tests/scripts.scm				\
   tests/search-paths.scm			\
@@ -512,6 +546,7 @@ SCM_TESTS =					\
   tests/swh.scm				\
   tests/syscalls.scm				\
   tests/system.scm				\
+  tests/style.scm				\
   tests/texlive.scm				\
   tests/transformations.scm			\
   tests/ui.scm					\
@@ -546,12 +581,15 @@ SH_TESTS =					\
   tests/guix-package.sh				\
   tests/guix-package-aliases.sh			\
   tests/guix-package-net.sh			\
+  tests/guix-style.sh				\
   tests/guix-system.sh				\
   tests/guix-home.sh				\
   tests/guix-archive.sh				\
   tests/guix-authenticate.sh			\
   tests/guix-environment.sh			\
   tests/guix-environment-container.sh		\
+  tests/guix-shell.sh				\
+  tests/guix-shell-export-manifest.sh		\
   tests/guix-graph.sh				\
   tests/guix-describe.sh			\
   tests/guix-repl.sh     			\
@@ -633,6 +671,7 @@ EXTRA_DIST +=						\
   etc/release-manifest.scm				\
   etc/source-manifest.scm				\
   etc/system-tests.scm					\
+  etc/time-travel-manifest.scm				\
   etc/historical-authorizations				\
   build-aux/build-self.scm				\
   build-aux/compile-all.scm				\
@@ -646,16 +685,18 @@ EXTRA_DIST +=						\
   build-aux/update-guix-package.scm			\
   build-aux/update-NEWS.scm				\
   tests/test.drv					\
-  tests/signing-key.pub					\
-  tests/signing-key.sec					\
   tests/cve-sample.json					\
-  tests/civodul.key					\
-  tests/rsa.key						\
-  tests/dsa.key						\
-  tests/ed25519.key					\
-  tests/ed25519.sec					\
-  tests/ed25519bis.key					\
-  tests/ed25519bis.sec					\
+  tests/keys/signing-key.pub				\
+  tests/keys/signing-key.sec				\
+  tests/keys/civodul.pub				\
+  tests/keys/rsa.pub					\
+  tests/keys/dsa.pub					\
+  tests/keys/ed25519.pub				\
+  tests/keys/ed25519.sec				\
+  tests/keys/ed25519-2.pub				\
+  tests/keys/ed25519-2.sec				\
+  tests/keys/ed25519-3.pub				\
+  tests/keys/ed25519-3.sec				\
   build-aux/config.rpath				\
   bootstrap						\
   doc/build.scm						\
@@ -936,25 +977,21 @@ release: dist-with-updated-version all
 	  mv "guix-binary.$$system.tar.xz"					\
 	      "$(releasedir)/guix-binary-$(PACKAGE_VERSION).$$system.tar.xz" ;	\
 	done
-# Bump the Guix package version and build it (again).
-	GUIX_ALLOW_ME_TO_USE_PRIVATE_COMMIT=yes \
-	$(top_builddir)/pre-inst-env "$(GUILE)"	\
-		$(top_srcdir)/build-aux/update-guix-package.scm	\
-		"`git rev-parse HEAD`"
-	git add $(top_srcdir)/gnu/packages/package-management.scm
-	git commit -m "gnu: guix: Update to `git rev-parse HEAD | cut -c1-7`."
-	$(top_builddir)/pre-inst-env guix build guix			\
+# Build 'current-guix' to speed things up for the next step.
+	$(top_builddir)/pre-inst-env guix build				\
+	      -e '((@ (gnu packages package-management) current-guix))'	\
 	      $(call system_flags,$(GUIX_SYSTEM_SUPPORTED_SYSTEMS))	\
 	      -v1 --no-grafts --fallback
 # Generate the ISO installation images.
 	for system in $(GUIX_SYSTEM_SUPPORTED_SYSTEMS) ; do				\
+	  GUIX_DISPLAYED_VERSION="`git describe --match=v* | sed -'es/^v//v'`" ;	\
 	  image=`$(top_builddir)/pre-inst-env						\
-	    guix system image -t iso9660                                           	\
+	    guix system image -t iso9660						\
 	    --label="GUIX_$${system}_$(VERSION)"					\
             --system=$$system --fallback						\
 	    gnu/system/install.scm` ;							\
 	  if [ ! -f "$$image" ] ; then							\
-	    echo "failed to produced Guix installation image for $$system" >&2 ;	\
+	    echo "failed to produce Guix installation image for $$system" >&2 ;		\
 	    exit 1 ;									\
 	  fi ;										\
 	  cp "$$image" "$(releasedir)/$(GUIX_SYSTEM_IMAGE_BASE).$$system.iso.tmp" ;	\
@@ -963,13 +1000,14 @@ release: dist-with-updated-version all
 	done
 # Generate the VM images.
 	for system in $(GUIX_SYSTEM_VM_SYSTEMS) ; do					\
+	  GUIX_DISPLAYED_VERSION="`git describe --match=v* | sed -'es/^v//v'`" ;	\
 	  image=`$(top_builddir)/pre-inst-env						\
 	    guix system image -t qcow2 $(GUIX_SYSTEM_VM_IMAGE_FLAGS)			\
 	    --save-provenance								\
 	    --system=$$system --fallback						\
 	    gnu/system/examples/vm-image.tmpl` ;					\
 	  if [ ! -f "$$image" ] ; then							\
-	    echo "failed to produced Guix VM image for $$system" >&2 ;			\
+	    echo "failed to produce Guix VM image for $$system" >&2 ;			\
 	    exit 1 ;									\
 	  fi ;										\
 	  cp "$$image" "$(releasedir)/$(GUIX_SYSTEM_VM_IMAGE_BASE).$$system.qcow2";	\
@@ -1009,10 +1047,12 @@ assert-no-store-file-names:
 	  exit 1 ;								\
 	fi
 
-# Make sure important substitutes are available.
+# Make sure important substitutes are available.  Check only the primary
+# server so that '--display-missing' doesn't print two lists.
 assert-binaries-available: $(GOBJECTS)
 	$(AM_V_at)$(top_builddir)/pre-inst-env				\
 	  guix weather -m "$(top_srcdir)/etc/release-manifest.scm"	\
+	                --substitute-urls="https://ci.guix.gnu.org"	\
 	                --display-missing
 
 # Make sure the final inputs don't refer to bootstrap tools.
@@ -1048,20 +1088,34 @@ WEBLATE_REPO = https://framagit.org/tyreunom/guix-translations
 # form.
 download-po:
 	dir=$$(mktemp -d); \
-	git clone --depth 1 "$(WEBLATE_REPO)" "$$dir/translations"; \
+	git clone --depth 1 "$(WEBLATE_REPO)" "$$dir/translations" && \
 	for domain in po/doc po/guix po/packages; do \
 	    for po in "$$dir/translations/$$domain"/*.po; do \
 	        translated=$$(LANG=en_US.UTF-8 msgfmt --statistics "$$po" 2>&1 | cut -f1 -d' '); \
+	        untranslated=$$(LANG=en_US.UTF-8 msgfmt --statistics "$$po" 2>&1 | rev | cut -f3 -d' ' | rev); \
+	        untranslated=$${untranslated:-0}; \
+	        total=$$(($$translated+$$untranslated)); \
 	        target=$$(basename "$$po"); \
 	        target="$$domain/$$target"; \
-	        if msgfmt -c "$$po" && [ "$$translated" != "0" ]; then \
+	        msgfmt -c "$$po"; \
+	        if msgfmt -c "$$po" && [ "$$translated" != "0" ] && ([ "$$domain" != "po/doc" ] || [ "$$translated" -gt $$(($$total/10)) ] || [ -f $$target ]); then \
 	            msgfilter --no-wrap -i "$$po" cat > "$$po".tmp; \
 	            mv "$$po".tmp "$$target"; \
 	            echo "copied $$target."; \
 	        else \
-	            echo "WARN: $$target ($$translated translated messages) was not added/updated."; \
+	            echo "WARN: $$target ($$translated translated messages ($$((translated/total*100))%)) was not added/updated."; \
 	        fi; \
 	    done; \
+	done; \
+	for po in po/doc/*.po; do \
+	    translated=$$(LANG=en_US.UTF-8 msgfmt --statistics "$$po" 2>&1 | cut -f1 -d' '); \
+	    untranslated=$$(LANG=en_US.UTF-8 msgfmt --statistics "$$po" 2>&1 | rev | cut -f3 -d' ' | rev); \
+	    untranslated=$${untranslated:-0}; \
+	    total=$$(($$translated + $$untranslated)); \
+	    if [ "$$translated" -lt "$$(($$total/20))" ]; then \
+	        echo "WARN: $$po was removed because it is below the 5% threshold: $$((translated/total*100))%"; \
+	        rm $$po; \
+	    fi; \
 	done; \
 	rm -rf "$$dir"
 .PHONY: download-po

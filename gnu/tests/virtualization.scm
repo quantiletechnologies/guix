@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2017 Christopher Baines <mail@cbaines.net>
-;;; Copyright © 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2020-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2021 Pierre Langlois <pierre.langlois@gmx.com>
 ;;;
@@ -31,12 +31,13 @@
   #:use-module (gnu services dbus)
   #:use-module (gnu services networking)
   #:use-module (gnu services virtualization)
-  #:use-module (gnu packages virtualization)
   #:use-module (gnu packages ssh)
+  #:use-module (gnu packages virtualization)
   #:use-module (guix gexp)
   #:use-module (guix records)
   #:use-module (guix store)
   #:export (%test-libvirt
+            %test-qemu-guest-agent
             %test-childhurd))
 
 
@@ -73,9 +74,7 @@
           (define marionette
             (make-marionette (list #$vm)))
 
-          (mkdir #$output)
-          (chdir #$output)
-
+          (test-runner-current (system-test-runner #$output))
           (test-begin "libvirt")
 
           (test-assert "service running"
@@ -107,8 +106,7 @@
                          "-c" "qemu:///system" "connect"))
              marionette))
 
-          (test-end)
-          (exit (= (test-runner-fail-count (test-runner-current)) 0)))))
+          (test-end))))
 
   (gexp->derivation "libvirt-test" test))
 
@@ -117,6 +115,89 @@
    (name "libvirt")
    (description "Connect to the running LIBVIRT service.")
    (value (run-libvirt-test))))
+
+
+;;;
+;;; QEMU Guest Agent service.
+;;;
+
+(define %qemu-guest-agent-os
+  (simple-operating-system
+   (service qemu-guest-agent-service-type)))
+
+(define (run-qemu-guest-agent-test)
+  "Run tests in %QEMU-GUEST-AGENT-OS."
+  (define os
+    (marionette-operating-system
+     %qemu-guest-agent-os
+     #:imported-modules '((gnu services herd))))
+
+  (define vm
+    (virtual-machine
+     (operating-system os)
+     (port-forwardings '())))
+
+  (define test
+    (with-imported-modules '((gnu build marionette))
+      #~(begin
+          (use-modules (gnu build marionette)
+                       (ice-9 rdelim)
+                       (srfi srfi-64))
+
+          (define marionette
+            ;; Ensure we look for the socket in the correct place below.
+            (make-marionette (list #$vm) #:socket-directory "/tmp"))
+
+          (define* (try-read port #:optional (attempts 10))
+            ;; Try reading from a port several times before giving up.
+            (cond ((char-ready? port)
+                   (let ((response (read-line port)))
+                     (close-port port)
+                     response))
+                  ((> attempts 1)
+                   (sleep 1)
+                   (try-read port (- attempts 1)))
+                  (else "")))
+
+          (define (run command)
+            ;; Run a QEMU guest agent command and return the response.
+            (let ((s (socket PF_UNIX SOCK_STREAM 0)))
+              (connect s AF_UNIX "/tmp/qemu-ga")
+              (display command s)
+              (try-read s)))
+
+          (test-runner-current (system-test-runner #$output))
+          (test-begin "qemu-guest-agent")
+
+          (test-assert "service running"
+            (marionette-eval
+             '(begin
+                (use-modules (gnu services herd))
+                (match (start-service 'qemu-guest-agent)
+                  (#f #f)
+                  (('service response-parts ...)
+                   (match (assq-ref response-parts 'running)
+                     ((pid) (number? pid))))))
+             marionette))
+
+          (test-equal "ping guest"
+            "{\"return\": {}}"
+            (run "{\"execute\": \"guest-ping\"}"))
+
+          (test-assert "get network interfaces"
+            (string-contains
+             (run "{\"execute\": \"guest-network-get-interfaces\"}")
+             "127.0.0.1"))
+
+          (test-end))))
+
+  (gexp->derivation "qemu-guest-agent-test" test))
+
+(define %test-qemu-guest-agent
+  (system-test
+   (name "qemu-guest-agent")
+   (description "Run commands in a virtual machine using QEMU guest agent.")
+   (value (run-qemu-guest-agent-test))))
 
 
 ;;;
@@ -154,8 +235,8 @@
      (operating-system os)
      (memory-size (* 1024 3))))
 
-  (define run-uname-over-ssh
-    ;; Program that runs 'uname' over SSH and prints the result on standard
+  (define (run-command-over-ssh . command)
+    ;; Program that runs COMMAND over SSH and prints the result on standard
     ;; output.
     (let ()
       (define run
@@ -176,12 +257,12 @@
                    (userauth-password! session "")
                    (display
                     (get-string-all
-                     (open-remote-input-pipe* session "uname" "-on"))))
+                     (open-remote-input-pipe* session #$@command))))
                   (status
                    (error "could not connect to childhurd over SSH"
                           session status)))))))
 
-      (program-file "run-uname-over-ssh" run)))
+      (program-file "run-command-over-ssh" run)))
 
   (define test
     (with-imported-modules '((gnu build marionette))
@@ -193,9 +274,7 @@
           (define marionette
             (make-marionette (list #$vm)))
 
-          (mkdir #$output)
-          (chdir #$output)
-
+          (test-runner-current (system-test-runner #$output))
           (test-begin "childhurd")
 
           (test-assert "service running"
@@ -247,11 +326,28 @@
                 (use-modules (ice-9 popen))
 
                 (get-string-all
-                 (open-input-pipe #$run-uname-over-ssh)))
+                 (open-input-pipe #$(run-command-over-ssh "uname" "-on"))))
              marionette))
 
-          (test-end)
-          (exit (= (test-runner-fail-count (test-runner-current)) 0)))))
+          (test-assert "guix-daemon up and running"
+            (let ((drv (marionette-eval
+                        '(begin
+                           (use-modules (ice-9 popen))
+
+                           (get-string-all
+                            (open-input-pipe
+                             #$(run-command-over-ssh "guix" "build" "coreutils"
+                                                     "--no-grafts" "-d"))))
+                        marionette)))
+              ;; We cannot compare the .drv with (raw-derivation-file
+              ;; coreutils) on the host: they may differ due to fixed-output
+              ;; derivations and changes introduced compared to the 'guix'
+              ;; package snapshot.
+              (and (string-suffix? ".drv"
+                                   (pk 'drv (string-trim-right drv)))
+                   drv)))
+
+          (test-end))))
 
   (gexp->derivation "childhurd-test" test))
 

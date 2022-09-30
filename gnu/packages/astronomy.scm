@@ -1,11 +1,14 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2016 John Darrington <jmd@gnu.org>
-;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
-;;; Copyright © 2018, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2018–2022 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2018, 2019, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2019 by Amar Singh <nly@disroot.org>
 ;;; Copyright © 2020 R Veera Kumar <vkor@vkten.in>
 ;;; Copyright © 2020, 2021 Guillaume Le Vaillant <glv@posteo.net>
-;;; Copyright © 2021 Sharlatan Hellseher <sharlatanus@gmail.com>
+;;; Copyright © 2021, 2022 Sharlatan Hellseher <sharlatanus@gmail.com>
+;;; Copyright © 2021, 2022 Vinicius Monego <monego@posteo.net>
+;;; Copyright © 2021 Greg Hogan <code@greghogan.com>
+;;; Copyright © 2021 Foo Chuan Wei <chuanwei.foo@hotmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -23,18 +26,17 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages astronomy)
-  #:use-module (guix packages)
   #:use-module ((guix licenses) #:prefix license:)
-  #:use-module (guix download)
-  #:use-module (guix git-download)
-  #:use-module (guix utils)
-  #:use-module (gnu packages)
   #:use-module (gnu packages algebra)
   #:use-module (gnu packages autotools)
+  #:use-module (gnu packages bison)
+  #:use-module (gnu packages boost)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages curl)
+  #:use-module (gnu packages flex)
   #:use-module (gnu packages fontutils)
+  #:use-module (gnu packages gcc)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages gl)
   #:use-module (gnu packages glib)
@@ -44,24 +46,251 @@
   #:use-module (gnu packages libusb)
   #:use-module (gnu packages lua)
   #:use-module (gnu packages maths)
+  #:use-module (gnu packages ncurses)
   #:use-module (gnu packages netpbm)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages pretty-print)
+  #:use-module (gnu packages python)
+  #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-check)
   #:use-module (gnu packages python-crypto)
   #:use-module (gnu packages python-science)
+  #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages qt)
+  #:use-module (gnu packages readline)
+  #:use-module (gnu packages time)
   #:use-module (gnu packages version-control)
   #:use-module (gnu packages video)
+  #:use-module (gnu packages wxwidgets)
   #:use-module (gnu packages xiph)
+  #:use-module (gnu packages xml)
   #:use-module (gnu packages xorg)
+  #:use-module (gnu packages)
   #:use-module (guix build-system cmake)
+  #:use-module (guix build-system copy)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system python)
+  #:use-module (guix download)
+  #:use-module (guix gexp)
+  #:use-module (guix git-download)
+  #:use-module (guix packages)
+  #:use-module (guix utils)
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1))
+
+(define-public aocommon
+  (let ((commit "7329a075271edab8f6264db649e81e62b2b6ae5e")
+        (revision "1"))
+    (package
+      (name "aocommon")
+      (version (git-version "0.0.0" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://gitlab.com/aroffringa/aocommon")
+               (commit commit)))
+         (sha256
+          (base32 "0qcfax6pbzs0yigy0x8xibrkk539wm2pbvjsb4lh50fybir02nix"))
+         (file-name (git-file-name name version))))
+      (build-system copy-build-system)
+      (arguments
+       (list #:install-plan
+             #~'(("include/aocommon" "include/aocommon"))))
+      (home-page "https://gitlab.com/aroffringa/aocommon")
+      (synopsis "Collection of functionality that is reused in astronomical applications")
+      (description
+       "This package provides source-only AOCommon collection of functionality that is
+reused in several astronomical applications, such as @code{wsclean},
+@code{aoflagger}, @code{DP3} and @code{everybeam}.")
+      (license license:gpl3+))))
+
+(define-public calceph
+  (package
+    (name "calceph")
+    (version  "3.5.1")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append
+             "https://www.imcce.fr/content/medias/recherche/equipes/asd/calceph/calceph-"
+             version ".tar.gz"))
+       (sha256
+        (base32 "078wn773pwf4pg9m0h0l00g4aq744pq1rb6kz6plgdpzp3hhpk1k"))))
+    (build-system gnu-build-system)
+    (native-inputs
+     (list gfortran))
+    (home-page "https://www.imcce.fr/inpop/calceph")
+    (properties `((release-monitoring-url . ,home-page)))
+    (synopsis "Astronomical library to access the binary planetary ephemeris files")
+    (description
+     "The CALCEPH Library is designed to access the binary planetary ephemeris files,
+such INPOPxx and JPL DExxx ephemeris files, (called @code{original JPL binary} or
+@code{INPOP 2.0 or 3.0 binary} ephemeris files in the next sections) and the SPICE
+kernel files (called @code{SPICE} ephemeris files in the next sections).  At the
+moment, supported SPICE files are:
+
+@itemize
+@item text Planetary Constants Kernel (KPL/PCK) files;
+@item binary PCK (DAF/PCK) files;
+@item binary SPK (DAF/SPK) files containing segments of type 1, 2, 3, 5, 8, 9,
+12, 13, 17, 18, 19, 20, 21, 102, 103 and 120;
+@item meta kernel (KPL/MK) files;
+@item frame kernel (KPL/FK) files (only basic support).
+@end itemize\n")
+    (license license:cecill)))
+
+(define-public aoflagger
+  (package
+    (name "aoflagger")
+    (version "3.2.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://gitlab.com/aroffringa/aoflagger")
+             (commit (string-append "v" version))))
+       (sha256
+        (base32 "1dcbfrbiybhpbypna2xhddx1wk7yifh38ha2r6p5rzsikzwlsin1"))
+       (patches
+        (search-patches "aoflagger-use-system-provided-pybind11.patch"))
+       (file-name (git-file-name name version))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      ;; XXX: Tests require external files download from
+      ;; https://www.astron.nl/citt/ci_data/aoflagger/
+      ;; FIXME: runtest is not found
+      #:tests? #f
+      #:configure-flags
+      #~(list (string-append "-DCASACORE_ROOT_DIR="
+                             #$(this-package-input "casacore")))
+      #:phases
+      #~(modify-phases %standard-phases
+          ;; aocommon and pybind11 are expected to be found as git submodules,
+          ;; link them before build.
+          (add-after 'unpack 'link-submodule-package
+            (lambda _
+              (rmdir "external/aocommon")
+              (symlink #$(this-package-native-input "aocommon")
+                       (string-append (getcwd) "/external/aocommon")))))))
+    (native-inputs
+     (list aocommon
+           boost
+           pkg-config
+           python
+           pybind11))
+    (inputs
+     (list casacore
+           cfitsio
+           fftw
+           gsl
+           gtkmm-3
+           hdf5
+           lapack
+           libpng
+           libsigc++
+           libxml2
+           lua
+           openblas
+           zlib))
+    (home-page "https://gitlab.com/aroffringa/aoflagger")
+    (synopsis "Astronomical tool that can find and remove radio-frequency interference")
+    (description
+     "AOFlagger is a tool that can find and remove radio-frequency
+interference (RFI) in radio astronomical observations.  It can make use of Lua
+scripts to make flagging strategies flexible, and the tools are applicable to a
+wide set of telescopes.")
+    (license license:gpl3+)))
+
+(define-public casacore
+  (package
+    (name "casacore")
+    (version "3.4.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/casacore/casacore")
+             (commit (string-append "v" version))))
+       (sha256
+        (base32
+         "05ar5gykgh4dm826xplj5ri5rw7znhxrvin2l67a3mjwfys7r2a0"))
+       (file-name (git-file-name name version))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      ;; Note: There are multiple failures in
+      ;; tests which require additional measures data. They are
+      ;; distributed via FTP without any license:
+      ;; ftp://ftp.astron.nl/outgoing/Measures/
+      ;; TODO: Check how to fix tests.
+      #:tests? #f
+      #:parallel-build? #t
+      #:configure-flags
+      #~(list "-DBUILD_PYTHON3=ON"
+              "-DBUILD_PYTHON=OFF"
+              "-DBUILD_TESTING=TRUE"
+              "-DUSE_HDF5=ON"
+              "-DUSE_OPENMP=OFF"
+              "-DUSE_THREADS=ON"
+              (string-append "-DDATA_DIR=" #$output "/data")
+              (string-append "-DPYTHON3_EXECUTABLE="
+                             #$(this-package-input "python") "/bin")
+              (string-append "-DPYTHON3_INCLUDE_DIR="
+                             #$(this-package-input "python") "/include")
+              (string-append "-DPYTHON3_LIBRARY="
+                             #$(this-package-input "python") "/lib"))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'set-env
+            (lambda _
+              (setenv "HOME" "/tmp")))
+          (add-after 'unpack 'use-absolute-rm
+            (lambda* (#:key inputs #:allow-other-keys)
+              (substitute* "casa/OS/test/tFile.run"
+                (("/bin/rm")
+                 (search-input-file inputs "/bin/rm")))))
+          (add-after 'unpack 'use-absolute-python3
+            (lambda _
+              (substitute* "build-tools/casacore_floatcheck"
+                (("#!/usr/bin/env python")
+                 (string-append "#!" (which "python3"))))))
+          ;; NOTE: (Sharlatan-20220611T200837+0100): Workaround for casacore
+          ;; tests stuck with missing "qsub" issue.
+          ;; https://github.com/casacore/casacore/issues/1122
+          (add-after 'unpack 'patch-pre-test-checks
+            (lambda _
+              (substitute* "build-tools/casacore_assay"
+                (("QSUBP=.*$") "QSUBP=\n")
+                (("YODP=.*$") "YODP=\n")))))))
+    (native-inputs
+     (list bison
+           boost
+           flex
+           readline))
+    (inputs
+     (list cfitsio
+           fftw
+           fftwf
+           gfortran
+           hdf5
+           lapack
+           ncurses
+           openblas
+           python
+           python-numpy
+           wcslib))
+    (home-page "http://casacore.github.io/casacore/")
+    (synopsis "Suite of C++ libraries for radio astronomy data processing")
+    (description
+     "The casacore package contains the core libraries of the old
+AIPS++/CASA (Common Astronomy Software Application) package.  This split was
+made to get a better separation of core libraries and applications.
+@url{https://casa.nrao.edu/, CASA} is now built on top of Casacore.")
+    (license license:gpl2+)))
 
 (define-public cfitsio
   (package
@@ -99,21 +328,20 @@ in FITS files.")
 (define-public python-fitsio
   (package
     (name "python-fitsio")
-    (version "1.1.5")
+    (version "1.1.7")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "fitsio" version))
        (sha256
-        (base32 "1llql2i6xr9lkdl81jx5nvz80kspamvira90546y32ldy551hq1l"))
+        (base32 "0q8siijys9kmjnqvyipjgh6hkhf4fwvr1swhsf4if211i9b0m1xy"))
        (modules '((guix build utils)))
        (snippet
         ;; Remove the bundled cfitsio
         `(begin
            (delete-file-recursively "cfitsio3490")
            (substitute* "MANIFEST.in"
-             (("recursive-include cfitsio3490.*$\n") ""))
-           #t))))
+             (("recursive-include cfitsio3490.*$\n") ""))))))
     (build-system python-build-system)
     (arguments
      `(#:phases
@@ -138,8 +366,7 @@ in FITS files.")
              (substitute* "fitsio/test.py"
                (("'SKIP_BZIP_TEST' in os.environ") "True")))))))
     (propagated-inputs
-     `(("python-numpy" ,python-numpy)
-       ("cfitsio" ,cfitsio)))
+     (list python-numpy cfitsio))
     (home-page "https://github.com/esheldon/fitsio")
     (synopsis
      "Python library to read from and write to FITS files")
@@ -183,7 +410,7 @@ for reading and writing.")
 (define-public erfa
   (package
     (name "erfa")
-    (version "1.7.3")
+    (version "2.0.0")
     (source
      (origin
        (method git-fetch)
@@ -192,13 +419,10 @@ for reading and writing.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0nh12dr7gk4ki55lz95pkm4fpf7kazirra3zax9pab6v4qql4hlw"))))
+        (base32 "0s9dpj0jdkqcg552f00jhd722czji4pffabmpys5pgi6djckq4f4"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("automake" ,automake)
-       ("autoreconf" ,autoconf)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list automake autoconf libtool pkg-config))
     (home-page "https://github.com/liberfa/erfa")
     (synopsis "Essential Routines for Fundamental Astronomy")
     (description
@@ -244,7 +468,7 @@ feature detection and cosmetic corrections.")
        (sha256
         (base32 "1536gmcpm6pckn9xrb6j8s4pm1vryjhzvhfaj9wx3jwxcpbdy0dw"))))
     (inputs
-     `(("cfitsio" ,cfitsio)))
+     (list cfitsio))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags
@@ -293,7 +517,7 @@ astronomical image-processing packages like Drizzle, Swarp or SExtractor.")
 (define-public gnuastro
   (package
     (name "gnuastro")
-    (version "0.16")
+    (version "0.18")
     (source
      (origin
        (method url-fetch)
@@ -301,22 +525,21 @@ astronomical image-processing packages like Drizzle, Swarp or SExtractor.")
                            version ".tar.lz"))
        (sha256
         (base32
-         "07xr0r5dmjpnrz7ylf7k3vmjjna2jafi16lfvkqwxj9fyssmz207"))))
+         "1y9ig2kkwiwl0rmp9ip9n83fyjjpg2cc2pxzvdzr8rysq5az357y"))))
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags '("--disable-static")))
     (inputs
-     `(("cfitsio" ,cfitsio)
-       ("curl" ,curl-minimal)
-       ("gsl" ,gsl)
-       ("libgit2" ,libgit2)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libtiff" ,libtiff)
-       ("wcslib" ,wcslib)
-       ("zlib" ,zlib)))
+     (list cfitsio
+           curl-minimal
+           gsl
+           libgit2
+           libjpeg-turbo
+           libtiff
+           wcslib
+           zlib))
     (native-inputs
-     `(("libtool" ,libtool)
-       ("lzip" ,lzip)))
+     (list libtool lzip))
     (home-page "https://www.gnu.org/software/gnuastro/")
     (synopsis "Astronomy utilities")
     (description "The GNU Astronomy Utilities (Gnuastro) is a suite of
@@ -354,9 +577,7 @@ programs for the manipulation and analysis of astronomical data.")
         (string-append
          "--with-fftw-incdir=" (assoc-ref %build-inputs "fftw") "/include"))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (inputs
      `(("openblas" ,openblas)
        ("fftw" ,fftwf)))
@@ -448,11 +669,9 @@ astronomical fields.  SkyMaker is part of the EFIGI
                (copy-recursively "lang" lang))
              #t)))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
      (inputs
-      `(("gtkmm" ,gtkmm)
-        ("libskry" ,libskry)
-        ("ffmpeg" ,ffmpeg)))
+      (list gtkmm-3 libskry ffmpeg))
      (home-page "https://github.com/GreatAttractor/stackistry")
      (synopsis "Astronomical lucky imaging/image stacking tool")
      (description
@@ -477,17 +696,17 @@ deconvolution).  Such post-processing is not performed by Stackistry.")
         (base32 "049jlc8vx06pad5h2syrmf7f1l346yr5iraai0wkn8s8pk30j8q7"))))
     (build-system cmake-build-system)
     (inputs
-     `(("qtbase" ,qtbase-5)
-       ("qtlocation" ,qtlocation)
-       ("qtmultimedia" ,qtmultimedia)
-       ("qtscript" ,qtscript)
-       ("qtserialport" ,qtserialport)
-       ("zlib" ,zlib)))
+     (list qtbase-5
+           qtlocation
+           qtmultimedia-5
+           qtscript
+           qtserialport
+           zlib))
     (native-inputs
      `(("gettext" ,gettext-minimal)     ; xgettext is used at compile time
        ("perl" ,perl)                   ; for pod2man
        ("qtbase" ,qtbase-5)               ; Qt MOC is needed at compile time
-       ("qttools" ,qttools)))
+       ("qttools-5" ,qttools-5)))
     (arguments
      `(#:test-target "test"
        #:configure-flags (list "-DENABLE_TESTING=1"
@@ -580,12 +799,12 @@ any arbitrary astrometric projection defined in the WCS standard.")
          ;; maybe required?
          ("mesa" ,mesa)
          ;; optional: fmtlib, Eigen3;
-         ("fmt" ,fmt)
+         ("fmt" ,fmt-7)
          ("eigen" ,eigen)
          ;; glut: for glut interface
          ("freeglut" ,freeglut)))
       (propagated-inputs
-       `(("lua" ,lua)))
+       (list lua))
       (arguments
        `(#:configure-flags '("-DENABLE_GLUT=ON" "-DENABLE_QT=OFF")
          #:tests? #f))                            ;no tests
@@ -612,6 +831,365 @@ accurately in real time at any rate desired.")
      `(#:configure-flags '("-DENABLE_GTK=ON" "-DENABLE_QT=OFF")
        #:tests? #f))))
 
+(define-public python-astropy
+  (package
+    (name "python-astropy")
+    (version "5.0.1")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "astropy" version))
+       (sha256
+        (base32 "09wh589ywjsgjvi76v2d2zqd9sri0461rrnml0b0pah5lbkcv0k3"))
+       (modules '((guix build utils)))
+       (snippet
+        '(begin
+           ;; Remove Python bundles.
+           (with-directory-excursion "astropy/extern"
+             (for-each delete-file-recursively '("ply" "configobj")))
+           ;; Remove cextern bundles and leave the wcslib bundle.  Astropy
+           ;; upgrades to different versions of wcslib every few releases
+           ;; and tests break every upgrade.
+           ;; TODO: unbundle wcslib.
+           (with-directory-excursion "cextern"
+             (for-each delete-file-recursively '("cfitsio" "expat")))
+           #t))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'preparations
+           (lambda _
+             ;; Use our own libraries in place of bundles, with the
+             ;; exception of wcslib.
+             (setenv "ASTROPY_USE_SYSTEM_CFITSIO" "1")
+             (setenv "ASTROPY_USE_SYSTEM_EXPAT" "1")
+             ;; Some tests require a writable home.
+             (setenv "HOME" "/tmp")
+             ;; Relax xfail tests.
+             (substitute* "setup.cfg"
+               (("xfail_strict = true") "xfail_strict = false"))
+             ;; Replace all references to external ply.
+             (let ((ply-files '("coordinates/angle_formats.py"
+                                "utils/parsing.py")))
+               (with-directory-excursion "astropy"
+                 (map (lambda (file)
+                        (substitute* file (("astropy.extern.ply")
+                                           "ply")))
+                      ply-files)))
+             ;; Replace reference to external configobj.
+             (with-directory-excursion "astropy/config"
+               (substitute* "configuration.py"
+                 (("from astropy.extern.configobj ") "")))))
+         ;; This file is opened in both install and check phases.
+         (add-before 'install 'writable-compiler
+           (lambda _ (make-file-writable "astropy/_compiler.c")))
+         (add-before 'check 'writable-compiler
+           (lambda _ (make-file-writable "astropy/_compiler.c")))
+         (replace 'check
+           (lambda* (#:key inputs outputs tests? #:allow-other-keys)
+             (when tests?
+               (add-installed-pythonpath inputs outputs)
+               ;; Extensions have to be rebuilt before running the tests.
+               (invoke "python" "setup.py" "build_ext" "--inplace")
+               (invoke "python" "-m" "pytest" "--pyargs" "astropy"
+                       ;; Skip tests that need remote data.
+                       "-m" "not remote_data")))))))
+    (native-inputs
+     (list pkg-config
+           python-coverage
+           python-cython
+           python-extension-helpers
+           python-ipython
+           python-jplephem
+           python-objgraph
+           python-pytest
+           python-pytest-astropy
+           python-pytest-xdist
+           python-setuptools-scm
+           python-sgp4
+           python-skyfield))
+    (inputs
+     (list cfitsio expat))
+    (propagated-inputs
+     (list python-configobj
+           python-numpy
+           python-packaging
+           python-ply
+           python-pyerfa
+           python-pyyaml))
+    (home-page "https://www.astropy.org/")
+    (synopsis "Core package for Astronomy in Python")
+    (description
+     "Astropy is a single core package for Astronomy in Python.  It contains
+much of the core functionality and some common tools needed for performing
+astronomy and astrophysics.")
+    (license license:bsd-3)))
+
+(define-public python-astropy-healpix
+  (package
+    (name "python-astropy-healpix")
+    (version "0.6")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "astropy-healpix" version))
+       (sha256
+        (base32 "1436ml03xkmvx4afzbhfj67ab91418sz1w3lq1b18r43qchnd6j0"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         ;; This file is opened in both install and check phases.
+         (add-before 'install 'writable-compiler
+           (lambda _ (make-file-writable "astropy_healpix/_compiler.c")))
+         (add-before 'check 'writable-compiler
+           (lambda _ (make-file-writable "astropy_healpix/_compiler.c")))
+         (replace 'check
+           (lambda* (#:key inputs outputs tests? #:allow-other-keys)
+             (when tests?
+               (add-installed-pythonpath inputs outputs)
+               ;; Extensions have to be rebuilt before running the tests.
+               (invoke "python" "setup.py" "build_ext" "--inplace")
+               (invoke "python" "-m" "pytest"
+                       "--pyargs" "astropy_healpix")))))))
+    (native-inputs
+     (list python-extension-helpers
+           python-hypothesis
+           python-pytest-astropy
+           python-setuptools-scm))
+    (propagated-inputs
+     (list python-astropy python-numpy))
+    (home-page "https://github.com/astropy/astropy-healpix")
+    (synopsis "HEALPix for Astropy")
+    (description "This package provides HEALPix to the Astropy project.")
+    (license license:bsd-3)))
+
+(define-public python-astroquery
+  (package
+    (name "python-astroquery")
+    (version "0.4.6")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "astroquery" version))
+       (sha256
+        (base32 "1vhkzsqlgn3ji5by2rdf2gwklhbyzvpzb1iglalhqjkkrdaaaz1h"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (add-before 'check 'writable-home
+           (lambda _                    ; some tests need a writable home
+             (setenv "HOME" (getcwd))))
+         (replace 'check
+           (lambda* (#:key inputs outputs tests? #:allow-other-keys)
+             (when tests?
+               (add-installed-pythonpath inputs outputs)
+               (invoke "python" "-m" "pytest" "--pyargs" "astroquery"
+                       ;; Skip tests that require online data.
+                       "-m" "not remote_data")))))))
+    (propagated-inputs
+     (list python-astropy
+           python-beautifulsoup4
+           python-html5lib
+           python-keyring
+           python-numpy
+           python-pyvo
+           python-requests))
+    (native-inputs
+     (list python-flask
+           python-jinja2
+           python-matplotlib
+           python-pytest-astropy
+           python-pytest-dependency))
+    (home-page "https://www.astropy.org/astroquery/")
+    (synopsis "Access online astronomical data resources")
+    (description "Astroquery is a package that contains a collection of tools
+to access online Astronomical data.  Each web service has its own sub-package.")
+    (license license:bsd-3)))
+
+(define-public python-cdflib
+  (package
+    (name "python-cdflib")
+    (version "0.4.4")
+    (source
+     (origin
+       (method git-fetch)   ; no tests in pypi archive
+       (uri (git-reference
+             (url "https://github.com/MAVENSDC/cdflib")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1h7750xvr6qbhnl2w3bhccs3pwp3hci3624pvvxym0yjinmskjlz"))))
+    (build-system python-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (replace 'check
+                 (lambda* (#:key tests? #:allow-other-keys)
+                   (when tests?
+                     (setenv "HOME" (getcwd))
+                     (invoke "pytest" "-vv" "tests")))))))
+    (propagated-inputs
+     (list python-attrs python-numpy))
+    (native-inputs
+     (list python-astropy
+           python-hypothesis
+           python-pytest
+           python-pytest-cov
+           python-pytest-remotedata
+           python-xarray))
+    (home-page "https://github.com/MAVENSDC/cdflib")
+    (synopsis "Python library to deal with NASA's CDF astronmical data format")
+    (description "This package provides a Python CDF reader toolkit
+It provides the following functionality:
+@itemize
+@item Ability to read variables and attributes from CDF files
+@item Writes CDF version 3 files
+@item Can convert between CDF time types (EPOCH/EPOCH16/TT2000) to other common
+time formats
+@item Can convert CDF files into XArray Dataset objects and vice versa,
+attempting to maintain ISTP compliance
+@end itemize\n")
+    (license license:expat)))
+
+(define-public python-photutils
+  (package
+    (name "python-photutils")
+    (version "1.3.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "photutils" version))
+       (sha256
+        (base32 "1a8djakaya6w5iv9237gkcz39brqzgrfs2wqrl0izi1s85cfdymn"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:test-target "pytest"
+       #:phases
+       (modify-phases %standard-phases
+         ;; This file is opened in both install and check phases.
+         (add-before 'install 'writable-compiler
+           (lambda _ (make-file-writable "photutils/_compiler.c")))
+         (add-before 'check 'writable-compiler
+           (lambda _ (make-file-writable "photutils/_compiler.c"))))))
+    (propagated-inputs
+     (list python-astropy python-numpy))
+    (native-inputs
+     (list python-cython
+           python-extension-helpers
+           python-pytest-astropy
+           python-pytest-runner
+           python-setuptools-scm))
+    (home-page "https://github.com/astropy/photutils")
+    (synopsis "Source detection and photometry")
+    (description "Photutils is an Astropy package for detection and photometry
+of astronomical sources.")
+    (license license:bsd-3)))
+
+(define-public python-pyvo
+  (package
+    (name "python-pyvo")
+    (version "1.2.1")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "pyvo" version))
+       (sha256
+        (base32 "1ri5yp6903386lkn79mdcmlax7zsfrrrjbcvb91wxydcc9yasc1n"))))
+    (build-system python-build-system)
+    (arguments
+     '(#:phases
+       (modify-phases %standard-phases
+         (replace 'check
+           (lambda* (#:key tests? #:allow-other-keys)
+             (when tests?
+               (invoke "python" "-m" "pytest" "--pyargs" "pyvo" "-k"
+                       (string-append   ; these tests use the network
+                        "not test_access_with_string"
+                        " and not test_access_with_list"
+                        " and not test_access_with_expansion"))))))))
+    (native-inputs
+     (list python-pytest-astropy python-requests-mock))
+    (propagated-inputs
+     (list python-astropy python-mimeparse python-pillow python-requests))
+    (home-page "https://github.com/astropy/pyvo")
+    (synopsis "Access Virtual Observatory data and services")
+    (description
+     "PyVO is a package providing access to remote data and services of the
+Virtual observatory (VO) using Python.")
+    (license license:bsd-3)))
+
+(define-public python-regions
+  (package
+    (name "python-regions")
+    (version "0.5")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "regions" version))
+       (sha256
+        (base32 "1bjrcjchbw3xw1a26d5g198lh7vxpp9m5sal58r7f8mmr1d8g2dc"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:test-target "pytest"
+       #:phases
+       (modify-phases %standard-phases
+         ;; This doctest requires online data.
+         (add-after 'unpack 'delete-doctest
+           (lambda _ (delete-file "docs/masks.rst")))
+         ;; This file is opened in both install and check phases.
+         (add-before 'install 'writable-compiler
+           (lambda _ (make-file-writable "regions/_compiler.c")))
+         (add-before 'check 'writable-compiler
+           (lambda _ (make-file-writable "regions/_compiler.c")))
+         (add-before 'check 'writable-home
+           (lambda _  (setenv "HOME" (getcwd)))))))
+    (propagated-inputs
+     (list python-astropy python-numpy))
+    (native-inputs
+     (list python-cython
+           python-extension-helpers
+           python-pytest-arraydiff
+           python-pytest-astropy
+           python-pytest-runner
+           python-setuptools-scm))
+    (home-page "https://github.com/astropy/regions")
+    (synopsis "Package for region handling")
+    (description "Regions is an Astropy package for region handling.")
+    (license license:bsd-3)))
+
+(define-public python-astral
+  (package
+    (name "python-astral")
+    (version "2.2")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "astral" version))
+       (sha256
+        (base32 "1gkggdibccmdy9glymw3kbrkzm6svvsg0lk56hhy92y4smkrj7g4"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'check
+           (lambda* (#:key inputs outputs tests? #:allow-other-keys)
+             (when tests?
+               (add-installed-pythonpath inputs outputs)
+               (invoke "python" "-m" "pytest")))))))
+    (native-inputs
+     (list python-freezegun python-setuptools-scm))
+    (propagated-inputs
+     (list python-dataclasses python-pytest python-pytz))
+    (home-page "https://github.com/sffjunkie/astral")
+    (synopsis "Calculations for the position of the sun and moon")
+    (description "Astral is a Python module that calculates times for various
+positions of the sun: dawn, sunrise, solar noon, sunset, dusk, solar
+elevation, solar azimuth, rahukaalam, and the phases of the moon.")
+    (license license:asl2.0)))
+
 (define-public libnova
   (package
     (name "libnova")
@@ -636,15 +1214,55 @@ accurately in real time at any rate desired.")
                (("/bin/sh") (which "sh")))
              #t)))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (synopsis "Celestial mechanics, astrometry and astrodynamics library")
     (description "Libnova is a general purpose, double precision, Celestial
 Mechanics, Astrometry and Astrodynamics library.")
     (home-page "http://libnova.sourceforge.net/")
     (license (list license:lgpl2.0+
                    license:gpl2+)))) ; examples/transforms.c & lntest/*.c
+
+(define-public libsep
+  (package
+    (name "libsep")
+    (version "1.2.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/kbarbary/sep")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "0sag96am6r1ffh9860yq40js874362v3132ahlm6sq7padczkicf"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      #:make-flags #~(list (string-append "CC=" #$(cc-for-target))
+                           (string-append "PREFIX=" #$output))
+      #:phases #~(modify-phases %standard-phases
+                   (replace 'check
+                     (lambda* (#:key tests? #:allow-other-keys)
+                       (when tests?
+                         (chdir "../source")
+                         (invoke "make"
+                                 (string-append "CC=" #$(cc-for-target))
+                                 "test")))))))
+    (native-inputs
+     (list python-wrapper))
+    (home-page "https://github.com/kbarbary/sep")
+    (synopsis "Astronomical source extraction and photometry library")
+    (description
+     "SEP makes the core algorithms of
+@url{https://www.astromatic.net/software/sextractor/, sextractor} available as a
+library of stand-alone functions and classes.  These operate directly on
+in-memory arrays (no FITS files or configuration files).  The code is derived
+from the Source Extractor code base (written in C) and aims to produce results
+compatible with Source Extractor whenever possible.  SEP consists of a C library
+with no dependencies outside the standard library, and a Python module that
+wraps the C library in a Pythonic API.  The Python wrapper operates on NumPy
+arrays with NumPy as its only dependency.")
+    (license (list license:expat license:lgpl3+ license:bsd-3))))
 
 (define-public libskry
   (package
@@ -679,7 +1297,7 @@ Mechanics, Astrometry and Astrodynamics library.")
                (copy-recursively "include" include))
              #t)))))
     (inputs
-     `(("ffmpeg" ,ffmpeg)))
+     (list ffmpeg))
     (home-page "https://github.com/GreatAttractor/libskry")
     (synopsis "Astronimical lucky imaging library")
     (description
@@ -785,7 +1403,7 @@ on FITS files:
          "xplanet-1.3.1-xpUtil-Add2017LeapSecond.cpp.patch"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
      `(("libx11" ,libx11)
        ("libxscrnsaver" ,libxscrnsaver)
@@ -833,12 +1451,10 @@ Mercator, Mollweide, Peters, polyconic, orthographic and rectangular.")
        ("gettext" ,gettext-minimal)
        ("pkg-config" ,pkg-config)))
     (inputs
-     `(("curl" ,curl)
-       ("glib" ,glib)
-       ("goocanvas" ,goocanvas)
-       ("gtk+" ,gtk+)))
+     (list curl glib goocanvas gtk+))
     (arguments
-     `(#:phases
+     `(#:configure-flags '("CFLAGS=-O2 -g -fcommon")
+       #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'fix-tests
            (lambda _
@@ -890,10 +1506,57 @@ provide you with detailed information about each pass.")
 It can be used to calculate the trajectory of satellites.")
       (license license:asl2.0))))
 
+(define-public imppg
+  (package
+    (name "imppg")
+    (version "0.6.4")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/GreatAttractor/imppg")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "04synbmyz0hkipl1cdc26nr42r57v494yjw8pi4jx0jrxrawgj9h"))))
+    (build-system cmake-build-system)
+    (arguments
+     `(#:tests? #f                      ;no test provided
+       #:phases
+       (modify-phases %standard-phases
+         (replace 'configure
+           (lambda* (#:key outputs #:allow-other-keys)
+             (mkdir-p "build")
+             (chdir "build")
+             (invoke
+              "cmake"
+              "-G" "Unix Makefiles"
+              "-DCMAKE_BUILD_TYPE=Release"
+              (string-append "-DCMAKE_INSTALL_PREFIX=" (assoc-ref outputs "out"))
+              ".."))))))
+    (native-inputs
+     (list boost pkg-config))
+    (inputs
+     (list cfitsio freeimage glew wxwidgets))
+    (home-page "https://github.com/GreatAttractor/imppg")
+    (synopsis "Astronomical Image Post-Proccessor (ImPPG)")
+    (description
+     "ImPPG performs Lucy-Richardson deconvolution, unsharp masking,
+brightness normalization and tone curve adjustment.  It can also apply
+previously specified processing settings to multiple images.  All operations
+are performed using 32-bit floating-point arithmetic.
+
+Supported input formats: FITS, BMP, JPEG, PNG, TIFF (most of bit depths and
+compression methods), TGA and more.  Images are processed in grayscale and can
+be saved as: BMP 8-bit; PNG 8-bit; TIFF 8-bit, 16-bit, 32-bit
+floating-point (no compression, LZW- or ZIP-compressed), FITS 8-bit, 16-bit,
+32-bit floating-point.")
+    (license license:gpl3+)))
+
 (define-public indi
   (package
     (name "indi")
-    (version "1.9.2")
+    (version "1.9.3")
     (source
      (origin
        (method git-fetch)
@@ -902,7 +1565,7 @@ It can be used to calculate the trajectory of satellites.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "00dlvp682xg2sdxm7ix55zp6311mgnd543q45drrc7kjlgaqvip4"))))
+        (base32 "0c7md288d3g2vf0m1ai6x2l4j4rmlasc4rya92phvd4ynf8vcki2"))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags
@@ -924,17 +1587,17 @@ It can be used to calculate the trajectory of satellites.")
              (let ((out (assoc-ref outputs "out")))
                (mkdir-p (string-append out "/lib/udev/rules.d"))))))))
     (native-inputs
-     `(("googletest" ,googletest)))
+     (list googletest))
     (inputs
-     `(("cfitsio" ,cfitsio)
-       ("curl" ,curl)
-       ("fftw" ,fftw)
-       ("gsl" ,gsl)
-       ("libjpeg-turbo" ,libjpeg-turbo)
-       ("libnova" ,libnova)
-       ("libtiff" ,libtiff)
-       ("libusb" ,libusb)
-       ("zlib" ,zlib)))
+     (list cfitsio
+           curl
+           fftw
+           gsl
+           libjpeg-turbo
+           libnova
+           libtiff
+           libusb
+           zlib))
     (home-page "https://www.indilib.org")
     (synopsis "Library for astronimical intrumentation control")
     (description
@@ -948,31 +1611,88 @@ more.")
                    license:lgpl2.0+
                    license:lgpl2.1+))))
 
+(define-public sunclock
+  (let ((commit "f4106eb0a81f7594726d6b2859efd8fc64cc1225")
+        (revision "1"))
+    (package
+      (name "sunclock")
+      (version (git-version "3.57" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://github.com/nongiach/Sunclock")
+               (commit commit)))
+         (file-name (git-file-name name version))
+         (sha256
+          (base32 "1rczdpmhvfw57b9r793vq8vqlbdhlkgj52fxwrdfl6cwj95a9kv2"))))
+      (build-system gnu-build-system)
+      (arguments
+       `(#:make-flags
+         (list (string-append "DESTDIR=" %output)
+               ;; Fix incorrect argument given to gcc. Error message:
+               ;; "gcc: error: DefaultGcc2AMD64Opt: No such file or directory"
+               "CDEBUGFLAGS=")
+         #:phases
+         (modify-phases %standard-phases
+           (replace 'configure
+             (lambda _
+               (chdir "sunclock-3.57")
+               (substitute* "Imakefile"
+                 (("^MANDIR=/X11R6/man/man1")
+                  "MANDIR=/share/man/man1")
+                 (("^BINDIR=/X11R6/bin")
+                  "BINDIR=/bin")
+                 ;; Disable ZLIB support for vmf files because zlib implements
+                 ;; `gzgetc` as a macro instead of a function, which results in
+                 ;; a compilation error.
+                 ((" -DZLIB") "")
+                 ((" -lz") "")
+                 (("cd \\$\\(DESTDIR\\)\\$\\(SHAREDIR\\)/earthmaps/vmf ; \
+gzip -f \\*.vmf")
+                  ""))
+               ;; Generate Makefile.
+               (invoke "xmkmf"))))
+         #:tests? #f))  ; No check target.
+      (inputs
+       (list libjpeg-turbo libpng libx11 libxpm))
+      (native-inputs
+       (list imake))
+      (home-page "https://github.com/nongiach/Sunclock")
+      (synopsis
+       "Map of the Earth that shows which portion is illuminated by the Sun")
+      (description
+       "Sunclock displays a map of the Earth and shows which portion is
+illuminated by the Sun.  It can commute between two states, the \"clock window\"
+and the \"map window\".  The clock window displays a small map of the Earth and
+therefore occupies little space on the screen, while the \"map window\" displays
+a large map and offers more advanced functions: local time of cities, Sun and
+Moon position, etc.")
+      (license license:gpl2+))))
+
 (define-public python-jplephem
   (package
     (name "python-jplephem")
-    (version "2.15")
+    (version "2.17")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "jplephem" version))
        (sha256
-        (base32 "1ca3dswsslij79qg6dcijjz4l0fj6nzmxld8z93v45ahlkhps0g0"))))
+        (base32 "09xaibxnwbzzs3x9g3ibqa2la17z3r6in93321glh02dbibfbip1"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
        (modify-phases %standard-phases
          (replace 'check
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (setenv "PYTHONPATH"
-                       (string-append "./build/lib:"
-                                      (getenv "PYTHONPATH")))
-               (setenv "PATH" (string-append out "/bin:"
-                                             (getenv "PATH")))
-               (invoke "python" "-m" "unittest" "discover" "-s" "test")))))))
+           (lambda* (#:key tests? inputs outputs #:allow-other-keys)
+             (when tests?
+               (let ((out (assoc-ref outputs "out")))
+                 (add-installed-pythonpath inputs outputs)
+                 (setenv "PATH" (string-append out "/bin:" (getenv "PATH")))
+                 (invoke "python" "-m" "unittest" "discover" "-s" "test"))))))))
     (inputs
-     `(("python-numpy" ,python-numpy)))
+     (list python-numpy))
     (home-page "https://github.com/brandon-rhodes/python-jplephem")
     (synopsis "Python version of NASA DE4xx ephemerides")
     (description
@@ -983,13 +1703,13 @@ JPL ephemerides use to predict raw (x,y,z) planetary positions.")
 (define-public python-pyerfa
   (package
     (name "python-pyerfa")
-    (version "1.7.3")
+    (version "2.0.0.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "pyerfa" version))
        (sha256
-        (base32 "1jqqrxvrgly4r0br5f6dsy8nab2xmhz915vp6md5f31ysr2sdwvc"))
+        (base32 "0c6y1rm51kj8ahbr1vwbswck3ix77dc3zhc2fkg6w7iczrzn7m1g"))
        (modules '((guix build utils)))
        (snippet
         '(begin
@@ -1002,15 +1722,13 @@ JPL ephemerides use to predict raw (x,y,z) planetary positions.")
        (modify-phases %standard-phases
          (add-before 'build 'use-system-liberfa
            (lambda _
-             (setenv "PYERFA_USE_SYSTEM_LIBERFA" "1")
-             #t)))))
+             (setenv "PYERFA_USE_SYSTEM_LIBERFA" "1"))))))
     (native-inputs
-     `(("pytest" ,python-pytest)
-       ("setuptools-scm" ,python-setuptools-scm)
-       ("pytest-doctestplus" ,python-pytest-doctestplus)))
+     (list python-pytest-doctestplus python-pytest python-setuptools-scm))
     (inputs
-     `(("liberfa" ,erfa)
-       ("numpy" ,python-numpy)))
+     (list erfa))
+    (propagated-inputs
+     (list python-numpy))
     (home-page "https://github.com/liberfa/pyerfa")
     (synopsis "Python bindings for ERFA")
     (description
@@ -1021,62 +1739,308 @@ Astronomical Union (IAU).  All C routines are wrapped as Numpy universal
 functions, so that they can be called with scalar or array inputs.")
     (license license:bsd-3)))
 
-(define-public python-sep
+(define-public python-pynbody
   (package
-    (name "python-sep")
-    (version "1.1.1")
+    (name "python-pynbody")
+    (version "1.2.3")
     (source
      (origin
        (method url-fetch)
-       (uri (pypi-uri "sep" version))
+       (uri (pypi-uri "pynbody" version))
        (sha256
-        (base32 "0wxdqn92q1grv8k7xi7h88ac6wnznw4xh5bdlz1vz6za2dgsyj4m"))))
+        (base32 "1jxwk2s4qz1znvyak2lj7ld01kl1jh87xp81ki7a8dz1gcy93fkx"))))
     (build-system python-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'disable-tests-require-testdata
+                 (lambda _
+                   ;; Disable tests which need to download additional 1.0GiB+
+                   ;; of test data archive from
+                   ;; http://star.ucl.ac.uk/~app/testdata.tar.gz
+                   ;;    https://github.com/pynbody/pynbody/blob/ \
+                   ;;    f4bd482dc47532831b3ec115c7cb07149d61bfc5/ \
+                   ;;    .github/workflows/build-test.yaml#L41
+                   (with-directory-excursion "tests"
+                     (for-each delete-file
+                               '("gravity_test.py"
+                                 "adaptahop_test.py"
+                                 "ahf_halos_test.py"
+                                 "array_test.py"
+                                 "bridge_test.py"
+                                 "family_test.py"
+                                 "partial_tipsy_test.py"
+                                 "snapshot_test.py"
+                                 "test_profile.py"
+                                 "gadget_test.py"
+                                 "gadgethdf_test.py"
+                                 "grafic_test.py"
+                                 "halotools_test.py"
+                                 "nchilada_test.py"
+                                 "ramses_new_ptcl_format_test.py"
+                                 "ramses_test.py"
+                                 "rockstar_test.py"
+                                 "sph_image_test.py"
+                                 "sph_smooth_test.py"
+                                 "subfind_test.py"
+                                 "subfindhdf_gadget4_test.py"
+                                 "tipsy_test.py")))))
+               (replace 'check
+                 (lambda* (#:key tests? inputs outputs #:allow-other-keys)
+                   (when tests?
+                     (add-installed-pythonpath inputs outputs)
+                     (setenv "HOME" "/tmp")
+                     (invoke "pytest" "-vv")))))))
     (native-inputs
-     `(("cython" ,python-cython)
-       ("pytest" ,python-pytest)))
-    (inputs
-     `(("numpy" ,python-numpy)))
-    (home-page "https://github.com/kbarbary/sep")
-    (synopsis "Astronomical source extraction and photometry library")
-    (description
-     "SEP makes the core algorithms of Source Extractor available as a library
-of stand-alone functions and classes.")
-    (license (list license:bsd-3
-                   license:expat
-                   license:lgpl3+))))
+     (list python-cython
+           python-pandas
+           python-pytest))
+    (propagated-inputs
+     (list python-h5py
+           python-matplotlib
+           python-numpy
+           python-posix-ipc
+           python-scipy))
+    (home-page "https://pynbody.github.io/pynbody/index.html")
+    (synopsis "Light-weight astronomical N-body/SPH analysis for python")
+    (description "@code{Pynbody} is an analysis framework for N-body and hydrodynamic
+astrophysical simulations supporting PKDGRAV/Gasoline, Gadget, Gadget4/Arepo,
+N-Chilada and RAMSES AMR outputs.")
+    (license license:gpl3+)))
+
+(define-public python-sep
+  (package
+    (inherit libsep)
+    (name "python-sep")
+    (build-system python-build-system)
+    (arguments
+     (strip-keyword-arguments
+      '(#:make-flags) (package-arguments libsep)))
+    (native-inputs
+     (modify-inputs (package-inputs libsep)
+       (prepend python-cython)))
+    (propagated-inputs
+     (modify-inputs (package-inputs libsep)
+       (prepend python-numpy)))))
 
 (define-public python-asdf
   (package
     (name "python-asdf")
-    (version "2.7.4")
+    (version "2.8.3")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "asdf" version))
        (sha256
-        (base32 "1mj52l2m8pbhiqacgjakjpvqi8kyx470yw151lcsswbq5wp0rsc6"))))
+        (base32 "0i4vq1hsympjgb1yvn4ql0gm8j1mki9ggmj03533kmg0nbzp03yy"))))
     (build-system python-build-system)
     (arguments
-     ;; TODO: (Sharlatan-20210207T165820+0000): Tests depend on astropy, astropy
-     ;; depends on asdf. Disable circular dependence.
+     ;; NOTE: (Sharlatan-20211229T201059+0000): Tests depend on astropy and
+     ;; gwcs, astropy gwcs depend on asdf.  Disable circular dependence.
      `(#:tests? #f))
     (native-inputs
-     `(("packaging" ,python-packaging)
-       ("semantic-version" ,python-semantic-version)
-       ("setuptools-scm" ,python-setuptools-scm)))
-     (inputs
-      `(("importlib-resources" ,python-importlib-resources)
-        ("jsonschema" ,python-jsonschema)
-        ("numpy" ,python-numpy)
-        ("pyyaml" ,python-pyyaml)))
-     (home-page "https://github.com/asdf-format/asdf")
-     (synopsis "Python tools to handle ASDF files")
-     (description
-      "The Advanced Scientific Data Format (ASDF) is a next-generation
+     (list python-setuptools-scm
+           python-semantic-version
+           python-packaging))
+    (propagated-inputs
+     (list python-importlib-resources
+           python-jsonschema
+           python-jmespath
+           python-numpy
+           python-pyyaml))
+    (home-page "https://github.com/asdf-format/asdf")
+    (synopsis "Python tools to handle ASDF files")
+    (description
+     "The Advanced Scientific Data Format (ASDF) is a next-generation
 interchange format for scientific data.  This package contains the Python
 implementation of the ASDF Standard.")
-     (license license:bsd-3)))
+    (license license:bsd-3)))
+
+(define python-asdf-transform-schemas
+  (package
+    (name "python-asdf-transform-schemas")
+    (version "0.2.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "asdf_transform_schemas" version))
+       (sha256
+        (base32 "1gmzd81hw4ppsvzrc91wcbjpcw9hhv9gavllv7nyi7qjb54c837g"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'check
+           (lambda* (#:key inputs outputs tests? #:allow-other-keys)
+             (when tests?
+               (add-installed-pythonpath inputs outputs)
+               (invoke "python" "-m" "pytest")))))))
+    (native-inputs
+     (list python-pytest
+           python-semantic-version
+           python-setuptools-scm))
+    (propagated-inputs
+     (list python-asdf))
+    (home-page "https://github.com/asdf-format/asdf-transform-schemas")
+    (synopsis "ASDF schemas for transforms")
+    (description
+     "This package provides ASDF schemas for validating transform tags.  Users
+should not need to install this directly; instead, install an implementation
+package such as asdf-astropy.")
+    (license license:bsd-3)))
+
+(define python-asdf-coordinates-schemas
+  (package
+    (name "python-asdf-coordinates-schemas")
+    (version "0.1.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "asdf_coordinates_schemas" version))
+       (sha256
+        (base32 "0ahwhsz5jzljnpkfd2kvspirg823lnj5ip9sfkd9cx09z1nlz8jg"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'check
+           (lambda* (#:key inputs outputs tests? #:allow-other-keys)
+             (when tests?
+               (add-installed-pythonpath inputs outputs)
+               (invoke "python" "-m" "pytest")))))))
+    (native-inputs
+     (list python-pytest
+           python-semantic-version
+           python-setuptools-scm))
+    (propagated-inputs
+     (list python-asdf))
+    (home-page "https://github.com/asdf-format/asdf-coordinates-schemas")
+    (synopsis "ASDF coordinates schemas")
+    (description "This package provides ASDF schemas for validating
+coordinates tags.  Users should not need to install this directly; instead,
+install an implementation package such as asdf-astropy.")
+    (license license:bsd-3)))
+
+(define-public python-asdf-astropy
+  (package
+    (name "python-asdf-astropy")
+    (version "0.1.2")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "asdf_astropy" version))
+       (sha256
+        (base32 "0bzgah7gskvnz6jcrzipvzixv8k2jzjkskqwxngzwp4nxgjbcvi4"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'check
+           (lambda* (#:key inputs outputs tests? #:allow-other-keys)
+             (when tests?
+               (add-installed-pythonpath inputs outputs)
+               (invoke "python" "-m" "pytest")))))))
+    (native-inputs
+     (list python-coverage
+           python-h5py
+           python-matplotlib
+           python-pandas
+           python-pytest-astropy
+           python-scipy
+           python-semantic-version
+           python-setuptools-scm))
+    (propagated-inputs
+     (list python-asdf
+           python-asdf-coordinates-schemas
+           python-asdf-transform-schemas
+           python-astropy
+           python-numpy
+           python-packaging))
+    (home-page "https://github.com/astropy/asdf-astropy")
+    (synopsis "ASDF serialization support for astropy")
+    (description
+     "This package includes plugins that provide ASDF serialization support for
+Astropy objects.")
+    (license license:bsd-3)))
+
+(define python-asdf-wcs-schemas
+  (package
+    (name "python-asdf-wcs-schemas")
+    (version "0.1.1")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "asdf_wcs_schemas" version))
+       (sha256
+        (base32 "0khyab9mnf2lv755as8kwhk3lqqpd3f4291ny3b9yp3ik86fzhz1"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'check
+           (lambda* (#:key inputs outputs tests? #:allow-other-keys)
+             (when tests?
+               (add-installed-pythonpath inputs outputs)
+               (invoke "python" "-m" "pytest")))))))
+    (native-inputs
+     (list python-pytest
+           python-setuptools-scm
+           python-semantic-version))
+    (propagated-inputs
+     (list python-asdf))
+    (home-page "https://github.com/asdf-format/asdf-wcs-schemas")
+    (synopsis "ASDF WCS Schemas")
+    (description
+     "This package provides ASDF schemas for validating World Coordinate
+System (WCS) tags.  Users should not need to install this directly; instead,
+install an implementation package such as gwcs.")
+    (license license:bsd-3)))
+
+(define-public python-gwcs
+  (package
+    (name "python-gwcs")
+    (version "0.18.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "gwcs" version))
+       (sha256
+        (base32 "194j49m8xjjzv9pp8cnj06igz8sdxb0nphyybcc7mhigw0f0kr30"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (replace 'check
+           (lambda* (#:key inputs outputs tests? #:allow-other-keys)
+             (when tests?
+               (add-installed-pythonpath inputs outputs)
+               (invoke "python" "-m" "pytest")))))))
+    (native-inputs
+     (list python-jsonschema
+           python-jmespath
+           python-pytest
+           python-pytest-doctestplus
+           python-pyyaml
+           python-semantic-version
+           python-setuptools-scm))
+    (propagated-inputs
+     (list python-asdf
+           python-asdf-astropy
+           python-asdf-wcs-schemas
+           python-astropy
+           python-numpy
+           python-scipy))
+    (home-page "https://gwcs.readthedocs.io/en/latest/")
+    (synopsis "Generalized World Coordinate System")
+    (description "Generalized World Coordinate System (GWCS) is an Astropy
+affiliated package providing tools for managing the World Coordinate System of
+astronomical data.
+
+GWCS takes a general approach to the problem of expressing transformations
+between pixel and world coordinates.  It supports a data model which includes
+the entire transformation pipeline from input coordinates (detector by
+default) to world coordinates.")
+    (license license:bsd-3)))
 
 (define-public python-astroalign
   (package
@@ -1120,10 +2084,7 @@ astronomical images, especially when there is no WCS information available.")
      ;; framework https://github.com/brandon-rhodes/assay
      `(#:tests? #f))
     (inputs
-     `(("python-certifi" ,python-certifi)
-       ("python-jplephem" ,python-jplephem)
-       ("python-numpy" ,python-numpy)
-       ("python-sgp4" ,python-sgp4)))
+     (list python-certifi python-jplephem python-numpy python-sgp4))
     (home-page "https://rhodesmill.org/skyfield/")
     (synopsis "Astronomy for Python")
     (description

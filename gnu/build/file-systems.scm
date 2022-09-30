@@ -1,11 +1,12 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2014, 2015, 2016, 2017, 2018, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014-2018, 2020-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2016, 2017 David Craven <david@craven.ch>
 ;;; Copyright © 2017 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2019 Guillaume Le Vaillant <glv@posteo.net>
 ;;; Copyright © 2019–2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 David C. Trudgian <dave@trudgian.net>
 ;;; Copyright © 2020 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Oleg Pykhalov <go.wigust@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -29,6 +30,8 @@
   #:use-module (guix build bournish)
   #:use-module ((guix build syscalls)
                 #:hide (file-system-type))
+  #:use-module (guix diagnostics)
+  #:use-module (guix i18n)
   #:use-module (rnrs io ports)
   #:use-module (rnrs bytevectors)
   #:use-module (ice-9 match)
@@ -50,11 +53,16 @@
             read-partition-uuid
             read-luks-partition-uuid
 
+            cleanly-unmounted-ext2?
+
             bind-mount
 
+            system*/tty
             mount-flags->bit-mask
             check-file-system
-            mount-file-system))
+            mount-file-system
+
+            swap-space->flags-bit-mask))
 
 ;;; Commentary:
 ;;;
@@ -62,6 +70,33 @@
 ;;; check file systems.
 ;;;
 ;;; Code:
+
+(define (system*/console program . args)
+  "Run PROGRAM with ARGS in a tty on top of /dev/console.  The return value is
+as for 'system*'."
+  (match (primitive-fork)
+    (0
+     (dynamic-wind
+       (const #t)
+       (lambda ()
+         (login-tty (open-fdes "/dev/console" O_RDWR))
+         (apply execlp program program args))
+       (lambda ()
+         (primitive-_exit 127))))
+    (pid
+     (cdr (waitpid pid)))))
+
+(define (system*/tty program . args)
+  "Run PROGRAM with ARGS, creating a tty if its standard input isn't one.
+The return value is as for 'system*'.
+
+This is necessary for commands such as 'cryptsetup open' or 'fsck' that may
+need to interact with the user but might be invoked from shepherd, where
+standard input is /dev/null."
+  (apply (if (isatty? (current-input-port))
+             system*
+             system*/console)
+         program args))
 
 (define (bind-mount source target)
   "Bind-mount SOURCE at TARGET."
@@ -161,6 +196,23 @@ NUL terminator, return the size of the bytevector."
 if DEVICE does not contain an ext2 file system."
   (read-superblock device 1024 264 ext2-superblock?))
 
+(define (ext2-superblock-cleanly-unmounted? sblock)
+  "Return true if SBLOCK denotes a file system that was cleanly unmounted,
+false otherwise."
+  (define EXT2_VALID_FS 1)                        ;cleanly unmounted
+  (define EXT2_ERROR_FS 2)                        ;errors detected
+
+  (define EXT3_FEATURE_INCOMPAT_RECOVER #x0004)   ;journal needs recovery
+
+  (let ((state (bytevector-u16-ref sblock 58 %ext2-endianness)))
+    (cond ((= state EXT2_VALID_FS)
+           (let ((incompatible-features
+                  (bytevector-u32-ref sblock 96 %ext2-endianness)))
+             (zero? (logand incompatible-features
+                            EXT3_FEATURE_INCOMPAT_RECOVER))))
+          ((= state EXT2_ERROR_FS) #f)
+          (else (error "invalid ext2 superblock state" state)))))
+
 (define (ext2-superblock-uuid sblock)
   "Return the UUID of ext2 superblock SBLOCK as a 16-byte bytevector."
   (sub-bytevector sblock 104 16))
@@ -176,17 +228,22 @@ true, check the file system even if it's marked as clean.  If REPAIR is false,
 do not write to the file system to fix errors.  If it's #t, fix all
 errors.  Otherwise, fix only those considered safe to repair automatically."
   (match (status:exit-val
-          (apply system* `("e2fsck" "-v" "-C" "0"
-                           ,@(if force? '("-f") '())
-                           ,@(match repair
-                               (#f '("-n"))
-                               (#t '("-y"))
-                               (_  '("-p")))
-                           ,device)))
+          (apply system*/tty "e2fsck" "-v" "-C" "0"
+                 `(,@(if force? '("-f") '())
+                   ,@(match repair
+                       (#f '("-n"))
+                       (#t '("-y"))
+                       (_  '("-p")))
+                   ,device)))
     (0 'pass)
     (1 'errors-corrected)
     (2 'reboot-required)
     (_ 'fatal-error)))
+
+(define (cleanly-unmounted-ext2? device)          ;convenience procedure
+  "Return true if DEVICE is an ext2 file system and if it was cleanly
+unmounted."
+  (ext2-superblock-cleanly-unmounted? (read-ext2-superblock device)))
 
 
 ;;;
@@ -227,6 +284,36 @@ if DEVICE does not contain an linux-swap file system."
   "Return the label of Linux-swap superblock SBLOCK as a string."
   (null-terminated-latin1->string
    (sub-bytevector sblock (+ 1024 4 4 4 16) 16)))
+
+(define (swap-space->flags-bit-mask swap)
+  "Return the number suitable for the 'flags' argument of 'mount'
+that corresponds to the swap-space SWAP."
+  (define prio-flag
+    (let ((p (swap-space-priority swap))
+          (max (ash SWAP_FLAG_PRIO_MASK (- SWAP_FLAG_PRIO_SHIFT))))
+      (if p
+          (logior SWAP_FLAG_PREFER
+                  (ash (cond
+                        ((< p 0)
+                         (begin (warning
+                                 (G_ "Given swap priority ~a is
+negative, defaulting to 0.~%") p)
+                                0))
+                        ((> p max)
+                         (begin (warning
+                                 (G_ "Limiting swap priority ~a to
+~a.~%")
+                                 p max)
+                                max))
+                        (else p))
+                       SWAP_FLAG_PRIO_SHIFT))
+          0)))
+  (define delayed-flag
+    (if (swap-space-discard? swap)
+        SWAP_FLAG_DISCARD
+        0))
+  (logior prio-flag delayed-flag))
+
 
 
 ;;;
@@ -278,14 +365,14 @@ errors. Otherwise, fix only those considered safe to repair automatically."
         (status
          ;; A number, or #f on abnormal termination (e.g., assertion failure).
          (status:exit-val
-          (apply system* `("bcachefs" "fsck" "-v"
-                           ,@(if force? '("-f") '())
-                           ,@(match repair
-                               (#f '("-n"))
-                               (#t '("-y"))
-                               (_  '("-p")))
-                           ;; Make each multi-device member a separate argument.
-                           ,@(string-split device #\:))))))
+          (apply system*/tty "bcachefs" "fsck" "-v"
+                 `(,@(if force? '("-f") '())
+                   ,@(match repair
+                       (#f '("-n"))
+                       (#t '("-y"))
+                       (_  '("-p")))
+                   ;; Make each multi-device member a separate argument.
+                   ,@(string-split device #\:))))))
     (match (and=> status (cut logand <> (lognot ignored-bits)))
       (0 'pass)
       (1 'errors-corrected)
@@ -330,17 +417,17 @@ false, do not write to DEVICE.  If it's #t, fix any errors found.  Otherwise,
 fix only those considered safe to repair automatically."
   (if force?
       (match (status:exit-val
-              (apply system* `("btrfs" "check" "--progress"
-                               ;; Btrfs's ‘--force’ is not relevant to us here.
-                               ,@(match repair
-                                   ;; Upstream considers ALL repairs dangerous
-                                   ;; and will warn the user at run time.
-                                   (#t '("--repair"))
-                                   (_  '("--readonly" ; a no-op for clarity
-                                         ;; A 466G file system with 180G used is
-                                         ;; enough to kill btrfs with 6G of RAM.
-                                         "--mode" "lowmem")))
-                               ,device)))
+              (apply system*/tty "btrfs" "check" "--progress"
+                     ;; Btrfs's ‘--force’ is not relevant to us here.
+                     `(,@(match repair
+                           ;; Upstream considers ALL repairs dangerous
+                           ;; and will warn the user at run time.
+                           (#t '("--repair"))
+                           (_  '("--readonly"     ; a no-op for clarity
+                                 ;; A 466G file system with 180G used is
+                                 ;; enough to kill btrfs with 6G of RAM.
+                                 "--mode" "lowmem")))
+                       ,device)))
         (0 'pass)
         (_ 'fatal-error))
       'pass))
@@ -378,11 +465,11 @@ ignored: a full file system scan is always performed.  If REPAIR is false, do
 not write to the file system to fix errors. Otherwise, automatically fix them
 using the least destructive approach."
   (match (status:exit-val
-          (apply system* `("fsck.vfat" "-v"
-                           ,@(match repair
-                               (#f '("-n"))
-                               (_  '("-a"))) ; no 'safe/#t distinction
-                           ,device)))
+          (system*/tty "fsck.vfat" "-v"
+                       (match repair
+                         (#f "-n")
+                         (_  "-a"))               ;no 'safe/#t distinction
+                       device))
     (0 'pass)
     (1 'errors-corrected)
     (_ 'fatal-error)))
@@ -511,7 +598,7 @@ do not write to the file system to fix errors, and replay the transaction log
 only if FORCE?  is true. Otherwise, replay the transaction log before checking
 and automatically fix found errors."
   (match (status:exit-val
-          (apply system*
+          (apply system*/tty
                  `("jfs_fsck" "-v"
                    ;; The ‘LEVEL’ logic is convoluted.  To quote fsck/xchkdsk.c
                    ;; (‘-p’, ‘-a’, and ‘-r’ are aliases in every way):
@@ -587,10 +674,10 @@ REPAIR are true, automatically fix found errors."
             "warning: forced check of F2FS ~a implies repairing any errors~%"
             device))
   (match (status:exit-val
-          (apply system* `("fsck.f2fs"
-                           ,@(if force? '("-f") '())
-                           ,@(if repair '("-p") '("--dry-run"))
-                           ,device)))
+          (apply system*/tty "fsck.f2fs"
+                 `(,@(if force? '("-f") '())
+                   ,@(if repair '("-p") '("--dry-run"))
+                   ,device)))
     ;; 0 and -1 are the only two possibilities according to the man page.
     (0 'pass)
     (_ 'fatal-error)))
@@ -675,9 +762,9 @@ ignored: a full check is always performed.  Repair is not possible: if REPAIR is
 true and the volume has been repaired by an external tool, clear the volume
 dirty flag to indicate that it's now safe to mount."
   (match (status:exit-val
-          (apply system* `("ntfsfix"
-                           ,@(if repair '("--clear-dirty") '("--no-action"))
-                           ,device)))
+          (system*/tty "ntfsfix"
+                       (if repair "--clear-dirty" "--no-action")
+                       device))
     (0 'pass)
     (_ 'fatal-error)))
 
@@ -720,11 +807,11 @@ write to DEVICE.  If it's #t, replay the log, check, and fix any errors found.
 Otherwise, only replay the log, and check without attempting further repairs."
   (define (xfs_repair)
     (status:exit-val
-     (apply system* `("xfs_repair" "-Pv"
-                      ,@(match repair
-                          (#t '("-e"))
-                          (_  '("-n"))) ; will miss some errors
-                      ,device))))
+     (system*/tty "xfs_repair" "-Pv"
+                  (match repair
+                    (#t "-e")
+                    (_  "-n"))                    ;will miss some errors
+                  device)))
   (if force?
       ;; xfs_repair fails with exit status 2 if the log is dirty, which is
       ;; likely in situations where you're running xfs_repair.  Only the kernel
@@ -1037,6 +1124,8 @@ corresponds to the symbols listed in FLAGS."
        (logior MS_STRICTATIME (loop rest)))
       (('lazy-time rest ...)
        (logior MS_LAZYTIME (loop rest)))
+      (('shared rest ...)
+       (loop rest))
       (()
        0))))
 
@@ -1100,6 +1189,9 @@ corresponds to the symbols listed in FLAGS."
         (cond
          ((string-prefix? "nfs" type)
           (mount-nfs source target type flags options))
+         ((memq 'shared (file-system-flags fs))
+          (mount source target type flags options)
+          (mount "none" target #f MS_SHARED))
          (else
           (mount source target type flags options)))
 

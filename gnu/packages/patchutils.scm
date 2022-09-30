@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2014, 2018 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2015, 2018 Leo Famulari <leo@famulari.name>
-;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2018–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 Christopher Baines <mail@cbaines.net>
 ;;; Copyright © 2021 Xinglu Chen <public@yoctocell.xyz>
 ;;;
@@ -64,8 +64,7 @@
          "1va5pzmxbzpi87vdnbjm9qdf9bvzps9xfv0gi4mycgg3bybb0xc8"))))
     (build-system gnu-build-system)
     (inputs
-     `(("perl" ,perl)
-       ("python" ,python)))
+     (list perl python))
     (arguments
      '(#:parallel-tests? #f
        #:phases
@@ -112,11 +111,7 @@ listing the files modified by a patch.")
     (build-system gnu-build-system)
     (native-inputs
      `(("gettext" ,gettext-minimal)))
-    (inputs `(("perl" ,perl)
-              ("less" ,less)
-              ("file" ,file)
-              ("ed" ,ed)
-              ("diffstat" ,diffstat)))
+    (inputs (list perl less file ed diffstat))
     (arguments
      '(#:parallel-tests? #f
        #:phases
@@ -163,7 +158,7 @@ refreshed, and more.")
 (define-public colordiff
   (package
     (name "colordiff")
-    (version "1.0.19")
+    (version "1.0.20")
     (source
       (origin
         (method url-fetch)
@@ -172,7 +167,7 @@ refreshed, and more.")
                    (string-append "http://www.colordiff.org/archive/colordiff-"
                                   version ".tar.gz")))
       (sha256
-       (base32 "069vzzgs7b44bmfh3ks2psrdb26s1w19gp9w4xxbgi7nhx6w3s26"))))
+       (base32 "1kbv3lsyzzrwca4v3ajpnv8q5j0h53r94lxiqgmikxmrxrxh3cp3"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f                      ; no tests
@@ -183,43 +178,13 @@ refreshed, and more.")
          (delete 'configure)            ; no configure script
          (delete 'build))))             ; nothing to build
     (inputs
-     `(("perl" ,perl)
-       ("xmlto" ,xmlto)))
+     (list perl xmlto))
     (home-page "https://www.colordiff.org")
     (synopsis "Display diff output with colors")
     (description
      "Colordiff is Perl script wrapper on top of diff command which provides
 'syntax highlighting' for various patch formats.")
     (license gpl2+)))
-
-(define-public patches
-  (let ((commit "ef1b8a7d954b82ed4af3a08fd63d2085d19090ef"))
-    (package
-      (name "patches")
-      (home-page "https://github.com/stefanha/patches")
-      (version (string-append "0.0-1." (string-take commit 7)))
-      (source (origin
-                (method git-fetch)
-                (uri (git-reference
-                      (url home-page)
-                      (commit commit)))
-                (sha256
-                 (base32
-                  "11rdmhv0l1s8nqb20ywmw2zqizczch2p62qf9apyx5wqgxlnjshk"))
-                (file-name (string-append name "-"version "-checkout"))))
-      (build-system python-build-system)
-      (inputs `(("python-notmuch" ,python2-notmuch)))
-      (arguments
-       `(#:tests? #f                             ;no "test" target
-         #:python ,python-2))                    ;not compatible with Python 3
-      (synopsis "Patch tracking tool")
-      (description
-       "@code{Patches} is a patch-tracking tool initially written for the QEMU
-project.  It provides commands that build a database of patches from a mailing
-list, and commands that can search that database.  It allows users to track
-the status of a patch, apply patches, and search for patches---all that from
-the command-line or from Emacs via its Notmuch integration.")
-      (license gpl2+))))
 
 (define-public vbindiff
   (package
@@ -234,7 +199,7 @@ the command-line or from Emacs via its Notmuch integration.")
                 "1f1kj4jki08bnrwpzi663mjfkrx4wnfpzdfwd2qgijlkx5ysjkgh"))))
     (build-system gnu-build-system)
     (inputs
-     `(("ncurses" ,ncurses)))
+     (list ncurses))
     (home-page "https://www.cjmweb.net/vbindiff/")
     (synopsis "Console-based tool for comparing binary data")
     (description "Visual Binary Diff (@command{vbindiff}) displays files in
@@ -267,7 +232,7 @@ GiB).")
        ("gsettings-desktop-schemas" ,gsettings-desktop-schemas)
        ("gtksourceview" ,gtksourceview-3)))
     (propagated-inputs
-     `(("dconf" ,dconf)))
+     (list dconf))
     (arguments
      `(#:imported-modules ((guix build glib-or-gtk-build-system)
                            ,@%python-build-system-modules)
@@ -328,7 +293,7 @@ you to figure out what is going on in that merge you keep avoiding.")
 (define-public patchwork
   (package
     (name "patchwork")
-    (version "3.0.1")
+    (version "3.0.4")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -337,7 +302,7 @@ you to figure out what is going on in that merge you keep avoiding.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "049ih1fbbbmj11v5m9ilahifl8x7gi6wyba58552y9n9djzs8csc"))))
+                "0dl0prsyzsnlq6g0jw05mxx00bq9y2rpc3vrbfxfiblyyydrn2xn"))))
     (build-system python-build-system)
     (arguments
      `(;; TODO: Tests require a running database
@@ -355,7 +320,7 @@ you to figure out what is going on in that merge you keep avoiding.")
                  ;; as the python modules in this package in the wsgi.py file,
                  ;; as this will ensure they are available at runtime.
                  (define pythonpath
-                   (string-append (getenv "PYTHONPATH")
+                   (string-append (getenv "GUIX_PYTHONPATH")
                                   ":"
                                   (site-packages inputs outputs)))
                  (display
@@ -390,22 +355,22 @@ application = get_wsgi_application()\n") port)))))
                (for-each (lambda (directory)
                            (copy-recursively
                             directory
-                            (string-append out-site-packages directory)))
+                            (string-append out-site-packages "/" directory)))
                          '(;; Contains the python code
                            "patchwork"
                            ;; Contains the templates for the generated HTML
                            "templates"))
                (delete-file-recursively
-                (string-append out-site-packages "patchwork/tests"))
+                (string-append out-site-packages "/patchwork/tests"))
 
                ;; Install patchwork related tools
                (for-each (lambda (file)
                            (install-file file (string-append out "/bin")))
                          (list
                           (string-append out-site-packages
-                                         "patchwork/bin/parsemail.sh")
+                                         "/patchwork/bin/parsemail.sh")
                           (string-append out-site-packages
-                                         "patchwork/bin/parsemail-batch.sh")))
+                                         "/patchwork/bin/parsemail-batch.sh")))
 
                ;; Collect the static assets, this includes JavaScript, CSS and
                ;; fonts. This is a standard Django process when running a
@@ -459,15 +424,15 @@ if __name__ == \"__main__\":
                (chmod (string-append out "/bin/patchwork-admin") #o555))
              #t)))))
     (inputs
-     `(("python-wrapper" ,python-wrapper)))
+     (list python-wrapper))
     (propagated-inputs
-     `(("python-django" ,python-django-2.2)
-       ;; TODO: Make this configurable
-       ("python-psycopg2" ,python-psycopg2)
-       ("python-mysqlclient" ,python-mysqlclient)
-       ("python-django-filter" ,python-django-filter)
-       ("python-djangorestframework" ,python-djangorestframework)
-       ("python-django-debug-toolbar" ,python-django-debug-toolbar)))
+     (list python-django-3.2
+           ;; TODO: Make this configurable
+           python-psycopg2
+           python-mysqlclient
+           python-django-filter
+           python-django-rest-framework
+           python-django-debug-toolbar))
     (synopsis "Web based patch tracking system")
     (description
      "Patchwork is a patch tracking system.  It takes in emails containing
@@ -518,10 +483,7 @@ Users can login allowing them to change the state of patches.")
                             "/share/man/man1"))
              #t)))))
     (native-inputs
-     `(("python-pbr" ,python-pbr)
-       ("python-pytest" ,python-pytest)
-       ("python-pytest-cov" ,python-pytest-cov)
-       ("python-mock" ,python-mock)))
+     (list python-pbr python-pytest python-pytest-cov python-mock))
     (home-page
      "https://github.com/getpatchwork/pwclient")
     (synopsis "Command-line client for the Patchwork patch tracking tool")

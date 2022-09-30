@@ -5,6 +5,8 @@
 ;;; Copyright © 2016–2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2017 Rene Saavedra <rennes@openmailbox.org>
 ;;; Copyright © 2021 David Larsson <david.larsson@selfhosted.xyz>
+;;; Copyright © 2021 Guillaume Le Vaillant <glv@posteo.net>
+;;; Copyright © 2022 Jai Vetrivelan <jaivetrivelan@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -32,7 +34,6 @@
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages freedesktop)
-  #:use-module (gnu packages gcc)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gtk)
@@ -65,11 +66,9 @@
                 "03b7y0h3mf4jfq5y8zw6hv9v44z3n6i8hc1iswax96y3z7sc85y5"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("zlib" ,zlib)
-       ("readline" ,readline)
-       ("gnutls" ,gnutls)))
+     (list zlib readline gnutls))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -104,6 +103,9 @@ reliability in mind.")
               (sha256
                (base32
                 "1389657cwgw5a3kljnqmhvfh4vr2gcr71dwz1mlhf22xq23hc82z"))
+              (patches
+               (search-patches
+                "ncftp-reproducible.patch"))
               (modules '((guix build utils)))
               (snippet
                '(begin
@@ -132,10 +134,11 @@ reliability in mind.")
                     (let ((out (assoc-ref outputs "out")))
                       (setenv "CONFIG_SHELL" (which "sh"))
                       (setenv "SHELL" (which "sh"))
+                      (setenv "CFLAGS" "-fcommon")
                       (invoke "./configure"
                               (string-append "--prefix=" out))))))
        #:tests? #f)) ;there are no tests
-    (inputs `(("ncurses" ,ncurses)))
+    (inputs (list ncurses))
     (home-page "https://www.ncftp.com/ncftp/")
     (synopsis "Command-line File Transfer Protocol (FTP) client")
     (description
@@ -161,9 +164,7 @@ FTP browser, as well as non-interactive commands such as @code{ncftpput} and
             "1ir761hjncr1bamaqcw9j7x57xi3s9jax3223bxwbq30a0vsw1pd"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("automake" ,automake)
-       ("autoconf" ,autoconf)
-       ("gettext" ,gettext-minimal)))
+     (list automake autoconf gettext-minimal))
     (home-page "http://weex.sourceforge.net/")
     (synopsis "Non-interactive client for FTP synchronization")
     (description
@@ -176,26 +177,22 @@ as required.")
 (define-public libfilezilla
   (package
     (name "libfilezilla")
-    (version "0.31.1")
+    (version "0.37.2")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://download.filezilla-project.org/"
                            "libfilezilla/libfilezilla-" version ".tar.bz2"))
        (sha256
-        (base32 "0vqn6gkwyin9hml39d74vcjcnbwlnk2cpc3msdlkhpq1ns3mhzcr"))))
+        (base32 "1mg2zqmpkkcimx6kq3a1ab26v515zzxw2s8rwhmajsv4cgp404g5"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags
        (list "--disable-static")))
     (native-inputs
-     `(("cppunit" ,cppunit)
-       ("gcc" ,gcc-8)                   ; XXX remove when it's the default
-       ("gettext" ,gettext-minimal)
-       ("pkg-config" ,pkg-config)))
+     (list cppunit gettext-minimal pkg-config))
     (inputs
-     `(("gnutls" ,gnutls)
-       ("nettle" ,nettle)))
+     (list gnutls nettle))
     (home-page "https://lib.filezilla-project.org")
     (synopsis "Cross-platform C++ library used by Filezilla client")
     (description
@@ -220,33 +217,30 @@ output.
 (define-public filezilla
   (package
     (name "filezilla")
-    (version "3.55.1")
+    (version "3.60.1")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://download.filezilla-project.org/client/"
                            "FileZilla_" version "_src.tar.bz2"))
        (sha256
-        (base32 "19bnyx89jg0ll8a8mr4y8gp26gizs11ckgrwglh27zak3zhx1y37"))))
+        (base32 "1bv643abf8jai552j9fqcl4i54h1yrs5hgn6w0w1ibwccdinryc1"))))
     (build-system gnu-build-system)
     (arguments
       ;; Don't let filezilla phone home to check for updates.
      '(#:configure-flags '("--disable-autoupdatecheck")))
     (native-inputs
-     `(("cppunit" ,cppunit)
-       ("gettext" ,gettext-minimal)
-       ("pkg-config" ,pkg-config)
-       ("xdg-utils" ,xdg-utils)))
+     (list cppunit gettext-minimal pkg-config xdg-utils))
     (inputs
-     `(("dbus" ,dbus)
-       ("gnutls" ,gnutls)
-       ("gtk+" ,gtk+)
-       ("libfilezilla" ,libfilezilla)
-       ("libidn" ,libidn)
-       ("nettle" ,nettle)
-       ("pugixml" ,pugixml)
-       ("sqlite" ,sqlite)
-       ("wxwidgets" ,wxwidgets)))
+     (list dbus
+           gnutls
+           gtk+
+           libfilezilla
+           libidn
+           nettle
+           pugixml
+           sqlite
+           wxwidgets))
     (home-page "https://filezilla-project.org")
     (synopsis "Full-featured graphical FTP/FTPS/SFTP client")
     (description
@@ -297,9 +291,7 @@ directory comparison and more.")
                (("/usr") (assoc-ref outputs "out")))))
          (delete 'configure))))         ; no configure script
     (inputs
-     `(("libcap" ,libcap)
-       ("linux-pam" ,linux-pam)
-       ("openssl" ,openssl)))
+     (list libcap linux-pam openssl))
     (synopsis "Small FTP server with a focus on security")
     (description
      "The Very Secure File Transfer Protocol Daemon or @command{vsftpd} is a

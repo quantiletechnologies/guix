@@ -60,9 +60,7 @@
           (define marionette
             (make-marionette (list #$vm)))
 
-          (mkdir #$output)
-          (chdir #$output)
-
+          (test-runner-current (system-test-runner #$output))
           (test-begin #$name)
 
           ;; XXX: Shepherd reads the config file *before* binding its control
@@ -87,27 +85,12 @@
              '(begin
                 ;; Wait for nix-daemon to be up and running.
                 (start-service 'nix-daemon)
-                (with-output-to-file "guix-test.nix"
-                  (lambda ()
-                    (display "\
-with import <nix/config.nix>;
-
-derivation {
-  system = builtins.currentSystem;
-  name = \"guix-test\";
-  builder = shell;
-  args = [\"-c\" \"mkdir $out\\necho FOO > $out/foo\"];
-  PATH = coreutils;
-}
-")))
-                (zero? (system* (string-append #$nix "/bin/nix-build")
-                                "--substituters" "" "--debug" "--no-out-link"
-                                "guix-test.nix")))
+                (zero? (system* (string-append #$nix "/bin/nix")
+                                "--experimental-features" "nix-command"
+                                "store" "ping" "--store" "daemon")))
              marionette))
 
-	  (test-end)
-
-          (exit (= (test-runner-fail-count (test-runner-current)) 0)))))
+          (test-end))))
 
   (gexp->derivation (string-append name "-test") test))
 
@@ -116,7 +99,7 @@ derivation {
   (let ((base-os
          (simple-operating-system
           (service nix-service-type)
-	  (service dhcp-client-service-type))))
+          (service dhcp-client-service-type))))
     (operating-system
       (inherit base-os)
       (packages (cons nix (operating-system-packages base-os))))))

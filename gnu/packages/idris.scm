@@ -2,7 +2,8 @@
 ;;; Copyright © 2015 Paul van der Walt <paul@denknerd.org>
 ;;; Copyright © 2016, 2017 David Craven <david@craven.ch>
 ;;; Copyright © 2018 Alex ter Weele <alex.ter.weele@gmail.com>
-;;; Copyright © 2019, 2021 Eric Bavier <bavier@posteo.net>
+;;; Copyright © 2019, 2021, 2022 Eric Bavier <bavier@posteo.net>
+;;; Copyright © 2022 Attila Lendvai <attila@lendvai.name>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -32,61 +33,58 @@
   #:use-module (guix build-system haskell)
   #:use-module (guix download)
   #:use-module (guix git-download)
+  #:use-module (guix utils)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages))
 
 (define-public idris
   (package
     (name "idris")
-    (version "1.3.3")
+    (version "1.3.4")
     (source (origin
-              (method url-fetch)
-              (uri (string-append
-                    "https://hackage.haskell.org/package/"
-                    "idris-" version "/idris-" version ".tar.gz"))
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/idris-lang/Idris-dev.git")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
               (sha256
                (base32
-                "1pachwc6msw3n1mz2z1r1w6h518w9gbhdvbaa5vi1qp3cn3wm6q4"))
-              (patches (search-patches "idris-disable-test.patch"
-                                       "idris-build-with-haskeline-0.8.patch"
-                                       "idris-build-with-megaparsec-9.patch"))))
+                "0cd2a92323hb9a6wy8sc0cqwnisf4pv8y9y2rxvxcbyv8cs1q8g2"))
+              (patches (search-patches "idris-test-ffi008.patch"))))
     (build-system haskell-build-system)
     (native-inputs                      ;For tests
-     `(("perl" ,perl)
-       ("ghc-cheapskate" ,ghc-cheapskate)
-       ("ghc-tasty" ,ghc-tasty)
-       ("ghc-tasty-golden" ,ghc-tasty-golden)
-       ("ghc-tasty-rerun" ,ghc-tasty-rerun)))
+     (list perl ghc-cheapskate ghc-tasty ghc-tasty-golden
+           ghc-tasty-rerun))
     (inputs
-     `(("gmp" ,gmp)
-       ("ncurses" ,ncurses)
-       ("ghc-aeson" ,ghc-aeson)
-       ("ghc-annotated-wl-pprint" ,ghc-annotated-wl-pprint)
-       ("ghc-ansi-terminal" ,ghc-ansi-terminal)
-       ("ghc-ansi-wl-pprint" ,ghc-ansi-wl-pprint)
-       ("ghc-async" ,ghc-async)
-       ("ghc-base64-bytestring" ,ghc-base64-bytestring)
-       ("ghc-blaze-html" ,ghc-blaze-html)
-       ("ghc-blaze-markup" ,ghc-blaze-markup)
-       ("ghc-cheapskate" ,ghc-cheapskate)
-       ("ghc-code-page" ,ghc-code-page)
-       ("ghc-fingertree" ,ghc-fingertree)
-       ("ghc-fsnotify" ,ghc-fsnotify)
-       ("ghc-ieee754" ,ghc-ieee754)
-       ("ghc-libffi" ,ghc-libffi)
-       ("ghc-megaparsec" ,ghc-megaparsec)
-       ("ghc-network" ,ghc-network)
-       ("ghc-optparse-applicative" ,ghc-optparse-applicative)
-       ("ghc-regex-tdfa" ,ghc-regex-tdfa)
-       ("ghc-safe" ,ghc-safe)
-       ("ghc-split" ,ghc-split)
-       ("ghc-terminal-size" ,ghc-terminal-size)
-       ("ghc-uniplate" ,ghc-uniplate)
-       ("ghc-unordered-containers" ,ghc-unordered-containers)
-       ("ghc-utf8-string" ,ghc-utf8-string)
-       ("ghc-vector" ,ghc-vector)
-       ("ghc-vector-binary-instances" ,ghc-vector-binary-instances)
-       ("ghc-zip-archive" ,ghc-zip-archive)))
+     (list gmp
+           ncurses
+           ghc-aeson
+           ghc-annotated-wl-pprint
+           ghc-ansi-terminal
+           ghc-ansi-wl-pprint
+           ghc-async
+           ghc-base64-bytestring
+           ghc-blaze-html
+           ghc-blaze-markup
+           ghc-cheapskate
+           ghc-code-page
+           ghc-fingertree
+           ghc-fsnotify
+           ghc-ieee754
+           ghc-libffi
+           ghc-megaparsec
+           ghc-network
+           ghc-optparse-applicative
+           ghc-regex-tdfa
+           ghc-safe
+           ghc-split
+           ghc-terminal-size
+           ghc-uniplate
+           ghc-unordered-containers
+           ghc-utf8-string
+           ghc-vector
+           ghc-vector-binary-instances
+           ghc-zip-archive))
     (arguments
      `(#:configure-flags
        (list (string-append "--datasubdir="
@@ -97,8 +95,7 @@
          ;; This allows us to call the 'idris' binary before installing.
          (add-after 'unpack 'set-ld-library-path
            (lambda _
-             (setenv "LD_LIBRARY_PATH" (string-append (getcwd) "/dist/build"))
-             #t))
+             (setenv "LD_LIBRARY_PATH" (string-append (getcwd) "/dist/build"))))
          (add-before 'configure 'update-constraints
            (lambda _
              (substitute* "idris.cabal"
@@ -106,8 +103,7 @@
                 dep))))
          (add-before 'configure 'set-cc-command
            (lambda _
-             (setenv "CC" "gcc")
-             #t))
+             (setenv "CC" ,(cc-for-target))))
          (add-after 'install 'fix-libs-install-location
            (lambda* (#:key outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
@@ -124,7 +120,7 @@
              (let ((out (assoc-ref outputs "out")))
                (chmod "test/scripts/timeout" #o755) ;must be executable
                (setenv "TASTY_NUM_THREADS" (number->string (parallel-job-count)))
-               (setenv "IDRIS_CC" "gcc") ;Needed for creating executables
+               (setenv "IDRIS_CC" ,(cc-for-target)) ;Needed for creating executables
                (setenv "PATH" (string-append out "/bin:" (getenv "PATH")))
                (apply (assoc-ref %standard-phases 'check) args))))
          (add-before 'check 'restore-libidris_rts
@@ -136,8 +132,7 @@
                    (static (assoc-ref outputs "static"))
                    (filename "/lib/idris/rts/libidris_rts.a"))
                (rename-file (string-append static filename)
-                            (string-append out filename))
-               #t))))))
+                            (string-append out filename))))))))
     (native-search-paths
      (list (search-path-specification
             (variable "IDRIS_LIBRARY_PATH")
@@ -195,8 +190,7 @@ Epigram and Agda.")
                                                                 path))
                                                         idris-path-subdirs)))))
             ;; FIXME: Seems to be a bug in idris that causes a dubious failure.
-            (apply system* install-cmd)
-            #t))))))
+            (apply system* install-cmd)))))))
 
 (define-public idris-lightyear
   (let ((commit "6d65ad111b4bed2bc131396f8385528fc6b3678a"))
@@ -214,7 +208,7 @@ Epigram and Agda.")
                   "1pkxnn3ryr0v0cin4nasw7kgkc9dnnpja1nfbj466mf3qv5s98af"))))
       (build-system gnu-build-system)
       (native-inputs
-       `(("idris" ,idris)))
+       (list idris))
       (arguments (idris-default-arguments name))
       (home-page "https://github.com/ziman/lightyear")
       (synopsis "Lightweight parser combinator library for Idris")
@@ -239,7 +233,7 @@ difference: backtracking.")
                   "0g7c3y9smifdz4sivi3qmvymhdr7v9kfq45fmfmmvkqcrix0spzn"))))
       (build-system gnu-build-system)
       (native-inputs
-       `(("idris" ,idris)))
+       (list idris))
       (arguments (idris-default-arguments name))
       (home-page "https://github.com/shayan-najd/wl-pprint")
       (synopsis "Pretty printing library")
@@ -264,7 +258,7 @@ wl-pprint library.")
                   "02vbsd3rmgnj0l1qq787709qcxjbr9890cbad4ykn27f77jk81h4"))))
       (build-system gnu-build-system)
       (native-inputs
-       `(("idris" ,idris)))
+       (list idris))
       (arguments (idris-default-arguments name))
       (home-page "https://github.com/HuwCampbell/Idris-Bifunctors")
       (synopsis "Bifunctor library")
@@ -288,9 +282,9 @@ excellent Haskell Bifunctors package from Edward Kmett.")
                   "06jzfj6rad08rk92w8jk5byi79svmyg0mrcqhibgx8rkjjy6vmai"))))
       (build-system gnu-build-system)
       (native-inputs
-       `(("idris" ,idris)))
+       (list idris))
       (propagated-inputs
-       `(("idris-bifunctors" ,idris-bifunctors)))
+       (list idris-bifunctors))
       (arguments (idris-default-arguments name))
       (home-page "https://github.com/HuwCampbell/idris-lens")
       (synopsis "Van Laarhoven lenses for Idris")

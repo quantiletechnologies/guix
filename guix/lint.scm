@@ -34,6 +34,7 @@
   #:use-module (guix store)
   #:autoload   (guix base16) (bytevector->base16-string)
   #:use-module (guix base32)
+  #:use-module (guix build-system)
   #:use-module (guix diagnostics)
   #:use-module (guix download)
   #:use-module (guix ftp-client)
@@ -82,6 +83,7 @@
   #:export (check-description-style
             check-inputs-should-be-native
             check-inputs-should-not-be-an-input-at-all
+            check-input-labels
             check-wrapper-inputs
             check-patch-file-names
             check-patch-headers
@@ -278,6 +280,16 @@ superfluous when building natively and incorrect when cross-compiling."
              (eq? tests? #t))
            (package-arguments package)))
   (if (and (tests-explicitly-enabled?)
+           ;; emacs-build-system sets #:tests? #f by default, therefore
+           ;; writing #:tests? #t in package definitions using
+           ;; emacs-build-system is reasonable.  Likewise for
+           ;; texlive-build-system.
+           ;;
+           ;; Compare the name of the build system instead of the build system
+           ;; itself to avoid loading unnecessary modules when only a few
+           ;; modules are linted.
+           (not (memq (build-system-name (package-build-system package))
+                      '(emacs texlive)))
            ;; Some packages, e.g. gnutls, set #:tests?
            ;; differently depending on whether it is being
            ;; cross-compiled.
@@ -477,24 +489,25 @@ of a package, and INPUT-NAMES, a list of package specifications such as
             "help2man"
             "intltool"
             "itstool"
+            "kdoctools"
             "libtool"
             "m4"
-            "qttools"
+            "qttools-5"
             "yasm" "nasm" "fasm"
-            "python-coverage" "python2-coverage"
-            "python-cython" "python2-cython"
-            "python-docutils" "python2-docutils"
-            "python-mock" "python2-mock"
-            "python-nose" "python2-nose"
-            "python-pbr" "python2-pbr"
-            "python-pytest" "python2-pytest"
-            "python-pytest-cov" "python2-pytest-cov"
-            "python-setuptools-scm" "python2-setuptools-scm"
-            "python-sphinx" "python2-sphinx"
+            "python-coverage"
+            "python-cython"
+            "python-docutils"
+            "python-mock"
+            "python-nose"
+            "python-pbr"
+            "python-pytest"
+            "python-pytest-cov"
+            "python-setuptools-scm"
+            "python-sphinx"
             "scdoc"
             "swig"
             "qmake"
-            "qttools"
+            "qttools-5"
             "texinfo"
             "xorg-server-for-tests"
             "yelp-tools")))
@@ -510,9 +523,7 @@ of a package, and INPUT-NAMES, a list of package specifications such as
   ;; Emit a warning if some inputs of PACKAGE are likely to should not be
   ;; an input at all.
   (let ((input-names '("python-setuptools"
-                       "python2-setuptools"
-                       "python-pip"
-                       "python2-pip")))
+                       "python-pip")))
     (map (lambda (input)
            (make-warning
             package
@@ -521,6 +532,37 @@ of a package, and INPUT-NAMES, a list of package specifications such as
             #:field 'inputs))
          (package-input-intersection (package-direct-inputs package)
                                      input-names))))
+
+(define (check-input-labels package)
+  "Emit a warning for labels that differ from the corresponding package name."
+  (define (check input-kind package-inputs)
+    (define (warning label name)
+      (make-warning package
+                    (G_ "label '~a' does not match package name '~a'")
+                    (list label name)
+                    #:field input-kind))
+
+    (append-map (match-lambda
+                  (((? string? label) (? package? dependency))
+                   (if (string=? label (package-name dependency))
+                       '()
+                       (list (warning label (package-name dependency)))))
+                  (((? string? label) (? package? dependency) output)
+                   (let ((expected (string-append (package-name dependency)
+                                                  ":" output)))
+                     (if (string=? label expected)
+                         '()
+                         (list (warning label expected)))))
+                  (_
+                   '()))
+                (package-inputs package)))
+
+  (append-map (match-lambda
+                ((kind proc)
+                 (check kind proc)))
+              `((native-inputs ,package-native-inputs)
+                (inputs ,package-inputs)
+                (propagated-inputs ,package-propagated-inputs))))
 
 (define (report-wrap-program-error package wrapper-name)
   "Warn that \"bash-minimal\" is missing from 'inputs', while WRAPPER-NAME
@@ -538,9 +580,7 @@ or \"bash-minimal\" is not in its inputs. 'wrap-script' is not supported."
                                        input-names)))
   (define (check-procedure-body body)
     (match body
-      ;; Explicitely setting an interpreter is acceptable,
-      ;; #:sh support is added on 'core-updates'.
-      ;; TODO(core-updates): remove mention of core-updates.
+      ;; Explicitely setting an interpreter is acceptable.
       (('wrap-program _ '#:sh . _) '())
       (('wrap-program _ . _)
        (list (report-wrap-program-error package 'wrap-program)))
@@ -957,8 +997,12 @@ patch could not be found."
 
      ;; Check whether we're reaching tar's maximum file name length.
      (let ((prefix (string-length (%distro-directory)))
-           (margin (string-length "guix-2.0.0rc3-10000-1234567890/"))
-           (max    99))
+           ;; Margin approximating the largest path that "make dist" might
+           ;; create, with a release candidate version, 123456 commits, and
+           ;; git commit hash abcde0.
+           (margin (string-length "guix-92.0.0rc3-123456-abcde0/"))
+           ;; Tested maximum patch file length for ustar format.
+           (max    151))
        (filter-map (match-lambda
                      ((? string? patch)
                       (if (> (+ margin (if (string-prefix? (%distro-directory)
@@ -968,7 +1012,7 @@ patch could not be found."
                              max)
                           (make-warning
                            package
-                           (G_ "~a: file name is too long")
+                           (G_ "~a: file name is too long, which may break 'make dist'")
                            (list (basename patch))
                            #:field 'patch-file-names)
                           #f))
@@ -1302,7 +1346,11 @@ descriptions maintained upstream."
                                  (formatted-message-arguments c))))
                  (make-warning package
                                (G_ "failed to create ~a derivation: ~a")
-                               (list system str)))))
+                               (list system str))))
+              (else
+               (make-warning package
+                             (G_ "failed to create ~a derivation: ~a")
+                             (list system c))))
       (parameterize ((%graft? #f))
         (package-derivation store package system #:graft? #f)
 
@@ -1774,6 +1822,10 @@ them for PACKAGE."
      (name        'inputs-should-not-be-input)
      (description "Identify inputs that shouldn't be inputs at all")
      (check       check-inputs-should-not-be-an-input-at-all))
+   (lint-checker
+     (name        'input-labels)
+     (description "Identify input labels that do not match package names")
+     (check       check-input-labels))
    (lint-checker
      (name        'wrapper-inputs)
      (description "Make sure 'wrap-program' can finds its interpreter.")

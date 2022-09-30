@@ -22,7 +22,7 @@
   #:use-module (gnu bootloader u-boot)
   #:use-module (gnu image)
   #:use-module (gnu packages linux)
-  #:use-module (gnu platforms arm)
+  #:use-module (guix platforms arm)
   #:use-module (gnu services)
   #:use-module (gnu services base)
   #:use-module (gnu system)
@@ -41,8 +41,8 @@
     (bootloader (bootloader-configuration
                  (bootloader u-boot-novena-bootloader)
                  (targets '("/dev/vda"))))
-    (initrd-modules '("sdhci-esdhc-imx" "ahci_imx" "i2c-dev"))
-    ;(kernel linux-libre-arm-generic)
+    (initrd-modules '())
+    (kernel linux-libre-arm-generic)
     (kernel-arguments '("console=ttymxc1,115200"))
     (file-systems (cons (file-system
                           (device (file-system-label "my-root"))

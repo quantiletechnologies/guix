@@ -1,5 +1,6 @@
 # Set of available languages.
 
+bn
 cs
 da
 de
@@ -7,9 +8,12 @@ en@boldquot
 en@quot
 eo
 es
+fa
+fi
 fr
 hu
 it
+ja
 ko
 nl
 oc
@@ -21,5 +25,7 @@ sk
 sr
 sv
 ta
+tr
+uk
 vi
 zh_CN

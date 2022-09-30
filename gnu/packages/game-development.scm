@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2014 Tomáš Čech <sleep_walker@suse.cz>
 ;;; Copyright © 2015 Mark H Weaver <mhw@netris.org>
-;;; Copyright © 2015, 2018 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015, 2018, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015, 2018 Alex Kost <alezost@gmail.com>
 ;;; Copyright © 2015, 2016, 2017 David Thompson <davet@gnu.org>
 ;;; Copyright © 2016, 2017, 2018, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
@@ -13,7 +13,7 @@
 ;;; Copyright © 2017 Peter Mikkelsen <petermikkelsen10@gmail.com>
 ;;; Copyright © 2017 Arun Isaac <arunisaac@systemreboot.net>
 ;;; Copyright © 2017, 2019 Rutger Helling <rhelling@mykolab.com>
-;;; Copyright © 2018 Marius Bakke <mbakke@fastmail.com>
+;;; Copyright © 2018, 2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2019 Pierre Neidhardt <mail@ambrevar.xyz>
 ;;; Copyright © 2019, 2020, 2021 Liliana Marie Prikler <liliana.prikler@gmail.com>
 ;;; Copyright © 2019 Jethro Cao <jethrocao@gmail.com>
@@ -23,6 +23,10 @@
 ;;; Copyright © 2021 Alexandru-Sergiu Marton <brown121407@posteo.ro>
 ;;; Copyright © 2021 Dmitry Polyakov <polyakov@liltechdude.xyz>
 ;;; Copyright © 2020-2021 James Smith <jsubuntuxp@disroot.org>
+;;; Copyright © 2021 Ekaitz Zarraga <ekaitz@elenq.tech>
+;;; Copyright © 2021 Andy Tai <atai@atai.org>
+;;; Copyright © 2022 Felix Gruber <felgru@posteo.net>
+;;; Copyright © 2022 Jai Vetrivelan <jaivetrivelan@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -44,6 +48,7 @@
   #:use-module (ice-9 match)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
+  #:use-module (guix gexp)
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix svn-download)
@@ -68,7 +73,6 @@
   #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages fribidi)
   #:use-module (gnu packages dbm)
-  #:use-module (gnu packages gcc)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages gl)
   #:use-module (gnu packages glib)
@@ -91,6 +95,7 @@
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages pulseaudio)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages qt)
@@ -111,7 +116,7 @@
 (define-public bullet
   (package
     (name "bullet")
-    (version "2.89")
+    (version "3.17")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -120,7 +125,7 @@
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "10ncf2z474jnv7p5lv01ak2mk2hib3rj5rz1zr8v2v5pnciqbijl"))
+                "0x1ghxbkvqr910sp01sjf4hlfy4sdgn2jx2qf0dsi697bzq1f3mr"))
               (modules '((guix build utils)))
               (snippet
                '(begin
@@ -130,9 +135,7 @@
                               '("Gwen" "clsocket" "enet" "glad" "imgui"
                                 "lua-5.2.3" "midi" "minizip" "openvr"
                                 "optionalX11" "serial" "zlib")))
-                  ;; These need files from ThirdPartyLibs.
-                  (substitute* "Extras/CMakeLists.txt"
-                    (("BulletRobotics") ""))
+
                   ;; Tests fail on linking, cannot find -lBussIK.
                   (substitute* "test/CMakeLists.txt"
                     ((" InverseDynamics")
@@ -145,6 +148,17 @@
                                "-DBUILD_CPU_DEMOS=OFF"
                                "-DBUILD_OPENGL3_DEMOS=OFF"
                                "-DBUILD_BULLET2_DEMOS=OFF"
+                               ;; openmw 0.47.0 requires bullet to be built with
+                               ;; double precision.
+                               ;; See <https://issues.guix.gnu.org/52953> for
+                               ;; more information.
+                               "-DUSE_DOUBLE_PRECISION=ON"
+                               ;; Extras/BulletRoboticsGUI needs files from
+                               ;; ThirdPartyLibs
+                               "-DBUILD_BULLET_ROBOTICS_GUI_EXTRA=OFF"
+                               ;; Extras/BulletRobotics needs files from
+                               ;; ThirdPartyLibs
+                               "-DBUILD_BULLET_ROBOTICS_EXTRA=OFF"
                                (string-append  "-DCMAKE_CXX_FLAGS=-fPIC "
                                                (or (getenv "CXXFLAGS") "")))
        #:phases
@@ -159,9 +173,7 @@
                 "# ADD_TEST(Test_BulletInverseForward"))
              #t)))))
     (inputs
-     `(("glu" ,glu)
-       ("libx11" ,libx11)
-       ("mesa" ,mesa)))
+     (list glu libx11 mesa))
     (home-page "https://pybullet.org/wordpress/")
     (synopsis "3D physics engine library")
     (description
@@ -183,11 +195,9 @@ is used in some video games and movies.")
        (base32 "0psb2za6ldrlak7s8pjvli98ij5yiwjx8j1ms2v7rj9yadx0xv8h"))))
    (build-system gnu-build-system)
    (inputs
-    `(("libpng" ,libpng)))
+    (list libpng))
    (native-inputs
-    `(("asciidoc" ,asciidoc)
-      ("pkg-config" ,pkg-config)
-      ("zstd" ,zstd)))
+    (list asciidoc pkg-config zstd))
    (home-page "https://github.com/Doom-Utils/deutex")
    (synopsis "WAD file composer for Doom and related games")
    (description
@@ -211,6 +221,7 @@ DeuTex has functions such as merging wads, etc.")
        (uri (string-append "https://binaries.openttd.org/extra/"
                            name "/" version "/" name "-" version
                            "-source.tar.xz"))
+       (patches (search-patches "grfcodec-gcc-compat.patch"))
        (sha256
         (base32 "08admgnpqcsifpicbm56apgv360fxapqpbbsp10qyk8i22w1ivsk"))))
     (build-system gnu-build-system)
@@ -236,12 +247,9 @@ DeuTex has functions such as merging wads, etc.")
                              "readme" "readme.rpn"))
                  (for-each (lambda (file)
                              (install-file file man))
-                           (find-files "." "\\.1"))))
-             #t)))))
+                           (find-files "." "\\.1")))))))))
     (inputs
-     `(("boost" ,boost)
-       ("libpng" ,libpng)
-       ("zlib" ,zlib)))
+     (list boost libpng zlib))
     (synopsis "GRF development tools")
     (description
      "The @dfn{Graphics Resource File} (GRF) development tools are a set of
@@ -306,13 +314,13 @@ PCM data.")
                         (("-Werror") ""))
                       #t)))))
     (native-inputs `(("pkgconfig" ,pkg-config)))
-    (inputs `(("bdb" ,bdb)
-              ("glib" ,glib)
-              ("guile" ,guile-3.0)
-              ("libmicrohttpd" ,libmicrohttpd)
-              ("ncurses" ,ncurses)
-              ("sdl" ,sdl)
-              ("zlib" ,zlib)))
+    (inputs (list bdb
+                  glib
+                  guile-3.0
+                  libmicrohttpd
+                  ncurses
+                  sdl
+                  zlib))
     (home-page "https://www.nongnu.org/gzochi/")
     (synopsis "Scalable middleware for multiplayer games")
     (description
@@ -341,8 +349,7 @@ provide connectivity for client applications written in any language.")
     (arguments
      '(#:tests? #f))
     (propagated-inputs
-     `(("python-pillow" ,python-pillow)
-       ("python-ply" ,python-ply)))
+     (list python-pillow python-ply))
     (home-page "https://github.com/OpenTTD/nml")
     (synopsis "NML compiler")
     (description
@@ -364,8 +371,7 @@ files) into @file{.grf} and/or @file{.nfo} files.")
          "0s5d5qzlzfmqb10iyrqi62n36ll94d99xjaznp5ca6dz1b91qkvr"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-pygame" ,python-pygame)
-       ("python-uniseg" ,python-uniseg)))
+     (list python-pygame python-uniseg))
     (home-page "https://python-sge.github.io/")
     (synopsis "2D game engine for Python")
     (description
@@ -374,9 +380,6 @@ general-purpose 2D game engine.  It takes care of several details for you so
 you can focus on the game itself.  This makes more rapid game development
 possible, and it also makes the SGE easy to learn.")
     (license license:lgpl3+)))
-
-(define-public python-sge-pygame
-  (deprecated-package "python-sge-pygame" python-sge))
 
 (define-public python-tmx
   (package
@@ -393,7 +396,7 @@ possible, and it also makes the SGE easy to learn.")
          "073q0prg1nzlkga2b45vhscz374206qh4x68ccg00mxxwagn64z0"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-six" ,python-six)))
+     (list python-six))
     (home-page "http://python-tmx.nongnu.org")
     (synopsis "Python library for the @code{Tiled} TMX format")
     (description
@@ -405,14 +408,6 @@ levels.")
                    ;; Documentation (only available in the source tarball) is
                    ;; under the CC0 license.
                    license:cc0))))
-
-(define-public python2-tmx
-  (let ((python2-tmx (package-with-python2 python-tmx)))
-    (package
-      (inherit python2-tmx)
-      (propagated-inputs
-       `(("python2-pathlib" ,python2-pathlib)
-         ,@(package-propagated-inputs python2-tmx))))))
 
 (define-public python-xsge
   (package
@@ -439,9 +434,9 @@ levels.")
                      "--root=/"))))
        #:tests? #f)) ; no check target
     (native-inputs
-     `(("unzip" ,unzip)))
+     (list unzip))
     (propagated-inputs
-     `(("python-sge" ,python-sge)))
+     (list python-sge))
     (home-page "https://python-sge.github.io/")
     (synopsis "Extensions for the SGE Game Engine")
     (description
@@ -501,9 +496,7 @@ support.")
        ("sfml" ,sfml)
        ("wxwidgets" ,wxwidgets-3.1)))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("which" ,which)
-       ("zip" ,zip)))
+     (list pkg-config which zip))
     (home-page "https://slade.mancubus.net")
     (synopsis "Doom game data editor")
     (description "SLADE3 is a modern editor for Doom-engine based games and
@@ -515,7 +508,7 @@ formats such as PNG.")
 (define-public tiled
   (package
     (name "tiled")
-    (version "1.7.2")
+    (version "1.8.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -524,15 +517,12 @@ formats such as PNG.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1ifxh3sv6gz32gahgi7ba0ivcw5mfgwnrw6iycpav150w9xla43i"))))
+                "05gczsywkk45bh0z1vv8l6cmrlncc2qj8agavj5ryxpnxkzy69r1"))))
     (build-system gnu-build-system)
     (inputs
-     `(("qtbase" ,qtbase-5)
-       ("qtdeclarative" ,qtdeclarative)
-       ("qtsvg" ,qtsvg)
-       ("zlib" ,zlib)))
+     (list qtbase-5 qtdeclarative-5 qtsvg-5 zlib))
     (native-inputs
-     `(("qttools" ,qttools)))
+     (list qttools-5))
     (arguments
      '(#:phases
        (modify-phases %standard-phases
@@ -541,8 +531,8 @@ formats such as PNG.")
              (substitute* "translations/translations.pro"
                (("LRELEASE =.*")
                 (string-append "LRELEASE = "
-                               (assoc-ref inputs "qttools")
-                               "/bin/lrelease\n")))
+                               (search-input-file inputs "/bin/lrelease")
+                               "\n")))
              (let ((out (assoc-ref outputs "out")))
                (invoke "qmake"
                        (string-append "PREFIX=" out))))))))
@@ -662,7 +652,7 @@ experimental.")
              "-DSFML_OS_PKGCONFIG_DIR=lib/pkgconfig")
        #:tests? #f)) ; no tests
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
      `(("mesa" ,mesa)
        ("glew" ,glew)
@@ -676,10 +666,7 @@ experimental.")
        ("stb-image-write" ,stb-image-write)))
     (propagated-inputs
      ;; In Requires.private of pkg-config files.
-     `(("flac" ,flac)
-       ("freetype" ,freetype)
-       ("libvorbis" ,libvorbis)
-       ("openal" ,openal)))
+     (list flac freetype libvorbis openal))
     (home-page "https://www.sfml-dev.org")
     (synopsis "Simple and Fast Multimedia Library")
     (description
@@ -713,11 +700,9 @@ of five modules: system, window, graphics, audio and network.")
                         #t))))
        #:tests? #f)) ; no tests
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("desktop-file-utils" ,desktop-file-utils)))
+     (list pkg-config desktop-file-utils))
     (inputs
-     `(("sdl" ,sdl)
-       ("gtk+" ,gtk+)))
+     (list sdl gtk+))
     (synopsis "Simple sound effect generator")
     (description "Sfxr is a tool for quickly generating simple sound effects.
 Originally created for use in video game prototypes, it can generate random
@@ -780,9 +765,9 @@ garbage collection and can be extended with plugins.")
                         (("CMAKE_COMPILER_IS_GNUCC") "FALSE"))
                       #t)))))
     (inputs
-     `(("zlib" ,zlib)))
+     (list zlib))
     (native-inputs
-     `(("doxygen" ,doxygen)))
+     (list doxygen))
     (home-page "https://icculus.org/physfs")
     (synopsis "File system abstraction library")
     (description
@@ -799,29 +784,29 @@ archive on a per-file basis.")
 (define-public love
   (package
     (name "love")
-    (version "11.3")
-    (source (origin
-             (method url-fetch)
-             (uri (string-append "https://bitbucket.org/rude/love/downloads/"
-                                 "love-" version "-linux-src.tar.gz"))
-             (sha256
-              (base32
-               "0m8lvlabmcchskx4qpzkdlsm44360f3j0q3vvvj2388cfnvhv7v4"))))
+    (version "11.4")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://github.com/love2d/love/releases/download/"
+                           version "/love-" version "-linux-src.tar.gz"))
+       (sha256
+        (base32 "0sak3zjpzfs3ys315m8qvszi946fz76jcpsb58j11wplyp5fwbz3"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("devil" ,devil)
-       ("freetype" ,freetype)
-       ("libmodplug" ,libmodplug)
-       ("libtheora" ,libtheora)
-       ("libvorbis" ,libvorbis)
-       ("luajit" ,luajit)
-       ("mesa" ,mesa)
-       ("mpg123" ,mpg123)
-       ("openal" ,openal)
-       ("sdl2" ,sdl2)
-       ("zlib" ,zlib)))
+     (list devil
+           freetype
+           libmodplug
+           libtheora
+           libvorbis
+           luajit
+           mesa
+           mpg123
+           openal
+           sdl2
+           zlib))
     (synopsis "2D game framework for Lua")
     (description "LÖVE is a framework for making 2D games in the Lua
 programming language.")
@@ -855,7 +840,7 @@ programming language.")
              (substitute* "CMakeLists.txt"
                (("DESTINATION .") "DESTINATION lib/love")))))))
     (inputs
-     `(("luajit" ,luajit)))
+     (list luajit))
     (synopsis "Lightweight immediate mode GUI for LÖVE games")
     (description "LÖVE is a Lua framework for making 2D games.  Nuklear
 is a minimal state immediate mode graphical user interface toolkit.  This
@@ -888,11 +873,7 @@ package is the Nuklear bindings for LÖVE created by Kevin Harrison.")
                (("ADDON_LINKAGE STATIC")
                 "ADDON_LINKAGE SHARED")))))))
     (inputs
-     `(("glu" ,glu)
-       ("libpng" ,libpng)
-       ("libvorbis" ,libvorbis)
-       ("mesa" ,mesa)
-       ("zlib" ,zlib)))
+     (list glu libpng libvorbis mesa zlib))
     (synopsis "Game programming library")
     (description "Allegro is a library mainly aimed at video game and
 multimedia programming.  It handles common, low-level tasks such as creating
@@ -933,7 +914,7 @@ etc.")
        ("physfs" ,physfs)
        ("zlib" ,zlib)))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (synopsis "Game programming library")
     (description "Allegro is a library mainly aimed at video game and
 multimedia programming.  It handles common, low-level tasks such as creating
@@ -994,7 +975,7 @@ etc.")
                             (assoc-ref %build-inputs "freetype")
                             "/include/freetype2"))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     ;; TODO: Use a patched Allegro 4 that supports window resizing.  This
     ;; patched version is bundled with Aseprite, but the patches should be
     ;; extracted and applied on top of a standalone Allegro 4 package.
@@ -1019,6 +1000,58 @@ the creation of animations, tiled graphics, texture atlases, and more.")
     (home-page "https://www.aseprite.org/")
     (license license:gpl2+)))
 
+(define-public libresprite
+  (package
+    (name "libresprite")
+    (version "1.0")
+    ;; TODO: Unbundle third party software.
+    ;; - duktape is bundled inside the project but it's hard to unbundle:
+    ;;   there are many differences from a version to the next and it is not
+    ;;   really designed to work as a shared lib.
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/LibreSprite/LibreSprite")
+                    (commit (string-append "v" version))
+                    (recursive? #t)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0djbjjh21ahlxzh0b0jp4mpfycam8h9157i4wbxkd618fraadhbp"))))
+    (build-system cmake-build-system)
+    (arguments
+     '(#:configure-flags
+       (list "-DWITH_WEBP_SUPPORT=1")
+       ;; Tests are unmaintained
+       #:tests? #f))
+    (native-inputs
+     `(("pkg-config" ,pkg-config)))
+    (inputs
+     `(("curl" ,curl)
+       ("freetype" ,freetype)
+       ("giflib" ,giflib)
+       ("googletest" ,googletest)
+       ("libjpeg" ,libjpeg-turbo)
+       ("libpng" ,libpng)
+       ("libwebp" ,libwebp)
+       ("libx11" ,libx11)
+       ("libxext" ,libxext)
+       ("libxxf86dga" ,libxxf86dga)
+       ("libxxf86vm" ,libxxf86vm)
+       ("lua" ,lua)                     ; Optional
+       ("pixman" ,pixman)
+       ("sdl2" ,sdl2)
+       ("sdl2-image" ,sdl2-image)
+       ("tinyxml" ,tinyxml)
+       ("zlib" ,zlib)))
+    (synopsis "Animated sprite editor and pixel art tool")
+    (description "LibreSprite is a tool for creating 2D pixel art for video
+games.  In addition to basic pixel editing features, it can assist in the
+creation of animations, tiled graphics, texture atlases, and more.
+LibreSprite is a fork of the latest GPLv2 commit of Aseprite.")
+    (home-page "https://libresprite.github.io/")
+    (license license:gpl2+)))
+
 (define-public qqwing
   (package
     (name "qqwing")
@@ -1033,7 +1066,7 @@ the creation of animations, tiled graphics, texture atlases, and more.")
                 "0bw0papyqjg22z6irf36gs54y8236wa37b6gyn2h1spy65n76lqp"))))
     (build-system gnu-build-system)
     (native-inputs
-      `(("pkg-config" ,pkg-config)))
+      (list pkg-config))
     (home-page "https://qqwing.com/")
     (synopsis "Sudoku puzzle solver and generator")
     (description
@@ -1063,11 +1096,8 @@ It offers the following features:
                (base32
                 "08ddhywdy2qg17m592ng3yr0p1ih96irg8wg729g75hsxxq9ipks"))))
     (build-system gnu-build-system)
-    (native-inputs `(("pkg-config" ,pkg-config)))
-    (inputs `(("fontconfig" ,fontconfig)
-              ("freeglute" ,freeglut)
-              ("fribidi" ,fribidi)
-              ("glew" ,glew)))
+    (native-inputs (list pkg-config))
+    (inputs (list fontconfig freeglut fribidi glew))
     (home-page "http://quesoglc.sourceforge.net")
     (synopsis "Implementation of the OpenGL Character Renderer (GLC)")
     (description
@@ -1178,12 +1208,9 @@ to create fully featured games and multimedia programs in the python language.")
                    license:public-domain
                    license:lgpl2.1+))))
 
-(define-public python2-pygame
-  (package-with-python2 python-pygame))
-
 (define-public python-pygame-sdl2
   (let ((real-version "2.1.0")
-        (renpy-version "7.4.10"))
+        (renpy-version "8.0.0"))
     (package
       (inherit python-pygame)
       (name "python-pygame-sdl2")
@@ -1193,15 +1220,14 @@ to create fully featured games and multimedia programs in the python language.")
          (method url-fetch)
          (uri (string-append "https://www.renpy.org/dl/" renpy-version
                              "/pygame_sdl2-" version ".tar.gz"))
-         (sha256 (base32 "0m0asrr722a4v24fm8199b0c53igagylay8bn9bz9rmc0r4v8si4"))
+         (sha256 (base32 "0majf64pdfba5byjlv41pgsdmwvy09hw3m7143jz3kc1wjd2gaw8"))
          (modules '((guix build utils)))
          (snippet
           '(begin
              ;; drop generated sources
              (delete-file-recursively "gen")
              (delete-file-recursively "gen3")
-             (delete-file-recursively "gen-static")
-             #t))))
+             (delete-file-recursively "gen-static")))))
       (build-system python-build-system)
       (arguments
        `(#:tests? #f                ; tests require pygame to be installed first
@@ -1221,10 +1247,9 @@ to create fully featured games and multimedia programs in the python language.")
                                       "/lib -Wl,--enable-new-dtags -lSDL2"))
                #t)))))
       (inputs
-       `(("sdl-union"
-          ,(sdl-union (list sdl2 sdl2-image sdl2-mixer sdl2-ttf)))))
+       (list (sdl-union (list sdl2 sdl2-image sdl2-mixer sdl2-ttf))))
       (native-inputs
-       `(("python-cython" ,python-cython)))
+       (list python-cython))
       (home-page "https://www.renpy.org/")
       (synopsis "Reimplementation of the Pygame API using SDL2")
       (description "Pygame_SDL2 reimplements the Pygame API using SDL2,
@@ -1233,19 +1258,16 @@ While it aims to be used as a drop-in replacement, it appears to be
 developed mainly for Ren'py.")
       (license (list license:lgpl2.1 license:zlib)))))
 
-(define-public python2-pygame-sdl2
-  (package-with-python2 python-pygame-sdl2))
-
-(define-public python2-renpy
+(define-public python-renpy
   (package
-    (name "python2-renpy")
-    (version "7.4.10")
+    (name "python-renpy")
+    (version "8.0.0")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://www.renpy.org/dl/" version
                            "/renpy-" version "-source.tar.bz2"))
-       (sha256 (base32 "1yngs2kh1l8micg28mcp9580qsvgq3aa8bkhv2xqfkg9qqrbr8y4"))
+       (sha256 (base32 "09z3r16j4cxddkb50ghmi4xp0s05s15q4pzdmfajy85ignwqhjdi"))
        (modules '((guix build utils)))
        (patches
         (search-patches
@@ -1254,11 +1276,13 @@ developed mainly for Ren'py.")
         '(with-directory-excursion "module"
            ;; drop fribidi sources
            (delete-file-recursively "fribidi-src")
-           #t))))
+           ;; drop _renpytfd, as there are missing sources
+           (substitute* "setup.py"
+             (("cython\\(\"_renpytfd\"" all)
+              (string-append "pass # " all)))))))
     (build-system python-build-system)
     (arguments
-     `(#:tests? #f ; Ren'py doesn't seem to package tests
-       #:python ,python-2
+     `(#:tests? #f                      ; Ren'py doesn't seem to package tests
        #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'fix-commands
@@ -1266,23 +1290,18 @@ developed mainly for Ren'py.")
              (substitute* "renpy/editor.py"
                (("xdg-open")
                 (string-append (assoc-ref inputs "xdg-utils")
-                               "/bin/xdg-open")))
-             #t))
+                               "/bin/xdg-open")))))
          (add-after 'unpack 'fix-include-paths
            (lambda* (#:key inputs #:allow-other-keys)
              (substitute* "module/setup.py"
                (("/usr/include/fribidi")
-                (string-append (assoc-ref inputs "fribidi")
-                               "/include/fribidi")))
-             #t))
+                (search-input-directory inputs "include/fribidi")))))
          (add-after 'set-paths 'set-build-vars
            (lambda* (#:key inputs native-inputs #:allow-other-keys)
              (setenv "RENPY_CYTHON"
-                     (string-append (assoc-ref (or native-inputs inputs)
-                                               "python2-cython")
-                                    "/bin/cython"))
-             (setenv "RENPY_DEPS_INSTALL" (string-join (map cdr inputs) ":"))
-             #t))
+                     (search-input-file (or native-inputs inputs)
+                                        "/bin/cython"))
+             (setenv "RENPY_DEPS_INSTALL" (string-join (map cdr inputs) ":"))))
          (replace 'build
            (lambda* (#:key inputs outputs #:allow-other-keys #:rest args)
              ;; The "module" subdirectory contains a python (really cython)
@@ -1290,11 +1309,9 @@ developed mainly for Ren'py.")
              ;; named "setup.py".
              (with-directory-excursion "module"
                (apply (assoc-ref %standard-phases 'build) args))
-             ;; the above causes renpy.__init__ to be compiled but does not
-             ;; compile anything else, hence we do that here
-             (delete-file "renpy/__init__.pyc")
-             (invoke "python" "-m" "compileall" "renpy")
-             #t))
+             ;; The above only builds the cython modules, but nothing else,
+             ;; so we do that here.
+             (invoke "python" "-m" "compileall" "renpy")))
          (replace 'install
            (lambda* (#:key inputs outputs #:allow-other-keys #:rest args)
              ;; Again, we have to wrap the module installation.
@@ -1309,23 +1326,18 @@ developed mainly for Ren'py.")
                  (apply (assoc-ref %standard-phases 'install) args))
                (copy-recursively "renpy"
                                  (string-append out site "/renpy"))
-               (delete-file-recursively (string-append out site "/renpy/common")))
-             #t)))))
+               (delete-file-recursively (string-append out site
+                                                       "/renpy/common"))))))))
+    (native-inputs (list python-cython))
     (inputs
-     `(("ffmpeg" ,ffmpeg)
-       ("freetype" ,freetype)
-       ("fribidi" ,fribidi)
-       ("glew" ,glew)
-       ("libpng" ,libpng)
-       ("sdl-union"
-        ,(sdl-union (list sdl2 sdl2-image sdl2-mixer sdl2-ttf)))
-       ("xdg-utils" ,xdg-utils)))
-    (propagated-inputs
-     `(("python2-future" ,python2-future)
-       ("python2-pygame" ,python2-pygame-sdl2)))
-    (native-inputs
-     `(("gcc" ,gcc-8) ; for const variables as initializer elements
-       ("python2-cython" ,python2-cython)))
+     (list ffmpeg
+           freetype
+           fribidi
+           glew
+           libpng
+           (sdl-union (list sdl2 sdl2-image sdl2-mixer sdl2-ttf))
+           xdg-utils))
+    (propagated-inputs (list python-future python-pygame-sdl2))
     (home-page "https://www.renpy.org/")
     (synopsis "Ren'py python module")
     (description "This package contains the shared libraries and Python modules
@@ -1336,216 +1348,160 @@ are only used to bootstrap it.")
 
 (define-public renpy
   (package
-    (inherit python2-renpy)
+    (inherit python-renpy)
     (name "renpy")
     (build-system python-build-system)
     (arguments
-     `(#:tests? #f ; see python2-renpy
-       #:python ,python-2
-       #:modules ((srfi srfi-1)
+     (list
+      #:tests? #f ; see python-renpy
+      #:modules '((srfi srfi-1)
                   (guix build python-build-system)
                   (guix build utils))
-       #:imported-modules ((srfi srfi-1) ,@%python-build-system-modules)
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'fix-commands
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (substitute* "launcher/game/choose_directory.rpy"
-               (("/usr/bin/python")
-                (string-append (assoc-ref inputs "python2")
-                               "/bin/python2")))
-             (substitute* "launcher/game/front_page.rpy"
-               (("xdg-open")
-                (string-append (assoc-ref inputs "xdg-utils")
-                               "/bin/xdg-open")))
-             (substitute* "launcher/game/project.rpy"
-               (("cmd = \\[ executable, \"-EO\", sys.argv\\[0\\] \\]")
-                (string-append "cmd = [ \"" (assoc-ref outputs "out")
-                               "/bin/renpy\" ]"))
-               ;; Projects are still created in the usual style, so we need
-               ;; to adjust the path.
-               (("cmd.append\\(self.path\\)")
-                "cmd.append(self.path + \"/game\")"))
-             #t))
-         (add-after 'unpack 'drop-game-from-paths
-           (lambda _
-             (substitute* (list "launcher/game/gui7.rpy"
-                                "launcher/game/gui7/images.py")
-               ((", \"game\",") ","))
-             #t))
-         (add-before 'build 'start-xserver
-           (lambda* (#:key inputs native-inputs #:allow-other-keys)
-             (let ((xorg-server (assoc-ref (or native-inputs inputs)
-                                           "xorg-server")))
-               (setenv "HOME" (getcwd))
-               (system (format #f "~a/bin/Xvfb :1 &" xorg-server))
-               (setenv "DISPLAY" ":1")
-               #t)))
-         (replace 'build
-           (lambda _
-             (invoke "python" "renpy.py" "launcher" "quit")
-             (invoke "python" "renpy.py" "the_question" "quit")
-             (invoke "python" "renpy.py" "tutorial" "quit")
-             #t))
-         (replace 'install
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             ;; Here we install our custom renpy program.
-             ;; After finishing this step, "out" will have the following:
-             ;; |-- bin/renpy
-             ;; `-- share/renpy ; i.e. path_to_renpy_base()
-             ;;     |-- common
-             ;;     `-- gui
-             ;;
-             ;; Note that common shares the source files that would be installed
-             ;; by python2-renpy (which are instead deleted from that package),
-             ;; but also contains their byte-compiled versions.
-             ;; On other systems, renpy_base would point to site-packages or
-             ;; even somewhere in /opt.
-             ;; The former approach is not as straightforward as it seems
-             ;; -- it causes renpy to load files twice for some weird reason --
-             ;; and the latter is impossible on Guix. Hence the detour through
-             ;; share/renpy and the custom renpy program.
-             ;;
-             ;; As a convention, other games should be installed as
-             ;; subdirectories of share/renpy in their respective outputs as
-             ;; well. This differs from the traditional layout, which is
-             ;; roughly the following:
-             ;; `-- Super Awesome Game
-             ;;     |-- game       ; <- the folder we actually want
-             ;;     |-- lib        ; compiled renpy module and dependencies
-             ;;     |-- renpy      ; yet another copy of Ren'py's code
-             ;;     |   |-- common ; the common folder from above
-             ;;     |   `-- ...    ; Python code (source + compiled)
-             ;;     |-- Super Awesome Game.py
-             ;;     `-- Super Awesome Game.sh
-             (let* ((out (assoc-ref outputs "out"))
-                    (bin/renpy (string-append out "/bin/renpy")))
-               (mkdir-p (string-append out "/bin"))
-               (copy-recursively "renpy/common"
-                                 (string-append out "/share/renpy/common"))
-               (copy-recursively "gui"
-                                 (string-append out "/share/renpy/gui"))
+      #:imported-modules `((srfi srfi-1) ,@%python-build-system-modules)
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'fix-commands
+            (lambda* (#:key inputs outputs #:allow-other-keys)
+              (substitute* "launcher/game/choose_directory.rpy"
+                (("/usr/bin/python")
+                 (search-input-file inputs "/bin/python3")))
+              (substitute* "launcher/game/front_page.rpy"
+                (("xdg-open")
+                 (search-input-file inputs "/bin/xdg-open")))
+              (substitute* "launcher/game/project.rpy"
+                (("cmd = \\[ executable, \"-EO\", sys.argv\\[0\\] \\]")
+                 (string-append "cmd = [ \"" (assoc-ref outputs "out")
+                                "/bin/renpy\" ]"))
+                ;; Projects are still created in the usual style, so we need
+                ;; to adjust the path.
+                (("cmd.append\\(self.path\\)")
+                 "cmd.append(self.path + \"/game\")"))))
+          (add-after 'unpack 'drop-game-from-paths
+            (lambda _
+              (substitute* (list "launcher/game/gui7.rpy"
+                                 "launcher/game/gui7/images.py")
+                ((", \"game\",") ","))
+              #t))
+          (add-before 'build 'start-xserver
+            (lambda* (#:key inputs native-inputs #:allow-other-keys)
+              (let ((Xvfb (search-input-file (or native-inputs inputs)
+                                             "/bin/Xvfb")))
+                (setenv "HOME" (getcwd))
+                (system (format #f "~a :1 &" Xvfb))
+                (setenv "DISPLAY" ":1"))))
+          (replace 'build
+            (lambda _
+              (invoke "python" "renpy.py" "launcher" "quit")
+              (invoke "python" "renpy.py" "the_question" "quit")
+              (invoke "python" "renpy.py" "tutorial" "quit")))
+          (replace 'install
+            (lambda* (#:key inputs outputs #:allow-other-keys)
+              ;; Here we install our custom renpy program.
+              ;; After finishing this step, "out" will have the following:
+              ;; |-- bin/renpy
+              ;; `-- share/renpy ; i.e. path_to_renpy_base()
+              ;;     |-- common
+              ;;     `-- gui
+              ;;
+              ;; Note that common shares the source files that would be installed
+              ;; by python2-renpy (which are instead deleted from that package),
+              ;; but also contains their byte-compiled versions.
+              ;; On other systems, renpy_base would point to site-packages or
+              ;; even somewhere in /opt.
+              ;; The former approach is not as straightforward as it seems
+              ;; -- it causes renpy to load files twice for some weird reason --
+              ;; and the latter is impossible on Guix. Hence the detour through
+              ;; share/renpy and the custom renpy program.
+              ;;
+              ;; As a convention, other games should be installed as
+              ;; subdirectories of share/renpy in their respective outputs as
+              ;; well. This differs from the traditional layout, which is
+              ;; roughly the following:
+              ;; `-- Super Awesome Game
+              ;;     |-- game       ; <- the folder we actually want
+              ;;     |-- lib        ; compiled renpy module and dependencies
+              ;;     |-- renpy      ; yet another copy of Ren'py's code
+              ;;     |   |-- common ; the common folder from above
+              ;;     |   `-- ...    ; Python code (source + compiled)
+              ;;     |-- Super Awesome Game.py
+              ;;     `-- Super Awesome Game.sh
+              (let* ((out (assoc-ref outputs "out"))
+                     (bin/renpy (string-append out "/bin/renpy")))
+                (copy-recursively "renpy/common"
+                                  (string-append out "/share/renpy/common"))
+                (copy-recursively "gui"
+                                  (string-append out "/share/renpy/gui"))
+                (copy-recursively "sdk-fonts"
+                                  (string-append out "/share/renpy/sdk-fonts"))
 
-               (call-with-output-file bin/renpy
-                 (lambda (port)
-                   (format port "#!~a/bin/python2~%"
-                           (assoc-ref inputs "python2"))
-                   (format port "
-from __future__ import print_function
+                (mkdir-p (string-append out "/bin"))
+                (copy-file #$(local-file (search-auxiliary-file "renpy/renpy.in"))
+                           bin/renpy)
+                (substitute* bin/renpy
+                  (("@PYTHON@") (search-input-file inputs "bin/python3"))
+                  (("@RENPY_BASE@") (string-append out "/share/renpy")))
+                (chmod bin/renpy #o755))))
 
-import os
-import sys
-import warnings
+          (add-after 'install 'install-games
+            (lambda* (#:key inputs outputs #:allow-other-keys)
+              (define renpy (assoc-ref outputs "out"))
+              ;; TODO: We should offer a renpy-build-system to make the
+              ;; installation of Ren'py games easier.
+              (define* (install-renpy-game #:key output game name (renpy renpy)
+                                           #:allow-other-keys)
+                (let* ((name (or name (basename game)))
+                       (launcher (string-append output "/bin/renpy-" name))
+                       (share (string-append output "/share/renpy/" name)))
+                  (copy-recursively (string-append game "/game") share)
+                  (mkdir-p (string-append output "/bin"))
+                  (with-output-to-file launcher
+                    (lambda ()
+                      (format #t
+                              "#!~a~%~a ~a \"$@\""
+                              (search-input-file inputs "/bin/bash")
+                              (string-append renpy "/bin/renpy")
+                              share)))
+                  (chmod launcher #o755)))
 
-def path_to_common(renpy_base):
-    return renpy_base + \"/common\"
+              (install-renpy-game #:output (assoc-ref outputs "out")
+                                  #:game "launcher")
 
-def path_to_saves(gamedir, save_directory=None):
-    import renpy  # @UnresolvedImport
+              (install-renpy-game #:output (assoc-ref outputs "the-question")
+                                  #:game "the_question"
+                                  #:name "the-question")
 
-    if save_directory is None:
-        save_directory = renpy.config.save_directory
-        save_directory = renpy.exports.fsencode(save_directory)
-
-    if not save_directory:
-        return gamedir + \"/saves\"
-
-    return os.path.expanduser(\"~~/.renpy/\" + save_directory)
-
-def path_to_renpy_base():
-    return \"~a\"
-
-def main():
-    renpy_base = path_to_renpy_base()
-    try:
-        import renpy.bootstrap
-        import renpy.arguments
-    except ImportError:
-        print(\"\"\"Could not import renpy.bootstrap.
-Please ensure you decompressed Ren'Py correctly, preserving the directory
-structure.\"\"\", file=sys.stderr)
-        raise
-
-    args = renpy.arguments.bootstrap()
-    if not args.basedir:
-        print(\"\"\"This Ren'py requires a basedir to launch.
-The basedir is the directory, in which .rpy files live -- usually the 'game'
-subdirectory of a game packaged by Ren'py.
-
-If you want the Ren'py launcher, use renpy-launcher instead.\"\"\",
-              file=sys.stderr)
-        sys.exit()
-
-    renpy.bootstrap.bootstrap(renpy_base)
-
-if __name__ == \"__main__\":
-    main()
-"
-                           (string-append out "/share/renpy"))))
-               (chmod bin/renpy #o755)
-               #t)))
-
-         (add-after 'install 'install-games
-           (lambda* (#:key outputs #:allow-other-keys)
-             (define renpy (assoc-ref outputs "out"))
-             ;; TODO: We should offer a renpy-build-system to make the
-             ;; installation of Ren'py games easier.
-             (define* (install-renpy-game #:key output game name (renpy renpy)
-                                          #:allow-other-keys)
-               (let* ((name (or name (basename game)))
-                      (launcher (string-append output "/bin/renpy-" name))
-                      (share (string-append output "/share/renpy/" name)))
-                 (copy-recursively (string-append game "/game") share)
-                 (mkdir-p (string-append output "/bin"))
-                 (with-output-to-file launcher
-                   (lambda ()
-                     (format #t
-                             "#!~a~%~a ~a \"$@\""
-                             (which "bash")
-                             (string-append renpy "/bin/renpy")
-                             share)))
-                 (chmod launcher #o755)))
-
-             (install-renpy-game #:output (assoc-ref outputs "out")
-                                 #:game "launcher")
-
-             (install-renpy-game #:output (assoc-ref outputs "the-question")
-                                 #:game "the_question"
-                                 #:name "the-question")
-
-             (install-renpy-game #:output (assoc-ref outputs "tutorial")
-                                 #:game "tutorial")
-             #t))
-         (replace 'wrap
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out"))
-                   (site (string-append "/lib/python"
-                                        (python-version
-                                         (assoc-ref inputs "python"))
-                                        "/site-packages")))
-               (wrap-program (string-append out "/bin/renpy")
-                 `("PYTHONPATH" =
-                   (,@(delete-duplicates
-                       (map
-                        (lambda (store-path)
-                          (string-append store-path site))
-                        (cons (assoc-ref outputs "out")
-                              (map cdr
-                                   (filter
-                                    (lambda (input)
-                                      (string-prefix? "python2" (car input)))
-                                    inputs))))))))
-               #t))))))
-    (inputs
-     `(("python2-renpy" ,python2-renpy)
-       ("python2-tkinter" ,python-2 "tk")
-       ("python2" ,python-2) ; for ‘fix-commands’ and ‘wrap’
-       ("xdg-utils" ,xdg-utils)))
+              (install-renpy-game #:output (assoc-ref outputs "tutorial")
+                                  #:game "tutorial")))
+          (replace 'wrap
+            (lambda* (#:key inputs outputs #:allow-other-keys)
+              (let ((out (assoc-ref outputs "out"))
+                    (site (string-append "/lib/python"
+                                         (python-version
+                                          (assoc-ref inputs "python"))
+                                         "/site-packages")))
+                (wrap-program (string-append out "/bin/renpy")
+                  `("GUIX_PYTHONPATH" =
+                    (,@(delete-duplicates
+                        (map
+                         (lambda (store-path)
+                           (string-append store-path site))
+                         (cons (assoc-ref outputs "out")
+                               (map cdr
+                                    (filter
+                                     (lambda (input)
+                                       (string-prefix? "python" (car input)))
+                                     inputs))))))))))))))
+    (inputs (list bash-minimal
+                  python
+                  python-pefile
+                  python-requests
+                  python-renpy
+                  python-six
+                  `(,python "tk")
+                  xdg-utils))
     (propagated-inputs '())
-    (native-inputs
-     `(("xorg-server" ,xorg-server-for-tests)))
-    (outputs
-     (list "out" "tutorial" "the-question"))
+    (native-inputs (list xorg-server-for-tests))
+    (outputs (list "out" "tutorial" "the-question"))
     (home-page "https://www.renpy.org/")
     (synopsis "Visual Novel Engine")
     (description "Ren'Py is a visual novel engine that helps you use words,
@@ -1597,8 +1553,6 @@ games.")
     (inputs
      `(("gifsicle" ,gifsicle)
        ("sdl2" ,(sdl-union (list sdl2 sdl2-image)))))
-    (native-inputs
-     `(("gcc" ,gcc-10)))                  ; for std::filesystem
     (home-page "https://github.com/kitao/pyxel")
     (synopsis "Retro game engine for Python")
     (description "Pyxel is a game engine inspired by retro gaming consoles.
@@ -1615,6 +1569,7 @@ also comes with a built-in image and sound editor.")
               (method url-fetch)
               ;; XXX: There is no URL that contains the version. :(
               (uri "http://pulkomandy.tk/projects/GrafX2/downloads/21")
+              (file-name (string-append "grafx2-" version ".tgz"))
               (sha256
                (base32
                 "0svsy6rqmdj11b400c242i2ixihyz0hds0dgicqz6g6dcgmcl62q"))))
@@ -1631,16 +1586,16 @@ also comes with a built-in image and sound editor.")
        ;; SDL header files are referenced without the preceeding "SDL/".
        (list (string-append "CFLAGS=-I"
                             (assoc-ref %build-inputs "sdl-union")
-                            "/include/SDL")
+                            "/include/SDL"
+                            " -fcommon")
              (string-append "prefix="
                             (assoc-ref %outputs "out")))
        #:tests? #f)) ; no check target
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("libpng" ,libpng)
-       ("lua" ,lua-5.1)
-       ("sdl-union" ,(sdl-union (list sdl sdl-image sdl-ttf)))))
+     (list libpng lua-5.1
+           (sdl-union (list sdl sdl-image sdl-ttf))))
     (synopsis "Bitmap paint program")
     (description "GrafX2 is a bitmap paint program inspired by the Amiga
 programs Deluxe Paint and Brilliance.  Specializing in 256-color drawing, it
@@ -1667,7 +1622,7 @@ painted with a mouse.")
     (arguments
      `(#:tests? #f))                    ; no test suite
     (inputs
-     `(("libx11" ,libx11)))
+     (list libx11))
     (synopsis "Object Oriented Input System")
     (description
      "Cross Platform Object Oriented Input Lib System is a cross platform,
@@ -1704,16 +1659,14 @@ robust and compatible with many systems and operating systems.")
              "-DMYGUI_BUILD_DEMOS=FALSE"
              "-DMYGUI_BUILD_TOOLS=FALSE")))
     (native-inputs
-     `(("boost" ,boost)
-       ("doxygen" ,doxygen)
-       ("pkg-config" ,pkg-config)))
+     (list boost doxygen pkg-config))
     (inputs
-     `(("font-dejavu" ,font-dejavu)
-       ("freetype" ,freetype)
-       ("graphviz" ,graphviz)
-       ("libx11" ,libx11)
-       ("ogre" ,ogre)
-       ("ois" ,ois)))
+     (list font-dejavu
+           freetype
+           graphviz
+           libx11
+           ogre
+           ois))
     (synopsis "Fast, flexible and simple GUI")
     (description
      "MyGUI is a library for creating Graphical User Interfaces (GUIs) for games
@@ -1739,16 +1692,15 @@ of use.")
                       "-DMYGUI_BUILD_DEMOS=FALSE"
                       "-DMYGUI_BUILD_TOOLS=FALSE")))))
     (inputs
-     `(("mesa" ,mesa)
-       ("glu" ,glu)
-       ,@(fold alist-delete (package-inputs mygui)
-               '("ogre"))))
+     (modify-inputs (package-inputs mygui)
+       (delete "ogre")
+       (prepend mesa glu)))
     (synopsis "Fast, flexible and simple GUI (OpenGL backend)")))
 
 (define-public openmw
   (package
     (name "openmw")
-    (version "0.46.0")
+    (version "0.47.0")
     (source
      (origin
        (method git-fetch)
@@ -1758,26 +1710,27 @@ of use.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "0rm32zsmxvr6b0jjihfj543skhicbw5kg6shjx312clhlm035w2x"))))
+         "19mcbnjl4279qalb97msf965bjax48mx1r1qczyvwhn28h6n3bsy"))))
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #f                      ; No test target
        #:configure-flags
-       (list "-DDESIRED_QT_VERSION=5")))
+       (list "-DDESIRED_QT_VERSION=5"
+             "-DOPENMW_USE_SYSTEM_RECASTNAVIGATION=ON")))
     (native-inputs
-     `(("boost" ,boost)
-       ("doxygen" ,doxygen)
-       ("pkg-config" ,pkg-config)))
+     (list boost doxygen pkg-config))
     (inputs
-     `(("bullet" ,bullet)
-       ("ffmpeg" ,ffmpeg)
-       ("libxt" ,libxt)
-       ("mygui" ,mygui-gl)              ; OpenMW does not need Ogre.
-       ("openal" ,openal)
-       ("openscenegraph" ,openmw-openscenegraph)
-       ("qtbase" ,qtbase-5)
-       ("sdl" ,sdl2)
-       ("unshield" ,unshield)))
+     (list bullet
+           ffmpeg
+           libxt
+           lz4
+           mygui-gl              ; OpenMW does not need Ogre.
+           openal
+           openmw-openscenegraph
+           qtbase-5
+           recastnavigation
+           sdl2
+           unshield))
     (synopsis "Re-implementation of the RPG Morrowind engine")
     (description
      "OpenMW is a game engine which reimplements and extends the one that runs
@@ -1790,7 +1743,7 @@ games.")
 (define-public godot
   (package
     (name "godot")
-    (version "3.2.3")
+    (version "3.4.2")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1799,7 +1752,7 @@ games.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "19vrp5lhyvxbm6wjxzn28sn3i0s8j08ca7nani8l1nrhvlc8wi0v"))
+                "1bm9yl995chvx6jwkdia12yjrgwcpzb1r9bmj606q8z264aw2ma5"))
               (modules '((guix build utils)
                          (ice-9 ftw)
                          (srfi srfi-1)))
@@ -1814,27 +1767,30 @@ games.")
                               "assimp"
                               "certs"
                               "cvtt"
+                              "embree"
                               "enet"
                               "etc2comp"
                               "fonts"
                               "glad"
                               "jpeg-compressor"
                               "libsimplewebm"
+                              "minimp3"
                               "miniupnpc"
                               "minizip"
                               "misc"
                               "nanosvg"
+                              "oidn"
                               "pvrtccompressor"
                               "recastnavigation"
                               "squish"
+                              "stb_rect_pack"
                               "tinyexr"
                               "vhacd"
                               "xatlas")))
                       (for-each delete-file-recursively
                                 (lset-difference string=?
                                                  (scandir ".")
-                                                 (cons* "." ".." preserved-files)))))
-                  #t))))
+                                                 (cons* "." ".." preserved-files)))))))))
     (build-system scons-build-system)
     (arguments
      `(#:scons ,scons-python2
@@ -1868,8 +1824,7 @@ games.")
                (("env_base = Environment\\(tools=custom_tools\\)")
                 (string-append
                  "env_base = Environment(tools=custom_tools)\n"
-                 "env_base = Environment(ENV=os.environ)")))
-             #t))
+                 "env_base = Environment(ENV=os.environ)")))))
          ;; Build headless tools, used for packaging games without depending on X.
          (add-after 'build 'build-headless
            (lambda* (#:key scons-flags #:allow-other-keys)
@@ -1892,8 +1847,19 @@ games.")
                  (install-file "godot_server" (string-append headless "/bin")))
                ;; Tell the editor where to find zenity for OS.alert().
                (wrap-program (string-append out "/bin/godot")
-                 `("PATH" ":" prefix (,(string-append zenity "/bin")))))
-             #t))
+                 `("PATH" ":" prefix (,(string-append zenity "/bin")))))))
+         (add-after 'install 'wrap
+           (lambda* (#:key inputs outputs #:allow-other-keys)
+             ;; FIXME: Mesa tries to dlopen libudev.so.0 and fails.  Pending a
+             ;; fix of the mesa package we wrap the pcb executable such that
+             ;; Mesa can find libudev.so.0 through LD_LIBRARY_PATH.
+             ;; also append ld path for pulseaudio and alsa-lib
+             (let* ((out (assoc-ref outputs "out"))
+                    (udev_path (string-append (assoc-ref inputs "eudev") "/lib"))
+                    (pulseaudio_path (string-append (assoc-ref inputs "pulseaudio") "/lib"))
+                    (alas_lib_path (string-append (assoc-ref inputs "alsa-lib") "/lib")))
+               (wrap-program (string-append out "/bin/godot")
+                 `("LD_LIBRARY_PATH" ":" prefix (,udev_path ,pulseaudio_path ,alas_lib_path))))))
          (add-after 'install 'install-godot-desktop
            (lambda* (#:key outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
@@ -1907,32 +1873,34 @@ games.")
                            (copy-file icon dest))
                          '("icon.png" "icon.svg")
                          `(,(string-append icons "/256x256/apps/godot.png")
-                           ,(string-append icons "/scalable/apps/godot.svg"))))
-             #t)))))
+                           ,(string-append icons "/scalable/apps/godot.svg")))))))))
     (outputs '("out" "headless"))
-    (native-inputs `(("pkg-config" ,pkg-config)))
-    (inputs `(("alsa-lib" ,alsa-lib)
-              ("bullet" ,bullet)
-              ("freetype" ,freetype)
-              ("glew" ,glew)
-              ("glu" ,glu)
-              ("libtheora" ,libtheora)
-              ("libvorbis" ,libvorbis)
-              ("libvpx" ,libvpx)
-              ("libwebp" ,libwebp)
-              ("libx11" ,libx11)
-              ("libxcursor" ,libxcursor)
-              ("libxi" ,libxi)
-              ("libxinerama" ,libxinerama)
-              ("libxrandr" ,libxrandr)
-              ("mbedtls" ,mbedtls-apache)
-              ("mesa" ,mesa)
-              ("opusfile" ,opusfile)
-              ("pcre2" ,pcre2)
-              ("pulseaudio" ,pulseaudio)
-              ("wslay" ,wslay)
-              ("zenity" ,zenity)
-              ("zstd" ,zstd "lib")))
+    (native-inputs
+     (list pkg-config))
+    (inputs
+     (list alsa-lib
+           bullet
+           freetype
+           glew
+           glu
+           libtheora
+           libvorbis
+           libvpx
+           libwebp
+           libx11
+           libxcursor
+           libxi
+           libxinerama
+           libxrandr
+           mbedtls-apache
+           mesa
+           opusfile
+           pcre2
+           pulseaudio
+           eudev                        ; FIXME: required by mesa
+           wslay
+           zenity
+           `(,zstd "lib")))
     (home-page "https://godotengine.org/")
     (synopsis "Advanced 2D and 3D game engine")
     (description
@@ -1963,11 +1931,10 @@ scripted in a Python-like language.")
        ;; Only tests are compiled, and they need assertions to work correctly.
        #:build-type "Debug"))
     (native-inputs
-     `(;; for testing
-       ("googletest" ,googletest)
-       ;; for documentation
-       ("doxygen" ,doxygen)
-       ("graphviz" ,graphviz)))
+     (list ;; for testing
+           googletest
+           ;; for documentation
+           doxygen graphviz))
     (synopsis "Entity component system")
     (description "EnTT is a header-only library, containing (among other things)
 @itemize
@@ -2023,8 +1990,7 @@ scripted in a Python-like language.")
               ("libpng" ,libpng)
               ("fltk" ,fltk)
               ("zlib" ,zlib)))
-    (native-inputs `(("pkg-config" ,pkg-config)
-                     ("xdg-utils" ,xdg-utils)))
+    (native-inputs (list pkg-config xdg-utils))
     (synopsis "Doom map editor")
     (description "Eureka is a map editor for the classic DOOM games, and a few
 related games such as Heretic and Hexen.  It comes with a 3d preview mode and
@@ -2050,16 +2016,14 @@ a 2D editor view.")
      `(("guile-opengl" ,guile3.0-opengl)
        ("guile-sdl2" ,guile-sdl2)))
     (inputs
-     `(("freetype" ,freetype)
-       ("guile" ,guile-3.0-latest)
-       ("libvorbis" ,libvorbis)
-       ("mpg123" ,mpg123)
-       ("openal" ,openal)
-       ("readline" ,readline)))
+     (list freetype
+           guile-3.0-latest
+           libvorbis
+           mpg123
+           openal
+           readline))
     (native-inputs
-     `(("guile" ,guile-3.0-latest)
-       ("pkg-config" ,pkg-config)
-       ("texinfo" ,texinfo)))
+     (list guile-3.0-latest pkg-config texinfo))
     (home-page "https://dthompson.us/projects/chickadee.html")
     (synopsis "Game development toolkit for Guile Scheme with SDL2 and OpenGL")
     (description "Chickadee is a game development toolkit for Guile Scheme
@@ -2074,9 +2038,6 @@ that parenthetically inclined game developers need to make 2D (and eventually
 @item REPL-driven development model
 @end enumerate\n")
     (license license:gpl3+)))
-
-(define-public guile3.0-chickadee
-  (deprecated-package "guile3.0-chickadee" guile-chickadee))
 
 (define-public bennu-game-development
   (package
@@ -2114,12 +2075,8 @@ that parenthetically inclined game developers need to make 2D (and eventually
 
             i*86)"))
                #t)))))
-    (inputs `(("openssl" ,openssl)
-              ("zlib" ,zlib)))
-    (native-inputs `(("pkg-config" ,pkg-config)
-                     ("autoconf" ,autoconf)
-                     ("automake" ,automake)
-                     ("libtool" ,libtool)))
+    (inputs (list openssl zlib))
+    (native-inputs (list pkg-config autoconf automake libtool))
     (synopsis "Programming language to create games")
     (description "Bennu Game Development, also known as bennudg, is a
 programming language tailored at game development.  It is the successor of
@@ -2141,11 +2098,7 @@ Fenix.")
                  (("extern fixed fmul\\( int x, int y \\);") "")
                  (("extern fixed fdiv\\( int x, int y \\);") "")))
              (chdir "modules"))))))
-    (inputs `(("zlib" ,zlib)
-              ("libpng" ,libpng)
-              ("openssl" ,openssl)
-              ("sdl-mixer" ,sdl-mixer)
-              ("bennu-game-development" ,bennu-game-development)))
+    (inputs (list zlib libpng openssl sdl-mixer bennu-game-development))
     (synopsis "Modules for the Bennu Game Development programming language")
     (description "This package contains a collection of modules for the Bennu
 Game Development programming language, from CD handling through SDL to
@@ -2166,11 +2119,9 @@ joystick support.")))
                                        "plib-CVE-2012-4552.patch"))))
     (build-system gnu-build-system)
     (inputs
-     `(("mesa" ,mesa)
-       ("libxi" ,libxi)
-       ("libxmu" ,libxmu)))
+     (list mesa libxi libxmu))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (home-page "http://plib.sourceforge.net/")
     (synopsis "Suite of portable game libraries")
     (description "PLIB is a set of libraries that will permit programmers to
@@ -2185,10 +2136,11 @@ of the others")
 
 (define-public ioquake3
   ;; We follow master since it seems that there won't be releases after 1.3.6.
-  (let ((commit "95b9cab4d644fa3bf757cfff821cc4f7d76e38b0"))
+  (let ((revision "2")
+        (commit "29b0cc3a4d037046eb3247fc04f4b703f6a33452"))
     (package
       (name "ioquake3")
-      (version (git-version "1.3.6" "1" commit))
+      (version (git-version "1.3.6" revision commit))
       (source
        (origin
          (method git-fetch)
@@ -2197,48 +2149,48 @@ of the others")
                (commit commit)))
          (file-name (git-file-name name version))
          (sha256
-          (base32
-           "1vflk028z9gccg5yfi5451y1k5wxjdh3qbhjf4x6r7w2pzlxh16z"))))
+          (base32 "0fqq2qpnrgpgf3gs71wvxlkcihxcrvhvllh88ii4ip134c1qbs9q"))))
       (build-system gnu-build-system)
       (inputs
-       `(("sdl2" ,sdl2)
-         ("libjpeg" ,libjpeg-turbo)
-         ("openal" ,openal)
-         ("curl" ,curl)
-         ("opusfile" ,opusfile)
-         ("opus" ,opus)
-         ("libvorbis" ,libvorbis)
-         ("freetype" ,freetype)
-         ("libogg" ,libogg)))
+       (list curl
+             freetype
+             libjpeg-turbo
+             libogg
+             libvorbis
+             openal
+             opus
+             opusfile
+             sdl2))
       (native-inputs
-       `(("which" ,which)               ; Else SDL_version.h won't be found.
-         ("pkg-config" ,pkg-config)))
+       (list which                      ; else SDL_version.h won't be found.
+             pkg-config))
       (arguments
-       '(#:tests? #f                    ; No tests.
-         #:make-flags '("CC=gcc"
-                        "USE_INTERNAL_LIBS=0"
-                        "USE_FREETYPE=1"
-                        "USE_RENDERER_DLOPEN=0"
-                        "USE_OPENAL_DLOPEN=0"
-                        "USE_CURL_DLOPEN=0")
-         #:phases
-         (modify-phases %standard-phases
-           (delete 'configure)
-           (replace 'install
-             (lambda* (#:key outputs #:allow-other-keys)
-               (invoke "make" "copyfiles" "CC=gcc"
-                        "USE_INTERNAL_LIBS=0"
+       (list
+        #:tests? #f                     ; no tests
+        #:make-flags
+        #~(list (string-append "CC=" #$(cc-for-target))
+                "USE_INTERNAL_LIBS=0"
+                "USE_FREETYPE=1"
+                "USE_RENDERER_DLOPEN=0"
+                "USE_OPENAL_DLOPEN=0"
+                "USE_CURL_DLOPEN=0")
+        #:phases
+        #~(modify-phases %standard-phases
+            (delete 'configure)         ; no configure-script
+            (replace 'install
+              (lambda* (#:key make-flags outputs #:allow-other-keys)
+                (apply invoke "make" "copyfiles"
                        (string-append "COPYDIR="
                                       (assoc-ref outputs "out")
-                                      "/bin")))))))
+                                      "/bin")
+                       make-flags))))))
       (home-page "https://ioquake3.org/")
       (synopsis "FPS game engine based on Quake 3")
       (description "ioquake3 is a free software first person shooter engine
 based on the Quake 3: Arena and Quake 3: Team Arena source code.  Compared to
 the original, ioquake3 has been cleaned up, bugs have been fixed and features
-added.  The permanent goal is to create the open source Quake 3 distribution
-upon which people base their games, ports to new platforms, and other
-projects.")
+added.  The permanent goal is to create a Quake 3 distribution upon which
+people base their games, ports to new platforms, and other projects.")
       (license license:gpl2))))
 
 (define-public instead
@@ -2343,7 +2295,7 @@ specific knowledge of the hardware they are targeting.")
                                       sdl-union)))
              #t)))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
      `(("sdl" ,(sdl-union (list sdl sdl-image sdl-mixer)))))
     (home-page "http://perso.b2b2c.ca/~sarrazip/dev/burgerspace.html")
@@ -2391,7 +2343,7 @@ double-buffering.")
                (install-file "bin/Release/FNA.dll" (string-append out "/lib"))
                #t))))))
     (native-inputs
-     `(("mono" ,mono)))
+     (list mono))
     (inputs `(("sdl2-cs-src" ,(package-source sdl2-cs))
               ("mojoshader-src" ,(package-source mojoshader-cs))
               ("faudio-src" ,(package-source faudio))
@@ -2424,7 +2376,7 @@ focuses solely on developing a fully accurate XNA4 runtime for the desktop.")
                            "-DBUILD_TESTING=ON"
                            "-DENABLE_DOUBLE_PRECISION=ON")))
     (native-inputs
-     `(("python-sphinx" ,python-sphinx)))
+     (list python-sphinx))
     (home-page "https://github.com/danfis/libccd")
     (synopsis "Library for collision detection between two convex shapes")
     (description "@code{libccd} is library for a collision detection
@@ -2461,9 +2413,7 @@ a.k.a. XenoCollide) as described in Game Programming Gems 7.")
                (("configure_file\\(libccd/.*") ""))
              #t)))))
     (inputs
-     `(("glu" ,glu)
-       ("libccd" ,libccd)
-       ("mesa" ,mesa)))
+     (list glu libccd mesa))
     (home-page "https://www.ode.org/")
     (synopsis "High performance library for simulating rigid body dynamics")
     (description "ODE is a high performance library for simulating
@@ -2495,9 +2445,7 @@ computer games, 3D authoring tools and simulation tools.")
        #:configure-flags '("-DBUILD_STATIC=OFF"
                            "-DBUILD_DEMOS=OFF")))
     (inputs
-     `(("freeglut" ,freeglut)
-       ("libxmu" ,libxmu)
-       ("libxrandr" ,libxrandr)))
+     (list freeglut libxmu libxrandr))
     (home-page "https://chipmunk-physics.net/")
     (synopsis "Fast and lightweight 2D game physics library")
     (description "Chipmunk is a simple, lightweight, fast and portable 2D
@@ -2520,15 +2468,25 @@ rigid body physics library written in C.")
        (modules '((guix build utils)))
        (snippet
         '(begin
-           ;; Bundled code only used for the testbed.
-           (delete-file-recursively "extern")))))
+           ;; Remove bundled code only used for the testbed.
+           (delete-file-recursively "extern")
+           ;; Remove bundled copy of doctest, and adjust tests accordingly.
+           (delete-file "unit-test/doctest.h")
+           (substitute* "unit-test/CMakeLists.txt"
+             (("doctest\\.h")
+              ""))
+           (substitute* (find-files "unit-test" "\\.cpp$")
+             (("include \"doctest\\.h\"")
+              "include <doctest/doctest.h>"))))))
     (build-system cmake-build-system)
     (arguments
      `(#:test-target "unit_test"
        #:configure-flags '("-DBUILD_SHARED_LIBS=ON"
                            "-DBOX2D_BUILD_TESTBED=OFF")))
+    (native-inputs
+     (list doctest))                    ;for tests
     (inputs
-     `(("libx11" ,libx11)))
+     (list libx11))
     (home-page "https://box2d.org/")
     (synopsis "2D physics engine for games")
     (description "Box2D is a 2D rigid body simulation library for games.
@@ -2586,21 +2544,17 @@ physics engine is just a system for procedural animation.")
          (add-after 'unpack 'change-to-build-dir
            (lambda _
              (chdir "buildsys/autotools")
-             (patch-shebang "get_version.py")
-             #t)))))
+             (patch-shebang "get_version.py"))))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("python" ,python)
-       ("pkg-config" ,pkg-config)
-       ("stb-sprintf" ,stb-sprintf)
-       ("stb-truetype" ,stb-truetype)))
+     (list autoconf
+           automake
+           libtool
+           python
+           pkg-config
+           stb-sprintf
+           stb-truetype))
     (inputs
-     `(("lodepng" ,lodepng)
-       ("sdl2" ,sdl2)
-       ("utf8proc" ,utf8proc)
-       ("zlib" ,zlib)))
+     (list lodepng sdl2 utf8proc zlib))
     (home-page "https://github.com/libtcod/libtcod")
     (synopsis "Library specifically designed for writing roguelikes")
     (description
@@ -2680,12 +2634,12 @@ utilities frequently used in roguelikes.")
          ("openal" ,openal)
          ("pulseaudio" ,pulseaudio)
          ("qtbase" ,qtbase-5)
-         ("qtdeclarative" ,qtdeclarative)
+         ("qtdeclarative-5" ,qtdeclarative-5)
          ("sdl2" ,sdl2)
          ("uuid.h" ,util-linux "lib")
          ("zlib" ,zlib)))
       (native-inputs
-       `(("pkg-config" ,pkg-config)))
+       (list pkg-config))
       (home-page "https://github.com/Warsow/qfusion")
       (supported-systems '("i686-linux" "x86_64-linux"))
       (synopsis "Warsow's fork of qfusion, the id Tech 2 derived game engine")
@@ -2698,7 +2652,7 @@ game engine.  id Tech 2 is the engine originally behind Quake 2.")
 (define-public dhewm3
   (package
     (name "dhewm3")
-    (version "1.5.1")
+    (version "1.5.2")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -2706,7 +2660,7 @@ game engine.  id Tech 2 is the engine originally behind Quake 2.")
                     version "/dhewm3-" version "-src.tar.xz"))
               (sha256
                (base32
-                "0s2brx6wyljhjbpli97iy4lc4fqqsvdc09raz8njg0vgzcsiyrri"))))
+                "10p0w1x5wx9b7d8mzvb6yqjia9prhkjwz04vbvphy8p383r33am6"))))
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #f                      ; No tests.
@@ -2714,17 +2668,13 @@ game engine.  id Tech 2 is the engine originally behind Quake 2.")
        (modify-phases %standard-phases
          (add-after 'unpack 'change-to-build-dir
            (lambda _
-             (chdir "neo")
-             #t)))))
+             (chdir "neo"))))))
     (inputs
-     `(("curl" ,curl)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libogg" ,libogg)
-       ("libvorbis" ,libvorbis)
-       ("libx11" ,libx11)
-       ("openal" ,openal)
-       ("sdl2" ,sdl2)
-       ("zlib" ,zlib)))
+     (list curl
+           libx11
+           openal
+           sdl2
+           zlib))
     (home-page "https://dhewm3.org/")
     (synopsis "Port of the original Doom 3 engine")
     (description
@@ -2776,10 +2726,9 @@ support.")
            (add-before 'build 'fix-env
              (lambda* (#:key inputs #:allow-other-keys)
                (setenv "CPATH"
-                       (string-append (assoc-ref inputs "sdl2-union")
-                                      "/include/SDL2:"
-                                      (or (getenv "CPATH") "")))
-               #t))
+                       (string-append
+                        (search-input-directory inputs "include/SDL2")
+                        ":" (or (getenv "CPATH") "")))))
            (add-after 'install 'really-install
              (lambda* (#:key outputs #:allow-other-keys)
                (let* ((out (assoc-ref outputs "out"))
@@ -2826,4 +2775,53 @@ upgraded modern rendering techniques.  The new rendering features include
 fully dynamic omnidirectional shadows, global illumination, HDR lighting,
 deferred shading, morphological / temporal / multisample anti-aliasing, and
 much more.")
+      (license license:zlib))))
+
+(define-public recastnavigation
+  ;; We follow master since there hasn't been a release since 1.5.1 in 2016.
+  (let ((commit "c5cbd53024c8a9d8d097a4371215e3342d2fdc87")
+        (revision "1"))
+    (package
+      (name "recastnavigation")
+      (version (git-version "1.5.1" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/recastnavigation/recastnavigation")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "034bm47gc3r285w1pnvkhmm74zz99d204b1r865gisaiq4qfbza0"))))
+      (build-system cmake-build-system)
+      (arguments
+       `(#:configure-flags (list "-DBUILD_SHARED_LIBS=ON"
+                                 "-DRECASTNAVIGATION_DEMO=OFF"
+                                 "-DRECASTNAVIGATION_TESTS=ON"
+                                 "-DRECASTNAVIGATION_EXAMPLES=OFF")))
+      (synopsis "Navigation system for games")
+      (description "Recast is state of the art navigation mesh
+construction toolset for games.
+
+@itemize
+@item It is automatic, which means that you can throw any level geometry
+      at it and you will get robust mesh out.
+@item It is fast which means swift turnaround times for level designers.
+@end itemize
+
+The Recast process starts with constructing a voxel mold from a level
+geometry and then casting a navigation mesh over it.  The process
+consists of three steps, building the voxel mold, partitioning the mold
+into simple regions, peeling off the regions as simple polygons.
+
+Recast is accompanied with Detour, path-finding and spatial reasoning
+toolkit.  You can use any navigation mesh with Detour, but of course the
+data generated with Recast fits perfectly.
+
+Detour offers simple static navigation mesh which is suitable for many
+simple cases, as well as tiled navigation mesh which allows you to plug
+in and out pieces of the mesh.  The tiled mesh allows you to create
+systems where you stream new navigation data in and out as the player
+progresses the level, or you may regenerate tiles as the world changes.")
+      (home-page "https://github.com/recastnavigation/recastnavigation")
       (license license:zlib))))

@@ -2,11 +2,12 @@
 ;;; Copyright © 2014 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2016 Daniel Pimentel <d4n1@d4n1.org>
 ;;; Copyright © 2016 Leo Famulari <leo@famulari.name>
-;;; Copyright © 2017, 2018, 2019 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2017, 2018, 2019, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2017, 2018, 2019, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
-;;; Copyright © 2020, 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2020, 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2020 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2020 Brett Gilio <brettg@gnu.org>
+;;; Copyright © 2021 Felix Gruber <felgru@posteo.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -24,6 +25,7 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages protobuf)
+  #:use-module (guix gexp)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
@@ -48,20 +50,22 @@
 (define-public fstrm
   (package
     (name "fstrm")
-    (version "0.3.2")
+    (version "0.6.1")
     (source
      (origin
        (method url-fetch)
-       (uri (string-append "https://dl.farsightsecurity.com/dist/" name "/"
-                           name "-" version ".tar.gz"))
+       (uri (string-append "https://dl.farsightsecurity.com/dist/fstrm/"
+                           "fstrm-" version ".tar.gz"))
        (sha256
-        (base32
-         "1i9y8a1712aj80p5a1kcp378bnjrg3s2127q7304hklhmjcrjl1d"))))
+        (base32 "13q9iz5fpp607zvk0i39158fvvjciz4y5k14rly94b9ak0gar95w"))))
     (build-system gnu-build-system)
+    (arguments
+     (list #:configure-flags
+           #~(list "--disable-static")))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("libevent" ,libevent)))
+     (list libevent))
     (home-page "https://github.com/farsightsec/fstrm")
     (synopsis "Implementation of the Frame Streams data transport protocol")
     (description
@@ -78,8 +82,8 @@ XML, JSON, MessagePack, YAML, etc.
 Frame Streams can be used either as a streaming transport over a reliable byte
 stream socket (TCP sockets, TLS connections, @code{AF_UNIX} sockets, etc.) for
 data in motion, or as a file format for data at rest.")
-    (license (list license:asl2.0
-                   (license:non-copyleft #f "See libmy/argv*")))))
+    (license (list license:expat        ; the combined work
+                   license:hpnd))))     ; libmy/argv*
 
 (define-public protobuf
   (package
@@ -94,7 +98,7 @@ data in motion, or as a file format for data at rest.")
                (base32
                 "1jzqrklhj9grs6xbddyb5dyxfbgbgbyhl5zig8ml50wb22gwkkji"))))
     (build-system gnu-build-system)
-    (inputs `(("zlib" ,zlib)))
+    (inputs (list zlib))
     (outputs (list "out"
                    "static"))           ; ~12 MiB of .a files
     (arguments
@@ -179,7 +183,11 @@ internal RPC protocols and file formats.")
                                   version ".tar.bz2"))
               (sha256
                (base32
-                "040rcs9fpv4bslhiy43v7dcrzakz4vwwpyqg4jp8bn24sl95ci7f"))))))
+                "040rcs9fpv4bslhiy43v7dcrzakz4vwwpyqg4jp8bn24sl95ci7f"))))
+    (arguments (substitute-keyword-arguments (package-arguments protobuf)
+                 ((#:phases phases)
+                  `(modify-phases ,phases
+                     (delete 'disable-broken-tests)))))))
 
 (define-public protobuf-c
   (package
@@ -194,8 +202,8 @@ internal RPC protocols and file formats.")
                (base32
                 "0y3yaanq97si7iyld06p8w20m0shpj7sf4xwzbhhvijhxw36d592"))))
     (build-system gnu-build-system)
-    (inputs `(("protobuf" ,protobuf)))
-    (native-inputs `(("pkg-config" ,pkg-config)))
+    (inputs (list protobuf))
+    (native-inputs (list pkg-config))
     (home-page "https://github.com/protobuf-c/protobuf-c")
     (synopsis "Protocol Buffers implementation in C")
     (description
@@ -209,7 +217,7 @@ code.")
 (define-public protozero
   (package
     (name "protozero")
-    (version "1.6.8")
+    (version "1.7.1")
     (source
      (origin
        (method git-fetch)
@@ -218,7 +226,7 @@ code.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1hfijpfylf1c71wa3mk70gjc88b6k1q7cxb87cwqdflw5q2x8ma6"))))
+        (base32 "052cq5mdjjgcsgk612zkqi8k08p3ikl22r59dk6i6fq41dxldja7"))))
     (build-system cmake-build-system)
     (home-page "https://github.com/mapbox/protozero")
     (synopsis "Minimalistic protocol buffer decoder and encoder in C++")
@@ -232,19 +240,15 @@ encoder in C++.  The developer using protozero has to manually translate the
 (define-public python-protobuf
   (package
     (name "python-protobuf")
-    (version "3.12.4")
+    (version "3.20.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "protobuf" version))
        (sha256
         (base32
-         "0mj6z58aiw532s1mq48m9xdrm3gdyp2vv9cdinfb5wmnfpm5m7n9"))))
+         "1ja2vpk9nklllmsirmil2s4l7ni9yfqvbvj47zz5xx17s1k1bhxd"))))
     (build-system python-build-system)
-    (native-inputs
-     `(("python-wheel" ,python-wheel)))
-    (propagated-inputs
-     `(("python-six" ,python-six)))
     (home-page "https://github.com/google/protobuf")
     (synopsis "Protocol buffers is a data interchange format")
     (description
@@ -268,33 +272,17 @@ mechanism for serializing structured data.")
         (base32 "15dp5pvazd0jx4wzzh79080ah7hkpd3axh40al9vhzs2hf3v90hx"))))
     (build-system python-build-system)
     (native-inputs
-     `(("python-flake8" ,python-flake8)
-       ("python-pytest" ,python-pytest)
-       ("python-pytest-cov" ,python-pytest-cov)
-       ("python-isort" ,python-isort)))
+     (list python-flake8 python-pytest python-pytest-cov python-isort))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
-         (add-before 'check 'setup-test-env
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (py3sitedir
-                     (string-append out "/lib/python"
-                                    ,(version-major+minor
-                                      (package-version python))
-                                    "/site-packages")))
-               (setenv "PYTHONPATH"
-                       (string-append py3sitedir ":"
-                                      (getenv "PYTHONPATH"))))
-             #t))
          (replace 'check
            (lambda _
              (invoke "pytest" "--cov-report" "term-missing" "--cov"
                      "pure_protobuf")
              (invoke "flake8" "pure_protobuf" "tests"
                      "--ignore=F541")
-             (invoke "isort" "-rc" "-c" "pure_protobuf" "tests")
-             #t)))))
+             (invoke "isort" "-rc" "-c" "pure_protobuf" "tests"))))))
     (home-page "https://pypi.org/project/pure-protobuf/")
     (synopsis "Protobuf implementation using dataclasses")
     (description
@@ -303,9 +291,6 @@ dataclasses module to define message types.  Protocol buffers are a
 language-neutral, platform-neutral extensible mechanism for serializing
 structured data.")
     (license license:expat)))
-
-(define-public python2-protobuf
-  (package-with-python2 python-protobuf))
 
 ;; For tensorflow.
 (define-public python-protobuf-3.6
@@ -319,7 +304,30 @@ structured data.")
        (uri (pypi-uri "protobuf" version))
        (sha256
         (base32
-         "04bqb12smlckzmgkj6vgmpbr3cby0n6726cmz33bqr7kn1vb728l"))))))
+         "04bqb12smlckzmgkj6vgmpbr3cby0n6726cmz33bqr7kn1vb728l"))))
+    (inputs
+     (cons python-six
+           (package-inputs python-protobuf)))))
+
+(define-public python-proto-plus
+  (package
+    (name "python-proto-plus")
+    (version "1.20.3")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "proto-plus" version))
+       (sha256
+        (base32 "1raad9qnmfva94nm33k40bcwrckgljbfky5pdwh4xhg6r5dj52zj"))))
+    (build-system python-build-system)
+    (propagated-inputs (list python-protobuf))
+    (home-page "https://github.com/googleapis/proto-plus-python.git")
+    (synopsis "Pythonic protocol buffers")
+    (description "This is a wrapper around protocol buffers.  Protocol buffers
+is a specification format for APIs, such as those inside Google.  This library
+provides protocol buffer message classes and objects that largely behave like
+native Python types.")
+    (license license:asl2.0)))
 
 (define-public emacs-protobuf-mode
   (package
@@ -397,26 +405,23 @@ source files.")
            (lambda _
              (invoke "rspec"))))))
     (native-inputs
-     `(("ruby-benchmark-ips" ,ruby-benchmark-ips)
-       ("ruby-ffi-rzmq" ,ruby-ffi-rzmq)
-       ("ruby-parser" ,ruby-parser)
-       ("ruby-pry-byebug" ,ruby-pry-byebug)
-       ("ruby-pry-stack-explorer" ,ruby-pry-stack-explorer)
-       ("ruby-rake" ,ruby-rake)
-       ("ruby-rspec" ,ruby-rspec)
-       ("ruby-rubocop" ,ruby-rubocop)
-       ("ruby-ruby-prof" ,ruby-ruby-prof)
-       ("ruby-simplecov" ,ruby-simplecov)
-       ("ruby-timecop" ,ruby-timecop)
-       ("ruby-varint" ,ruby-varint)
-       ("ruby-yard" ,ruby-yard)))
+     (list ruby-benchmark-ips
+           ruby-ffi-rzmq
+           ruby-parser
+           ruby-pry-byebug
+           ruby-pry-stack-explorer
+           ruby-rake
+           ruby-rspec
+           ruby-rubocop
+           ruby-ruby-prof
+           ruby-simplecov
+           ruby-timecop
+           ruby-varint
+           ruby-yard))
     (inputs
-     `(("protobuf" ,protobuf)))
+     (list protobuf))
     (propagated-inputs
-     `(("ruby-activesupport" ,ruby-activesupport)
-       ("ruby-middleware" ,ruby-middleware)
-       ("ruby-thor" ,ruby-thor)
-       ("ruby-thread-safe" ,ruby-thread-safe)))
+     (list ruby-activesupport ruby-middleware ruby-thor ruby-thread-safe))
     (home-page "https://github.com/ruby-protobuf/protobuf")
     (synopsis "Implementation of Google's Protocol Buffers in Ruby")
     (description "Protobuf is an implementation of Google's Protocol Buffers

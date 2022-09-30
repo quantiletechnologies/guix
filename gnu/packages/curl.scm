@@ -2,15 +2,16 @@
 ;;; Copyright © 2013, 2014, 2015 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2015 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2015 Tomáš Čech <sleep_walker@suse.cz>
-;;; Copyright © 2015, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015, 2020, 2021, 2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2016, 2017, 2019 Leo Famulari <leo@famulari.name>
-;;; Copyright © 2017, 2019, 2020 Marius Bakke <mbakke@fastmail.com>
+;;; Copyright © 2017, 2019, 2020, 2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2017 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2017, 2018 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018 Roel Janssen <roel@gnu.org>
 ;;; Copyright © 2019, 2021 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2020 Jakub Kądziołka <kuba@kadziolka.net>
 ;;; Copyright © 2020 Dale Mellor <guix-devel-0brg6b@rdmp.org>
+;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2021 Jean-Baptiste Volatier <jbv@pm.me>
 ;;; Copyright © 2021 Felix Gruber <felgru@posteo.net>
 ;;;
@@ -32,6 +33,7 @@
 (define-module (gnu packages curl)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
+  #:use-module (guix gexp)
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix utils)
@@ -39,13 +41,17 @@
   #:use-module (guix build-system copy)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system go)
+  #:use-module (guix build-system meson)
+  #:use-module ((guix search-paths) #:select ($SSL_CERT_DIR $SSL_CERT_FILE))
   #:use-module (gnu packages)
+  #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages golang)
   #:use-module (gnu packages guile)
   #:use-module (gnu packages kerberos)
+  #:use-module (gnu packages logging)
+  #:use-module (gnu packages libevent)
   #:use-module (gnu packages libidn)
-  #:use-module (gnu packages openldap)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
@@ -57,40 +63,30 @@
 (define-public curl
   (package
    (name "curl")
-   (replacement curl-7.77.0)
-   (version "7.74.0")
+   (version "7.79.1")
+   (replacement curl-7.84.0)
    (source (origin
              (method url-fetch)
-             (uri (string-append "https://curl.haxx.se/download/curl-"
+             (uri (string-append "https://curl.se/download/curl-"
                                  version ".tar.xz"))
              (sha256
               (base32
-               "12w7gskrglg6qrmp822j37fmbr0icrcxv7rib1fy5xiw80n5z7cr"))
+               "129n9hi7rbg3s112chyadhp4y27ppb5i65n12wm77aw2255zf1h6"))
              (patches (search-patches "curl-use-ssl-cert-env.patch"))))
    (build-system gnu-build-system)
    (outputs '("out"
               "doc"))                             ;1.2 MiB of man3 pages
-   (inputs `(("gnutls" ,gnutls)
-             ("libidn" ,libidn)
-             ("openldap" ,openldap)
-             ("mit-krb5" ,mit-krb5)
-             ("nghttp2" ,nghttp2 "lib")
-             ("zlib" ,zlib)))
+   (inputs (list gnutls libidn mit-krb5
+                 `(,nghttp2 "lib") zlib))
    (native-inputs
-     `(("perl" ,perl)
+     `(("nghttp2" ,nghttp2)
+       ("perl" ,perl)
        ("pkg-config" ,pkg-config)
-       ("python" ,python-wrapper)))
+       ("python" ,python-minimal-wrapper)))
    (native-search-paths
     ;; These variables are introduced by curl-use-ssl-cert-env.patch.
-    (list (search-path-specification
-           (variable "SSL_CERT_DIR")
-           (separator #f)                        ;single entry
-           (files '("etc/ssl/certs")))
-          (search-path-specification
-           (variable "SSL_CERT_FILE")
-           (file-type 'regular)
-           (separator #f)                        ;single entry
-           (files '("etc/ssl/certs/ca-certificates.crt")))
+    (list $SSL_CERT_DIR
+          $SSL_CERT_FILE
           ;; Note: This search path is respected by the `curl` command-line
           ;; tool only.  Patching libcurl to read it too would bring no
           ;; advantages and require maintaining a more complex patch.
@@ -112,8 +108,7 @@
             ;; Do not save the configure options to avoid unnecessary references.
             (substitute* "curl-config.in"
               (("@CONFIGURE_OPTIONS@")
-               "\"not available\""))
-            #t))
+               "\"not available\""))))
         (add-after
          'install 'move-man3-pages
          (lambda* (#:key outputs #:allow-other-keys)
@@ -122,18 +117,17 @@
                  (doc (assoc-ref outputs "doc")))
              (mkdir-p (string-append doc "/share/man"))
              (rename-file (string-append out "/share/man/man3")
-                          (string-append doc "/share/man/man3"))
-             #t)))
-        (replace
-         'check
-         (lambda _
-           (substitute* "tests/runtests.pl"
-             (("/bin/sh") (which "sh")))
+                          (string-append doc "/share/man/man3")))))
+        (replace 'check
+          (lambda* (#:key tests? #:allow-other-keys)
+            (substitute* "tests/runtests.pl"
+              (("/bin/sh") (which "sh")))
 
-           ;; The top-level "make check" does "make -C tests quiet-test", which
-           ;; is too quiet.  Use the "test" target instead, which is more
-           ;; verbose.
-           (invoke "make" "-C" "tests" "test"))))))
+            (when tests?
+              ;; The top-level "make check" does "make -C tests quiet-test", which
+              ;; is too quiet.  Use the "test" target instead, which is more
+              ;; verbose.
+              (invoke "make" "-C" "tests" "test")))))))
    (synopsis "Command line tool for transferring data with URL syntax")
    (description
     "curl is a command line tool for transferring data with URL syntax,
@@ -147,14 +141,37 @@ tunneling, and so on.")
                                   "See COPYING in the distribution."))
    (home-page "https://curl.haxx.se/")))
 
-;; This package exists mainly to bootstrap CMake.  It must not depend on
-;; anything that uses cmake-build-system.
+;; Replacement package with fixes for multiple vulnerabilities.
+;; See <https://curl.se/docs/security.html>.
+(define curl-7.84.0
+  (package
+    (inherit curl)
+    (version "7.84.0")
+    (source (origin
+              (inherit (package-source curl))
+              (uri (string-append "https://curl.se/download/curl-"
+                                  version ".tar.xz"))
+              (sha256
+               (base32
+                "1f2xgj0wvys9xw50h7vcbaraavjr9rxx9n06x2xfbgs7ym1qn49d"))
+              (patches (append (origin-patches (package-source curl))
+                               (search-patches "curl-easy-lock.patch")))))
+    (arguments (substitute-keyword-arguments (package-arguments curl)
+                 ((#:phases phases)
+                  (cond
+                   ((not (target-64bit?))
+                    #~(modify-phases #$phases
+                        (add-after 'unpack 'tweak-lib3026-test
+                          (lambda _
+                            ;; Have that test create a hundred threads, not a
+                            ;; thousand.
+                            (substitute* "tests/libtest/lib3026.c"
+                              (("NUM_THREADS .*$")
+                               "NUM_THREADS 100\n"))))))
+                   (else phases)))))))
+
 (define-public curl-minimal
-  (hidden-package
-   (package/inherit
-    curl
-    (name "curl-minimal")
-    (inputs (alist-delete "openldap" (package-inputs curl))))))
+  (deprecated-package "curl-minimal" curl))
 
 (define-public curl-ssh
   (package/inherit curl
@@ -166,21 +183,6 @@ tunneling, and so on.")
      `(("libssh2" ,libssh2)
        ,@(package-inputs curl)))
     (properties `((hidden? . #t)))))
-
-(define-public curl-7.77.0
-  (package
-    (inherit curl)
-    (version "7.77.0")
-    (source
-     (origin
-       (inherit (package-source curl))
-       (uri (string-append "https://curl.haxx.se/download/curl-"
-                           version ".tar.xz"))
-       (patches (search-patches "curl-7.76-use-ssl-cert-env.patch"
-                                "curl-7.77-tls-priority-string.patch"))
-       (sha256
-        (base32
-         "0jsrc97vbghvljic997r9nypc9qqddcil2lzvv032br8ahn5hr0g"))))))
 
 (define-public kurly
   (package
@@ -214,9 +216,8 @@ tunneling, and so on.")
                             (string-append man "/kurly.1")))
                #t))))))
     (inputs
-     `(("go-github-com-alsm-ioprogress" ,go-github-com-alsm-ioprogress)
-       ("go-github-com-aki237-nscjar" ,go-github-com-aki237-nscjar)
-       ("go-github-com-urfave-cli" ,go-github-com-urfave-cli)))
+     (list go-github-com-alsm-ioprogress go-github-com-aki237-nscjar
+           go-github-com-urfave-cli))
     (synopsis "Command-line HTTP client")
     (description "kurly is an alternative to the @code{curl} program written in
 Go.  kurly is designed to operate in a similar manner to curl, with select
@@ -287,10 +288,9 @@ not offer a replacement for libcurl.")
               ;; The build system does not actually compile the Scheme module.
               ;; So we can compile it and put it in the right place in one go.
               (invoke "guild" "compile" curl.scm "-o" curl.go)))))))
-   (native-inputs `(("pkg-config" ,pkg-config)))
+   (native-inputs (list pkg-config))
    (inputs
-    `(("curl" ,curl)
-      ("guile" ,guile-3.0)))
+    (list curl guile-3.0))
    (home-page "http://www.lonelycactus.com/guile-curl.html")
    (synopsis "Curl bindings for Guile")
    (description "@code{guile-curl} is a project that has procedures that allow
@@ -303,8 +303,7 @@ FTP servers.  It is based on the curl library.")
     (inherit guile-curl)
     (name "guile2.2-curl")
     (inputs
-     `(("curl" ,curl)
-       ("guile" ,guile-2.2)))))
+     (list curl guile-2.2))))
 
 (define-public curlpp
   (package
@@ -325,7 +324,7 @@ FTP servers.  It is based on the curl library.")
      '(#:tests? #f))
     ;; The installed version needs the header files from the C library.
     (propagated-inputs
-     `(("curl" ,curl)))
+     (list curl))
     (synopsis "C++ wrapper around libcURL")
     (description
      "This package provides a free and easy-to-use client-side C++ URL
@@ -356,10 +355,63 @@ more!")
      '(#:install-plan
        '(("./h2c" "bin/"))))
     (inputs
-     `(("perl" ,perl)))
+     (list perl))
     (home-page "https://curl.se/h2c/")
     (synopsis "Convert HTTP headers to a curl command line")
     (description
      "Provided a set of HTTP request headers, h2c outputs how to invoke
 curl to obtain exactly that HTTP request.")
+    (license license:expat)))
+
+(define-public coeurl
+  (package
+    (name "coeurl")
+    (version "0.2.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://nheko.im/nheko-reborn/coeurl")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "0kbazvrb4hzc9jr7yywd36ack1yy7bh8sh1kc4jzv6jfzvxjb0i0"))))
+    (build-system meson-build-system)
+    (native-inputs
+     (list doctest pkg-config))
+    (inputs
+     (list curl libevent spdlog))
+    (home-page "https://nheko.im/nheko-reborn/coeurl")
+    (synopsis "Simple async wrapper around CURL for C++")
+    (description "Coeurl is a simple library to do HTTP requests
+asynchronously via cURL in C++.")
+    (license license:expat)))
+
+(define-public curlie
+  (package
+    (name "curlie")
+    (version "1.6.9")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/rs/curlie")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "1b94wfliivfq06i5sf664nhmp3v1k0lpz33cv9lyk6s59awb2hnw"))))
+    (build-system go-build-system)
+    (arguments
+     `(#:import-path "github.com/rs/curlie"))
+    (inputs
+     (list curl go-golang-org-x-crypto go-golang-org-x-sys))
+    (home-page "https://curlie.io")
+    (synopsis "The power of curl, the ease of use of httpie")
+    (description "If you like the interface of HTTPie but miss the features of
+curl, curlie is what you are searching for.  Curlie is a frontend to
+@code{curl} that adds the ease of use of @code{httpie}, without compromising
+on features and performance.  All @code{curl} options are exposed with syntax
+sugar and output formatting inspired from @code{httpie}.")
     (license license:expat)))

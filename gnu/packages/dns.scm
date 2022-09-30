@@ -5,11 +5,11 @@
 ;;; Copyright © 2016, 2017 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016 John Darrington <jmd@gnu.org>
 ;;; Copyright © 2016 Nikita <nikita@n0.is>
-;;; Copyright © 2016–2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2016–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2016, 2020 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2017 Vasile Dumitrascu <va511e@yahoo.com>
 ;;; Copyright © 2017 Gregor Giesen <giesen@zaehlwerk.net>
-;;; Copyright © 2018 Oleg Pykhalov <go.wigust@gmail.com>
+;;; Copyright © 2018, 2022 Oleg Pykhalov <go.wigust@gmail.com>
 ;;; Copyright © 2019 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2019 Chris Marusich <cmmarusich@gmail.com>
 ;;; Copyright © 2019 Rutger Helling <rhelling@mykolab.com>
@@ -40,7 +40,6 @@
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
-  #:use-module (gnu packages certs)
   #:use-module (gnu packages check)
   #:use-module (gnu packages curl)
   #:use-module (gnu packages databases)
@@ -79,6 +78,7 @@
   #:use-module (gnu packages web)
   #:use-module (gnu packages xml)
   #:use-module (gnu packages)
+  #:use-module (guix gexp)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
   #:use-module (guix download)
@@ -127,10 +127,7 @@
                       ":"))))
                #t)))))
       (inputs
-       `(("bash-minimal" ,bash-minimal)
-         ("curl" ,curl)
-         ("grep" ,grep)
-         ("json.sh" ,json.sh)))
+       (list bash-minimal curl grep json.sh))
       (synopsis
         "CLI to edit Cloudflare DNS records")
       (description
@@ -143,15 +140,15 @@ protocol.")
 (define-public ldns
   (package
     (name "ldns")
-    (version "1.7.1")
+    (version "1.8.3")
     (source
      (origin
        (method url-fetch)
        (uri
         (string-append "https://www.nlnetlabs.nl/downloads/"
-                       name "/" name "-" version ".tar.gz"))
+                       "ldns/ldns-" version ".tar.gz"))
        (sha256
-        (base32 "0ac242n7996fswq1a3nlh1bbbhrsdwsq4mx7xq8ffq6aplb4rj4a"))
+        (base32 "0q3q1svyxpj2g5wdkfy1ndb14m9fzffwyskflpihfabb0g8jvxy3"))
        (patches
         (search-patches
          ;; To create make-flag variables,
@@ -160,62 +157,41 @@ protocol.")
     (build-system gnu-build-system)
     (outputs '("out" "drill" "examples" "pyldns"))
     (arguments
-     `( ;; Tests require Tpkg.
-       ;; https://tpkg.github.io/
-       #:tests? #f
-       #:configure-flags
-       (list
-        "--disable-static"
-        "--enable-gost-anyway"
-        "--enable-rrtype-ninfo"
-        "--enable-rrtype-rkey"
-        "--enable-rrtype-ta"
-        "--enable-rrtype-avc"
-        "--enable-rrtype-doa"
-        "--enable-rrtype-amtrelay"
-        "--with-drill"
-        "--with-examples"
-        "--with-pyldns"
-        ;; Perl module DNS::LDNS not available.
-        ;; https://github.com/erikoest/DNS-LDNS.git
-        ;; "--with-p5-dns-ldns"
-        (string-append "--with-ssl="
-                       (assoc-ref %build-inputs "openssl"))
-        (string-append "--with-ca-path="
-                       (assoc-ref %build-inputs "nss-certs")
-                       "/etc/ssl/certs"))
-       #:make-flags
-       (list
-        (string-append "drillbindir="
-                       (assoc-ref %outputs "drill")
-                       "/bin")
-        (string-append "drillmandir="
-                       (assoc-ref %outputs "drill")
-                       "/share/man")
-        (string-append "examplesbindir="
-                       (assoc-ref %outputs "examples")
-                       "/bin")
-        (string-append "examplesmandir="
-                       (assoc-ref %outputs "examples")
-                       "/share/man")
-        (string-append "python_site="
-                       (assoc-ref %outputs "pyldns")
-                       "/lib/python"
-                       ,(version-major+minor
-                         (package-version python))
-                       "/site-packages"))))
+     (list
+      #:tests? #f                     ; tests require <https://tpkg.github.io>
+      #:configure-flags
+      #~(list
+         "--disable-static"
+         "--enable-gost-anyway"
+         "--enable-rrtype-ninfo"
+         "--enable-rrtype-rkey"
+         "--enable-rrtype-ta"
+         "--enable-rrtype-avc"
+         "--enable-rrtype-doa"
+         "--enable-rrtype-amtrelay"
+         "--with-drill"
+         "--with-examples"
+         "--with-pyldns"
+         ;; Perl module DNS::LDNS not available.
+         ;; https://github.com/erikoest/DNS-LDNS.git
+         ;; "--with-p5-dns-ldns"
+         (string-append "--with-ssl=" #$(this-package-input "openssl"))
+         (string-append "--with-ca-path=/etc/ssl/certs"))
+      #:make-flags
+      #~(list
+         (string-append "drillbindir=" #$output:drill "/bin")
+         (string-append "drillmandir=" #$output:drill "/share/man")
+         (string-append "examplesbindir=" #$output:examples "/bin")
+         (string-append "examplesmandir=" #$output:examples "/share/man")
+         (string-append "python_site=" #$output:pyldns "/lib/python"
+                        #$(version-major+minor (package-version
+                                                (this-package-input
+                                                 "python-wrapper")))
+                        "/site-packages"))))
     (native-inputs
-     `(("doxygen" ,doxygen)
-       ("ksh" ,oksh)
-       ("perl" ,perl)
-       ("perl-devel-checklib" ,perl-devel-checklib)
-       ("pkg-config" ,pkg-config)
-       ("python" ,python-wrapper)
-       ("swig" ,swig)))
+     (list doxygen perl perl-devel-checklib pkg-config swig))
     (inputs
-     `(("libpcap" ,libpcap)
-       ("nss-certs" ,nss-certs)
-       ("openssl" ,openssl)))
+     (list libpcap openssl python-wrapper))
     (synopsis "DNS library that facilitates DNS tool programming")
     (description "LDNS aims to simplify DNS programming, it supports recent
 RFCs like the DNSSEC documents, and allows developers to easily create
@@ -240,84 +216,67 @@ C it should be a lot faster than Perl.")
     (build-system glib-or-gtk-build-system)
     (outputs '("out" "gui" "nm"))
     (arguments
-     `(#:test-target "test"
-       #:configure-flags
-       (list
-        (string-append "--with-ssl="
-                       (assoc-ref %build-inputs "openssl"))
-        "--with-hooks=networkmanager"
-        (string-append "--with-networkmanager-dispatch="
-                       (assoc-ref %outputs "nm")
-                       "/etc/NetworkManager/dispatcher.d")
-        (string-append "--with-xdg-autostart="
-                       (assoc-ref %outputs "gui")
-                       "/etc/xdg/autostart")
-        (string-append "--with-uidir="
-                       (assoc-ref %outputs "gui")
-                       "/share/dnssec-trigger")
-        (string-append "--with-python="
-                       (assoc-ref %build-inputs "python")
-                       "/bin/python")
-        (string-append "--with-unbound-control="
-                       (assoc-ref %build-inputs "unbound")
-                       "/sbin/unbound-control")
-        "--with-forward-zones-support")
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'patch-configure
-           (lambda _
-             (substitute* "configure"
-               (("appindicator-0.1")
-                "appindicator3-0.1"))
-             #t))
-         (add-before 'configure 'patch-makefile
-           (lambda _
-             (substitute* "Makefile.in"
-               (("/usr")
-                "$(prefix)")
-               (("/etc")
-                "$(prefix)/etc")
-               ((".*gtk-update-icon-cache.*")
-                ""))
-             #t))
-         (add-after 'install 'remove-systemd
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out")))
-               (delete-file-recursively
-                (string-append out "/lib/systemd"))
-               #t)))
-         (add-after 'remove-systemd 'move-gui
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (gui (assoc-ref outputs "gui")))
-               (mkdir-p (string-append gui "/bin"))
-               (mkdir-p (string-append gui "/share"))
-               (rename-file
-                (string-append out "/bin")
-                (string-append gui "/bin"))
-               (rename-file
-                (string-append out "/share/icons")
-                (string-append gui "/share/icons"))
-               #t)))
-         (add-after 'move-gui 'move-nm
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (nm (assoc-ref outputs "nm")))
-               (mkdir-p (string-append nm "/libexec"))
-               (rename-file
-                (string-append out "/libexec")
-                (string-append nm "/libexec"))
-               #t))))))
+     (list #:test-target "test"
+           #:configure-flags
+           #~(list
+              (string-append "--with-ssl=" #$(this-package-input "openssl"))
+              "--with-hooks=networkmanager"
+              (string-append "--with-networkmanager-dispatch="
+                             #$output:nm
+                             "/etc/NetworkManager/dispatcher.d")
+              (string-append "--with-xdg-autostart="
+                             #$output:gui
+                             "/etc/xdg/autostart")
+              (string-append "--with-uidir="
+                             #$output:gui
+                             "/share/dnssec-trigger")
+              (string-append "--with-python="
+                             #$(this-package-native-input "python-wrapper")
+                             "/bin/python")
+              (string-append "--with-unbound-control="
+                             #$(this-package-input "unbound")
+                             "/sbin/unbound-control")
+              "--with-forward-zones-support")
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'patch-configure
+                 (lambda _
+                   (substitute* "configure"
+                     (("appindicator-0.1")
+                      "appindicator3-0.1"))))
+               (add-before 'configure 'patch-makefile
+                 (lambda _
+                   (substitute* "Makefile.in"
+                     (("/usr")
+                      "$(prefix)")
+                     (("/etc")
+                      "$(prefix)/etc")
+                     ((".*gtk-update-icon-cache.*")
+                      ""))))
+               (add-after 'install 'remove-systemd
+                 (lambda _
+                   (delete-file-recursively
+                    (string-append #$output "/lib/systemd"))))
+               (add-after 'remove-systemd 'move-gui
+                 (lambda _
+                   (mkdir-p (string-append #$output:gui "/bin"))
+                   (mkdir-p (string-append #$output:gui "/share"))
+                   (rename-file
+                    (string-append #$output     "/bin")
+                    (string-append #$output:gui "/bin"))
+                   (rename-file
+                    (string-append #$output     "/share/icons")
+                    (string-append #$output:gui "/share/icons"))))
+               (add-after 'move-gui 'move-nm
+                 (lambda _
+                   (mkdir-p (string-append #$output:nm "/libexec"))
+                   (rename-file
+                    (string-append #$output    "/libexec")
+                    (string-append #$output:nm "/libexec")))))))
     (native-inputs
-     `(("cmocka" ,cmocka)
-       ("pkg-config" ,pkg-config)
-       ("python" ,python-wrapper)))
+     (list cmocka pkg-config python-wrapper))
     (inputs
-     `(("gtk+-2" ,gtk+-2)
-       ("ldns" ,ldns)
-       ("libappindicator" ,libappindicator)
-       ("openssl" ,openssl)
-       ("unbound" ,unbound)))
+     (list gtk+-2 ldns libappindicator openssl unbound))
     (synopsis "DNSSEC protection for the DNS traffic")
     (description "DNSSEC-Trigger enables your computer to use DNSSEC protection
 for the DNS traffic.  It relies on the Unbound DNS resolver running locally on
@@ -342,14 +301,15 @@ prompt the user with the option to go with insecure DNS only.")
                 "027b0ycw8h8yvvkq46vnr7dv8iqn5srm4kr7hm7sq110kvy2rm98"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("dbus" ,dbus)))
+     (list dbus))
     (arguments
      `(#:phases
        (modify-phases %standard-phases (delete 'configure))
        #:make-flags (list (string-append "PREFIX=" (assoc-ref %outputs "out"))
                           (string-append "CC=" ,(cc-for-target))
+                          (string-append "PKG_CONFIG=" ,(pkg-config-for-target))
                           "COPTS=\"-DHAVE_DBUS\"")
        #:tests? #f))                    ; no ‘check’ target
     (home-page "http://www.thekelleys.org.uk/dnsmasq/doc.html")
@@ -373,29 +333,29 @@ and BOOTP/TFTP for network booting of diskless machines.")
     ;; When updating, check whether isc-dhcp's bundled copy should be as well.
     ;; The BIND release notes are available here:
     ;; https://www.isc.org/bind/
-    (version "9.16.16")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append
-                    "https://ftp.isc.org/isc/bind9/" version
-                    "/bind-" version ".tar.xz"))
-              (sha256
-               (base32
-                "0yqxfq7qc26x7qhk0nkp8h7x9jggzaafm712bvfffy7qml13k4bc"))))
+    (version "9.16.32")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://ftp.isc.org/isc/bind9/" version
+                           "/bind-" version ".tar.xz"))
+       (sha256
+        (base32 "0w2rcjxqnbhwzgsdsas36dadjq0qn6s1xjx4g4qk0ph2nvf4gj9j"))
+       (patches
+        (search-patches "bind-re-add-attr-constructor-priority.patch"))))
     (build-system gnu-build-system)
     (outputs `("out" "utils"))
     (inputs
      ;; It would be nice to add GeoIP and gssapi once there are packages.
-     `(("libcap" ,libcap)
-       ("libuv" ,libuv)
-       ("libxml2" ,libxml2)
-       ("openssl" ,openssl)
-       ("p11-kit" ,p11-kit)
-       ("python" ,python)
-       ("python-ply" ,python-ply)))
+     (list libcap
+           libuv
+           libxml2
+           openssl
+           p11-kit
+           python
+           python-ply))
     (native-inputs
-     `(("perl" ,perl)
-       ("pkg-config" ,pkg-config)))
+     (list perl pkg-config))
     (arguments
      `(#:configure-flags
        (list (string-append "--with-pkcs11="
@@ -488,13 +448,9 @@ Dynamic DNS update utility
              ;; The system version is still favored and referenced.
              (invoke "autoreconf" "-vif"))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("automake" ,automake)
-       ("autoconf" ,autoconf)
-       ("libtool" ,libtool)))
+     (list pkg-config automake autoconf libtool))
     (inputs
-     `(("libltdl" ,libltdl)
-       ("libsodium" ,libsodium)))
+     (list libltdl libsodium))
     (home-page "https://www.dnscrypt.org/")
     (synopsis "Securely send DNS requests to a remote server")
     (description
@@ -533,10 +489,9 @@ servers is included, and an up-to-date version is available at
            (lambda _
              (invoke "make" "configure"))))))
     (native-inputs
-     `(("autoconf" ,autoconf)))
+     (list autoconf))
     (inputs
-     `(("libevent" ,libevent)
-       ("libsodium" ,libsodium)))
+     (list libevent libsodium))
     (home-page "https://github.com/Cofyc/dnscrypt-wrapper")
     (synopsis "Server-side dnscrypt proxy")
     (description
@@ -573,10 +528,7 @@ the two.")
                              (string-append out "/share/man/man3"))
                #t))))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (home-page "https://www.opensmtpd.org")
     (synopsis "Asynchronous resolver library by the OpenBSD project")
     (description
@@ -592,14 +544,14 @@ asynchronous fashion.")
 (define-public nsd
   (package
     (name "nsd")
-    (version "4.3.7")
+    (version "4.4.0")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://www.nlnetlabs.nl/downloads/nsd/nsd-"
                            version ".tar.gz"))
        (sha256
-        (base32 "1bg87g0i66hw16fm7gbqmzyi2rcn1hadzz0bg9b8s5mx7g2rwfzx"))))
+        (base32 "0dl8iriy0mscppfa6ar5qcglgvxw87140abwxyksak1lk7fnzkfg"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags
@@ -635,12 +587,10 @@ asynchronous fashion.")
                  ((".*INSTALL.*\\$\\((config|pid|xfr|db)dir" command)
                   (string-append "#" command))
                  (("\\$\\(nsdconfigfile\\)\\.sample" file-name)
-                  (string-append doc "/examples/" file-name)))
-               #t))))
+                  (string-append doc "/examples/" file-name)))))))
        #:tests? #f))                    ; no tests
     (inputs
-     `(("libevent" ,libevent)
-       ("openssl" ,openssl)))
+     (list libevent openssl))
     (home-page "https://www.nlnetlabs.nl/projects/nsd/about/")
     (synopsis "Authoritative DNS name server")
     (description "@dfn{NSD}, short for Name Server Daemon, is an authoritative
@@ -691,7 +641,7 @@ to result in system-wide compromise.")
                (install-file "rbldnsd" sbin)
                (install-file "rbldnsd.8" man8)))))))
     (inputs
-     `(("zlib" ,zlib)))
+     (list zlib))
     (native-inputs
      ;; For running the test suite.  Python 3 is not yet supported by a release:
      ;; see <https://github.com/spamhaus/rbldnsd/issues/16>.
@@ -727,15 +677,14 @@ BIND and djbdns---whilst using relatively little memory.")
     (build-system gnu-build-system)
     (outputs '("out" "python"))
     (native-inputs
-     `(("flex" ,flex)
-       ("swig" ,swig)))
+     (list flex swig))
     (inputs
-     `(("expat" ,expat)
-       ("libevent" ,libevent)
-       ("nghttp2" ,nghttp2 "lib")
-       ("protobuf" ,protobuf)
-       ("python-wrapper" ,python-wrapper)
-       ("openssl" ,openssl)))
+     (list expat
+           libevent
+           `(,nghttp2 "lib")
+           protobuf
+           python-wrapper
+           openssl))
     (arguments
      `(#:configure-flags
        (list "--disable-static" ; save space and non-determinism in libunbound.a
@@ -876,36 +825,34 @@ served by AS112.  Stub and forward zones are supported.")
 (define-public yadifa
   (package
     (name "yadifa")
-    (version "2.5.1")
+    (version "2.5.3")
     (source
-     (let ((build "10306"))
+     (let ((build "10333"))
        (origin
          (method url-fetch)
          (uri
           (string-append "https://www.yadifa.eu/sites/default/files/releases/"
                          "yadifa-" version "-" build ".tar.gz"))
          (sha256
-          (base32 "051h4pmh9llwj0w6h0v8fl2f146fb26cv3w5an9dmfh845sv6hzr")))))
+          (base32 "1mwy6sfnlaslx26f3kpj9alh8i8y8bf1nbnsdd5j04hjsbavd07p")))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("which" ,which)))
+     (list which))
     (inputs
-     `(("openssl" ,openssl)))
+     (list openssl))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
          (add-before 'configure 'omit-example-configurations
            (lambda _
              (substitute* "Makefile.in"
-               ((" (etc|var)") ""))
-             #t))
+               ((" (etc|var)") ""))))
          (add-after 'configure 'omit-spurious-references
            (lambda _
              ;; The many Makefile.in grep this(!) to #define BUILD_OPTIONS.
              (substitute* "config.log"
                (("(=/gnu/store/)[^-]*" _ match)
-                (string-append match "...")))
-             #t)))
+                (string-append match "..."))))))
        #:configure-flags
        (list "--sysconfdir=/etc"
              "--localstatedir=/var"
@@ -924,7 +871,7 @@ Extensions} (DNSSEC).")
 (define-public knot
   (package
     (name "knot")
-    (version "3.1.2")
+    (version "3.1.9")
     (source
      (origin
        (method git-fetch)
@@ -933,7 +880,7 @@ Extensions} (DNSSEC).")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1kyjf6d1jx8q0zjzwy06f4d3ar5cbbqxka8cc7ckwmbpf1n6cij5"))
+        (base32 "0w3jyz9qgkb34gkv2lr71phk5ad3rycn86qyw7n88ryhdsk45j73"))
        (modules '((guix build utils)))
        (snippet
         '(begin
@@ -1019,13 +966,13 @@ Extensions} (DNSSEC).")
                (rename-file (string-append out   "/share/man/man1")
                             (string-append tools "/share/man/man1"))))))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)
-       ("python-sphinx" ,python-sphinx)
-       ("ragel" ,ragel)
-       ("texinfo" ,texinfo)))
+     (list autoconf
+           automake
+           libtool
+           pkg-config
+           python-sphinx
+           ragel
+           texinfo))
     (inputs
      `(("fstrm" ,fstrm)
        ("gnutls" ,gnutls)
@@ -1062,14 +1009,14 @@ synthesis, and on-the-fly re-configuration.")
 (define-public knot-resolver
   (package
     (name "knot-resolver")
-    (version "5.4.1")
+    (version "5.4.4")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://secure.nic.cz/files/knot-resolver/"
                                   "knot-resolver-" version ".tar.xz"))
               (sha256
                (base32
-                "0rixiqfj53rfabrz8qpnq4whx8y29d2m5w64a4jlwx7gv4nrd2zv"))))
+                "1sic5ccbbqml4c01dbikkg6qx1gg81nqi76cj79pjdllkqqn92aq"))))
     (build-system meson-build-system)
     (outputs '("out" "doc"))
     (arguments
@@ -1081,8 +1028,7 @@ synthesis, and on-the-fly re-configuration.")
              ;;  Disable the default managed root TA, since we don't have
              ;;  write access to the keyfile and its directory in store.
              (substitute* "daemon/lua/sandbox.lua.in"
-               (("^trust_anchors\\.add_file.*") ""))
-             #t))
+               (("^trust_anchors\\.add_file.*") ""))))
          (add-after 'build 'build-doc
            (lambda _
              (invoke "ninja" "doc")))
@@ -1113,17 +1059,16 @@ synthesis, and on-the-fly re-configuration.")
                                  (string-append p "/lib/lua/5.1/?.so"))))
                (wrap-program (string-append out "/sbin/kresd")
                  `("LUA_PATH" ";" prefix ,(map lua-path lua-*))
-                 `("LUA_CPATH" ";" prefix ,(map lua-cpath lua-*)))
-               #t))))))
+                 `("LUA_CPATH" ";" prefix ,(map lua-cpath lua-*)))))))))
     (native-inputs
-     `(("cmocka" ,cmocka)               ; for unit tests
-       ("doxygen" ,doxygen)
-       ("protobuf-c" ,protobuf-c)
-       ("pkg-config" ,pkg-config)
-       ("python-breathe" ,python-breathe)
-       ("python-sphinx" ,python-sphinx)
-       ("python-sphinx-rtd-theme" ,python-sphinx-rtd-theme)
-       ("texinfo" ,texinfo)))
+     (list cmocka ; for unit tests
+           doxygen
+           protobuf-c
+           pkg-config
+           python-breathe
+           python-sphinx
+           python-sphinx-rtd-theme
+           texinfo))
     (inputs
      `(("fstrm" ,fstrm)
        ("gnutls" ,gnutls)
@@ -1133,7 +1078,8 @@ synthesis, and on-the-fly re-configuration.")
        ("luajit" ,luajit)
        ;; TODO: Add optional lua modules: basexx and psl.
        ("lua-bitop" ,lua5.1-bitop)
-       ("nghttp2" ,nghttp2 "lib")))
+       ("nghttp2" ,nghttp2 "lib")
+       ("python" ,python)))
     (home-page "https://www.knot-resolver.cz/")
     (synopsis "Caching validating DNS resolver")
     (description
@@ -1160,14 +1106,13 @@ LuaJIT, both a resolver library and a daemon.")
         (base32 "0hf377g4j9r9sac75xp17nk2h58mazswz4vkg4g2gl2yyhvzq91w"))))
     (build-system trivial-build-system) ; no Makefile.PL
     (native-inputs
-     `(("bash" ,bash)
-       ("perl" ,perl)))
+     (list bash perl))
     (inputs
-     `(("inetutils" ,inetutils)         ; logger
-       ("net-tools" ,net-tools)
-       ("perl-data-validate-ip" ,perl-data-validate-ip)
-       ("perl-digest-sha1" ,perl-digest-sha1)
-       ("perl-io-socket-ssl" ,perl-io-socket-ssl)))
+     (list inetutils ; logger
+           net-tools
+           perl-data-validate-ip
+           perl-digest-sha1
+           perl-io-socket-ssl))
     (arguments
      `(#:modules ((guix build utils))
        #:builder
@@ -1265,12 +1210,9 @@ attempts the update when it has changed.")
      (arguments
       '(#:configure-flags '("--disable-static"))) ;no need for libhsk.a
      (native-inputs
-      `(("autoconf" ,autoconf)
-        ("automake" ,automake)
-        ("libtool" ,libtool)))
+      (list autoconf automake libtool))
      (inputs
-      `(("unbound" ,unbound)
-        ("libuv" ,libuv)))
+      (list unbound libuv))
      (home-page "https://www.handshake.org/")
      (synopsis "Resolver daemon for the Handshake naming protocol")
      (description
@@ -1418,7 +1360,21 @@ and TCP-capable recursive DNS server for finding domains on the internet.")
        #:configure-flags
        (list (string-append "--sysconfdir=/etc"))
        #:make-flags
-       (list (string-append "SYSCONFDIR=/" (assoc-ref %outputs "out") "/etc"))))
+       (list (string-append "SYSCONFDIR=/" (assoc-ref %outputs "out") "/etc"))
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'install 'wrap-program
+           (lambda* (#:key inputs outputs #:allow-other-keys)
+             (let ((out (assoc-ref outputs "out"))
+                   (coreutils (assoc-ref inputs "coreutils-minimal")))
+               (substitute* (string-append out "/sbin/resolvconf")
+                 (("RESOLVCONF=\"\\$0\"")
+                  (format #f "\
+RESOLVCONF=\"$0\"
+PATH=~a/bin:$PATH"
+                          coreutils)))))))))
+    (inputs
+     (list coreutils-minimal))
     (home-page "https://roy.marples.name/projects/openresolv/")
     (synopsis "Resolvconf POSIX compliant implementation, a middleman for resolv.conf")
     (description "openresolv is an implementation of @command{resolvconf}, the

@@ -20,7 +20,6 @@
 
 (define-module (gnu installer newt user)
   #:use-module (gnu installer user)
-  #:use-module ((gnu installer steps) #:select (&installer-step-abort))
   #:use-module (gnu installer newt page)
   #:use-module (gnu installer newt utils)
   #:use-module (gnu installer utils)
@@ -40,6 +39,9 @@
 REAL-NAME, and HOME-DIRECTORY as the initial values in the form."
   (define (pad-label label)
     (string-pad-right label 25))
+
+  (define (root-account? name)
+    (string=? name "root"))
 
   (let* ((label-name
           (make-label -1 -1 (pad-label (G_ "Name"))))
@@ -117,10 +119,14 @@ REAL-NAME, and HOME-DIRECTORY as the initial values in the form."
                                GRID-ELEMENT-SUBGRID button-grid)
                               title)
 
-    (let ((error-page
+    (let ((error-empty-field-page
            (lambda ()
              (run-error-page (G_ "Empty inputs are not allowed.")
-                             (G_ "Empty input")))))
+                             (G_ "Empty input"))))
+          (error-root-page
+           (lambda ()
+             (run-error-page (G_ "Root account is automatically created.")
+                             (G_ "Root account")))))
       (receive (exit-reason argument)
           (run-form form)
         (dynamic-wind
@@ -133,22 +139,28 @@ REAL-NAME, and HOME-DIRECTORY as the initial values in the form."
                       (real-name      (entry-value entry-real-name))
                       (home-directory (entry-value entry-home-directory))
                       (password       (entry-value entry-password)))
-                  (if (or (string=? name "")
-                          (string=? home-directory ""))
-                      (begin
-                        (error-page)
-                        (run-user-add-page))
-                      (let ((password (confirm-password password)))
-                        (if password
-                            (user
-                             (name name)
-                             (real-name real-name)
-                             (home-directory home-directory)
-                             (password password))
-                            (run-user-add-page #:name name
-                                               #:real-name real-name
-                                               #:home-directory
-                                               home-directory)))))))))
+                  (cond
+                   ;; Empty field.
+                   ((or (string=? name "")
+                        (string=? home-directory ""))
+                    (error-empty-field-page)
+                    (run-user-add-page))
+                   ;; Reject root account.
+                   ((root-account? name)
+                    (error-root-page)
+                    (run-user-add-page))
+                   (else
+                    (let ((password (confirm-password password)))
+                      (if password
+                          (user
+                           (name name)
+                           (real-name real-name)
+                           (home-directory home-directory)
+                           (password (make-secret password)))
+                          (run-user-add-page #:name name
+                                             #:real-name real-name
+                                             #:home-directory
+                                             home-directory))))))))))
           (lambda ()
             (destroy-form-and-pop form)))))))
 
@@ -257,9 +269,7 @@ administrator (\"root\").")
                    (run users))
                  (reverse users))
                 ((components=? argument exit-button)
-                 (raise
-                  (condition
-                   (&installer-step-abort))))))
+                 (abort-to-prompt 'installer-step 'abort))))
               ('exit-fd-ready
                ;; Read the complete user list at once.
                (match argument
@@ -269,7 +279,7 @@ administrator (\"root\").")
                   (map (lambda (name real-name home password)
                          (user (name name) (real-name real-name)
                                (home-directory home)
-                               (password password)))
+                               (password (make-secret password))))
                        names real-names homes passwords))))))
           (lambda ()
             (destroy-form-and-pop form))))))
@@ -277,5 +287,5 @@ administrator (\"root\").")
   ;; Add a "root" user simply to convey the root password.
   (cons (user (name "root")
               (home-directory "/root")
-              (password (run-root-password-page)))
+              (password (make-secret (run-root-password-page))))
         (run '())))

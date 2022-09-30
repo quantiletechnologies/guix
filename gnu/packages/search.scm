@@ -2,12 +2,15 @@
 ;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2015, 2016 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2017 Thomas Danckaert <post@thomasdanckaert.be>
-;;; Copyright © 2017 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2017, 2021 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2018, 2020, 2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018 Adam Massmann <massmannak@gmail.com>
 ;;; Copyright © 2020 Hartmut Goebel <h.goebel@crazy-compilers.com>
 ;;; Copyright © 2021 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2021 Alexandr Vityazev <avityazev@posteo.org>
+;;; Copyright © 2021, 2022 Nicolas Goaziou <mail@nicolasgoaziou.fr>
+;;; Copyright © 2022 Jai Vetrivelan <jaivetrivelan@gmail.com>
+;;; Copyright © 2022 Arun Isaac <arunisaac@systemreboot.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -25,30 +28,42 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages search)
-  #:use-module ((guix licenses)
-                #:select (gpl2 gpl2+ gpl3+ agpl3+ lgpl2.1+ bsd-3 x11 perl-license))
+  #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
+  #:use-module (guix gexp)
   #:use-module (guix utils)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system perl)
   #:use-module (guix build-system python)
   #:use-module (guix build-system meson)
   #:use-module (gnu packages)
+  #:use-module (gnu packages aspell)
+  #:use-module (gnu packages autotools)
+  #:use-module (gnu packages base)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages check)
   #:use-module (gnu packages databases)
+  #:use-module (gnu packages ebook)
   #:use-module (gnu packages freedesktop)
+  #:use-module (gnu packages gawk)
+  #:use-module (gnu packages gettext)
+  #:use-module (gnu packages glib)
+  #:use-module (gnu packages groff)
+  #:use-module (gnu packages gtk)
+  #:use-module (gnu packages icu4c)
   #:use-module (gnu packages less)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages pcre)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pdf)
+  #:use-module (gnu packages photo)
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-crypto)
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
+  #:use-module (gnu packages qt)
   #:use-module (gnu packages sphinx)
   #:use-module (gnu packages time)
   #:use-module (gnu packages web)
@@ -59,17 +74,18 @@
 (define-public xapian
   (package
     (name "xapian")
-    (version "1.4.18")
-    ;; Note: When updating Xapian, remember to update xapian-bindings below.
+    (version "1.4.19")
+    ;; Note: When updating Xapian, remember to update omega and
+    ;; python-xapian-bindings below.
     (source (origin
               (method url-fetch)
               (uri (string-append "https://oligarchy.co.uk/xapian/" version
                                   "/xapian-core-" version ".tar.xz"))
               (sha256
-               (base32 "0xsb4ihf3p767f0zx9p4janwni6r9sg5j6lry0002i8hmnsdnv8r"))))
+               (base32 "1hx92kbqdl38gsrwzvbqgf2jc4wwzsad2gd99g62cdfclvy4ijhz"))))
     (build-system gnu-build-system)
-    (inputs `(("zlib" ,zlib)
-              ("util-linux" ,util-linux "lib")))
+    (inputs (list zlib
+                  `(,util-linux "lib")))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -92,7 +108,36 @@ add advanced indexing and search facilities to their own applications.  It
 supports the Probabilistic Information Retrieval model and also supports a
 rich set of boolean query operators.")
     (home-page "https://xapian.org/")
-    (license (list gpl2+ bsd-3 x11))))
+    (license (list license:gpl2+ license:bsd-3 license:x11))))
+
+(define-public omega
+  (package
+    (name "omega")
+    (version (package-version xapian))
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://oligarchy.co.uk/xapian/" version
+                           "/xapian-omega-" version ".tar.xz"))
+       (sha256
+        (base32
+         "136dsna6jvq48j4x4rr5y9nxmgrif9kvf4ybl5a6gpsmgqlfzcp4"))))
+    (build-system gnu-build-system)
+    (inputs
+     (list (list pcre "bin") perl xapian zlib))
+    (home-page "https://xapian.org/")
+    (synopsis "Search engine built on Xapian")
+    (description
+     "Omega is a search application built on Xapian.  It provides indexers and
+a CGI web search frontend.")
+    (license (list license:gpl2+        ; Main license
+                   ;; csvescape.cc, csvescape.h, csvesctest.cc, datetime.cc,
+                   ;; datetime.h, jsonescape.cc, jsonescape.h, jsonesctest.cc,
+                   ;; mimemap.h, my-html-tok.h, namedents.h, pkglibbindir.cc,
+                   ;; pkglibbindir.h, timegm.cc, timegm.h, urldecode.h,
+                   ;; urlencode.cc, urlencode.h, urlenctest.cc, common/Tokeniseise.pm,
+                   ;; common/keyword.cc, common/keyword.h
+                   license:expat))))
 
 (define-public python-xapian-bindings
   (package (inherit xapian)
@@ -104,7 +149,7 @@ rich set of boolean query operators.")
                                   "/xapian-bindings-" version ".tar.xz"))
               (sha256
                (base32
-                "13ziql8027glgihgvnbsa75vkcn82g83mbihj60zf0njj170clpy"))))
+                "0gc8l9cn8jdma0p73jl14z17yizp6dax5zsycvgprajii6j8bhwi"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags '("--with-python3")
@@ -115,37 +160,35 @@ rich set of boolean query operators.")
                                             (package-version python))
                             "/site-packages/xapian"))))
     (native-inputs
-     `(("python-sphinx" ,python-sphinx))) ;for documentation
+     (list python-sphinx)) ;for documentation
     (inputs
-     `(("python" ,python)
-       ("xapian" ,xapian)
-       ("zlib" ,zlib)))
+     (list python xapian zlib))
     (synopsis "Python bindings for the Xapian search engine library")
-    (license gpl2+)))
+    (license license:gpl2+)))
 
 (define-public perl-search-xapian
   (package
     (name "perl-search-xapian")
-    (version "1.2.25.4")
+    (version "1.2.25.5")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://cpan/authors/id/O/OL/OLLY/"
                            "Search-Xapian-" version ".tar.gz"))
        (sha256
-        (base32 "1pbl8pbgmbs3i8yik4p63g4pd9bhn0dp3d7l667dkvw0kccl66c7"))))
+        (base32 "12xs22li1z10rccpxbb4zflkkdh7q37z9hb8nvx1ywfn2b3vskr0"))))
     (build-system perl-build-system)
     (native-inputs
-     `(("perl-devel-leak" ,perl-devel-leak)))
+     (list perl-devel-leak))
     (inputs
-     `(("xapian" ,xapian)))
+     (list xapian))
     (home-page "https://metacpan.org/release/Search-Xapian")
     (synopsis "Perl XS frontend to the Xapian C++ search library")
     (description
      "Search::Xapian wraps most methods of most Xapian classes.  The missing
 classes and methods should be added in the future.  It also provides a
 simplified, more 'perlish' interface to some common operations.")
-    (license perl-license)))
+    (license license:perl-license)))
 
 (define-public libtocc
   (package
@@ -160,8 +203,8 @@ simplified, more 'perlish' interface to some common operations.")
         (base32
          "1kd2jd74m8ksc8s7hh0haz0q0c3n0mr39bbky262kk4l58f1g068"))))
     (build-system gnu-build-system)
-    (native-inputs `(("catch" ,catch-framework)))
-    (inputs `(("unqlite" ,unqlite)))
+    (native-inputs (list catch-framework))
+    (inputs (list unqlite))
     (arguments
      `(#:phases (modify-phases %standard-phases
                   (add-before 'configure 'chdir-source
@@ -189,7 +232,7 @@ simplified, more 'perlish' interface to some common operations.")
 system.  The goal of Tocc is to provide a better system for classifying files
 that is more flexible than classic file systems that are based on a tree of
 files and directories.")
-    (license gpl3+)))
+    (license license:gpl3+)))
 
 (define-public tocc
   (package
@@ -198,8 +241,7 @@ files and directories.")
     (source (package-source libtocc))
     (build-system gnu-build-system)
     (inputs
-     `(("libtocc" ,libtocc)
-       ("unqlite" ,unqlite)))
+     (list libtocc unqlite))
     (arguments
      `(#:tests? #f                      ;No tests
        #:phases (modify-phases %standard-phases
@@ -211,7 +253,7 @@ files and directories.")
     (description
      "Tocc is a tag-based file management system.  This package contains the
 command line tool for interacting with libtocc.")
-    (license gpl3+)))
+    (license license:gpl3+)))
 
 (define-public searx
   (package
@@ -233,33 +275,32 @@ command line tool for interacting with libtocc.")
        (modify-phases %standard-phases
          (add-after 'unpack 'relax-requirements
            (lambda _
-             ;; These packages are outdated in Guix at the time of packaging.
-             ;; When they are updated, remove corresponding substitutions.
              ;; Tests can run after build with 'searx-checker' tool in /bin.
+             ;; allow using a higher dependency version
              (substitute* "requirements.txt"
-               (("flask-babel==2.0.0") "flask-babel>=1.0.0")
-               (("jinja2==2.11.3") "jinja2>=2.11.2")
-               (("lxml==4.6.3") "lxml>=4.4.2")
-               (("pygments==2.8.0") "pygments>=2.7.3")
-               (("requests\\[socks\\]==2.25.1") "requests>=2.25")
-               (("==") ">=")))))))
+               (("==") ">="))))
+         (add-before 'sanity-check 'set-debug
+           (lambda _
+             ;; the user will need to change the secret key
+             ;; https://github.com/searx/searx/issues/2278
+             (setenv "SEARX_DEBUG" "1"))))))
     (propagated-inputs
-     `(("python-babel" ,python-babel)
-       ("python-certifi" ,python-certifi)
-       ("python-dateutil" ,python-dateutil)
-       ("python-flask" ,python-flask)
-       ("python-flask-babel" ,python-flask-babel)
-       ("python-idna" ,python-idna)
-       ("python-jinja2" ,python-jinja2)
-       ("python-langdetect" ,python-langdetect)
-       ("python-lxml" ,python-lxml)
-       ("python-pygments" ,python-pygments)
-       ("python-pyyaml" ,python-pyyaml)
-       ("python-requests" ,python-requests)))
+     (list python-babel
+           python-certifi
+           python-dateutil
+           python-flask
+           python-flask-babel
+           python-idna
+           python-jinja2
+           python-langdetect
+           python-lxml
+           python-pygments
+           python-pyyaml
+           python-requests))
     (home-page "https://searx.github.io/searx/")
     (synopsis "Privacy-respecting metasearch engine")
     (description "Searx is a privacy-respecting, hackable metasearch engine.")
-    (license agpl3+)))
+    (license license:agpl3+)))
 
 (define-public bool
   (package
@@ -284,7 +325,134 @@ statements, as well as the NEAR statement to search for the occurrence of
 words in close proximity to each other.  It handles context gracefully,
 accounting for new lines and paragraph changes.  It also has robust support
 for parsing HTML files.")
-    (license gpl3+)))
+    (license license:gpl3+)))
+
+(define-public fsearch
+  (package
+    (name "fsearch")
+    (version "0.2.2")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/cboxdoerfer/fsearch")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "126sg0fa96vxwinih120riqhj42jlxs2h1bp373r6ml7jwkvlyyn"))))
+    (build-system meson-build-system)
+    (native-inputs
+     (list autoconf
+           automake
+           gettext-minimal
+           `(,glib "bin")               ;for glib-compile-resources
+           intltool
+           libtool
+           pkg-config))
+    (inputs
+     (list gtk+ icu4c pcre2))
+    (home-page "https://github.com/cboxdoerfer/fsearch")
+    (synopsis "Fast file search utility")
+    (description
+     "FSearch is a fast file search utility, inspired by Everything
+Search Engine.  It is written in C and based on GTK3.")
+    (license license:gpl2+)))
+
+(define-public recoll
+  (package
+    (name "recoll")
+    (version "1.31.2")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://www.lesbonscomptes.com/recoll/"
+                           "recoll-" version ".tar.gz"))
+       (sha256
+        (base32 "0m1w5hf2n09lbzmzvlrm2lks4lci9vvjxy2mcmgb2avgly7v5vfk"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:configure-flags
+       (list "--disable-webkit"
+             "--disable-python-module"
+             "--without-systemd"
+             (string-append "QMAKEPATH=" (assoc-ref %build-inputs "qtbase")
+                            "/bin/qmake"))
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'patch-default-data-dir
+           (lambda* (#:key outputs #:allow-other-keys)
+             (substitute* "python/recoll/recoll/rclconfig.py"
+               (("/opt/local")
+                (assoc-ref outputs "out")))))
+         (add-after 'install 'wrap-filters
+           (lambda* (#:key inputs outputs #:allow-other-keys)
+             (let* ((out (assoc-ref outputs "out"))
+                    (mapping
+                     '(("rclps"
+                        "poppler")
+                       ("rclpdf.py"
+                        "poppler")
+                       ("rclpurple"
+                        "gawk")
+                       ("rcllyx"
+                        "libiconv")
+                       ("rcltex"
+                        "libiconv")
+                       ("rclkwd"
+                        "unzip" "gzip" "tar" "libxslt")
+                       ("rclman"
+                        "groff")
+                       ("rclgaim"
+                        "gawk" "libiconv")
+                       ("rclaptosidman"
+                        "sed")
+                       ("rclscribus"
+                        "grep" "gawk" "sed"))))
+               (for-each
+                (lambda (program packages)
+                  (wrap-program (string-append out "/share/recoll/filters/" program)
+                    `("PATH" ":" prefix
+                      ,(map (lambda (i)
+                              (string-append (assoc-ref inputs i) "/bin"))
+                            packages))))
+                (map car mapping)
+                (map cdr mapping))
+
+               (wrap-program (string-append out "/share/recoll/filters/rclimg")
+                 `("PERL5LIB" ":" prefix
+                   (,(getenv "PERL5LIB"))))))))))
+    (inputs
+     (list aspell
+           chmlib
+           inotify-tools
+           libxslt
+           libxml2
+           python
+           qtbase-5
+           unzip
+           xapian
+           zlib
+           ;; For filters
+           gawk
+           grep
+           groff
+           gzip
+           libiconv
+           perl
+           perl-image-exiftool
+           poppler
+           sed
+           tar))
+    (native-inputs
+     (list pkg-config which))
+    (home-page "https://www.lesbonscomptes.com/recoll/")
+    (synopsis "Find documents based on their contents or file names")
+    (description "Recoll finds documents based on their contents as well as
+their file names.  It can search most document formats, but you may need
+external applications for text extraction.  It can reach any storage place:
+files, archive members, email attachments, transparently handling
+decompression.")
+    (license license:gpl2+)))
 
 (define-public hyperestraier
   (package
@@ -299,8 +467,7 @@ for parsing HTML files.")
          (base32
           "1qk3pxgzyrpcz5qfyd5xs2hw9q1cbb7j5zd4kp1diq501wcj2vs9"))))
     (inputs
-     `(("qdbm" ,qdbm)
-       ("zlib" ,zlib)))
+     (list qdbm zlib))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags (list (string-append "LDFLAGS=-Wl,-rpath="
@@ -311,7 +478,7 @@ for parsing HTML files.")
     (description "Hyper Estraier can be used to integrate full-text
 search into applications, using either the provided command line and CGI
 interfaces, or a C API.")
-    (license lgpl2.1+)))
+    (license license:lgpl2.1+)))
 
 (define-public mlocate
   (package
@@ -334,36 +501,45 @@ most of the file system, which makes it faster and does not trash the system
 caches as much.  The locate(1) utility is intended to be completely compatible
 with slocate, and attempts to be compatible to GNU locate when it does not
 conflict with slocate compatibility.")
-    (license gpl2)))
+    (license license:gpl2)))
 
 (define-public plocate
   (package
     (name "plocate")
-    (version "1.1.12")
+    (version "1.1.16")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://plocate.sesse.net/download/"
                            "plocate-" version ".tar.gz"))
        (sha256
-        (base32 "1damwm8kqf797kgr1cify521i6icz5khc5brq16m6nlg26nja7d1"))))
+        (base32 "0ccn785yi069dgwp4j3g23zvvivzsf5chadbdr357qphkmpxy125"))))
     (build-system meson-build-system)
     (arguments
      `(#:configure-flags
        (list
-        (string-append
-         "--sharedstatedir=" (assoc-ref %outputs "out") "/var"))))
+        ;; Put the database in /var/cache/plocate.db
+        "--sharedstatedir=/var"
+        "-Dinstall_systemd=false"
+        "-Ddbpath=cache/plocate.db")
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'remove-cachedirtag
+           (lambda _
+             (substitute* "meson.build"
+               ;; Remove the script adding a "cachedirtag"
+               (("meson.add_install_script") "#")))))))
     (inputs
-     `(("liburing" ,liburing)
-       ("zstd" ,zstd "lib")))
+     (list liburing
+           `(,zstd "lib")))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (home-page "https://plocate.sesse.net/")
     (synopsis "Faster locate")
     (description "Plocate is a @code{locate} based on posting lists,
 completely replacing @command{mlocate} with a faster and smaller index.  It is
 suitable as a default locate on your system.")
-    (license gpl2)))
+    (license license:gpl2)))
 
 (define-public swish-e
   (package
@@ -390,11 +566,8 @@ suitable as a default locate on your system.")
     ;; building: xpdf, catdoc, MP3::Tag, Spreadsheet::ParseExcel,
     ;; HTML::Entities.
     (inputs
-     `(("perl" ,perl)
-       ("perl-uri" ,perl-uri)
-       ("perl-html-parser" ,perl-html-parser)
-       ("perl-html-tagset" ,perl-html-tagset)
-       ("perl-mime-types" ,perl-mime-types)))
+     (list perl perl-uri perl-html-parser perl-html-tagset
+           perl-mime-types))
     (arguments
      `(;; XXX: This fails to build with zlib (API mismatch) and tests fail
        ;; with libxml2, so disable both.
@@ -427,7 +600,7 @@ suitable as a default locate on your system.")
      "Swish-e is Simple Web Indexing System for Humans - Enhanced.  Swish-e
 can quickly and easily index directories of files or remote web sites and
 search the generated indexes.")
-    (license gpl2+)))                   ;with exception
+    (license license:gpl2+)))           ; with exception
 
 (define-public xapers
   (package
@@ -444,17 +617,14 @@ search the generated indexes.")
          "0ykz6hn3qj46w3c99d6q0pi5ncq2894simcl7vapv047zm3cylmd"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("poppler" ,poppler)
-       ("python-urwid" ,python-urwid)
-       ("xclip" ,xclip)
-       ("xdg-utils" ,xdg-utils)))
+     (list poppler python-urwid xclip xdg-utils))
     (inputs
-     `(("python-latexcodec" ,python-latexcodec)
-       ("python-pybtex" ,python-pybtex)
-       ("python-pycurl" ,python-pycurl)
-       ("python-pyyaml" ,python-pyyaml)
-       ("python-six" ,python-six)
-       ("python-xapian-bindings" ,python-xapian-bindings)))
+     (list python-latexcodec
+           python-pybtex
+           python-pycurl
+           python-pyyaml
+           python-six
+           python-xapian-bindings))
     (arguments
      `(#:modules ((ice-9 rdelim)
                   (guix build python-build-system)
@@ -498,47 +668,49 @@ geared towards academic journal articles build on the Xapian search engine.
 Think of it as your own personal document search engine, or a local cache of
 online libraries.  It provides fast search of document text and
 bibliographic data and simple document and bibtex retrieval.")
-    (license gpl3+)))
+    (license license:gpl3+)))
 
 (define-public ugrep
   (package
     (name "ugrep")
-    (version "3.1.12")
+    (version "3.8.3")
     (source (origin
               (method git-fetch)
               (uri (git-reference
                     (url "https://github.com/Genivia/ugrep")
                     (commit (string-append "v" version))))
               (sha256
-               (base32 "06y61sf2ywjaix4nss11wwkxipj8cc9ccx6bsmdm31h8d8wd2s0j"))
+               (base32 "03b3lahc3zzsznaqnrk47f1cnd5jwakvwrkz0r4m2crk09cpfv57"))
               (file-name (git-file-name name version))
               (modules '((guix build utils)))
               (snippet
-               '(begin
-                  (delete-file-recursively "bin") ; pre-built executables
-                  (for-each delete-file (find-files "tests" "^archive\\..*"))
-                  (for-each delete-file (find-files "tests" "^.*\\.pdf$"))
-                  (for-each delete-file (find-files "tests" "^.*\\.class$"))
-                  #t))))
+               #~(begin
+                   (delete-file-recursively "bin") ; pre-built executables
+                   (for-each (lambda (regexp)
+                               (for-each delete-file
+                                         (find-files "tests" regexp)))
+                             '("^archive" "\\.pdf$" "\\.class$"))))))
     (build-system gnu-build-system)
     (inputs
-     `(("bzip2" ,bzip2)
-       ("less" ,less)
-       ("lz4" ,lz4)
-       ("lzip" ,lzip)  ;; lzma
-       ("pcre2" ,pcre2)
-       ("zlib" ,zlib)))
+     (list bzip2
+           less
+           lz4
+           lzip ;; lzma
+           pcre2
+           zlib
+           `(,zstd "lib")))
     (arguments
-     `(#:tests? #f                  ; no way to rebuild the binary input files
-       #:test-target "test"
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'check 'check-setup
-           (lambda _
-             ;; Unpatch shebangs in tests.
-             (substitute* '("tests/Hello.bat"
-                            "tests/Hello.sh")
-               (("#!/gnu/store/.*/bin/sh") "#!/bin/sh")))))))
+     (list
+      #:tests? #f                  ; no way to rebuild the binary input files
+      #:test-target "test"
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-before 'check 'check-setup
+            (lambda _
+              ;; Unpatch shebangs in tests.
+              (substitute* '("tests/Hello.bat"
+                             "tests/Hello.sh")
+                (("#!/gnu/store/.*/bin/sh") "#!/bin/sh")))))))
     (home-page "https://github.com/Genivia/ugrep/")
     (synopsis "Faster grep with an interactive query UI")
     (description "Ugrep is a ultra fast searcher of file systems, text
@@ -553,6 +725,6 @@ multi-threaded and other techniques to speed up search, pattern-matching and
 decompression.  Many pre-defined regexps ease searching e.g. C typdefs or XML
 attributes.  Results can be output in several structured or self-defined
 formats.")
-    (license bsd-3)))
+    (license license:bsd-3)))
 
 ;;; search.scm ends here

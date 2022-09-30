@@ -7,6 +7,8 @@
 ;;; Copyright © 2019, 2020 Miguel Ángel Arruga Vivas <rosen644835@gmail.com>
 ;;; Copyright © 2020 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2020 Stefan <stefan-guix@vodafonemail.de>
+;;; Copyright © 2022 Karl Hallsby <karl@hallsby.com>
+;;; Copyright © 2022 Denis 'GNUtoo' Carikli <GNUtoo@cyberdimension.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -50,10 +52,13 @@
             grub-theme-color-highlight
             grub-theme-gfxmode
 
+            install-grub-efi-removable
             install-grub-efi-netboot
 
             grub-bootloader
             grub-efi-bootloader
+            grub-efi-removable-bootloader
+            grub-efi32-bootloader
             grub-efi-netboot-bootloader
             grub-mkrescue-bootloader
             grub-minimal-bootloader
@@ -264,36 +269,38 @@ is a string that can be inserted in grub.cfg."
                          at_keyboard usb_keyboard))
 
          (io (string-append
-               "terminal_output "
-               (symbols->string
-                 (map
-                   (lambda (output)
-                     (if (memq output valid-outputs) output #f)) outputs)) "\n"
-               (if (null? inputs)
-                 ""
-                 (string-append
-                   "terminal_input "
-                   (symbols->string
-                     (map
-                       (lambda (input)
-                         (if (memq input valid-inputs) input #f)) inputs)) "\n"))
-               ;; UNIT and SPEED are arguments to the same GRUB command
-               ;; ("serial"), so we process them together.
-               (if (or unit speed)
-                 (string-append
+              ;; UNIT and SPEED are arguments to the same GRUB command
+              ;; ("serial"), so we process them together.
+              (if (or unit speed)
+                  (string-append
                    "serial"
                    (if unit
-                     ;; COM ports 1 through 4
-                     (if (and (exact-integer? unit) (<= unit 3) (>= unit 0))
-                       (string-append " --unit=" (number->string unit))
-                       #f)
-                     "")
+                       ;; COM ports 1 through 4
+                       (if (and (exact-integer? unit) (<= unit 3) (>= unit 0))
+                           (string-append " --unit=" (number->string unit))
+                           #f)
+                       "")
                    (if speed
-                     (if (exact-integer? speed)
-                       (string-append " --speed=" (number->string speed))
-                       #f)
-                     ""))
-                 ""))))
+                       (if (exact-integer? speed)
+                           (string-append " --speed=" (number->string speed))
+                           #f)
+                       "")
+                   "\n")
+                  "")
+              (if (null? inputs)
+                  ""
+                  (string-append
+                   "terminal_input "
+                   (symbols->string
+                    (map
+                     (lambda (input)
+                       (if (memq input valid-inputs) input #f)) inputs))
+                   "\n"))
+              "terminal_output "
+              (symbols->string
+               (map
+                (lambda (output)
+                  (if (memq output valid-outputs) output #f)) outputs)))))
     (format #f "~a" io)))
 
 (define (grub-root-search device file)
@@ -415,8 +422,7 @@ menuentry ~s {
           ;; Other type of devices aren't implemented.
           #~()))
     (let ((devices (map crypto-device->cryptomount store-crypto-devices))
-          ;; XXX: Add luks2 when grub 2.06 is packaged.
-          (modules #~(format port "insmod luks~%")))
+          (modules #~(format port "insmod luks~%insmod luks2~%")))
       (if (null? devices)
           devices
           (cons modules devices))))
@@ -607,6 +613,54 @@ fi~%"))))
                         "--bootloader-id=Guix"
                         "--efi-directory" target-esp)))))
 
+(define install-grub-efi-removable
+  #~(lambda (bootloader efi-dir mount-point)
+      ;; NOTE: mount-point is /mnt in guix system init /etc/config.scm /mnt/point
+      ;; NOTE: efi-dir comes from target list of booloader configuration
+      ;; There is nothing useful to do when called in the context of a disk
+      ;; image generation.
+      (when efi-dir
+        ;; Install GRUB onto the EFI partition mounted at EFI-DIR, for the
+        ;; system whose root is mounted at MOUNT-POINT.
+        (let ((grub-install (string-append bootloader "/sbin/grub-install"))
+              (install-dir (string-append mount-point "/boot"))
+              ;; When installing Guix, it's common to mount EFI-DIR below
+              ;; MOUNT-POINT rather than /boot/efi on the live image.
+              (target-esp (if (file-exists? (string-append mount-point efi-dir))
+                              (string-append mount-point efi-dir)
+                              efi-dir)))
+          ;; Tell 'grub-install' that there might be a LUKS-encrypted /boot or
+          ;; root partition.
+          (setenv "GRUB_ENABLE_CRYPTODISK" "y")
+          (invoke/quiet grub-install "--boot-directory" install-dir
+                        "--removable"
+                        ;; "--no-nvram"
+                        "--bootloader-id=Guix"
+                        "--efi-directory" target-esp)))))
+
+(define install-grub-efi32
+  #~(lambda (bootloader efi-dir mount-point)
+      ;; There is nothing useful to do when called in the context of a disk
+      ;; image generation.
+      (when efi-dir
+        ;; Install GRUB onto the EFI partition mounted at EFI-DIR, for the
+        ;; system whose root is mounted at MOUNT-POINT.
+        (let ((grub-install (string-append bootloader "/sbin/grub-install"))
+              (install-dir (string-append mount-point "/boot"))
+              ;; When installing Guix, it's common to mount EFI-DIR below
+              ;; MOUNT-POINT rather than /boot/efi on the live image.
+              (target-esp (if (file-exists? (string-append mount-point efi-dir))
+                              (string-append mount-point efi-dir)
+                              efi-dir)))
+          ;; Tell 'grub-install' that there might be a LUKS-encrypted /boot or
+          ;; root partition.
+          (setenv "GRUB_ENABLE_CRYPTODISK" "y")
+          (invoke/quiet grub-install "--boot-directory" install-dir
+                        "--bootloader-id=Guix"
+			(cond ((target-x86?) "--target=i386-efi")
+                              ((target-arm?) "--target=arm-efi"))
+                        "--efi-directory" target-esp)))))
+
 (define (install-grub-efi-netboot subdir)
   "Define a grub-efi-netboot bootloader installer for installation in SUBDIR,
 which is usually efi/Guix or efi/boot."
@@ -732,6 +786,19 @@ considered for security aspects."
    (disk-image-installer #f)
    (name 'grub-efi)
    (package grub-efi)))
+
+(define grub-efi-removable-bootloader
+  (bootloader
+   (inherit grub-efi-bootloader)
+   (name 'grub-efi-removable-bootloader)
+   (installer install-grub-efi-removable)))
+
+(define grub-efi32-bootloader
+  (bootloader
+   (inherit grub-efi-bootloader)
+   (installer install-grub-efi32)
+   (name 'grub-efi32)
+   (package grub-efi32)))
 
 (define grub-efi-netboot-bootloader
   (bootloader

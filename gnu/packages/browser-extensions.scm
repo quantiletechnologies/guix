@@ -51,16 +51,18 @@ supported content to the Kodi media center.")
 (define ublock-origin
   (package
     (name "ublock-origin")
-    (version "1.38.6")
+    (version "1.44.0")
     (home-page "https://github.com/gorhill/uBlock")
     (source (origin
               (method git-fetch)
               (uri (git-reference (url home-page) (commit version)
+                                  ;; Also fetch the tightly coupled
+                                  ;; "uAssets" submodule.
                                   (recursive? #t)))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1jdi7p537dj0bpxsdnvs722cw8xv5ifh8mjj1ndwjvgasvj18fsd"))))
+                "0sws7xd8nvxnzcyw92i9sc5xv3hpqw1kzdj9vm8bhfxlh042l7ly"))))
     (build-system gnu-build-system)
     (outputs '("xpi" "firefox" "chromium"))
     (arguments
@@ -98,8 +100,7 @@ supported content to the Kodi media center.")
                (copy-recursively "dist/build/uBlock0.firefox" firefox)
                (copy-recursively "dist/build/uBlock0.chromium" chromium)))))))
     (native-inputs
-     `(("python" ,python-wrapper)
-       ("zip" ,zip)))
+     (list python-wrapper zip))
     (synopsis "Block unwanted content from web sites")
     (description
      "uBlock Origin is a @dfn{wide spectrum blocker} for IceCat and

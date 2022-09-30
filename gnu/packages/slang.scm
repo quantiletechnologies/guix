@@ -2,7 +2,7 @@
 ;;; Copyright © 2015 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2015 Eric Bavier <bavier@member.fsf.org>
-;;; Copyright © 2018, 2019 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2018, 2019, 2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -22,6 +22,7 @@
 (define-module (gnu packages slang)
   #:use-module (guix packages)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix utils)
   #:use-module (guix build-system gnu)
   #:use-module ((guix licenses) #:prefix license:)
@@ -47,30 +48,31 @@
                 "06p379fqn6w38rdpqi98irxi2bf4llb0rja3dlgkqz7nqh7kp7pw"))
               (modules '((guix build utils)))
               (snippet
-               '(begin
-                  (substitute* "src/Makefile.in"
-                    (("/bin/ln") "ln"))
-                  #t))))
+               #~(begin
+                   (substitute* "src/Makefile.in"
+                     (("/bin/ln") "ln"))))))
     (build-system gnu-build-system)
     (arguments
-     '(#:parallel-tests? #f
-       #:parallel-build? #f  ; there's at least one race
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'configure 'substitute-before-config
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let ((ncurses (assoc-ref inputs "ncurses")))
-               (substitute* "configure"
-                 (("MISC_TERMINFO_DIRS=\"\"")
-                  (string-append "MISC_TERMINFO_DIRS="
-                                 "\"" ncurses "/share/terminfo" "\"")))
-               #t))))))
+     (list #:parallel-tests? #f
+           #:parallel-build? #f         ; race to build/use elfobj
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'reduce-array-test-size
+                 ;; Fix array.sl/array.slc failure on 32-bit systems ("Unable to
+                 ;; to create a multi-dimensional array of the desired size").
+                 (lambda _
+                   (substitute* "src/test/array.sl"
+                     (("10000,10000,10000,10000,10000,10000")
+                      "10,10,10,10,10,10"))))
+               (add-before 'configure 'fix-configure-script
+                 ;; Don't try to link to the long-obsolete (and gone) -ltermcap.
+                 (lambda _
+                   (substitute* "configure"
+                     (("(MISC_TERMINFO_DIRS)=.*" _ variable)
+                      (format #f "~a=\"~a/share/terminfo\"\n" variable
+                              #$(this-package-input "ncurses")))))))))
     (inputs
-     `(("readline" ,readline)
-       ("zlib" ,zlib)
-       ("libpng" ,libpng)
-       ("pcre" ,pcre)
-       ("ncurses" ,ncurses)))
+     (list readline zlib libpng pcre ncurses))
     (home-page "https://www.jedsoft.org/slang/")
     (synopsis "Library for interactive applications and extensibility")
     (description
@@ -82,6 +84,51 @@ is the slang interpreter that may be easily embedded into a program to make it
 extensible.  While the emphasis has always been on the embedded nature of the
 interpreter, it may also be used in a stand-alone fashion through the use of
 slsh, which is part of the S-Lang distribution.")
+    (license license:gpl2+)))
+
+(define-public most
+  (package
+    (name "most")
+    (version "5.1.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "http://www.jedsoft.org/releases/most/most-"
+                           version ".tar.gz"))
+       (sha256
+        (base32 "008537ns659pw2aag15imwjrxj73j26aqq90h285is6kz8gmv06v"))
+       (modules '((guix build utils)))
+       (snippet
+        #~(begin
+            (substitute* "src/Makefile.in"
+              (("/bin/cp") "cp"))))))
+    (build-system gnu-build-system)
+    (arguments
+     (list #:configure-flags
+           #~(list (string-append "--with-slang="
+                                  #$(this-package-input "slang")))
+           #:tests? #f                  ; no test suite
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-before 'configure 'fix-configure-script
+                 ;; Don't try to link to the long-obsolete (and gone) -ltermcap.
+                 (lambda _
+                   (substitute* "configure"
+                     (("(MISC_TERMINFO_DIRS)=.*" _ variable)
+                      (format #f "~a=\"~a/share/terminfo\"\n" variable
+                              #$(this-package-input "ncurses")))))))))
+    (inputs
+     (list ncurses slang))
+    (home-page "https://www.jedsoft.org/most/")
+    (synopsis
+     "@dfn{Pager} (terminal text viewer) with multiple windows and filters")
+    (description
+     "Most is a paging text viewer.  It displays the contents of a file or the
+output of a command on the terminal, one screenful at a time, and lets you
+scroll up and down to (re)view the entire text.
+
+You can open multiple windows within @command{most} to view different files, or
+to inspect different parts of the same file, at the same time.")
     (license license:gpl2+)))
 
 (define-public newt
@@ -98,39 +145,43 @@ slsh, which is part of the S-Lang distribution.")
     (build-system gnu-build-system)
     (outputs '("out" "python"))
     (inputs
-     `(("slang" ,slang)
-       ("popt" ,popt)
-       ("python" ,python)
-       ("fribidi" ,fribidi)))
+     (list slang popt python fribidi))
     (arguments
-     `(#:tests? #f    ; no test suite
+     (list
+       #:tests? #f    ; no test suite
        #:configure-flags
        ;; Set the correct RUNPATH in binaries.
-       (list (string-append "LDFLAGS=-Wl,-rpath=" %output "/lib"))
+       #~(list (string-append "LDFLAGS=-Wl,-rpath=" #$output "/lib"))
        #:make-flags
        ;; configure uses a hard-coded search of /usr/include/python* to set
        ;; this variable, and does not allow us to override it from the
        ;; command line.  Fortunately, the Makefile does, so provide it here.
-       (list (string-append "PYTHONVERS=python"
-                            ,(version-major+minor (package-version python))))
+       #~(list
+          (string-append "PYTHONVERS=python"
+                         #$(version-major+minor (package-version python))))
        #:phases
-       (modify-phases %standard-phases
-         (add-after
-          'unpack 'patch-/usr/bin/install
-          (lambda _
-            (substitute* "po/Makefile"
-              (("/usr/bin/install") "install"))
-            #t))
-         (add-after
-          'install 'move-python
-          (lambda* (#:key outputs #:allow-other-keys)
-            (let ((out  (assoc-ref outputs "out"))
-                  (py   (assoc-ref outputs "python"))
-                  (ver ,(version-major+minor (package-version python))))
-              (mkdir-p (string-append py "/lib"))
-              (rename-file (string-append out "/lib/python" ver)
-                           (string-append py  "/lib/python" ver))
-              #t))))))
+       #~(modify-phases %standard-phases
+           (add-after 'unpack 'patch-/usr/bin/install
+             (lambda _
+               (substitute* "po/Makefile"
+                 (("/usr/bin/install") "install"))))
+           (add-before 'build 'add-python-config-to-path
+             (lambda* (#:key target #:allow-other-keys)
+               ;; When cross-compiling python-config is not present in $PATH.
+               ;;
+               ;; It is a shell script without dependencies on target binaries
+               ;; so it can be run on the host to allow cross-compilation.
+               (when target
+                 (let ((path (getenv "PATH"))
+                       (py (string-append #$python "/bin")))
+                   (setenv "PATH" (string-append path ":" py))))))
+           (add-after 'install 'move-python
+             (lambda* _
+               (let ((ver #$(version-major+minor (package-version python))))
+                 (mkdir-p (string-append #$output:python "/lib"))
+                 (rename-file
+                   (string-append #$output "/lib/python" ver)
+                   (string-append #$output:python  "/lib/python" ver))))))))
     (home-page "https://pagure.io/newt")
     (synopsis "Not Erik's Windowing Toolkit - text mode windowing with slang")
     (description

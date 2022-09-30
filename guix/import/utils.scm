@@ -2,13 +2,16 @@
 ;;; Copyright © 2012, 2013, 2018, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2016 Jelle Licht <jlicht@fsfe.org>
 ;;; Copyright © 2016 David Craven <david@craven.ch>
-;;; Copyright © 2017, 2019, 2020 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2017, 2019, 2020, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2018 Oleg Pykhalov <go.wigust@gmail.com>
 ;;; Copyright © 2019 Robert Vollmert <rob@vllmrt.net>
 ;;; Copyright © 2020 Helio Machado <0x2b3bfa0+guix@googlemail.com>
 ;;; Copyright © 2020 Martin Becze <mjbecze@riseup.net>
 ;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Sarah Morgensen <iskarian@mgsn.dev>
+;;; Copyright © 2021 Xinglu Chen <public@yoctocell.xyz>
+;;; Copyright © 2022 Alice Brenon <alice.brenon@ens-lyon.fr>
+;;; Copyright © 2022 Kyle Meyer <kyle@kyleam.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -36,9 +39,11 @@
   #:use-module (guix discovery)
   #:use-module (guix build-system)
   #:use-module (guix gexp)
+  #:use-module ((guix i18n) #:select (G_))
   #:use-module (guix store)
   #:use-module (guix download)
   #:use-module (guix sets)
+  #:use-module ((guix ui) #:select (fill-paragraph))
   #:use-module (gnu packages)
   #:use-module (ice-9 match)
   #:use-module (ice-9 rdelim)
@@ -128,7 +133,7 @@ of the string VERSION is replaced by the symbol 'version."
   "Convert STR, a SPDX formatted license identifier, to a license object.
    Return #f if STR does not match any known identifiers."
   ;; https://spdx.org/licenses/
-  ;; The psfl, gfl1.0, nmap, repoze
+  ;; The gfl1.0, nmap, repoze
   ;; licenses doesn't have SPDX identifiers
   ;;
   ;; Please update guix/licenses.scm when modifying
@@ -139,33 +144,51 @@ of the string VERSION is replaced by the symbol 'version."
     ;; or "GPL-N-or-later" as appropriate.  Likewise for LGPL
     ;; and AGPL
     ("AGPL-1.0"                    'license:agpl1)
+    ("AGPL-1.0-only"               'license:agpl1)
     ("AGPL-3.0"                    'license:agpl3)
     ("AGPL-3.0-only"               'license:agpl3)
     ("AGPL-3.0-or-later"           'license:agpl3+)
     ("Apache-1.1"                  'license:asl1.1)
     ("Apache-2.0"                  'license:asl2.0)
+    ("APSL-2.0"                    'license:apsl2)
     ("BSL-1.0"                     'license:boost1.0)
     ("0BSD"                        'license:bsd-0)
-    ("BSD-2-Clause-FreeBSD"        'license:bsd-2)
+    ("BSD-2-Clause"                'license:bsd-2)
+    ("BSD-2-Clause-FreeBSD"        'license:bsd-2)     ;flagged as deprecated on spdx
     ("BSD-3-Clause"                'license:bsd-3)
     ("BSD-4-Clause"                'license:bsd-4)
     ("CC0-1.0"                     'license:cc0)
     ("CC-BY-2.0"                   'license:cc-by2.0)
     ("CC-BY-3.0"                   'license:cc-by3.0)
+    ("CC-BY-4.0"                   'license:cc-by4.0)
     ("CC-BY-SA-2.0"                'license:cc-by-sa2.0)
     ("CC-BY-SA-3.0"                'license:cc-by-sa3.0)
     ("CC-BY-SA-4.0"                'license:cc-by-sa4.0)
     ("CDDL-1.0"                    'license:cddl1.0)
+    ("CDDL-1.1"                    'license:cddl1.1)
+    ("CECILL-2.1"                  'license:cecill)
+    ("CECILL-B"                    'license:cecill-b)
     ("CECILL-C"                    'license:cecill-c)
     ("Artistic-2.0"                'license:artistic2.0)
     ("ClArtistic"                  'license:clarified-artistic)
+    ("copyleft-next-0.3.0"         'license:copyleft-next)
     ("CPL-1.0"                     'license:cpl1.0)
     ("EPL-1.0"                     'license:epl1.0)
+    ("EPL-2.0"                     'license:epl2.0)
+    ("EUPL-1.2"                    'license:eupl1.2)
     ("MIT"                         'license:expat)
+    ("MIT-0"                       'license:expat-0)
     ("FTL"                         'license:freetype)
+    ("FreeBSD-DOC"                 'license:freebsd-doc)
+    ("Freetype"                    'license:freetype)
+    ("FSFAP"                       'license:fsf-free)
+    ("FSFUL"                       'license:fsf-free)
     ("GFDL-1.1"                    'license:fdl1.1+)
+    ("GFDL-1.1-or-later"           'license:fdl1.1+)
     ("GFDL-1.2"                    'license:fdl1.2+)
+    ("GFDL-1.2-or-later"           'license:fdl1.2+)
     ("GFDL-1.3"                    'license:fdl1.3+)
+    ("GFDL-1.3-or-later"           'license:fdl1.3+)
     ("Giftware"                    'license:giftware)
     ("GPL-1.0"                     'license:gpl1)
     ("GPL-1.0-only"                'license:gpl1)
@@ -179,6 +202,7 @@ of the string VERSION is replaced by the symbol 'version."
     ("GPL-3.0-only"                'license:gpl3)
     ("GPL-3.0+"                    'license:gpl3+)
     ("GPL-3.0-or-later"            'license:gpl3+)
+    ("HPND"                        'license:hpnd)
     ("ISC"                         'license:isc)
     ("IJG"                         'license:ijg)
     ("Imlib2"                      'license:imlib2)
@@ -197,14 +221,24 @@ of the string VERSION is replaced by the symbol 'version."
     ("LGPL-3.0-only"               'license:lgpl3)
     ("LGPL-3.0+"                   'license:lgpl3+)
     ("LGPL-3.0-or-later"           'license:lgpl3+)
+    ("LPPL-1.0"                    'license:lppl)
+    ("LPPL-1.1"                    'license:lppl)
+    ("LPPL-1.2"                    'license:lppl1.2)
+    ("LPPL-1.3a"                   'license:lppl1.3a)
+    ("LPPL-1.3c"                   'license:lppl1.3c)
+    ("MirOS"                       'license:miros)
     ("MPL-1.0"                     'license:mpl1.0)
     ("MPL-1.1"                     'license:mpl1.1)
     ("MPL-2.0"                     'license:mpl2.0)
     ("MS-PL"                       'license:ms-pl)
     ("NCSA"                        'license:ncsa)
+    ("OGL-UK-1.0"                  'license:ogl-psi1.0)
     ("OpenSSL"                     'license:openssl)
     ("OLDAP-2.8"                   'license:openldap2.8)
+    ("OPL-1.0"                     'license:opl1.0+)
     ("CUA-OPL-1.0"                 'license:cua-opl1.0)
+    ("PSF-2.0"                     'license:psfl)
+    ("OSL-2.1"                     'license:osl2.1)
     ("QPL-1.0"                     'license:qpl)
     ("Ruby"                        'license:ruby)
     ("SGI-B-2.0"                   'license:sgifreeb2.0)
@@ -213,6 +247,9 @@ of the string VERSION is replaced by the symbol 'version."
     ("TCL"                         'license:tcl/tk)
     ("Unlicense"                   'license:unlicense)
     ("Vim"                         'license:vim)
+    ("W3C"                         'license:w3c)
+    ("WTFPL"                       'license:wtfpl2)
+    ("wxWindow"                    'license:wxwindows3.1+)         ;flagged as deprecated on spdx
     ("X11"                         'license:x11)
     ("ZPL-2.1"                     'license:zpl2.1)
     ("Zlib"                        'license:zlib)
@@ -231,10 +268,14 @@ to in the (guix licenses) module, or #f if there is no such known license."
 with dashes."
   (string-join (string-split (string-downcase str) #\_) "-"))
 
-(define (beautify-description description)
-  "Improve the package DESCRIPTION by turning a beginning sentence fragment
-into a proper sentence and by using two spaces between sentences."
+(define* (beautify-description description #:optional (length 80))
+  "Improve the package DESCRIPTION by turning a beginning sentence fragment into
+a proper sentence and by using two spaces between sentences, and wrap lines at
+LENGTH characters."
   (let ((cleaned (cond
+                  ((not (string? description))
+                   (G_ "This package lacks a description.  Run \
+\"info '(guix) Synopses and Descriptions'\" for more information."))
                   ((string-prefix? "A " description)
                    (string-append "This package provides a"
                                   (substring description 1)))
@@ -242,14 +283,19 @@ into a proper sentence and by using two spaces between sentences."
                    (string-append "This package provides"
                                   (substring description
                                              (string-length "Provides"))))
+                  ((string-prefix? "Implements " description)
+                   (string-append "This package implements"
+                                  (substring description
+                                             (string-length "Implements"))))
                   ((string-prefix? "Functions " description)
                    (string-append "This package provides functions"
                                   (substring description
                                              (string-length "Functions"))))
                   (else description))))
     ;; Use double spacing between sentences
-    (regexp-substitute/global #f "\\. \\b"
-                              cleaned 'pre ".  " 'post)))
+    (fill-paragraph (regexp-substitute/global #f "\\. \\b"
+                                          cleaned 'pre ".  " 'post)
+                length)))
 
 (define* (package-names->package-inputs names #:optional (output #f))
   "Given a list of PACKAGE-NAMES or (PACKAGE-NAME VERSION) pairs, and an
@@ -299,6 +345,8 @@ APPEND-VERSION?/string is a string, append this string."
   (match guix-package
     ((or
       ('package ('name name) ('version version) . rest)
+      ('package ('inherit ('simple-texlive-package name . _))
+                ('version version) . rest)
       ('let _ ('package ('name name) ('version version) . rest)))
 
      `(define-public ,(string->symbol

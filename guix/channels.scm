@@ -1,7 +1,8 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2018-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2018 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2019 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
+;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -76,6 +77,7 @@
             %default-guix-channel
             %default-channels
             guix-channel?
+            repository->guix-channel
 
             channel-instance?
             channel-instance-channel
@@ -200,6 +202,26 @@ introduction, add it."
       (channel (inherit chan)
                (introduction %guix-channel-introduction))
       chan))
+
+(define* (repository->guix-channel directory
+                                   #:key
+                                   (introduction %guix-channel-introduction))
+  "Look for a Git repository in DIRECTORY or its ancestors and return a
+channel that uses that repository and the commit HEAD currently points to; use
+INTRODUCTION as the channel's introduction.  Return #f if no Git repository
+could be found at DIRECTORY or one of its ancestors."
+  (catch 'git-error
+    (lambda ()
+      (with-repository (repository-discover directory) repository
+        (let* ((head   (repository-head repository))
+               (commit (oid->string (reference-target head))))
+          (channel
+           (inherit %default-guix-channel)
+           (url (repository-working-directory repository))
+           (commit commit)
+           (branch (reference-shorthand head))
+           (introduction introduction)))))
+    (const #f)))
 
 (define-record-type <channel-instance>
   (channel-instance channel commit checkout)
@@ -895,7 +917,12 @@ specified."
 (define (package-cache-file manifest)
   "Build a package cache file for the instance in MANIFEST.  This is meant to
 be used as a profile hook."
-  (let ((profile (profile (content manifest) (hooks '()))))
+  ;; Note: Emit a profile in format version 3, which was introduced in 2017
+  ;; and is readable by Guix since before version 1.0.  This ensures that the
+  ;; Guix in MANIFEST is able to read the manifest file created for its own
+  ;; profile below.  See <https://issues.guix.gnu.org/56441>.
+  (let ((profile (profile (content manifest) (hooks '())
+                          (format-version 3))))
     (define build
       #~(begin
           (use-modules (gnu packages))
@@ -906,7 +933,14 @@ be used as a profile hook."
                 (format (current-error-port)
                         "Generating package cache for '~a'...~%"
                         #$profile)
-                (generate-package-cache #$output))
+                ;; This script runs through (primitive-load), which by default
+                ;; doesn't print backtraces when it encounters an exception,
+                ;; so manually do it.  Use with-throw-handler because it is
+                ;; supported by all Guile versions.
+                (with-throw-handler #t
+                  (lambda () (generate-package-cache #$output))
+                  (lambda (key . args)
+                      (backtrace))))
               (mkdir #$output))))
 
     (gexp->derivation-in-inferior "guix-package-cache" build
@@ -929,8 +963,12 @@ be used as a profile hook."
   "Return the derivation of the profile containing INSTANCES, a list of
 channel instances."
   (mlet %store-monad ((manifest (channel-instances->manifest instances)))
+    ;; Emit a profile in format version so that, if INSTANCES denotes an old
+    ;; Guix, it can still read that profile, for instance for the purposes of
+    ;; 'guix describe'.
     (profile-derivation manifest
-                        #:hooks %channel-profile-hooks)))
+                        #:hooks %channel-profile-hooks
+                        #:format-version 3)))
 
 (define latest-channel-instances*
   (store-lift latest-channel-instances))
@@ -1009,6 +1047,7 @@ true, include its introduction, if any."
     `(channel
       (name ',(channel-name channel))
       (url ,(channel-url channel))
+      (branch ,(channel-branch channel))
       (commit ,(channel-commit channel))
       ,@(if intro
             `((introduction (make-channel-introduction
@@ -1114,7 +1153,11 @@ NEW.  When OLD is omitted or is #f, return all the news entries of CHANNEL."
         (if (and news-file (file-exists? news-file))
             (with-repository checkout repository
               (let* ((news    (call-with-input-file news-file
-                                read-channel-news))
+                                (lambda (port)
+                                  (set-port-encoding! port
+                                                      (or (file-encoding port)
+                                                          "UTF-8"))
+                                  (read-channel-news port))))
                      (entries (map (lambda (entry)
                                      (resolve-channel-news-entry-tag repository
                                                                      entry))

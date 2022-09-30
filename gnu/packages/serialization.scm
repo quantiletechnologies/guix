@@ -2,14 +2,15 @@
 ;;; Copyright © 2015, 2017, 2019, 2020, 2021 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2016 Lukas Gradl <lgradl@openmailbox.org>
 ;;; Copyright © 2016 David Craven <david@craven.ch>
-;;; Copyright © 2016, 2019, 2020 Marius Bakke <mbakke@fastmail.com>
-;;; Copyright © 2016, 2018, 2019 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016, 2019, 2020, 2022 Marius Bakke <marius@gnu.org>
+;;; Copyright © 2016, 2018, 2019, 2021 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2017 Corentin Bocquillon <corentin@nybble.fr>
 ;;; Copyright © 2017 Gregor Giesen <giesen@zaehlwerk.net>
 ;;; Copyright © 2017 Frederick M. Muriithi <fredmanglis@gmail.com>
 ;;; Copyright © 2017 Nikita <nikita@n0.is>
-;;; Copyright © 2017, 2018, 2019 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2017–2019, 2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018 Joshua Sierles, Nextjournal <joshua@nextjournal.com>
+;;; Copyright © 2020 Martin Becze <mjbecze@riseup.net>
 ;;; Copyright © 2020 Alexandros Theodotou <alex@zrythm.org>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -30,7 +31,9 @@
 (define-module (gnu packages serialization)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
+  #:use-module (guix gexp)
   #:use-module (guix download)
+  #:use-module (guix hg-download)
   #:use-module (guix git-download)
   #:use-module (guix utils)
   #:use-module (guix build-system cmake)
@@ -75,8 +78,7 @@
          (add-after 'unpack 'chdir
            (lambda _ (chdir "lang/c++"))))))
     (inputs
-     `(("boost" ,boost)
-       ("snappy" ,snappy)))
+     (list boost snappy))
     (home-page "https://avro.apache.org/")
     (synopsis "Data serialization system")
     (description "Apache Avro is a data serialization system.  Avro provides:
@@ -110,8 +112,7 @@ implement RPC protocols.")
              (let ((gcc (assoc-ref inputs  "gcc")))
                (setenv "CPLUS_INCLUDE_PATH"
                        (string-join
-                        (cons* (string-append (assoc-ref inputs "libcxx+libcxxabi")
-                                              "/include/c++/v1")
+                        (cons* (search-input-directory inputs "include/c++/v1")
                                ;; Hide GCC's C++ headers so that they do not interfere with
                                ;; the Clang headers.
                                (delete (string-append gcc "/include/c++")
@@ -132,7 +133,7 @@ implement RPC protocols.")
 (define-public cereal
   (package
     (name "cereal")
-    (version "1.3.0")
+    (version "1.3.2")
     (source
      (origin
        (method git-fetch)
@@ -142,31 +143,68 @@ implement RPC protocols.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "0hc8wh9dwpc1w1zf5lfss4vg5hmgpblqxbrpp1rggicpx9ar831p"))))
+         "02sd90ynya7wg013zwzjr79fsv4bzqgfg9l2mapd4j38rv06gahx"))))
     (build-system cmake-build-system)
     (arguments
-     `(#:configure-flags '("-DSKIP_PORTABILITY_TEST=ON")
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'configure 'skip-sandbox
-           (lambda _
-             (substitute* "CMakeLists.txt"
-               (("add_subdirectory\\(sandbox\\)") ""))))
-         (add-after 'install 'install-doc
-           (lambda _
-             (let ((doc (string-append %output "/share/doc/html")))
-               (invoke "make" "doc")
-               (mkdir-p doc)
-               (copy-recursively "doc/html" doc)))))))
+     (list
+      #:configure-flags #~'("-DSKIP_PORTABILITY_TEST=ON"
+                            ;; Don't bother building the sandbox examples.
+                            "-DSKIP_PERFORMANCE_COMPARISON=ON"
+                            "-DBUILD_SANDBOX=OFF")
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'install 'install-doc
+            (lambda _
+              (let ((doc (string-append #$output "/share/doc/html")))
+                (invoke "make" "doc")
+                (mkdir-p doc)
+                (copy-recursively "doc/html" doc)))))))
     (native-inputs
-     `(("doxygen" ,doxygen)))
+     (list doxygen))
     (home-page "https://uscilab.github.io/cereal/")
     (synopsis "C++11 library for serialization")
     (description
      "Cereal is a header-only C++11 serialization library.  Cereal takes
 arbitrary data types and reversibly turns them into different representations,
 such as compact binary encodings, XML, or JSON.")
-    (license license:bsd-3)))
+    ;; Note: Cereal bundles forked versions of rapidxml and rapidjson
+    ;; (see include/cereal/external/), so list their licenses too.
+    (license (list license:bsd-3        ;Cereal itself
+                   ;; The bundled RapidXML is dual Boost/Expat (users choice).
+                   ;; RapidJSON is Expat licensed, and further bundles a
+                   ;; stdint.h with BSD-3.
+                   license:boost1.0 license:expat
+                   ;; Finally, include/cereal/external/base64.hpp has a
+                   ;; home-grown BSD-like license.
+                   (license:non-copyleft
+                    "file://include/cereal/external/LICENSE")))))
+
+;; Some packages fail with the latest version.  Remove this variable
+;; when unused.
+(define-public cereal-1.3.0
+  (package
+    (inherit cereal)
+    (version "1.3.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/USCiLab/cereal")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name "cereal" version))
+       (sha256
+        (base32
+         "0hc8wh9dwpc1w1zf5lfss4vg5hmgpblqxbrpp1rggicpx9ar831p"))))
+    (arguments
+     (substitute-keyword-arguments (package-arguments cereal)
+       ((#:configure-flags flags #~'())
+        #~'("-DSKIP_PORTABILITY_TEST=ON"))
+       ((#:phases phases #~%standard-phases)
+        #~(modify-phases #$phases
+            (add-before 'configure 'skip-sandbox
+              (lambda _
+                (substitute* "CMakeLists.txt"
+                  (("add_subdirectory\\(sandbox\\)") ""))))))))))
 
 (define-public msgpack
   (package
@@ -189,10 +227,9 @@ such as compact binary encodings, XML, or JSON.")
         (base32 "0yzhq50ijvwrfkr97knhvn54lj3f4hr3zy39yq8wpf6xll94s4bf"))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("googletest" ,googletest-1.8)
-       ("pkg-config" ,pkg-config)))
+     (list googletest-1.8 pkg-config))
     (propagated-inputs
-     `(("zlib" ,zlib))) ;; Msgpack installs two headers (zbuffer.h,
+     (list zlib)) ;; Msgpack installs two headers (zbuffer.h,
     ;; zbuffer.hpp) which #include <zlib.h>.  However, 'guix gc --references'
     ;; does not detect a store reference to zlib since these headers are not
     ;; compiled.
@@ -225,7 +262,7 @@ serialization.")
        (modify-phases %standard-phases
          (delete 'configure))))
     (native-inputs
-     `(("libtool" ,libtool)))
+     (list libtool))
     (home-page "https://github.com/tarruda/libmpack")
     (synopsis "Small binary serialization library")
     (description "Libmpack is a small binary serialization and RPC library
@@ -277,7 +314,7 @@ that implements both the msgpack and msgpack-rpc specifications.")
                                "mpack-src")
              #t)))))
     (inputs
-     `(("lua" ,lua)))
+     (list lua))
     (native-inputs
      `(("pkg-config" ,pkg-config)
        ("libmpack" ,(package-source libmpack))))
@@ -355,7 +392,7 @@ that implements both the msgpack and msgpack-rpc specifications.")
 (define-public libcyaml
   (package
     (name "libcyaml")
-    (version "1.1.0")
+    (version "1.3.1")
     (source
      (origin
        (method git-fetch)
@@ -365,23 +402,20 @@ that implements both the msgpack and msgpack-rpc specifications.")
        (file-name (git-file-name name version))
        (patches (search-patches "libcyaml-libyaml-compat.patch"))
        (sha256
-        (base32 "0428p0rwq71nhh5nzcbapsbrjxa0x5l6h6ns32nxv7j624f0zd93"))))
+        (base32 "0gvf3h8r8300wdwfjgxw3nzlj7w14q63m67p8wdm5fvpha017n4y"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:make-flags
+     `(#:test-target "test"
+       #:make-flags
        (list (string-append "PREFIX=" (assoc-ref %outputs "out"))
-             (string-append "CC=gcc"))
+             (string-append "CC=" ,(cc-for-target)))
        #:phases
        (modify-phases %standard-phases
-         (delete 'configure)            ; no configure script
-         (replace 'check
-           (lambda _
-             (setenv "CC" "gcc")
-             (invoke "make" "test"))))))
+         (delete 'configure))))         ; no configure script
     (inputs
-     `(("libyaml" ,libyaml)))
+     (list libyaml))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (synopsis "C library for reading and writing YAML")
     (description
      "LibCYAML is a C library written in ISO C11 for reading and writing
@@ -409,7 +443,7 @@ in which the loaded data is arranged in memory.")
     (arguments
      '(#:configure-flags '("-DYAML_BUILD_SHARED_LIBS=ON")))
     (native-inputs
-     `(("python" ,python)))
+     (list python))
     (home-page "https://github.com/jbeder/yaml-cpp")
     (synopsis "YAML parser and emitter in C++")
     (description "YAML parser and emitter in C++ matching the YAML 1.2 spec.")
@@ -418,16 +452,17 @@ in which the loaded data is arranged in memory.")
 (define-public jsoncpp
   (package
     (name "jsoncpp")
-    (version "1.9.2")
+    (version "1.9.4")
     (home-page "https://github.com/open-source-parsers/jsoncpp")
     (source (origin
               (method git-fetch)
               (uri (git-reference (url home-page) (commit version)))
               (file-name (git-file-name name version))
-              (patches (search-patches "jsoncpp-fix-inverted-case.patch"))
+              (patches
+               (search-patches "jsoncpp-pkg-config-version.patch"))
               (sha256
                (base32
-                "037d1b1qdmn3rksmn1j71j26bv4hkjv7sn7da261k853xb5899sg"))))
+                "0qnx5y6c90fphl9mj9d20j2dfgy6s5yr5l0xnzid0vh71zrp6jwv"))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags '("-DBUILD_SHARED_LIBS:BOOL=YES"
@@ -496,9 +531,7 @@ it a convenient format to store user input files.")
                       ":"))))
                 #t)))))
       (inputs
-       `(("bash-minimal" ,bash-minimal)
-         ("grep" ,grep)
-         ("sed" ,sed)))
+       (list bash-minimal grep sed))
       (synopsis "Pipeable JSON parser written in shell")
       (description
         "This package provides a JSON parser written in shell, compatible with
@@ -558,7 +591,7 @@ RPC system.  Think JSON, except binary.  Or think Protocol Buffers, except faste
          (base32
           "1fj4554msq0rrz14snbj908dzqj46gh7jg9w9j0akn2b7q911m5a"))))
     (build-system gnu-build-system)
-    (native-inputs `(("perl" ,perl)))
+    (native-inputs (list perl))
     (home-page "http://mongoc.org/libbson/current/index.html")
     (synopsis "C BSON library")
     (description "Libbson can create and parse BSON documents.  It can also
@@ -569,21 +602,23 @@ it is comparable to protobuf.")
 (define-public python-ruamel.yaml
   (package
     (name "python-ruamel.yaml")
-    (version "0.15.83")
+    (version "0.16.13")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "ruamel.yaml" version))
        (sha256
         (base32
-         "0p4i8ad28cbbbjja8b9274irkhnphhvhap3aym6yb8xfp1d72kpw"))))
+         "0hm9yg785f46bkrgqknd6fdvmkby9dpzjnm0b63qf0i748acaj5v"))))
     (build-system python-build-system)
     (native-inputs
-     `(("python-pytest" ,python-pytest)))
+     (list python-pytest))
+    (propagated-inputs
+     (list python-ruamel.yaml.clib))
     (arguments
      `(;; TODO: Tests require packaging "ruamel.std.pathlib".
        #:tests? #f))
-    (home-page "https://bitbucket.org/ruamel/yaml")
+    (home-page "https://sourceforge.net/projects/ruamel-yaml/")
     (synopsis "YAML 1.2 parser/emitter")
     (description
      "This package provides YAML parser/emitter that supports roundtrip
@@ -593,8 +628,43 @@ and has round-trip loaders and dumpers.  It supports comments.  Block
 style and key ordering are kept, so you can diff the source.")
     (license license:expat)))
 
-(define-public python2-ruamel.yaml
-  (package-with-python2 python-ruamel.yaml))
+(define-public python-ruamel.yaml.clib
+  (package
+    (name "python-ruamel.yaml.clib")
+    (version "0.2.6")
+    (source
+      (origin
+        ;; pypi release code has cythonized code without corresponding source.
+        (method hg-fetch)
+        (uri (hg-reference
+               (url "http://hg.code.sf.net/p/ruamel-yaml-clib/code")
+               (changeset version)))
+        (file-name (string-append name "-" version "-checkout"))
+        (sha256
+         (base32
+          "05m3y7pjfbaarqbbgw1k6gs6cnnmxnwadjipxvw1aaaqk3s236cs"))
+        (modules '((guix build utils)))
+        (snippet
+         '(begin
+            (delete-file "_ruamel_yaml.c")))))
+    (build-system python-build-system)
+    (arguments
+     `(#:tests? #f  ; This package is split from python-ruamel.yaml and
+                    ; depends on modules from it for the test suite.
+       #:phases
+       (modify-phases %standard-phases
+         (delete 'sanity-check) ; Depends on python-ruamel.yaml
+         (add-after 'unpack 'cythonize-code
+           (lambda _
+             (invoke "cython" "_ruamel_yaml.pyx"))))))
+    (native-inputs
+     (list python-cython))
+    (home-page "https://sourceforge.net/p/ruamel-yaml-clib/code/ci/default/tree")
+    (synopsis "C version of reader, parser and emitter for ruamel.yaml")
+    (description
+     "This package provides a C version of the reader, parser and emitter for
+@code{ruamel.yaml} derived from libyaml.")
+    (license license:expat)))
 
 (define-public python-cbor
   (package
@@ -663,8 +733,7 @@ game development and other performance-critical applications.")
           "00w9hwz7sj3fkdjc378r066vdy6lpxmn6vfac3qx956k8lvpxxj5"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-pandas" ,python-pandas)
-       ("python-pyarrow" ,python-pyarrow)))
+     (list python-pandas python-pyarrow))
     (home-page "https://github.com/wesm/feather")
     (synopsis "Python wrapper to the Feather file format")
     (description "This package provides a Python wrapper library to the

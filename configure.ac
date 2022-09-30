@@ -8,7 +8,7 @@ AC_INIT([GNU Guix],
   [https://www.gnu.org/software/guix/])
 AC_CONFIG_AUX_DIR([build-aux])
 
-AM_INIT_AUTOMAKE([1.14 gnu silent-rules subdir-objects \
+AM_INIT_AUTOMAKE([1.14 gnu tar-ustar silent-rules subdir-objects \
  color-tests parallel-tests -Woverride -Wno-portability])
 
 # Enable silent rules by default.
@@ -101,6 +101,9 @@ GUILE_PROGS
 if test "x$GUILD" = "x"; then
    AC_MSG_ERROR(['guild' binary not found; please check your Guile installation.])
 fi
+
+dnl (guix ui), notably, requires 'default-optimization-level' added in 3.0.3.
+PKG_CHECK_MODULES([GUILE], [guile-3.0 >= 3.0.3])
 
 dnl Get CFLAGS and LDFLAGS for libguile.
 GUILE_FLAGS
@@ -271,6 +274,7 @@ AC_CONFIG_FILES([Makefile
                  guix/config.scm])
 
 AC_CONFIG_FILES([etc/committer.scm], [chmod +x etc/committer.scm])
+AC_CONFIG_FILES([etc/teams.scm], [chmod +x etc/teams.scm])
 AC_CONFIG_FILES([test-env:build-aux/test-env.in], [chmod +x test-env])
 AC_CONFIG_FILES([pre-inst-env:build-aux/pre-inst-env.in],
   [chmod +x pre-inst-env])

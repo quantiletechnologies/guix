@@ -1,6 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2014 John Darrington <jmd@gnu.org>
 ;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -23,21 +24,25 @@
   #:use-module (guix licenses)
   #:use-module (guix packages)
   #:use-module (guix download)
-  #:use-module (guix build-system gnu))
+  #:use-module (guix utils)
+  #:use-module (guix gexp)
+  #:use-module (guix build-system gnu)
+  #:use-module (gnu packages perl)
+  #:use-module (gnu packages zig))
 
 (define-public ncdu
   (package
     (name "ncdu")
-    (version "1.16")
+    (version "1.17")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://dev.yorhel.nl/download/ncdu-"
                                   version ".tar.gz"))
               (sha256
                (base32
-                "1m0gk09jaz114piidiw8fkg0id5l6nhz1cg5nlaf1yl3l595g49b"))))
+                "1wfvdajln0iy7364nxkg4bpgdv8l3b6a9bnkhy67icqsxnl4a1w1"))))
     (build-system gnu-build-system)
-    (inputs `(("ncurses" ,ncurses)))
+    (inputs (list ncurses))
     (synopsis "Ncurses-based disk usage analyzer")
     (description
      "Ncdu is a disk usage analyzer with an ncurses interface, aimed to be
@@ -49,3 +54,39 @@ ncurses installed.")
               (string-append "https://g.blicky.net/ncdu.git/plain/COPYING?id=v"
                              version)))
     (home-page "https://dev.yorhel.nl/ncdu")))
+
+(define-public ncdu-2
+  (package
+    (inherit ncdu)
+    (name "ncdu2")      ; To destinguish it from the C based version.
+    (version "2.1.2")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "https://dev.yorhel.nl/download/ncdu-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "1p66691xgpljx1y92b4bfpn5rr7gnwbr5x3bf8bc78qq6vq6w3cy"))))
+    (arguments
+     (list
+       #:make-flags
+       #~(list (string-append "PREFIX=" #$output)
+               (string-append "CC=" #$(cc-for-target)))
+       #:phases
+       #~(modify-phases %standard-phases
+           (delete 'configure)      ; No configure script.
+           (add-before 'build 'pre-build
+             (lambda _
+               (setenv "ZIG_GLOBAL_CACHE_DIR"
+                       (mkdtemp "/tmp/zig-cache-XXXXXX"))))
+           (add-after 'build 'build-manpage
+             (lambda _
+               (delete-file "ncdu.1")
+               (invoke "make" "doc")))
+           (replace 'check
+             (lambda* (#:key tests? #:allow-other-keys)
+               (when tests?
+                 (invoke "zig" "test" "build.zig")))))))
+    (native-inputs
+     (list perl zig))
+    (properties `((upstream-name . "ncdu")))))

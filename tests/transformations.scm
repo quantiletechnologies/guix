@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2016, 2017, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2016-2017, 2019-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2021 Marius Bakke <marius@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -38,12 +38,14 @@
   #:use-module (guix utils)
   #:use-module (guix git)
   #:use-module (guix upstream)
+  #:use-module (guix diagnostics)
   #:use-module (gnu packages)
   #:use-module (gnu packages base)
   #:use-module (gnu packages busybox)
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-26)
+  #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-64))
 
 
@@ -449,6 +451,18 @@
                              (string=? (local-file-file input) patch)))
                       inputs))))))))
 
+(test-equal "options->transformation, property order"
+  ;; See <https://issues.guix.gnu.org/54942>.
+  '((with-debug-info . "does-not-exist")
+    (with-commit . "does-not-exist=aaaaaaa")
+    (without-tests . "does-not-exist"))
+  (let* ((t (options->transformation
+             '((with-debug-info . "does-not-exist")
+               (with-commit . "does-not-exist=aaaaaaa")
+               (without-tests . "does-not-exist")))))
+    (let ((new (t coreutils)))
+      (assq-ref (package-properties new) 'transformations))))
+
 (test-equal "options->transformation, with-latest"
   "42.0"
   (mock ((guix upstream) %updaters
@@ -464,6 +478,39 @@
                (t (options->transformation
                    `((with-latest . "foo")))))
           (package-version (t p)))))
+
+(test-equal "options->transformation, tune"
+  '(cpu-tuning . "superfast")
+  (let* ((p0 (dummy-package "p0"))
+         (p1 (dummy-package "p1"
+               (inputs `(("p0" ,p0)))
+               (properties '((tunable? . #t)))))
+         (p2 (dummy-package "p2"
+               (inputs `(("p1" ,p1)))))
+         (t  (options->transformation '((tune . "superfast"))))
+         (p3 (t p2)))
+    (and (not (package-replacement p3))
+         (match (package-inputs p3)
+           ((("p1" tuned))
+            (match (package-inputs tuned)
+              ((("p0" p0))
+               (and (not (package-replacement p0))
+                    (assq 'cpu-tuning
+                          (package-properties
+                           (package-replacement tuned)))))))))))
+
+(test-assert "options->transformations, tune, wrong micro-architecture"
+  (let ((p (dummy-package "tunable"
+             (properties '((tunable? . #t)))))
+        (t (options->transformation '((tune . "nonexistent-superfast")))))
+    ;; Because GCC used by P's build system does not support
+    ;; '-march=nonexistent-superfast', we should see an error when lowering
+    ;; the tuned package.
+    (guard (c ((formatted-message? c)
+               (member "nonexistent-superfast"
+                       (formatted-message-arguments c))))
+      (package->bag (t p))
+      #f)))
 
 (test-equal "options->transformation + package->manifest-entry"
   '((transformations . ((without-tests . "foo"))))

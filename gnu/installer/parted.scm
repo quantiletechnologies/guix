@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2018, 2019 Mathieu Othacehe <m.othacehe@gmail.com>
-;;; Copyright © 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2019, 2020, 2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -26,6 +26,7 @@
   #:use-module ((gnu build file-systems)
                 #:select (canonicalize-device-spec
                           find-partition-by-label
+                          find-partition-by-uuid
                           read-partition-uuid
                           read-luks-partition-uuid))
   #:use-module ((gnu build linux-boot)
@@ -37,6 +38,7 @@
                 #:select (%base-initrd-modules))
   #:use-module (guix build syscalls)
   #:use-module (guix build utils)
+  #:use-module (guix read-print)
   #:use-module (guix records)
   #:use-module (guix utils)
   #:use-module (guix i18n)
@@ -78,9 +80,8 @@
             efi-installation?
             default-esp-mount-point
 
-            with-delay-device-in-use?
             force-device-sync
-            non-install-devices
+            eligible-devices
             partition-user-type
             user-fs-type-name
             partition-filesystem-user-type
@@ -342,38 +343,63 @@ fail. See rereadpt function in wipefs.c of util-linux for an explanation."
 
 (define (remove-logical-devices)
   "Remove all active logical devices."
-  (with-null-output-ports
-   (invoke "dmsetup" "remove_all")))
+   ((run-command-in-installer) "dmsetup" "remove_all"))
 
-(define (installation-device)
-  "Return the installation device path."
+(define (installer-root-partition-path)
+  "Return the root partition path, or #f if it could not be detected."
   (let* ((cmdline (linux-command-line))
-         (root (find-long-option "--root" cmdline)))
+         (root (find-long-option "root" cmdline)))
     (and root
-         (canonicalize-device-spec (uuid root)))))
+         (or (and (access? root F_OK) root)
+             (find-partition-by-label root)
+             (and=> (uuid root)
+                    find-partition-by-uuid)))))
 
-(define (non-install-devices)
-  "Return all the available devices, except the install device."
-  (define (read-only? device)
-    (dynamic-wind
-    (lambda ()
-      (device-open device))
-    (lambda ()
-      (device-read-only? device))
-    (lambda ()
-      (device-close device))))
+;; Minimal installation device size.
+(define %min-device-size
+  (* 2 GIBIBYTE-SIZE)) ;2GiB
 
-  ;; If parted reports that a device is read-only it is probably the
-  ;; installation device. However, as this detection does not always work,
-  ;; compare the device path to the installation device path read from the
-  ;; command line.
-  (let ((install-device (installation-device)))
-    (remove (lambda (device)
-              (let ((file-name (device-path device)))
-                (or (read-only? device)
-                    (and install-device
-                         (string=? file-name install-device)))))
-            (devices))))
+(define (eligible-devices)
+  "Return all the available devices except the install device and the devices
+which are smaller than %MIN-DEVICE-SIZE."
+
+  (define the-installer-root-partition-path
+    (installer-root-partition-path))
+
+  (define (small-device? device)
+    (let ((length (device-length device))
+          (sector-size (device-sector-size device)))
+      (and (< (* length sector-size) %min-device-size)
+           (installer-log-line "~a is not eligible because it is smaller than \
+~a."
+                   (device-path device)
+                   (unit-format-custom-byte device
+                                            %min-device-size
+                                            UNIT-GIGABYTE)))))
+
+  ;; Read partition table of device and compare each path to the one
+  ;; we're booting from to determine if it is the installation
+  ;; device.
+  (define (installation-device? device)
+    ;; When using CDROM based installation, the root partition path may be the
+    ;; device path.
+    (and (or (string=? the-installer-root-partition-path
+                       (device-path device))
+             (let ((disk (disk-new device)))
+               (and disk
+                    (any (lambda (partition)
+                           (string=? the-installer-root-partition-path
+                                     (partition-get-path partition)))
+                         (disk-partitions disk)))))
+         (installer-log-line "~a is not eligible because it is the \
+installation device."
+                 (device-path device))))
+
+  (remove
+   (lambda (device)
+     (or (installation-device? device)
+         (small-device? device)))
+   (devices)))
 
 
 ;;
@@ -609,8 +635,14 @@ determined by MAX-LENGTH-COLUMN procedure."
 (define (mklabel device type-name)
   "Create a partition table on DEVICE. TYPE-NAME is the type of the partition
 table, \"msdos\" or \"gpt\"."
-  (let ((type (disk-type-get type-name)))
-    (disk-new-fresh device type)))
+  (let* ((type (disk-type-get type-name))
+         (disk (disk-new-fresh device type)))
+    (or disk
+        (raise
+         (condition
+          (&error)
+          (&message (message (format #f "Cannot create partition table of type
+~a on device ~a." type-name (device-path device)))))))))
 
 
 ;;
@@ -792,37 +824,39 @@ cause them to cross."
                    (disk-add-partition disk partition no-constraint)))
               (partition-ok?
                (or partition-constraint-ok? partition-no-contraint-ok?)))
-         (syslog "Creating partition:
-~/type: ~a
-~/filesystem-type: ~a
-~/start: ~a
-~/end: ~a
-~/start-range: [~a, ~a]
-~/end-range: [~a, ~a]
-~/constraint: ~a
-~/no-constraint: ~a
-"
-                 partition-type
-                 (filesystem-type-name filesystem-type)
-                 start-sector*
-                 end-sector
-                 (geometry-start start-range) (geometry-end start-range)
-                 (geometry-start end-range) (geometry-end end-range)
-                 partition-constraint-ok?
-                 partition-no-contraint-ok?)
+         (installer-log-line "Creating partition:")
+         (installer-log-line "~/type: ~a" partition-type)
+         (installer-log-line "~/filesystem-type: ~a"
+                             (filesystem-type-name filesystem-type))
+         (installer-log-line "~/flags: ~a" flags)
+         (installer-log-line "~/start: ~a" start-sector*)
+         (installer-log-line "~/end: ~a" end-sector)
+         (installer-log-line "~/start-range: [~a, ~a]"
+                             (geometry-start start-range)
+                             (geometry-end start-range))
+         (installer-log-line "~/end-range: [~a, ~a]"
+                             (geometry-start end-range)
+                             (geometry-end end-range))
+         (installer-log-line "~/constraint: ~a"
+                             partition-constraint-ok?)
+         (installer-log-line "~/no-constraint: ~a"
+                             partition-no-contraint-ok?)
          ;; Set the partition name if supported.
          (when (and partition-ok? has-name? name)
            (partition-set-name partition name))
 
-         ;; Set flags is required.
+         ;; Both partition-set-system and partition-set-flag calls can affect
+         ;; the partition type.  Their order is important, see:
+         ;; https://issues.guix.gnu.org/55549.
+         (partition-set-system partition filesystem-type)
+
+         ;; Set flags if required.
          (for-each (lambda (flag)
                      (and (partition-is-flag-available? partition flag)
                           (partition-set-flag partition flag 1)))
                    flags)
 
-         (and partition-ok?
-              (partition-set-system partition filesystem-type)
-              partition))))))
+         (and partition-ok? partition))))))
 
 
 ;;
@@ -1090,53 +1124,37 @@ list and return the updated list."
             (file-name file-name))))
        user-partitions))
 
-(define-syntax-rule (with-null-output-ports exp ...)
-  "Evaluate EXP with both the output port and the error port pointing to the
-bit bucket."
-  (with-output-to-port (%make-void-port "w")
-    (lambda ()
-      (with-error-to-port (%make-void-port "w")
-        (lambda () exp ...)))))
-
 (define (create-btrfs-file-system partition)
   "Create a btrfs file-system for PARTITION file-name."
-  (with-null-output-ports
-   (invoke "mkfs.btrfs" "-f" partition)))
+   ((run-command-in-installer) "mkfs.btrfs" "-f" partition))
 
 (define (create-ext4-file-system partition)
   "Create an ext4 file-system for PARTITION file-name."
-  (with-null-output-ports
-   (invoke "mkfs.ext4" "-F" partition)))
+   ((run-command-in-installer) "mkfs.ext4" "-F" partition))
 
 (define (create-fat16-file-system partition)
   "Create a fat16 file-system for PARTITION file-name."
-  (with-null-output-ports
-   (invoke "mkfs.fat" "-F16" partition)))
+   ((run-command-in-installer) "mkfs.fat" "-F16" partition))
 
 (define (create-fat32-file-system partition)
   "Create a fat32 file-system for PARTITION file-name."
-  (with-null-output-ports
-   (invoke "mkfs.fat" "-F32" partition)))
+   ((run-command-in-installer) "mkfs.fat" "-F32" partition))
 
 (define (create-jfs-file-system partition)
   "Create a JFS file-system for PARTITION file-name."
-  (with-null-output-ports
-   (invoke "jfs_mkfs" "-f" partition)))
+   ((run-command-in-installer) "jfs_mkfs" "-f" partition))
 
 (define (create-ntfs-file-system partition)
   "Create a JFS file-system for PARTITION file-name."
-  (with-null-output-ports
-   (invoke "mkfs.ntfs" "-F" "-f" partition)))
+   ((run-command-in-installer) "mkfs.ntfs" "-F" "-f" partition))
 
 (define (create-xfs-file-system partition)
   "Create an XFS file-system for PARTITION file-name."
-  (with-null-output-ports
-   (invoke "mkfs.xfs" "-f" partition)))
+   ((run-command-in-installer) "mkfs.xfs" "-f" partition))
 
 (define (create-swap-partition partition)
   "Set up swap area on PARTITION file-name."
-  (with-null-output-ports
-   (invoke "mkswap" "-f" partition)))
+   ((run-command-in-installer) "mkswap" "-f" partition))
 
 (define (call-with-luks-key-file password proc)
   "Write PASSWORD in a temporary file and pass it to PROC as argument."
@@ -1163,17 +1181,18 @@ USER-PARTITION if it is encrypted, or the plain file-name otherwise."
     (call-with-luks-key-file
      password
      (lambda (key-file)
-       (syslog "formatting and opening LUKS entry ~s at ~s~%"
+       (installer-log-line "formatting and opening LUKS entry ~s at ~s"
                label file-name)
-       (system* "cryptsetup" "-q" "luksFormat" file-name key-file)
-       (system* "cryptsetup" "open" "--type" "luks"
-                "--key-file" key-file file-name label)))))
+       ((run-command-in-installer) "cryptsetup" "-q" "luksFormat"
+        file-name key-file)
+       ((run-command-in-installer) "cryptsetup" "open" "--type" "luks"
+        "--key-file" key-file file-name label)))))
 
 (define (luks-close user-partition)
   "Close the encrypted partition pointed by USER-PARTITION."
   (let ((label (user-partition-crypt-label user-partition)))
-    (syslog "closing LUKS entry ~s~%" label)
-    (system* "cryptsetup" "close" label)))
+    (installer-log-line "closing LUKS entry ~s" label)
+    ((run-command-in-installer) "cryptsetup" "close" label)))
 
 (define (format-user-partitions user-partitions)
   "Format the <user-partition> records in USER-PARTITIONS list with
@@ -1254,7 +1273,7 @@ respective mount-points."
                        (file-name
                         (user-partition-upper-file-name user-partition)))
                   (mkdir-p target)
-                  (syslog "mounting ~s on ~s~%" file-name target)
+                  (installer-log-line "mounting ~s on ~s" file-name target)
                   (mount file-name target mount-type)))
               sorted-partitions)))
 
@@ -1270,7 +1289,7 @@ respective mount-points."
                        (target
                         (string-append (%installer-target-dir)
                                        mount-point)))
-                  (syslog "unmounting ~s~%" target)
+                  (installer-log-line "unmounting ~s" target)
                   (umount target)
                   (when crypt-label
                     (luks-close user-partition))))
@@ -1414,14 +1433,23 @@ USER-PARTITIONS, or return nothing."
             (let* ((uuids (map (lambda (file)
                                  (uuid->string (read-partition-uuid file)))
                                swap-devices)))
-              `((swap-devices (list ,@(map (lambda (uuid)
-                                             `(uuid ,uuid))
-                                           uuids))))))
+              `((swap-devices
+                 (list ,@(map (lambda (uuid)
+                                `(swap-space
+                                  (target (uuid ,uuid))))
+                              uuids))))))
       ,@(if (null? encrypted-partitions)
             '()
             `((mapped-devices
                (list ,@(map user-partition->mapped-device
                             encrypted-partitions)))))
+
+      ,(vertical-space 1)
+      ,(let-syntax ((G_ (syntax-rules () ((_ str) str))))
+         (comment (G_ "\
+;; The list of file systems that get \"mounted\".  The unique
+;; file system identifiers there (\"UUIDs\") can be obtained
+;; by running 'blkid' in a terminal.\n")))
       (file-systems (cons*
                      ,@(user-partitions->file-systems user-partitions)
                      %base-file-systems)))))
@@ -1459,6 +1487,6 @@ the devices not to be used before returning."
                       (error
                        (format #f (G_ "Device ~a is still in use.")
                                file-name))
-                      (syslog "Syncing ~a took ~a seconds.~%"
+                      (installer-log-line "Syncing ~a took ~a seconds."
                               file-name (time-second time)))))
               device-file-names)))

@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2016 Kei Kebreau <kkebreau@posteo.net>
 ;;; Copyright © 2017 Gábor Boskovits <boskovits@gmail.com>
-;;; Copyright © 2018, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2018, 2020, 2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2020 Jakub Kądziołka <kuba@kadziolka.net>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -34,7 +34,7 @@
 (define-public hexedit
   (package
     (name "hexedit")
-    (version "1.5")
+    (version "1.6")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -43,7 +43,7 @@
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1sfa4i374n1xrz2ivvzcd8jzc296ly11x1713s4bplvszcqpw6dv"))))
+                "00l8vazbjzdg09azp6w3nzq4rl7qyh06i65dh621r6zaprp0z23w"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f                      ; no check target
@@ -57,14 +57,11 @@
                 (string-append "\"" (assoc-ref inputs "man-db") "/bin/man\""))
                (("\"hexedit\"")
                 (string-append "\"" (assoc-ref outputs "out")
-                               "/share/man/man1/hexedit.1.gz\"")))
-             #t)))))
+                               "/share/man/man1/hexedit.1.gz\""))))))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)))
+     (list autoconf automake))
     (inputs
-     `(("man-db" ,man-db)
-       ("ncurses" ,ncurses)))
+     (list man-db ncurses))
     (synopsis "View and edit files or devices in hexadecimal or ASCII")
     (description "hexedit shows a file both in ASCII and in hexadecimal.  The
 file can be a device as the file is read a piece at a time.  You can modify
@@ -86,8 +83,7 @@ the file and search through it.")
                 "0w2xnw3z9ws9qrdpb80q55h6ynhh3aziixcfn45x91bzrbifix9i"))))
     (build-system gnu-build-system)
     (inputs
-     `(("lzo" ,lzo)
-       ("ncurses" ,ncurses)))
+     (list lzo ncurses))
     (synopsis "Viewer, editor, and analyzer for executable binaries")
     (description
      "ht is a terminal-based program to view, edit, and analyze any file, but
@@ -112,7 +108,7 @@ Development Environment} (IDE).")
     (build-system gnu-build-system)
     (arguments '(#:tests? #f))          ; no check target
     (inputs
-     `(("ncurses" ,ncurses)))
+     (list ncurses))
     (synopsis "Binary file editor")
     (description "@command{bvi} is a display-oriented editor for binary files,
 based on the @command{vi} text editor.")

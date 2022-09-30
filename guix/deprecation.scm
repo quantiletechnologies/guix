@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2021 Mathieu Othacehe <othacehe@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -21,7 +22,12 @@
   #:use-module (guix diagnostics)
   #:autoload   (guix utils) (source-properties->location)
   #:export (define-deprecated
+
+            define-deprecated/public
             define-deprecated/alias
+            define-deprecated/public-alias
+
+            warn-about-old-daemon
             warn-about-deprecation))
 
 ;;; Commentary:
@@ -29,6 +35,11 @@
 ;;; Provide a mechanism to mark bindings as deprecated.
 ;;;
 ;;; Code:
+
+(define (warn-about-old-daemon)
+  (warning (G_ "Your Guix daemon is severely outdated, and will soon cease to
+be able to download binary substitutes.  To upgrade it, refer to the
+'Upgrading Guix' section in the manual.~%")))
 
 (define* (warn-about-deprecation variable properties
                                  #:key replacement)
@@ -38,6 +49,8 @@
                  variable replacement)
         (warning location (G_ "'~a' is deprecated~%")
                  variable))))
+
+(define-syntax public (syntax-rules ()))          ;private syntactic keyword
 
 (define-syntax define-deprecated
   (lambda (s)
@@ -53,6 +66,8 @@ This will write a deprecation warning to GUIX-WARNING-PORT."
        #'(define-deprecated proc replacement
            (lambda* (formals ...) body ...)))
       ((_ variable replacement exp)
+       #'(define-deprecated private variable replacement exp))
+      ((_ visibility variable replacement exp)
        (identifier? #'variable)
        (with-syntax ((real (datum->syntax
                             #'variable
@@ -74,10 +89,22 @@ This will write a deprecation warning to GUIX-WARNING-PORT."
                     #'(real args (... ...)))
                    (id
                     (identifier? #'id)
-                    #'real)))))))
+                    #'real))))
+
+             ;; When asking for public visibility, export both REAL and
+             ;; VARIABLE.  Exporting REAL is useful when defining deprecated
+             ;; packages: there must be a public variable bound to a package
+             ;; so that the (guix discover) machinery finds it.
+             #,(if (free-identifier=? #'visibility #'public)
+                   #'(export real variable)
+                   #'(begin)))))
       ((_ variable alias)
        (identifier? #'alias)
        #'(define-deprecated variable alias alias)))))
+
+(define-syntax-rule (define-deprecated/public body ...)
+  "Like 'define/deprecated', but export all the newly introduced bindings."
+  (define-deprecated public body ...))
 
 (define-syntax-rule (define-deprecated/alias deprecated replacement)
   "Define as an alias a deprecated variable, procedure, or macro, along
@@ -98,3 +125,10 @@ This will write a deprecation warning to GUIX-WARNING-PORT."
         (id
          (identifier? #'id)
          #'replacement)))))
+
+(define-syntax-rule (define-deprecated/public-alias deprecated replacement)
+  "Like define-deprecated/alias, but exporting DEPRECATED.
+It is assumed, that REPLACEMENT is already public."
+  (begin
+    (define-deprecated/alias deprecated replacement)
+    (export deprecated)))

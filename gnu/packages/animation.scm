@@ -2,7 +2,7 @@
 ;;; Copyright © 2015, 2017 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 Pkill -9 <pkill9@runbox.com>
-;;; Copyright © 2020, 2021 Vinicius Monego <monego@posteo.net>
+;;; Copyright © 2020, 2021, 2022 Vinicius Monego <monego@posteo.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -82,8 +82,7 @@
         "-Dlog=true"
         "-Dtest=true")))
     (native-inputs
-     `(("googletest" ,googletest)
-       ("pkg-config" ,pkg-config)))
+     (list googletest pkg-config))
     (synopsis "Lottie Animation Library")
     (description "Rlottie is a platform independent standalone c++ library for
 rendering vector based animations and art in realtime.")
@@ -182,8 +181,7 @@ C++ @dfn{Standard Template Library} (STL).")
        ("openexr" ,openexr-2)
        ("pango" ,pango)))
     (native-inputs
-     `(("intltool" ,intltool)
-       ("pkg-config" ,pkg-config)))
+     (list intltool pkg-config))
     (home-page "https://www.synfig.org")
     (synopsis "Vector-based 2D animation renderer")
     (description
@@ -225,13 +223,9 @@ for tweening, preventing the need to hand-draw each frame.")
                  `("XDG_DATA_DIRS" ":" prefix (,gtk-share)))
                #t))))))
     (inputs
-     `(("gtkmm" ,gtkmm)
-       ("gtk+" ,gtk+)
-       ("libsigc++" ,libsigc++)
-       ("synfig" ,synfig)))
+     (list gtkmm-3 gtk+ libsigc++ synfig))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("intltool" ,intltool)))
+     (list pkg-config intltool))
     (home-page "https://www.synfig.org")
     (synopsis "Vector-based 2D animation package (GUI)")
     (description
@@ -329,7 +323,7 @@ audio or video backends, ensuring good performance.")
 (define-public lightspark
   (package
     (name "lightspark")
-    (version "0.8.5")
+    (version "0.8.6")
     (source
      (origin
        (method git-fetch)
@@ -338,7 +332,7 @@ audio or video backends, ensuring good performance.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "00535ndzjbz5xyr95cih01wlkc2mgvg60bv6amz4lnnglk0c5v0p"))))
+        (base32 "0v7d7vwb0xqkk3v8dyks0wyk52ga57v5lg93y74v1d2wh7spmmzw"))))
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #f ;requires Adobe Flex SDK, see README.tests
@@ -358,29 +352,28 @@ audio or video backends, ensuring good performance.")
              (when tests?
                (invoke "./tests")))))))
     (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("glib:bin" ,glib "bin")
-       ("nasm" ,nasm)
-       ("perl" ,perl)
-       ("pkg-config" ,pkg-config)
-       ("python" ,python-wrapper)))
+     (list gettext-minimal
+           `(,glib "bin")
+           nasm
+           perl
+           pkg-config
+           python-wrapper))
     (inputs
-     `(("cairo" ,cairo)
-       ("curl" ,curl)
-       ("ffmpeg" ,ffmpeg)
-       ("freeglut" ,freeglut)
-       ("glew" ,glew)
-       ("glibmm" ,glibmm)
-       ("gnash" ,gnash)
-       ("gnutls" ,gnutls)
-       ("libjpeg" ,libjpeg-turbo)
-       ("openssl" ,openssl)
-       ("pango" ,pango)
-       ("pcre2" ,pcre2)
-       ("rtmpdump" ,rtmpdump)
-       ("sdl2" ,sdl2)
-       ("sdl2-mixer" ,sdl2-mixer)
-       ("zlib" ,zlib)))
+     (list cairo
+           curl
+           ffmpeg
+           freeglut
+           glew
+           glibmm
+           gnutls
+           libjpeg-turbo
+           openssl
+           pango
+           pcre2
+           rtmpdump
+           sdl2
+           sdl2-mixer
+           zlib))
     (home-page "https://lightspark.github.io/")
     (synopsis "Flash player implementation")
     (description
@@ -441,7 +434,7 @@ language.")
            (add-after 'install 'wrap-executable
              (lambda* (#:key inputs outputs #:allow-other-keys)
                (let* ((out (assoc-ref outputs "out"))
-                      (qt '("qt" "qtmultimedia")))
+                      (qt '("qt" "qtmultimedia-5")))
                  (wrap-program (string-append out "/bin/Papagayo")
                    `("QT_PLUGIN_PATH" ":" prefix
                      ,(map (lambda (label)
@@ -451,10 +444,10 @@ language.")
                  #t))))))
       (inputs
        `(("qt" ,qtbase-5)
-         ("qtmultimedia" ,qtmultimedia)
+         ("qtmultimedia-5" ,qtmultimedia-5)
          ("libsndfile" ,libsndfile)))
       (native-inputs
-       `(("qttools" ,qttools)))
+       (list qttools-5))
       (home-page "https://www.lostmarble.com/papagayo/")
       (synopsis "Lip-syncing for animations")
       (description
@@ -480,10 +473,7 @@ waveform until they line up with the proper sounds.")
                 "0b1nwiwyg01087q318vymg4si76dw41ykxbn2zwd6dqbxzbpr1dh"))))
     (build-system gnu-build-system)
     (inputs
-     `(("qtbase" ,qtbase-5)
-       ("qtxmlpatterns" ,qtxmlpatterns)
-       ("qtmultimedia" ,qtmultimedia)
-       ("qtsvg" ,qtsvg)))
+     (list qtbase-5 qtxmlpatterns qtmultimedia-5 qtsvg-5))
     (arguments
      `(#:phases
        (modify-phases %standard-phases

@@ -6,7 +6,7 @@
 ;;; Copyright © 2019 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2019–2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2021 Trevor Hass <thass@okstate.edu>
-;;; Copyright © 2020, 2021 Liliana Marie Prikler <liliana.prikler@gmail.com>
+;;; Copyright © 2020, 2021, 2022 Liliana Marie Prikler <liliana.prikler@gmail.com>
 ;;; Copyright © 2021 Maxime Devos <maximedevos@telenet.be>
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,6 +26,7 @@
   #:use-module (gnu packages)
   #:use-module (gnu packages audio)
   #:use-module (gnu packages base)
+  #:use-module (gnu packages compression)
   #:use-module (gnu packages curl)
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages games)
@@ -41,6 +42,7 @@
   #:use-module (gnu packages xiph)
   #:use-module (gnu packages xorg)
   #:use-module (guix packages)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system copy)
@@ -51,7 +53,7 @@
 (define-public minetest
   (package
     (name "minetest")
-    (version "5.4.1")
+    (version "5.5.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -60,11 +62,8 @@
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "062ilb7s377q3hwfhl8q06vvcw2raydz5ljzlzwy2dmyzmdcndb8"))
+                "042v71gkk0xfixcsn82az2fri0n28fgf9d2zcz31bijqmg5q7imj"))
               (modules '((guix build utils)))
-              (patches
-               (search-patches
-                "minetest-add-MINETEST_MOD_PATH.patch"))
               (snippet
                '(begin
                   ;; Delete bundled libraries.
@@ -72,42 +71,49 @@
                   #t))))
     (build-system cmake-build-system)
     (arguments
-     `(#:configure-flags
-       (list "-DRUN_IN_PLACE=0"
-             "-DENABLE_FREETYPE=1"
-             "-DENABLE_GETTEXT=1"
-             "-DENABLE_SYSTEM_JSONCPP=TRUE"
-             (string-append "-DIRRLICHT_INCLUDE_DIR="
-                            (assoc-ref %build-inputs "irrlicht")
-                            "/include/irrlicht")
-             (string-append "-DCURL_INCLUDE_DIR="
-                            (assoc-ref %build-inputs "curl")
-                            "/include/curl"))
+     (list
+      #:configure-flags
+      #~(list "-DRUN_IN_PLACE=0"
+              "-DENABLE_FREETYPE=1"
+              "-DENABLE_GETTEXT=1"
+              "-DENABLE_SYSTEM_JSONCPP=TRUE"
+              (string-append "-DIRRLICHTMT_INCLUDE_DIR="
+                             (search-input-directory %build-inputs
+                                                     "include/irrlichtmt"))
+              (string-append "-DCURL_INCLUDE_DIR="
+                             (search-input-directory %build-inputs
+                                                     "include/curl"))
+              (string-append "-DZSTD_INCLUDE_DIR="
+                             (dirname
+                              (search-input-file %build-inputs
+                                                 "include/zstd.h")))
+              (string-append "-DZSTD_LIBRARY="
+                             (search-input-file %build-inputs
+                                                "lib/libzstd.so")))
        #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'patch-sources
-           (lambda* (#:key inputs #:allow-other-keys)
-             (substitute* "src/filesys.cpp"
-               ;; Use store-path for "rm" instead of non-existing FHS path.
-               (("\"/bin/rm\"")
-                (string-append "\"" (assoc-ref inputs "coreutils") "/bin/rm\"")))
-             (substitute* "src/CMakeLists.txt"
-               ;; Let minetest binary remain in build directory.
-               (("set\\(EXECUTABLE_OUTPUT_PATH .*\\)") ""))
-             (substitute* "src/unittest/test_servermodmanager.cpp"
-               ;; do no override MINETEST_SUBGAME_PATH
-               (("(un)?setenv\\(\"MINETEST_SUBGAME_PATH\".*\\);")
-                "(void)0;"))
-             (setenv "MINETEST_SUBGAME_PATH"
-                     (string-append (getcwd) "/games")) ; for check
-             #t))
-         (replace 'check
-           (lambda* (#:key tests? #:allow-other-keys)
-             ;; Thanks to our substitutions, the tests should also run
-             ;; when invoked on the target outside of `guix build'.
-             (when tests?
-               (setenv "HOME" "/tmp")
-               (invoke "src/minetest" "--run-unittests")))))))
+       #~(modify-phases %standard-phases
+           (add-after 'unpack 'patch-sources
+             (lambda* (#:key inputs #:allow-other-keys)
+               (substitute* "src/filesys.cpp"
+                 ;; Use store-path for "rm" instead of non-existing FHS path.
+                 (("\"/bin/rm\"")
+                  (format #f "~s" (search-input-file inputs "bin/rm"))))
+               (substitute* "src/CMakeLists.txt"
+                 ;; Let minetest binary remain in build directory.
+                 (("set\\(EXECUTABLE_OUTPUT_PATH .*\\)") ""))
+               (substitute* "src/unittest/test_servermodmanager.cpp"
+                 ;; do no override MINETEST_SUBGAME_PATH
+                 (("(un)?setenv\\(\"MINETEST_SUBGAME_PATH\".*\\);")
+                  "(void)0;"))
+               (setenv "MINETEST_SUBGAME_PATH" ; for check
+                       (string-append (getcwd) "/games"))))
+           (replace 'check
+             (lambda* (#:key tests? #:allow-other-keys)
+               ;; Thanks to our substitutions, the tests should also run
+               ;; when invoked on the target outside of `guix build'.
+               (when tests?
+                 (setenv "HOME" "/tmp")
+                 (invoke "src/minetest" "--run-unittests")))))))
     (native-search-paths
      (list (search-path-specification
             (variable "MINETEST_SUBGAME_PATH")
@@ -116,27 +122,28 @@
             (variable "MINETEST_MOD_PATH")
             (files '("share/minetest/mods")))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("coreutils" ,coreutils)
-       ("curl" ,curl)
-       ("freetype" ,freetype)
-       ("gettext" ,gettext-minimal)
-       ("gmp" ,gmp)
-       ("irrlicht" ,irrlicht)
-       ("jsoncpp" ,jsoncpp)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libogg" ,libogg)
-       ("libvorbis" ,libvorbis)
-       ("libxxf86vm" ,libxxf86vm)
-       ("luajit" ,luajit)
-       ("mesa" ,mesa)
-       ("ncurses" ,ncurses)
-       ("openal" ,openal)
-       ("sqlite" ,sqlite)))
+     (list coreutils
+           curl
+           freetype
+           gettext-minimal
+           gmp
+           irrlicht-for-minetest
+           jsoncpp
+           libjpeg-turbo
+           libpng
+           libogg
+           libvorbis
+           libxxf86vm
+           luajit
+           mesa
+           ncurses
+           openal
+           sqlite
+           `(,zstd "lib")))
     (propagated-inputs
-     `(("minetest-data" ,minetest-data)))
+     (list minetest-data))
     (synopsis "Infinite-world block sandbox game")
     (description
      "Minetest is a sandbox construction game.  Players can create and destroy
@@ -159,22 +166,11 @@ in different ways.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0i45lbnikvgj9kxdp0yphpjjwjcgp4ibn49xkj78j5ic1s9n8jd4"))))
-    (build-system trivial-build-system)
-    (native-inputs
-     `(("source" ,source)))
+                "12cpaiww148szvnrc8r8cffwvl33smnrl7k29sh401yv0pbqi3j8"))))
+    (build-system copy-build-system)
     (arguments
-     `(#:modules ((guix build utils))
-       #:builder (begin
-                   (use-modules (guix build utils))
-                   (let ((install-dir (string-append
-                                       %output
-                                       "/share/minetest/games/minetest_game")))
-                     (mkdir-p install-dir)
-                     (copy-recursively
-                      (assoc-ref %build-inputs "source")
-                      install-dir)
-                     #t))))
+     (list #:install-plan
+           #~'(("." "/share/minetest/games/minetest_game"))))
     (synopsis "Main game data for the Minetest game engine")
     (description
      "Game data for the Minetest infinite-world block sandbox game.")
@@ -208,25 +204,65 @@ as swords and tools made of different materials.  It also adds copper rails.")
     (license license:zlib)
     (properties `((upstream-name . "Calinou/moreores")))))
 
-(define-public minetest-basic-materials
+(define-public minetest-sound-api-core
   (package
-    (name "minetest-basic-materials")
-    ;; Upstream uses dates as version numbers.
-    (version "2021-01-30")
+    (name "minetest-sound-api-core")
+    ;; No tags, no releases. The author intended to let users use it as a
+    ;; submodules for other projects.
+    ;; https://github.com/mt-mods/basic_materials/issues/4
+    (version "2022-02-27")
     (source
      (origin
        (method git-fetch)
        (uri (git-reference
-             (url "https://gitlab.com/VanessaE/basic_materials.git")
-             (commit "e72665b2ed98d7be115779a32d35e6d9ffa231bd")))
+             (url "https://github.com/mt-mods/sound_api_core")
+             (commit "6956e49e775f325116f8e0c643899c089c691e1e")))
        (sha256
-        (base32 "0v6l3lrjgshy4sccjhfhmfxc3gk0cdy73qb02i9wd2vw506v5asx"))
-       (file-name (git-file-name name version))))
+        (base32 "1ys6g2skhkksa4cx9agxhsibj5js8z4y2q1ngis9ddr38p756pcy"))
+       (file-name (git-file-name name version))
+       (snippet
+        '(begin
+           (call-with-output-file "mod.conf"
+             (lambda (port)
+               (format port "\
+name = sound_api_core")))))))
+    (build-system minetest-mod-build-system)
+    (propagated-inputs '())
+    (home-page "https://github.com/mt-mods/sound_api_core")
+    (synopsis "Core for game agnostic sounds")
+    (description
+     "This library can be used to get some specific sounds, whatever the game.")
+    (license license:expat)))
+
+(define-public minetest-basic-materials
+  (package
+    (name "minetest-basic-materials")
+    ;; Upstream uses dates as version numbers.
+    (version "2022-03-28")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/mt-mods/basic_materials")
+             (commit "9d55f9916d20779ecbf93c7e95dae8adebd2079b")))
+       (sha256
+        (base32 "0nzx5mdw26mk2by14hxyvbqckgz8k67vlh2ch30skssvh4984bjw"))
+       (file-name (git-file-name name version))
+       (snippet
+        '(begin
+           (use-modules (guix build utils))
+           (substitute* "mod.conf"
+             (("optional_depends =")
+              "depends = sound_api_core
+optional_depends ="))
+           (substitute* "nodes.lua"
+             (("basic_materials.modpath \\.\\. \"/sound_api_core/init.lua\"")
+              "minetest.get_modpath(\"sound_api_core\") .. \"/init.lua\""))))))
     (build-system minetest-mod-build-system)
     (propagated-inputs
      ;; basic_materials:silver_wire cannot be crafted without
      ;; moreores:silver_ingot.
-     `(("minetest-moreores" ,minetest-moreores)))
+     (list minetest-moreores minetest-sound-api-core))
     (home-page (minetest-topic 21000))
     (synopsis "Some \"basic\" materials and items for other Minetest mods to use")
     (description
@@ -253,7 +289,7 @@ like steel bars and chains, wire, plastic strips and sheets, and more.")
        (file-name (git-file-name name version))))
     (build-system minetest-mod-build-system)
     (propagated-inputs
-     `(("minetest-unifieddyes" ,minetest-unifieddyes)))
+     (list minetest-unifieddyes))
     (home-page (minetest-topic 2411))
     (synopsis "Painted wood in Minetest")
     (description
@@ -299,20 +335,19 @@ special items, intending to make an interesting adventure.")
     (name "minetest-homedecor-modpack")
     ;; Upstream doesn't tag releases, so use the release title from
     ;; ContentDB as version.
-    (version "2021-03-27-1")
+    (version "2022-05-18")
     (source
      (origin
        (method git-fetch)
        (uri (git-reference
-             (url "https://gitlab.com/VanessaE/homedecor_modpack")
-             (commit "9ffe2b7d691133e1a067546574fbe7364fd02f32")))
+             (url "https://github.com/mt-mods/homedecor_modpack")
+             (commit "5ffdc26673169e05492141709fbb18e8fb6e5937")))
        (sha256
-        (base32 "1lfajqvc2adf9hqskghky4arccqzpjw4i9a01hv4qcckvivm04ag"))
+        (base32 "03pf254r3hnznklw7lf3q4rzqg0a1y4c9rjjhzssf1q7ai5pdrkn"))
        (file-name (git-file-name name version))))
     (build-system minetest-mod-build-system)
     (propagated-inputs
-     `(("minetest-basic-materials" ,minetest-basic-materials)
-       ("minetest-unifieddyes" ,minetest-unifieddyes)))
+     (list minetest-basic-materials minetest-unifieddyes))
     (home-page (minetest-topic 2041))
     (synopsis "Home decor mod for Minetest")
     (description
@@ -327,8 +362,8 @@ and a variety of other stuff.")
 
 (define-public minetest-mesecons
   ;; The release on ContentDB does not have its own version number.
-  (let ((commit "db5879706d04d3480bc4863ce0c03fa73e5f10c7")
-        (revision "0"))
+  (let ((commit "27c3c515b49af91c1dbc427f31a820722854eb24")
+        (revision "63"))
     (package
       (name "minetest-mesecons")
       (version (git-version "1.2.1" revision commit))
@@ -339,7 +374,7 @@ and a variety of other stuff.")
                (url "https://github.com/minetest-mods/mesecons")
                (commit commit)))
          (sha256
-          (base32 "04m9s9l3frw1lgki41hgvjsw2zkrvfv0sy750b6j12arzb3lv645"))
+          (base32 "1l0kwjj8ns8hv6z520g6ph5swknar336dbi5qr3dfsy18ydk1j92"))
          (file-name (git-file-name name version))))
       (build-system minetest-mod-build-system)
       (home-page "https://mesecons.net")
@@ -354,26 +389,22 @@ pressure plates and note blocks.
 Mesecons has a similar goal to Redstone in Minecraft, but works in its own way,
 with different rules and mechanics.")
       ;; LGPL for code, CC-BY-SA for textures.
-      ;; The README.md and COPYING.txt disagree about the "+" in license:lgpl3+.
-      ;; For now, assume README.md is correct.  Upstream has been asked to
-      ;; correct the inconsistency:
-      ;; <https://github.com/minetest-mods/mesecons/issues/575>.
-      (license (list license:lgpl3+ license:cc-by-sa3.0))
+      (license (list license:lgpl3 license:cc-by-sa3.0))
       (properties `((upstream-name . "Jeija/mesecons"))))))
 
 (define-public minetest-mineclone
   (package
     (name "minetest-mineclone")
-    (version "0.71.0")
+    (version "0.75.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
-                    (url "https://git.minetest.land/Wuzzy/MineClone2")
+                    (url "https://git.minetest.land/MineClone2/MineClone2")
                     (commit version)))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0qm809dqvxc7pa1cr9skmglq9vrbq5hhm4c4m5yi46ldh1v96dgf"))))
+                "10apja8bp8wmrbjlxg3gvrw5bdc8mizcngvnfi2ff790f6bsc5ip"))))
     (build-system copy-build-system)
     (arguments
      `(#:install-plan
@@ -390,15 +421,15 @@ closely as the engine allows.")
     (name "minetest-mobs")
     ;; Upstream does not tag release, so use the ContentDB release
     ;; title instead.
-    (version "2021-07-22")
+    (version "2021-12-12")
     (source
      (origin
        (method git-fetch)
        (uri (git-reference
              (url "https://notabug.org/TenPlus1/mobs_redo")
-             (commit "9f46182bb4b1a390f9a140bc2b443f3cda702332")))
+             (commit "6a4a02f3fbf1038c69e72aaafa52a1e7d6106da8")))
        (sha256
-        (base32 "026kqjis4lipgskjivb3jh9ris3iz80vy2q1jvgxhxmfghjjzp4j"))
+        (base32 "0vgv7jpm9v3dwq4l9jxdd5z14yq164w8kin1d05jfv3ck4hwlwvr"))
        (file-name (git-file-name name version))))
     (build-system minetest-mod-build-system)
     (home-page (minetest-topic 9917))
@@ -419,19 +450,19 @@ add some mobs, a mod like e.g. @code{mobs_animal} provided by the
     (name "minetest-mobs-animal")
     ;; Upstream does not use version numbers, so use the release title
     ;; from ContentDB instead;
-    (version "2021-07-24")
+    (version "2021-11-14")
     (source
      (origin
        (method git-fetch)
        (uri (git-reference
              (url "https://notabug.org/TenPlus1/mobs_animal")
-             (commit "c2fa3e300c79c7dd80b6fe91a8b5082bb6b3d934")))
+             (commit "3e15456bce7779aa0dc09a8890f7b5180c1ac771")))
        (sha256
-        (base32 "1j719f079ia9vjxrmjrcj8s6jvaz5kgs1r4dh66z8ql6s70kx7vh"))
+        (base32 "08686mj3jh8fsziqp878jpaj5267s4n6i86dr1gnxyxbsrjraqpn"))
        (file-name (git-file-name name version))))
     (build-system minetest-mod-build-system)
     (propagated-inputs
-     `(("minetest-mobs" ,minetest-mobs)))
+     (list minetest-mobs))
     (home-page "https://notabug.org/TenPlus1/mobs_animal")
     (synopsis "Add animals to Minetest")
     (description
@@ -457,7 +488,7 @@ bunnies, chickens, cows, kittens, rats, sheep, warthogs, penguins and pandas.")
        (file-name (git-file-name name version))))
     (build-system minetest-mod-build-system)
     (propagated-inputs
-     `(("minetest-basic-materials" ,minetest-basic-materials)))
+     (list minetest-basic-materials))
     (home-page (minetest-topic 2155))
     (synopsis "Pipes, item-transport tubes and related devices for Minetest")
     (description
@@ -477,20 +508,19 @@ breakers simulate a player punching a node.")
     (name "minetest-technic")
     ;; Upstream doesn't keep version numbers, so use the release
     ;; date on ContentDB instead.
-    (version "2021-04-15")
+    (version "2022-02-06")
     (source
      (origin
        (method git-fetch)
        (uri (git-reference
              (url "https://github.com/minetest-mods/technic")
-             (commit "1c219487d3f4dd03c01ff9aa1f298c7c18c7e189")))
+             (commit "d2b68a6bef53e34e166deadd64e02b58bcae59a1")))
        (sha256
-        (base32 "1k9hdgzp7jnhsk6rgrlrv1lr5xrmh8ln4wv6r25v6f0fwbyj57sf"))
+        (base32 "0vmi1y39q0x39s9w0hhgi979a4hf6n1ah5jaazjvmjf02pjcvvy1"))
        (file-name (git-file-name name version))))
     (build-system minetest-mod-build-system)
     (propagated-inputs
-     `(("minetest-pipeworks" ,minetest-pipeworks)
-       ("minetest-basic-materials" ,minetest-basic-materials)))
+     (list minetest-pipeworks minetest-basic-materials))
     (home-page (minetest-topic 2538))
     (synopsis "Machinery and automation for Minetest")
     (description
@@ -554,7 +584,7 @@ arrow and bow, but @code{minetest-throwing-arrows} does.")
          (file-name (git-file-name name version))))
       (build-system minetest-mod-build-system)
       (propagated-inputs
-       `(("minetest-throwing" ,minetest-throwing)))
+       (list minetest-throwing))
       (home-page (minetest-topic 16365))
       (synopsis "Arrows and bows for Minetest")
       (description
@@ -603,7 +633,7 @@ to and from the file system.")
        (file-name (git-file-name name version))))
     (build-system minetest-mod-build-system)
     (propagated-inputs
-     `(("minetest-basic-materials" ,minetest-basic-materials)))
+     (list minetest-basic-materials))
     (home-page (minetest-topic 2178))
     (synopsis
      "Unified Dyes expands the standard dye set of Minetest to up to 256 colours")
@@ -620,15 +650,15 @@ for general colour handling.")
     (name "minetest-unified-inventory")
     ;; Upstream doesn't keep version numbers, so use the release title
     ;; on ContentDB instead.
-    (version "2021-03-25-1")
+    (version "2021-12-26")
     (source
      (origin
        (method git-fetch)
        (uri (git-reference
              (url "https://github.com/minetest-mods/unified_inventory")
-             (commit "c044f5e3b08f0c68ab028d757b2fa63d9a1b0370")))
+             (commit "d6688872c84417d2f61d6f5e607aea39d78920aa")))
        (sha256
-        (base32 "198g945gzbfl0kps46gwjw0c601l3b3wvn4c7dw8manskri1jr4g"))
+        (base32 "1rlw96s2yyxdbz0h9byayyx9nsbqdr4ric91w0k3dkjr71aj8a3b"))
        (file-name (git-file-name name version))))
     (build-system minetest-mod-build-system)
     (home-page (minetest-topic 12767))
@@ -653,7 +683,7 @@ track of important locations.")
 (define-public minetest-advtrains
   (package
     (name "minetest-advtrains")
-    (version "2.3.1")
+    (version "2.4.1")
     (source
      (origin
        (method git-fetch)
@@ -661,7 +691,7 @@ track of important locations.")
              (url "https://git.bananach.space/advtrains.git")
              (commit (string-append "release-" version))))
        (sha256
-        (base32 "1ijqlchh269jpvmgmdmdvy3nsnk0bszkvvcqk6vaysvxam695ggw"))
+        (base32 "1q2jj8181pjgsakl28xadv0z4sszq1lb5rpgj070wr0px6mp447p"))
        (file-name (git-file-name name version))))
     (build-system minetest-mod-build-system)
     (home-page "http://advtrains.de/")
@@ -707,7 +737,7 @@ stopping before signals.
        (file-name (git-file-name name version))))
     (build-system minetest-mod-build-system)
     (propagated-inputs
-     `(("minetest-advtrains" ,minetest-advtrains)))
+     (list minetest-advtrains))
     (home-page
      "http://advtrains.de/wiki/doku.php?id=usage:trains:basic_trains")
     (synopsis "Collection of basic trains for the Advanced Trains mod")

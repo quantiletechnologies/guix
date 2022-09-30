@@ -1,9 +1,9 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2014, 2015, 2016, 2017, 2018, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015 Andy Wingo <wingo@igalia.com>
 ;;; Copyright © 2015 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2016 Sou Bunnbu <iyzsong@gmail.com>
-;;; Copyright © 2017, 2020 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2017, 2020, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2017 Nikita <nikita@n0.is>
 ;;; Copyright © 2018, 2020 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2018 Ricardo Wurmus <rekado@elephly.net>
@@ -13,6 +13,7 @@
 ;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2020 Reza Alizadeh Majd <r.majd@pantherx.org>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
+;;; Copyright © 2021 muradm <mail@muradm.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -39,10 +40,14 @@
   #:use-module (gnu services networking)
   #:use-module (gnu services sound)
   #:use-module ((gnu system file-systems)
-                #:select (%elogind-file-systems file-system))
+                #:select (%control-groups
+                          %elogind-file-systems
+                          file-system))
+  #:autoload   (gnu services sddm) (sddm-service-type)
   #:use-module (gnu system)
   #:use-module (gnu system setuid)
   #:use-module (gnu system shadow)
+  #:use-module (gnu system uuid)
   #:use-module (gnu system pam)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages admin)
@@ -67,6 +72,7 @@
   #:use-module (guix utils)
   #:use-module (guix gexp)
   #:use-module (srfi srfi-1)
+  #:use-module (ice-9 format)
   #:use-module (ice-9 match)
   #:export (<upower-configuration>
             upower-configuration
@@ -153,6 +159,9 @@
             gnome-keyring-configuration
             gnome-keyring-configuration?
             gnome-keyring-service-type
+
+            seatd-configuration
+            seatd-service-type
 
             %desktop-services))
 
@@ -363,7 +372,11 @@ users are allowed."
                  (list (service-extension dbus-root-service-type
                                           geoclue-dbus-service)
                        (service-extension account-service-type
-                                          (const %geoclue-accounts))))))
+                                          (const %geoclue-accounts))))
+                (description "Run the @command{geoclue} location service.
+This service provides a D-Bus interface to allow applications to request
+access to a user's physical location, and optionally to add information to
+online location databases.")))
 
 (define* (geoclue-service #:key (geoclue geoclue)
                           (whitelist '())
@@ -402,14 +415,380 @@ site} for more information."
   bluetooth-configuration make-bluetooth-configuration
   bluetooth-configuration?
   (bluez bluetooth-configuration-bluez (default bluez))
-  (auto-enable? bluetooth-configuration-auto-enable? (default #f)))
+
+  ;;; [General]
+  (name bluetooth-configuration-name (default "BlueZ"))
+  (class bluetooth-configuration-class (default #x000000))
+  (discoverable-timeout
+   bluetooth-configuration-discoverable-timeout (default 180))
+  (always-pairable? bluetooth-configuration-always-pairable? (default #f))
+  (pairable-timeout bluetooth-configuration-pairable-timeout (default 0))
+
+  ;;; MAYBE: Exclude into separate <device-id> record-type?
+  (device-id bluetooth-configuration-device-id (default #f))
+  (reverse-service-discovery?
+   bluetooth-configuration-reverse-service-discovery (default #t))
+  (name-resolving? bluetooth-configuration-name-resolving? (default #t))
+  (debug-keys? bluetooth-configuration-debug-keys? (default #f))
+
+  ;;; Possible values:
+  ;;; 'dual, 'bredr, 'le
+  (controller-mode bluetooth-configuration-controller-mode (default 'dual))
+
+  ;;; Possible values:
+  ;;; 'off, 'single, 'multiple
+  (multi-profile bluetooth-configuration-multi-profile (default 'off))
+  (fast-connectable? bluetooth-configuration-fast-connectable? (default #f))
+
+  ;;; Possible values:
+  ;;; for LE mode: 'off, 'network/on, 'device
+  ;;; for Dual mode: 'off, 'network/on', 'device, 'limited-network, 'limited-device
+  ;;; Source: https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/src/main.conf#n68
+  (privacy bluetooth-configuration-privacy (default 'off))
+
+  ;;; Possible values:
+  ;;; 'never, 'confirm, 'always
+  (just-works-repairing
+   bluetooth-configuration-just-works-repairing (default 'never))
+  (temporary-timeout bluetooth-configuration-temporary-timeout (default 30))
+  (refresh-discovery? bluetooth-configuration-refresh-discovery (default #t))
+
+  ;;; Possible values: #t, #f, (uuid <uuid>)
+  ;;; Possible UUIDs:
+  ;;; d4992530-b9ec-469f-ab01-6c481c47da1c (BlueZ Experimental Debug)
+  ;;; 671b10b5-42c0-4696-9227-eb28d1b049d6 (BlueZ Experimental Simultaneous Central and Peripheral)
+  ;;; 15c0a148-c273-11ea-b3de-0242ac130004 (BlueZ Experimental LL privacy)
+  ;;; 330859bc-7506-492d-9370-9a6f0614037f (BlueZ Experimental Bluetooth Quality Report)
+  ;;; a6695ace-ee7f-4fb9-881a-5fac66c629af (BlueZ Experimental Offload Codecs)
+  ;;; Source: https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/src/main.conf#n110
+  (experimental bluetooth-configuration-experimental (default #f))
+  (remote-name-request-retry-delay
+   bluetooth-configuration-remote-name-request-retry-delay (default 300))
+
+  ;;; [BR]
+  (page-scan-type bluetooth-configuration-page-scan-type (default #f))
+  (page-scan-interval bluetooth-configuration-page-scan-interval (default #f))
+  (page-scan-window bluetooth-configuration-page-scan-window (default #f))
+  (inquiry-scan-type bluetooth-configuration-inquiry-scan-type (default #f))
+  (inquiry-scan-interval bluetooth-configuration-inquiry-scan-interval (default #f))
+  (inquiry-scan-window bluetooth-configuration-inquiry-scan-window (default #f))
+  (link-supervision-timeout bluetooth-configuration-link-supervision-timeout (default #f))
+  (page-timeout bluetooth-configuration-page-timeout (default #f))
+  (min-sniff-interval bluetooth-configuration-min-sniff-interval (default #f))
+  (max-sniff-interval bluetooth-configuration-max-sniff-interval (default #f))
+
+  ;;; [LE]
+  (min-advertisement-interval
+   bluetooth-configuration-min-advertisement-interval (default #f))
+  (max-advertisement-interval
+   bluetooth-configuration-max-advertisement-interval (default #f))
+  (multi-advertisement-rotation-interval
+   bluetooth-configuration-multi-advertisement-rotation-interval (default #f))
+  (scan-interval-auto-connect
+   bluetooth-configuration-scan-interval-auto-connect (default #f))
+  (scan-window-auto-connect
+   bluetooth-configuration-scan-window-auto-connect (default #f))
+  (scan-interval-suspend
+   bluetooth-configuration-scan-interval-suspend (default #f))
+  (scan-window-suspend
+   bluetooth-configuration-scan-window-suspend (default #f))
+  (scan-interval-discovery
+   bluetooth-configuration-scan-interval-discovery (default #f))
+  (scan-window-discovery
+   bluetooth-configuration-scan-window-discovery (default #f))
+  (scan-interval-adv-monitor
+   bluetooth-configuration-scan-interval-adv-monitor (default #f))
+  (scan-window-adv-monitor
+   bluetooth-configuration-scan-window-adv-monitor (default #f))
+  (scan-interval-connect
+   bluetooth-configuration-scan-interval-connect (default #f))
+  (scan-window-connect
+   bluetooth-configuration-scan-window-connect (default #f))
+  (min-connection-interval
+   bluetooth-configuration-min-connection-interval (default #f))
+  (max-connection-interval
+   bluetooth-configuration-max-connection-interval (default #f))
+  (connection-latency
+   bluetooth-configuration-connection-latency (default #f))
+  (connection-supervision-timeout
+   bluetooth-configuration-connection-supervision-timeout (default #f))
+  (autoconnect-timeout
+   bluetooth-configuration-autoconnect-timeout (default #f))
+  (adv-mon-allowlist-scan-duration
+   bluetooth-configuration-adv-mon-allowlist-scan-duration (default 300))
+  (adv-mon-no-filter-scan-duration
+   bluetooth-configuration-adv-mon-no-filter-scan-duration (default 500))
+  (enable-adv-mon-interleave-scan?
+   bluetooth-configuration-enable-adv-mon-interleave-scan (default #t))
+
+  ;;; [GATT]
+  ;;; Possible values: 'yes, 'no, 'always
+  (cache bluetooth-configuration-cache (default 'always))
+
+  ;;; Possible values: 7 ... 16, 0 (don't care)
+  (key-size bluetooth-configuration-key-size (default 0))
+
+  ;;; Possible values: 23 ... 517
+  (exchange-mtu bluetooth-configuration-exchange-mtu (default 517))
+
+  ;;; Possible values: 1 ... 5
+  (att-channels bluetooth-configuration-att-channels (default 3))
+
+  ;;; [AVDTP]
+  ;;; Possible values: 'basic, 'ertm
+  (session-mode bluetooth-configuration-session-mode (default 'basic))
+
+  ;;; Possible values: 'basic, 'streaming
+  (stream-mode bluetooth-configuration-stream-mode (default 'basic))
+
+  ;;; [Policy]
+  (reconnect-uuids bluetooth-configuration-reconnect-uuids (default '()))
+  (reconnect-attempts bluetooth-configuration-reconnect-attempts (default 7))
+  (reconnect-intervals bluetooth-configuration-reconnect-intervals
+                       (default (list 1 2 4 8 16 32 64)))
+  (auto-enable? bluetooth-configuration-auto-enable? (default #f))
+  (resume-delay bluetooth-configuration-resume-delay (default 2))
+
+  ;;; [AdvMon]
+  ;;; Possible values:
+  ;;; "0x00", "0xFF",
+  ;;; "N = 0x00" ... "N = 0xFF"
+  ;;; Source: https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/src/main.conf#n286
+  (rssi-sampling-period bluetooth-configuration-rssi-sampling-period
+                        (default #xFF)))
 
 (define (bluetooth-configuration-file config)
   "Return a configuration file for the systemd bluetooth service, as a string."
   (string-append
-   "[Policy]\n"
-   "AutoEnable=" (bool (bluetooth-configuration-auto-enable?
-                        config))))
+   "[General]"
+   "\nName = " (bluetooth-configuration-name config)
+   "\nClass = " (string-append
+                 "0x"
+                 (format #f "~6,'0x" (bluetooth-configuration-class config)))
+   "\nDiscoverableTimeout = " (number->string
+                               (bluetooth-configuration-discoverable-timeout
+                                config))
+   "\nAlwaysPairable = " (bool (bluetooth-configuration-always-pairable?
+                                config))
+   "\nPairableTimeout = " (number->string
+                           (bluetooth-configuration-pairable-timeout
+                            config))
+   (if (bluetooth-configuration-device-id config)
+       (string-append "\nDeviceID = " (bluetooth-configuration-device-id config))
+       "")
+   "\nReverseServiceDiscovery = " (bool
+                                   (bluetooth-configuration-reverse-service-discovery
+                                    config))
+   "\nNameResolving = " (bool (bluetooth-configuration-name-resolving? config))
+   "\nDebugKeys = " (bool (bluetooth-configuration-debug-keys? config))
+   "\nControllerMode = " (symbol->string
+                          (bluetooth-configuration-controller-mode config))
+   "\nMultiProfile = " (symbol->string (bluetooth-configuration-multi-profile
+                                        config))
+   "\nFastConnectable = " (bool (bluetooth-configuration-fast-connectable? config))
+   "\nPrivacy = " (symbol->string (bluetooth-configuration-privacy config))
+   "\nJustWorksRepairing = " (symbol->string
+                              (bluetooth-configuration-just-works-repairing config))
+   "\nTemporaryTimeout = " (number->string
+                            (bluetooth-configuration-temporary-timeout config))
+   "\nRefreshDiscovery = " (bool (bluetooth-configuration-refresh-discovery config))
+   "\nExperimental = " (let ((experimental (bluetooth-configuration-experimental config)))
+                         (cond ((or (eq? experimental #t)
+                                    (eq? experimental #f)) (bool experimental))
+                               ((list? experimental)
+                                (string-join (map uuid->string experimental) ","))))
+   "\nRemoteNameRequestRetryDelay = " (number->string
+                                       (bluetooth-configuration-remote-name-request-retry-delay
+                                        config))
+   "\n[BR]"
+   (if (bluetooth-configuration-page-scan-type config)
+       (string-append
+        "\nPageScanType = "
+        (number->string (bluetooth-configuration-page-scan-type config)))
+       "")
+   (if (bluetooth-configuration-page-scan-interval config)
+       (string-append
+        "\nPageScanInterval = "
+        (number->string (bluetooth-configuration-page-scan-interval config)))
+       "")
+   (if (bluetooth-configuration-page-scan-window config)
+       (string-append
+        "\nPageScanWindow = "
+        (number->string (bluetooth-configuration-page-scan-window config)))
+       "")
+   (if (bluetooth-configuration-inquiry-scan-type config)
+       (string-append
+        "\nInquiryScanType = "
+        (number->string (bluetooth-configuration-inquiry-scan-type config)))
+       "")
+   (if (bluetooth-configuration-inquiry-scan-interval config)
+       (string-append
+        "\nInquiryScanInterval = "
+        (number->string (bluetooth-configuration-inquiry-scan-interval config)))
+       "")
+   (if (bluetooth-configuration-inquiry-scan-window config)
+       (string-append
+        "\nInquiryScanWindow = "
+        (number->string (bluetooth-configuration-inquiry-scan-window config)))
+       "")
+   (if (bluetooth-configuration-link-supervision-timeout config)
+       (string-append
+        "\nLinkSupervisionTimeout = "
+        (number->string (bluetooth-configuration-link-supervision-timeout config)))
+       "")
+   (if (bluetooth-configuration-page-timeout config)
+       (string-append
+        "\nPageTimeout = "
+        (number->string (bluetooth-configuration-page-timeout config)))
+       "")
+   (if (bluetooth-configuration-min-sniff-interval config)
+       (string-append
+        "\nMinSniffInterval = "
+        (number->string (bluetooth-configuration-min-sniff-interval config)))
+       "")
+   (if (bluetooth-configuration-max-sniff-interval config)
+       (string-append
+        "\nMaxSniffInterval = "
+        (number->string (bluetooth-configuration-max-sniff-interval config)))
+       "")
+
+   "\n[LE]"
+   (if (bluetooth-configuration-min-advertisement-interval config)
+       (string-append
+        "\nMinAdvertisementInterval = "
+        (number->string (bluetooth-configuration-min-advertisement-interval config)))
+       "")
+   (if (bluetooth-configuration-max-advertisement-interval config)
+       (string-append
+        "\nMaxAdvertisementInterval = "
+        (number->string (bluetooth-configuration-max-advertisement-interval config)))
+       "")
+   (if (bluetooth-configuration-multi-advertisement-rotation-interval config)
+       (string-append
+        "\nMultiAdvertisementRotationInterval = "
+        (number->string
+         (bluetooth-configuration-multi-advertisement-rotation-interval config)))
+       "")
+   (if (bluetooth-configuration-scan-interval-auto-connect config)
+       (string-append
+        "\nScanIntervalAutoConnect = "
+        (number->string (bluetooth-configuration-scan-interval-auto-connect config)))
+       "")
+   (if (bluetooth-configuration-scan-window-auto-connect config)
+       (string-append
+        "\nScanWindowAutoConnect = "
+        (number->string (bluetooth-configuration-scan-window-auto-connect config)))
+       "")
+   (if (bluetooth-configuration-scan-interval-suspend config)
+       (string-append
+        "\nScanIntervalSuspend = "
+        (number->string (bluetooth-configuration-scan-interval-suspend config)))
+       "")
+   (if (bluetooth-configuration-scan-window-suspend config)
+       (string-append
+        "\nScanWindowSuspend = "
+        (number->string (bluetooth-configuration-scan-window-suspend config)))
+       "")
+   (if (bluetooth-configuration-scan-interval-discovery config)
+       (string-append
+        "\nScanIntervalDiscovery = "
+        (number->string (bluetooth-configuration-scan-interval-discovery config)))
+       "")
+   (if (bluetooth-configuration-scan-window-discovery config)
+       (string-append
+        "\nScanWindowDiscovery = "
+        (number->string (bluetooth-configuration-scan-window-discovery config)))
+       "")
+   (if (bluetooth-configuration-scan-interval-adv-monitor config)
+       (string-append
+        "\nScanIntervalAdvMonitor = "
+        (number->string (bluetooth-configuration-scan-interval-adv-monitor config)))
+       "")
+   (if (bluetooth-configuration-scan-window-adv-monitor config)
+       (string-append
+        "\nScanWindowAdvMonitor = "
+        (number->string (bluetooth-configuration-scan-window-adv-monitor config)))
+       "")
+   (if (bluetooth-configuration-scan-interval-connect config)
+       (string-append
+        "\nScanIntervalConnect = "
+        (number->string (bluetooth-configuration-scan-interval-connect config)))
+       "")
+   (if (bluetooth-configuration-scan-window-connect config)
+       (string-append
+        "\nScanWindowConnect = "
+        (number->string (bluetooth-configuration-scan-window-connect config)))
+       "")
+   (if (bluetooth-configuration-min-connection-interval config)
+       (string-append
+        "\nMinConnectionInterval = "
+        (number->string (bluetooth-configuration-min-connection-interval config)))
+       "")
+   (if (bluetooth-configuration-max-connection-interval config)
+       (string-append
+        "\nMaxConnectionInterval = "
+        (number->string (bluetooth-configuration-max-connection-interval config)))
+       "")
+   (if (bluetooth-configuration-connection-latency config)
+       (string-append
+        "\nConnectionLatency = "
+        (number->string (bluetooth-configuration-connection-latency config)))
+       "")
+   (if (bluetooth-configuration-connection-supervision-timeout config)
+       (string-append
+        "\nConnectionSupervisionTimeout = "
+        (number->string (bluetooth-configuration-connection-supervision-timeout config)))
+       "")
+   (if (bluetooth-configuration-autoconnect-timeout config)
+       (string-append
+        "\nAutoconnecttimeout = "
+        (number->string (bluetooth-configuration-autoconnect-timeout config)))
+       "")
+   "\nAdvMonAllowlistScanDuration = " (number->string
+                                       (bluetooth-configuration-adv-mon-allowlist-scan-duration
+                                        config))
+   "\nAdvMonNoFilterScanDuration = " (number->string
+                                      (bluetooth-configuration-adv-mon-no-filter-scan-duration
+                                       config))
+   "\nEnableAdvMonInterleaveScan = " (number->string
+                                      (if (eq? #t
+                                               (bluetooth-configuration-enable-adv-mon-interleave-scan
+                                                config))
+                                          1 0))
+   
+   "\n[GATT]"
+   "\nCache = " (symbol->string (bluetooth-configuration-cache config))
+   "\nKeySize = " (number->string (bluetooth-configuration-key-size config))
+   "\nExchangeMTU = " (number->string (bluetooth-configuration-exchange-mtu config))
+   "\nChannels = " (number->string (bluetooth-configuration-att-channels config))
+
+   "\n[AVDTP]"
+   "\nSessionMode = " (symbol->string (bluetooth-configuration-session-mode config))
+   "\nStreamMode = " (symbol->string (bluetooth-configuration-stream-mode config))
+
+   "\n[Policy]"
+   (let ((uuids (bluetooth-configuration-reconnect-uuids config)))
+     (if (not (eq? '() uuids))
+         (string-append
+          "\nReconnectUUIDs = "
+          (string-join (map uuid->string uuids) ","))
+         ""))
+   "\nReconnectAttempts = " (number->string
+                             (bluetooth-configuration-reconnect-attempts config))
+   "\nReconnectIntervals = " (string-join
+                              (map number->string
+                                   (bluetooth-configuration-reconnect-intervals
+                                    config))
+                              ",")
+   "\nAutoEnable = " (bool (bluetooth-configuration-auto-enable?
+                            config))
+   "\nResumeDelay = " (number->string (bluetooth-configuration-resume-delay config))
+
+   "\n[AdvMon]"
+   "\nRSSISamplingPeriod = " (string-append
+                              "0x"
+                              (format #f "~2,'0x"
+                                      (bluetooth-configuration-rssi-sampling-period config)))))
 
 (define (bluetooth-directory config)
   (computed-file "etc-bluetooth"
@@ -545,7 +924,11 @@ screens and scanners.")))
 
                          ;; Profile 'udisksctl' & co. in the system profile.
                          (service-extension profile-service-type
-                                            udisks-package))))))
+                                            udisks-package)))
+                  (description "Run UDisks, a @dfn{disk management} daemon
+that provides user interfaces with notifications and ways to mount/unmount
+disks.  Programs that talk to UDisks include the @command{udisksctl} command,
+part of UDisks, and GNOME Disks."))))
 
 (define* (udisks-service #:key (udisks udisks))
   "Return a service for @uref{http://udisks.freedesktop.org/docs/latest/,
@@ -588,7 +971,7 @@ include the @command{udisksctl} command, part of UDisks, and GNOME Disks."
   (handle-lid-switch-docked         elogind-handle-lid-switch-docked
                                     (default 'ignore))
   (handle-lid-switch-external-power elogind-handle-lid-switch-external-power
-                                    (default 'ignore))
+                                    (default *unspecified*))
   (power-key-ignore-inhibited?      elogind-power-key-ignore-inhibited?
                                     (default #f))
   (suspend-key-ignore-inhibited?    elogind-suspend-key-ignore-inhibited?
@@ -649,7 +1032,9 @@ include the @command{udisksctl} command, part of UDisks, and GNOME Disks."
   (define handle-actions
     '(ignore poweroff reboot halt kexec suspend hibernate hybrid-sleep lock))
   (define (handle-action x)
-    (enum x handle-actions))
+    (if (unspecified? x)
+        ""                              ;empty serializer
+        (enum x handle-actions)))
   (define (sleep-list tokens)
     (unless (valid-list? tokens char-set:user-name)
       (error "invalid sleep list" tokens))
@@ -698,10 +1083,60 @@ include the @command{udisksctl} command, part of UDisks, and GNOME Disks."
    ("HybridSleepMode" (sleep-list elogind-hybrid-sleep-mode))))
 
 (define (elogind-dbus-service config)
-  (list (wrapped-dbus-service (elogind-package config)
-                              "libexec/elogind/elogind"
-                              `(("ELOGIND_CONF_FILE"
-                                 ,(elogind-configuration-file config))))))
+  "Return a @file{org.freedesktop.login1.service} file that tells D-Bus how to
+\"start\" elogind.  In practice though, our elogind is started when booting by
+shepherd.  Thus, the @code{Exec} line of this @file{.service} file does not
+explain how to start elogind; instead, it spawns a wrapper that waits for the
+@code{elogind} shepherd service.  This avoids a race condition where both
+@command{shepherd} and @command{dbus-daemon} would attempt to start elogind."
+  ;; For more info on the elogind startup race, see
+  ;; <https://issues.guix.gnu.org/55444>.
+
+  (define elogind
+    (elogind-package config))
+
+  (define wrapper
+    (program-file "elogind-dbus-shepherd-sync"
+                  (with-imported-modules '((gnu services herd))
+                    #~(begin
+                        (use-modules (gnu services herd)
+                                     (srfi srfi-34))
+
+                        (guard (c ((service-not-found-error? c)
+                                   (format (current-error-port)
+                                           "no elogind shepherd service~%")
+                                   (exit 1))
+                                  ((shepherd-error? c)
+                                   (format (current-error-port)
+                                           "elogind shepherd service not \
+started~%")
+                                   (exit 2)))
+                          (wait-for-service 'elogind))))))
+
+  (define build
+    (with-imported-modules '((guix build utils))
+      #~(begin
+          (use-modules (guix build utils)
+                       (ice-9 match))
+
+          (define service-directory
+            "/share/dbus-1/system-services")
+
+          (mkdir-p (dirname (string-append #$output service-directory)))
+          (copy-recursively (string-append #$elogind service-directory)
+                            (string-append #$output service-directory))
+          (symlink (string-append #$elogind "/etc") ;for etc/dbus-1
+                   (string-append #$output "/etc"))
+
+          ;; Replace the "Exec=" line of the 'org.freedesktop.login1.service'
+          ;; file with one that refers to WRAPPER instead of elogind.
+          (match (find-files #$output "\\.service$")
+            ((file)
+             (substitute* file
+               (("Exec[[:blank:]]*=.*" _)
+                (string-append "Exec=" #$wrapper "\n"))))))))
+
+  (list (computed-file "elogind-dbus-service-wrapper" build)))
 
 (define (pam-extension-procedure config)
   "Return an extension for PAM-ROOT-SERVICE-TYPE that ensures that all the PAM
@@ -760,7 +1195,12 @@ seats.)"
                        ;; We need /run/user, /run/systemd, etc.
                        (service-extension file-system-service-type
                                           (const %elogind-file-systems))))
-                (default-value (elogind-configuration))))
+                (default-value (elogind-configuration))
+                (description "Run the @command{elogind} login and seat
+management service.  The @command{elogind} service integrates with PAM to
+allow other system components to know the set of logged-in users as well as
+their session types (graphical, console, remote, etc.).  It can also clean up
+after users when they log out.")))
 
 (define* (elogind-service #:key (config (elogind-configuration)))
   "Return a service that runs the @command{elogind} login and seat management
@@ -808,7 +1248,11 @@ when they log out."
                                           (const %accountsservice-activation))
                        (service-extension dbus-root-service-type list)
                        (service-extension polkit-service-type list)))
-                (default-value accountsservice)))
+                (default-value accountsservice)
+                (description "Run AccountsService, a system service available
+over D-Bus that can list available accounts, change their passwords, and so
+on.  AccountsService integrates with PolicyKit to enable unprivileged users to
+acquire the capability to modify their system configuration.")))
 
 (define* (accountsservice-service #:key (accountsservice accountsservice))
   "Return a service that runs AccountsService, a system service that
@@ -867,22 +1311,34 @@ rules.")
   gnome-desktop-configuration?
   (gnome gnome-package (default gnome)))
 
-(define (gnome-polkit-settings config)
-  "Return the list of GNOME dependencies that provide polkit actions and
-rules."
+(define (gnome-packages config packages)
+  "Return the list of GNOME dependencies from CONFIG which names are part of
+the given PACKAGES list."
   (let ((gnome (gnome-package config)))
     (map (lambda (name)
            ((package-direct-input-selector name) gnome))
-         '("gnome-settings-daemon"
-           "gnome-control-center"
-           "gnome-system-monitor"
-           "gvfs"))))
+         packages)))
+
+(define (gnome-udev-rules config)
+  "Return the list of GNOME dependencies that provide udev rules."
+  (gnome-packages config '("gnome-settings-daemon")))
+
+(define (gnome-polkit-settings config)
+  "Return the list of GNOME dependencies that provide polkit actions and
+rules."
+  (gnome-packages config
+                  '("gnome-settings-daemon"
+                    "gnome-control-center"
+                    "gnome-system-monitor"
+                    "gvfs")))
 
 (define gnome-desktop-service-type
   (service-type
    (name 'gnome-desktop)
    (extensions
-    (list (service-extension polkit-service-type
+    (list (service-extension udev-service-type
+                             gnome-udev-rules)
+          (service-extension polkit-service-type
                              gnome-polkit-settings)
           (service-extension profile-service-type
                              (compose list
@@ -1021,7 +1477,7 @@ rules."
                         (use-modules (guix build utils))
                         (let ((directory "/tmp/.X11-unix"))
                           (mkdir-p directory)
-                          (chmod directory #o777))))))
+                          (chmod directory #o1777))))))
 
 ;;;
 ;;; Enlightenment desktop service.
@@ -1184,12 +1640,74 @@ or setting its password with passwd.")))
 
 
 ;;;
+;;; seatd-service-type -- minimal seat management daemon
+;;;
+
+(define-record-type* <seatd-configuration> seatd-configuration
+  make-seatd-configuration
+  seatd-configuration?
+  (seatd seatd-package (default seatd))
+  (user seatd-user (default "root"))
+  (group seatd-group (default "users"))
+  (socket seatd-socket (default "/run/seatd.sock"))
+  (logfile seatd-logfile (default "/var/log/seatd.log"))
+  (loglevel seatd-loglevel (default "info")))
+
+(define (seatd-shepherd-service config)
+  (list (shepherd-service
+         (documentation "Minimal seat management daemon")
+         (requirement '())
+         ;; TODO: once cgroups is separate dependency
+         ;; here we should depend on it rather than elogind
+         (provision '(seatd elogind))
+         (start #~(make-forkexec-constructor
+                   (list #$(file-append (seatd-package config) "/bin/seatd")
+                         "-u" #$(seatd-user config)
+                         "-g" #$(seatd-group config))
+                   #:environment-variables
+                   (list (string-append "SEATD_LOGLEVEL="
+                                        #$(seatd-loglevel config))
+                         (string-append "SEATD_DEFAULTPATH="
+                                        #$(seatd-socket config)))
+                   #:log-file #$(seatd-logfile config)))
+         (stop #~(make-kill-destructor)))))
+
+(define seatd-environment
+  (match-lambda
+    (($ <seatd-configuration> _ _ _ socket)
+     `(("SEATD_SOCK" . ,socket)))))
+
+(define seatd-service-type
+  (service-type
+   (name 'seatd)
+   (description "Seat management takes care of mediating access
+to shared devices (graphics, input), without requiring the
+applications needing access to be root.")
+   (extensions
+    (list
+     (service-extension session-environment-service-type seatd-environment)
+     ;; TODO: once cgroups is separate dependency we should not mount it here
+     ;; for now it is mounted here, because elogind mounts it
+     (service-extension file-system-service-type (const %control-groups))
+     (service-extension shepherd-root-service-type seatd-shepherd-service)))
+   (default-value (seatd-configuration))))
+
+
+;;;
 ;;; The default set of desktop services.
 ;;;
 
-(define %desktop-services
+(define* (desktop-services-for-system #:optional
+                                      (system (or (%current-target-system)
+                                                  (%current-system))))
   ;; List of services typically useful for a "desktop" use case.
-  (cons* (service gdm-service-type)
+
+  ;; Since GDM depends on Rust (gdm -> gnome-shell -> gjs -> mozjs -> rust)
+  ;; and Rust is currently unavailable on non-x86_64 platforms, default to
+  ;; SDDM there (FIXME).
+  (cons* (if (string-prefix? "x86_64" system)
+             (service gdm-service-type)
+             (service sddm-service-type))
 
          ;; Screen lockers are a pretty useful thing and these are small.
          (screen-locker-service slock)
@@ -1247,5 +1765,8 @@ or setting its password with passwd.")))
          (service alsa-service-type)
 
          %base-services))
+
+(define-syntax %desktop-services
+  (identifier-syntax (desktop-services-for-system)))
 
 ;;; desktop.scm ends here

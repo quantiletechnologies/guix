@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012-2018, 2020-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2012, 2015 Free Software Foundation, Inc.
 ;;; Copyright © 2017 Tobias Geerinckx-Rice <me@tobias.gr>
@@ -52,6 +52,7 @@
             http-get-error-uri
             http-get-error-code
             http-get-error-reason
+            http-get-error-headers
 
             http-fetch
             http-multiple-get
@@ -69,9 +70,10 @@
 ;; HTTP GET error.
 (define-condition-type &http-get-error &error
   http-get-error?
-  (uri    http-get-error-uri)                     ; URI
-  (code   http-get-error-code)                    ; integer
-  (reason http-get-error-reason))                 ; string
+  (uri      http-get-error-uri)                   ;URI
+  (code     http-get-error-code)                  ;integer
+  (reason   http-get-error-reason)                ;string
+  (headers  http-get-error-headers))              ;alist
 
 
 (define* (http-fetch uri #:key port (text? #f) (buffered? #t)
@@ -98,14 +100,15 @@ TIMEOUT is #f, connection establishment never times out.
 Write information about redirects to LOG-PORT.
 
 Raise an '&http-get-error' condition if downloading fails."
-  (let loop ((uri (if (string? uri)
-                      (string->uri uri)
-                      uri)))
-    (let ((port (or port (open-connection uri
-                                          #:verify-certificate?
-                                          verify-certificate?
-                                          #:timeout timeout)))
-          (headers (match (uri-userinfo uri)
+  (define uri*
+    (if (string? uri) (string->uri uri) uri))
+
+  (let loop ((uri uri*)
+             (port (or port (open-connection uri*
+                                             #:verify-certificate?
+                                             verify-certificate?
+                                             #:timeout timeout))))
+    (let ((headers (match (uri-userinfo uri)
                      ((? string? str)
                       (cons (cons 'Authorization
                                   (string-append "Basic "
@@ -129,16 +132,29 @@ Raise an '&http-get-error' condition if downloading fails."
             303                                   ; see other
             307                                   ; temporary redirection
             308)                                  ; permanent redirection
-           (let ((uri (resolve-uri-reference (response-location resp) uri)))
-             (close-port port)
+           (let ((host (uri-host uri))
+                 (uri  (resolve-uri-reference (response-location resp) uri)))
+             (if keep-alive?
+                 (dump-port data (%make-void-port "w0")
+                            (response-content-length resp))
+                 (close-port port))
              (format log-port (G_ "following redirection to `~a'...~%")
                      (uri->string uri))
-             (loop uri)))
+             (loop uri
+                   (or (and keep-alive?
+                            (or (not (uri-host uri))
+                                (string=? host (uri-host uri)))
+                            port)
+                       (open-connection uri
+                                        #:verify-certificate?
+                                        verify-certificate?
+                                        #:timeout timeout)))))
           (else
            (raise (condition (&http-get-error
                               (uri uri)
                               (code code)
-                              (reason (response-reason-phrase resp)))
+                              (reason (response-reason-phrase resp))
+                              (headers (response-headers resp)))
                              (&message
                               (message
                                (format
@@ -280,6 +296,7 @@ returning."
                                   #f #f base64url-alphabet))))
 
 (define* (http-fetch/cached uri #:key (ttl (%http-cache-ttl)) text?
+                            (headers '((user-agent . "GNU Guile")))
                             (write-cache dump-port)
                             (cache-miss (const #t))
                             (log-port (current-error-port))
@@ -291,21 +308,27 @@ Call WRITE-CACHE with the HTTP input port and the cache output port to write
 the data to cache.  Call CACHE-MISS with URI just before fetching data from
 URI.
 
+HEADERS is an alist of extra HTTP headers, to which cache-related headers are
+added automatically as appropriate.
+
 TIMEOUT specifies the timeout in seconds for connection establishment.
 
 Write information about redirects to LOG-PORT."
-  (let ((file (cache-file-for-uri uri)))
+  (let* ((uri (if (string? uri)
+                  (string->uri uri)
+                  uri))
+         (file (cache-file-for-uri uri)))
     (define (update-cache cache-port)
       (define cache-time
         (and cache-port
              (stat:mtime (stat cache-port))))
 
-      (define headers
-        `((user-agent . "GNU Guile")
-          ,@(if cache-time
-                `((if-modified-since
-                   . ,(time-utc->date (make-time time-utc 0 cache-time))))
-                '())))
+      (define extended-headers
+        (if cache-time
+            `((if-modified-since
+               . ,(time-utc->date (make-time time-utc 0 cache-time)))
+              ,@headers)
+            headers))
 
       ;; Update the cache and return an input port.
       (guard (c ((http-get-error? c)
@@ -316,7 +339,8 @@ Write information about redirects to LOG-PORT."
                      (raise c))))
         (let ((port (http-fetch uri #:text? text?
                                 #:log-port log-port
-                                #:headers headers #:timeout timeout)))
+                                #:headers extended-headers
+                                #:timeout timeout)))
           (cache-miss uri)
           (mkdir-p (dirname file))
           (when cache-port

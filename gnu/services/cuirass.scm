@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2016 Mathieu Lirzin <mthl@gnu.org>
-;;; Copyright © 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2016-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2017, 2020 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2017 Jan Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2018, 2019 Ricardo Wurmus <rekado@elephly.net>
@@ -58,7 +58,7 @@
 ;;;; Code:
 
 (define %cuirass-default-database
-  "dbname=cuirass host=/tmp")
+  "dbname=cuirass")
 
 (define-record-type* <cuirass-remote-server-configuration>
   cuirass-remote-server-configuration make-cuirass-remote-server-configuration
@@ -85,7 +85,7 @@
 (define-record-type* <cuirass-configuration>
   cuirass-configuration make-cuirass-configuration
   cuirass-configuration?
-  (cuirass          cuirass-configuration-cuirass ;package
+  (cuirass          cuirass-configuration-cuirass ;file-like
                     (default cuirass))
   (log-file         cuirass-configuration-log-file ;string
                     (default "/var/log/cuirass.log"))
@@ -302,9 +302,11 @@
 (define (cuirass-log-rotations config)
   "Return the list of log rotations that corresponds to CONFIG."
   (list (log-rotation
-         (files (list (cuirass-configuration-log-file config)))
+         (files (list (cuirass-configuration-log-file config)
+                      (cuirass-configuration-web-log-file config)))
          (frequency 'weekly)
-         (options '("rotate 40")))))              ;worth keeping
+         (options `("rotate 40"                   ;worth keeping
+                    ,@%default-log-rotation-options)))))
 
 (define cuirass-service-type
   (service-type
@@ -327,7 +329,7 @@
 (define-record-type* <cuirass-remote-worker-configuration>
   cuirass-remote-worker-configuration make-cuirass-remote-worker-configuration
   cuirass-remote-worker-configuration?
-  (cuirass          cuirass-remote-worker-configuration-cuirass ;package
+  (cuirass          cuirass-remote-worker-configuration-cuirass ;file-like
                     (default cuirass))
   (workers          cuirass-remote-worker-workers ;int
                     (default 1))

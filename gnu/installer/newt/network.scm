@@ -30,6 +30,8 @@
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
   #:use-module (ice-9 match)
+  #:use-module (web client)
+  #:use-module (web response)
   #:use-module (newt)
   #:export (run-network-page))
 
@@ -63,12 +65,8 @@ Internet and return the selected technology. For now, only technologies with
             (G_ "Exit")
             (G_ "The install process requires Internet access but no \
 network devices were found. Do you want to continue anyway?"))
-       ((1) (raise
-             (condition
-              (&installer-step-break))))
-       ((2) (raise
-             (condition
-              (&installer-step-abort))))))
+       ((1) (abort-to-prompt 'installer-step 'break))
+       ((2) (abort-to-prompt 'installer-step 'abort))))
     ((technology)
      ;; Since there's only one technology available, skip the selection
      ;; screen.
@@ -84,9 +82,7 @@ network devices were found. Do you want to continue anyway?"))
       #:button-text (G_ "Exit")
       #:button-callback-procedure
       (lambda _
-        (raise
-         (condition
-          (&installer-step-abort))))))))
+        (abort-to-prompt 'installer-step 'abort))))))
 
 (define (find-technology-by-type technologies type)
   "Find and return a technology with the given TYPE in TECHNOLOGIES list."
@@ -119,8 +115,23 @@ network devices were found. Do you want to continue anyway?"))
 (define (wait-service-online)
   "Display a newt scale until connman detects an Internet access. Do
 FULL-VALUE tentatives, spaced by 1 second."
+  (define (ci-available?)
+    (dynamic-wind
+      (lambda ()
+        (sigaction SIGALRM
+          (lambda _ #f))
+        (alarm 3))
+      (lambda ()
+        (false-if-exception
+         (= (response-code
+             (http-request "https://ci.guix.gnu.org"))
+            200)))
+      (lambda ()
+        (alarm 0))))
+
   (define (online?)
-    (or (connman-online?)
+    (or (and (connman-online?)
+             (ci-available?))
         (file-exists? "/tmp/installer-assume-online")))
 
   (let* ((full-value 5))
@@ -137,11 +148,9 @@ FULL-VALUE tentatives, spaced by 1 second."
     (unless (online?)
       (run-error-page
        (G_ "The selected network does not provide access to the \
-Internet, please try again.")
+Internet and the Guix substitute server, please try again.")
        (G_ "Connection error"))
-      (raise
-       (condition
-        (&installer-step-abort))))))
+      (abort-to-prompt 'installer-step 'abort))))
 
 (define (run-network-page)
   "Run a page to allow the user to configure connman so that it can access the

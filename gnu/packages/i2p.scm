@@ -32,7 +32,7 @@
 (define-public i2pd
   (package
     (name "i2pd")
-    (version "2.38.0")
+    (version "2.41.0")
     (source
      (origin
        (method git-fetch)
@@ -41,13 +41,10 @@
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1a35grcfw5a9dsj0rnm2i86fjf4px96xbnjj3hkril7hv5jvl37k"))))
+        (base32 "0kh03lb4m8fvlfvq06d4hgwmk43pk7yp7n7y36kb2vplhrjrn2kx"))))
     (build-system cmake-build-system)
     (inputs
-     `(("boost" ,boost)
-       ("miniupnpc" ,miniupnpc)
-       ("openssl" ,openssl)
-       ("zlib" ,zlib)))
+     (list boost miniupnpc openssl zlib))
     (arguments
      '(#:configure-flags
        (let ((source (assoc-ref %build-inputs "source")))
@@ -72,7 +69,7 @@
                                    "./tests")
                  (with-directory-excursion "tests"
                    (substitute* "Makefile"
-                     (("../libi2pd/") (string-append source "/libi2pd/")))
+                     (("../libi2pd") (string-append source "/libi2pd")))
                    (apply invoke "make" "all"
                           `(,@(if parallel-tests?
                                 `("-j" ,(number->string

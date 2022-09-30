@@ -1,13 +1,14 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2016, 2017 Andy Patterson <ajpatter@uwaterloo.ca>
 ;;; Copyright © 2018, 2020 Efraim Flashner <efraim@flashner.co.il>
-;;; Copyright © 2018, 2019, 2020, 2021 Pierre Neidhardt <mail@ambrevar.xyz>
+;;; Copyright © 2018, 2019, 2020, 2021, 2022 Pierre Neidhardt <mail@ambrevar.xyz>
 ;;; Copyright © 2018 Pierre Langlois <pierre.langlois@gmx.com>
 ;;; Copyright © 2019 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019, 2020 Katherine Cox-Buday <cox.katherine.e@gmail.com>
-;;; Copyright © 2019, 2020, 2021 Guillaume Le Vaillant <glv@posteo.net>
+;;; Copyright © 2019, 2020, 2021, 2022 Guillaume Le Vaillant <glv@posteo.net>
 ;;; Copyright © 2021 Sharlatan Hellseher <sharlatanus@gmail.com>
 ;;; Copyright © 2021 Charles Jackson <charles.b.jackson@protonmail.com>
+;;; Copyright © 2022 jgart <jgart@dismail.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -78,11 +79,9 @@
           (base32 "1kbjwpniffdpv003igmlz5r0vy65m7wpfnhg54fhwirp1227hgg7"))))
       (build-system asdf-build-system/sbcl)
       (inputs
-       `(("alexandria" ,sbcl-alexandria)
-         ("closer-mop" ,sbcl-closer-mop)
-         ("optima" ,sbcl-optima)))
+       (list sbcl-alexandria sbcl-closer-mop sbcl-optima))
       (native-inputs
-       `(("stefil" ,sbcl-stefil)))
+       (list sbcl-stefil))
       (home-page "https://github.com/arclanguage/Clamp")
       (synopsis "Randomized specification-based testing for Common Lisp")
       (description
@@ -117,12 +116,11 @@ designed to embed randomized tests in whatever framework you like.")
        ;; Error while trying to load definition for system checkl-test from
        ;; pathname [...]/checkl-test.asd: The function CHECKL:DEFINE-TEST-OP
        ;; is undefined.
-       '(#:asd-files '("checkl.asd")
-         #:tests? #f))
+       '(#:tests? #f))
       (native-inputs
-       `(("sbcl-fiveam" ,sbcl-fiveam)))
+       (list sbcl-fiveam))
       (inputs
-       `(("sbcl-marshal" ,sbcl-marshal)))
+       (list sbcl-marshal))
       (home-page "https://github.com/rpav/CheckL/")
       (synopsis "Dynamic testing for Common Lisp")
       (description
@@ -156,11 +154,9 @@ against the last run.")
           (base32 "0f40wikcf783jx26ip0nnhwjjfjvjiw7njqsqrb6kaphc8bgw0i1"))))
       (build-system asdf-build-system/sbcl)
       (inputs
-       `(("alexandria" ,sbcl-alexandria)
-         ("closer-mop" ,sbcl-closer-mop)
-         ("trivia" ,sbcl-trivia)))
+       (list sbcl-alexandria sbcl-closer-mop sbcl-trivia))
       (native-inputs
-       `(("fiveam" ,sbcl-fiveam)))
+       (list sbcl-fiveam))
       (home-page "https://github.com/Ferada/cl-mock")
       (synopsis "Mocking functions for Common Lisp testing")
       (description
@@ -298,8 +294,8 @@ that of Eos has not.  Thus, Eos is now deprecated in favor of FiveAM.")
   (sbcl-package->ecl-package sbcl-eos))
 
 (define-public sbcl-fiasco
-  (let ((commit "d62f7558b21addc89f87e306f65d7f760632655f")
-        (revision "1"))
+  (let ((commit "bb47d2fef4eb24cc16badc1c9a73d73c3a7e18f5")
+        (revision "2"))
     (package
       (name "sbcl-fiasco")
       (version (git-version "0.0.1" revision commit))
@@ -312,11 +308,10 @@ that of Eos has not.  Thus, Eos is now deprecated in favor of FiveAM.")
          (file-name (git-file-name "fiasco" version))
          (sha256
           (base32
-           "1zwxs3d6iswayavcmb49z2892xhym7n556d8dnmvalc32pm9bkjh"))))
+           "1k8i2kq57201bvy3zfpsxld530hd104dgbglxigqb6i408c1a7aw"))))
       (build-system asdf-build-system/sbcl)
       (inputs
-       `(("alexandria" ,sbcl-alexandria)
-         ("trivial-gray-streams" ,sbcl-trivial-gray-streams)))
+       (list sbcl-alexandria sbcl-trivial-gray-streams))
       (synopsis "Simple and powerful test framework for Common Lisp")
       (description "A Common Lisp test framework that treasures your failures,
 logical continuation of Stefil.  It focuses on interactive debugging.")
@@ -347,9 +342,8 @@ logical continuation of Stefil.  It focuses on interactive debugging.")
        (sha256
         (base32 "04mh5plmlb15jbq3dkd8b9jl1dmbbg4hnd3k7859vpf6s12k5p4j"))))
     (inputs
-     `(("alexandria" ,sbcl-alexandria)
-       ("net.didierverna.asdf-flv" ,sbcl-net.didierverna.asdf-flv)
-       ("trivial-backtrace" ,sbcl-trivial-backtrace)))
+     (list sbcl-alexandria sbcl-net.didierverna.asdf-flv
+           sbcl-trivial-backtrace))
     (build-system asdf-build-system/sbcl)
     (synopsis "Common Lisp testing framework")
     (description "FiveAM is a simple (as far as writing and running tests
@@ -363,6 +357,44 @@ interactive development model in mind.")
 
 (define-public ecl-fiveam
   (sbcl-package->ecl-package sbcl-fiveam))
+
+(define-public sbcl-hamcrest
+  (let ((commit "a54553e59a70dc5a539b683e79bfcdb0e8bae5c8")
+        (revision "0"))
+    (package
+      (name "sbcl-hamcrest")
+      (version "0.4.4")
+      (source
+        (origin
+          (method git-fetch)
+          (uri (git-reference
+                (url "https://github.com/40ants/cl-hamcrest")
+                (commit commit)))
+          (sha256
+           (base32 "181nnb2fjbsdqjqdvwg2x9n1jjalkfzszwdgqcap4py2q63q1kxj"))
+          (file-name (git-file-name "cl-hamcrest" commit))))
+      (build-system asdf-build-system/sbcl)
+      (inputs
+        (list sbcl-iterate
+              sbcl-split-sequence
+              sbcl-cl-ppcre
+              sbcl-alexandria
+              sbcl-rove
+              sbcl-prove))
+      (home-page "https://40ants.com/cl-hamcrest/")
+      (synopsis "Make CL unit tests more readable")
+      (description
+       "@code{cl-hamcrest} is an implementation of the Hamcrest idea in
+Common Lisp.  It simplifes unit tests and makes them more readable.
+Hamcrest uses the idea of pattern-matching, to construct matchers from
+different pieces and to apply them to the data.")
+      (license license:bsd-3))))
+
+(define-public cl-hamcrest
+  (sbcl-package->cl-source-package sbcl-hamcrest))
+
+(define-public ecl-cl-hamcrest
+  (sbcl-package->ecl-package sbcl-hamcrest))
 
 (define-public sbcl-hu.dwim.stefil
   (let ((commit "414902c6f575818c39a8a156b8b61b1adfa73dad"))
@@ -381,9 +413,9 @@ interactive development model in mind.")
          (file-name (git-file-name "hu.dwim.stefil" version))))
       (build-system asdf-build-system/sbcl)
       (native-inputs
-       `(("asdf:cl-hu.dwim.asdf" ,sbcl-hu.dwim.asdf)))
+       (list sbcl-hu.dwim.asdf))
       (inputs
-       `(("sbcl-alexandria" ,sbcl-alexandria)))
+       (list sbcl-alexandria))
       (home-page "http://dwim.hu/project/hu.dwim.stefil")
       (synopsis "Simple test framework")
       (description "Stefil is a simple test framework for Common Lisp,
@@ -395,6 +427,47 @@ with a focus on interactive development.")
 
 (define-public ecl-hu.dwim.stefil
   (sbcl-package->ecl-package sbcl-hu.dwim.stefil))
+
+(define-public sbcl-kaputt
+  (let ((commit "f26c9b0f8219fe61d86249198ef85174eecafc10")
+        (revision "1"))
+    (package
+      (name "sbcl-kaputt")
+      (version (git-version "0.0.0" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://github.com/foretspaisibles/cl-kaputt")
+               (commit commit)))
+         (file-name (git-file-name "kaputt" version))
+         (sha256
+          (base32 "10a78032vnf12kjjpfmq9ign38cad237ycyq37dwnx922nxjjaj4"))))
+      (build-system asdf-build-system/sbcl)
+      (inputs
+       (list sbcl-cl-ppcre))
+      (home-page "https://github.com/foretspaisibles/cl-kaputt")
+      (synopsis "Simple interactive test framework for Common Lisp")
+      (description
+       "KAPUTT is a test framework for Common Lisp that focuses on the
+following features:
+
+@itemize
+@item KAPUTT is simple, it only defines three abstractions testcase, assertion
+and protocol and does not add any artefact on the backtrace when errors occur.
+
+@item KAPUTT is extensible, it is possible to add problem-specific assertions
+to make test code more informative.
+
+@item KAPUTT fits well interactive development.
+@end itemize\n")
+      (license license:cecill-b))))
+
+(define-public ecl-kaputt
+  (sbcl-package->ecl-package sbcl-kaputt))
+
+(define-public cl-kaputt
+  (sbcl-package->cl-source-package sbcl-kaputt))
 
 (define-public sbcl-lift
   (let ((commit "2594160d6ca3a77d8750110dfa63214256aab852")
@@ -486,10 +559,8 @@ testing.  It is an extension of the library written by Chris Riesbeck.")
            "1rsqy8y0jqll6xn9a593848f5wvd5ribv4csry1ly0hmdhfnqzlp"))))
       (build-system asdf-build-system/sbcl)
       (inputs
-       `(("alexandria" ,sbcl-alexandria)
-         ("cl-interpol" ,sbcl-cl-interpol)
-         ("iterate" ,sbcl-iterate)
-         ("symbol-munger" ,sbcl-symbol-munger)))
+       (list sbcl-alexandria sbcl-cl-interpol sbcl-iterate
+             sbcl-symbol-munger))
       (synopsis "Test Framework for Common Lisp")
       (description
        "LISP-UNIT2 is a Common Lisp library that supports unit testing in the
@@ -521,8 +592,7 @@ by Chris Riesbeck.")
         (base32 "1hf3r6pqbnd9vsd1i24qmz928kia72hdgmiafiwb6jw1hmj3r6ga"))))
      (build-system asdf-build-system/sbcl)
      (inputs
-      `(("closer-mop" ,sbcl-closer-mop)
-        ("org-sampler" ,sbcl-org-sampler)))
+      (list sbcl-closer-mop sbcl-org-sampler))
      (home-page "https://github.com/jphmrst/cl-nst")
      (synopsis "Unit testing for Common Lisp")
      (description
@@ -536,8 +606,8 @@ by Chris Riesbeck.")
   (sbcl-package->cl-source-package sbcl-nst))
 
 (define-public sbcl-parachute
-  (let ((commit "ca04dd8e43010a6dfffa26dbe1d62af86008d666")
-        (revision "0"))
+  (let ((commit "86563473dc23fb1277d35a3ad2c911a6c8e5b0da")
+        (revision "1"))
     (package
       (name "sbcl-parachute")
       (version (git-version "1.1.1" revision commit))
@@ -551,11 +621,10 @@ by Chris Riesbeck.")
          (file-name (git-file-name name version))
          (sha256
           (base32
-           "1mvsm3r0r6a2bg75nw0q7n9vlby3ch45qjl7hnb5k1z2n5x5lh60"))))
+           "026crl465xqh3fnskfd4c1sxa9c33dfy702cf3l5apbjyj1dg20n"))))
       (build-system asdf-build-system/sbcl)
       (inputs
-       `(("documentation-utils" ,sbcl-documentation-utils)
-         ("form-fiddle" ,sbcl-form-fiddle)))
+       (list sbcl-documentation-utils sbcl-form-fiddle))
       (synopsis "Extensible and cross-compatible testing framework for Common Lisp")
       (description
        "Parachute is a simple-to-use and extensible testing framework.
@@ -587,10 +656,8 @@ Each test can contain a bunch of test forms that make up its body.")
          (file-name (git-file-name "prove" version))))
       (build-system asdf-build-system/sbcl)
       (inputs
-       `(("alexandria" ,sbcl-alexandria)
-         ("cl-colors" ,sbcl-cl-colors)
-         ("cl-ppcre" ,sbcl-cl-ppcre)
-         ("cl-ansi-text" ,sbcl-cl-ansi-text)))
+       (list sbcl-alexandria sbcl-cl-colors sbcl-cl-ppcre
+             sbcl-cl-ansi-text))
       (synopsis "Yet another unit testing framework for Common Lisp")
       (description
        "This project was originally called @command{cl-test-more}.
@@ -627,7 +694,13 @@ advantages of @command{prove} are:
                (commit commit)))
          (file-name (git-file-name name version))
          (sha256
-          (base32 "1l0lfl7cdnr2qf4zh38hi4llxg22c49zkm639bdkmvlkzwj3ndwf"))))
+          (base32 "1l0lfl7cdnr2qf4zh38hi4llxg22c49zkm639bdkmvlkzwj3ndwf"))
+         (modules '((guix build utils)))
+         (snippet
+          ;; The useless bundled debian folder drags `make' into the closure.
+          `(begin
+             (delete-file-recursively "debian")
+             #t))))
       (build-system asdf-build-system/sbcl)
       (home-page "http://quickdocs.org/ptester/")
       (synopsis "Portable test harness package")
@@ -658,9 +731,7 @@ tester module.")
          "07ala4l2fncxf540fzxj3h5mhi9i4wqllhj0rqk8m2ljl5zbz89q"))))
     (build-system asdf-build-system/sbcl)
     (inputs
-     `(("bordeaux-threads" ,sbcl-bordeaux-threads)
-       ("dissect" ,sbcl-dissect)
-       ("trivial-gray-streams" ,sbcl-trivial-gray-streams)))
+     (list sbcl-bordeaux-threads sbcl-dissect sbcl-trivial-gray-streams))
     (home-page "https://github.com/fukamachi/rove")
     (synopsis
      "Yet another common lisp testing library")
@@ -689,7 +760,13 @@ This is intended to be a successor of Prove.")
                (commit commit)))
          (file-name (git-file-name name version))
          (sha256
-          (base32 "13si2rrxaagbr0bkvg6sqicxxpyshabx6ad6byc9n2ik5ysna69b"))))
+          (base32 "13si2rrxaagbr0bkvg6sqicxxpyshabx6ad6byc9n2ik5ysna69b"))
+         (modules '((guix build utils)))
+         (snippet
+          ;; The useless bundled debian folder drags `make' into the closure.
+          `(begin
+             (delete-file-recursively "debian")
+             #t))))
       (build-system asdf-build-system/sbcl)
       (synopsis "MIT Regression Tester")
       (description
@@ -720,10 +797,7 @@ This is intended to be a successor of Prove.")
           (base32 "1fqqa7lhf28qg60ji9libkylkcy747x576qpjn1y7c945j2fxmnm"))))
       (build-system asdf-build-system/sbcl)
       (inputs
-       `(("cl-ppcre" ,sbcl-cl-ppcre)
-         ("local-time" ,sbcl-local-time)
-         ("osicat" ,sbcl-osicat)
-         ("rutils" ,sbcl-rutils)))
+       (list sbcl-cl-ppcre sbcl-local-time sbcl-osicat sbcl-rutils))
       (home-page "https://github.com/vseloved/should-test")
       (synopsis "Minimal yet feature-rich Common Lisp test framework")
       (description
@@ -781,6 +855,48 @@ interactive development.")
 (define-public ecl-stefil
   (sbcl-package->ecl-package sbcl-stefil))
 
+(define-public sbcl-try
+  (let ((commit "a1fffad2ca328b3855f629b633ab1daaeec929c2")
+        (revision "1"))
+    (package
+      (name "sbcl-try")
+      (version (git-version "0.0.1" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://github.com/melisgl/try")
+               (commit commit)))
+         (file-name (git-file-name "cl-try" version))
+         (sha256
+          (base32 "03dm2i2y4wiyzz9d25zdxm6gdglnvwali0ylp0rfwpk6wf29sj09"))))
+      (build-system asdf-build-system/sbcl)
+      (native-inputs
+       (list sbcl-cl-ppcre))
+      (inputs
+       (list sbcl-alexandria
+             sbcl-closer-mop
+             sbcl-ieee-floats
+             sbcl-mgl-pax
+             sbcl-trivial-gray-streams))
+      (arguments
+       `(;; FIXME: Get tests to work
+         #:tests? #f))
+      (home-page "https://github.com/melisgl/try")
+      (synopsis "Common Lisp test framework")
+      (description
+       "@code{Try} is a library for unit testing with equal support for
+interactive and non-interactive workflows.  Tests are functions, and almost
+everything else is a condition, whose types feature prominently in
+parameterization.")
+      (license license:expat))))
+
+(define-public cl-try
+  (sbcl-package->cl-source-package sbcl-try))
+
+(define-public ecl-try
+  (sbcl-package->ecl-package sbcl-try))
+
 (define-public sbcl-unit-test
   (let ((commit "266afaf4ac091fe0e8803bac2ae72d238144e735")
         (revision "1"))
@@ -823,7 +939,13 @@ interactive development.")
          (file-name (git-file-name name version))
          (sha256
           (base32
-           "0argfmp9nghs4sihyj3f8ch9qfib2b7ll07v5m9ziajgzsfl5xw3"))))
+           "0argfmp9nghs4sihyj3f8ch9qfib2b7ll07v5m9ziajgzsfl5xw3"))
+         (modules '((guix build utils)))
+         (snippet
+          ;; The useless bundled debian folder drags `make' into the closure.
+          `(begin
+             (delete-file-recursively "debian")
+             #t))))
       (build-system asdf-build-system/sbcl)
       (arguments
        '(#:phases

@@ -1,6 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Xinglu Chen <public@yoctocell.xyz>
+;;; Copyright © 2022 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -19,6 +20,7 @@
 
 (define-module (tests services configuration)
   #:use-module (gnu services configuration)
+  #:use-module (guix diagnostics)
   #:use-module (guix gexp)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-64))
@@ -26,6 +28,9 @@
 ;;; Tests for the (gnu services configuration) module.
 
 (test-begin "services-configuration")
+
+(define (serialize-number field value)
+  (format #f "~a=~a" field value))
 
 
 ;;;
@@ -40,6 +45,17 @@
   80
   (port-configuration-port (port-configuration)))
 
+(test-equal "wrong type for a field"
+  '("configuration.scm" 57 11)                    ;error location
+  (guard (c ((configuration-error? c)
+             (let ((loc (error-location c)))
+               (list (basename (location-file loc))
+                     (location-line loc)
+                     (location-column loc)))))
+    (port-configuration
+     ;; This is line 56; the test relies on line/column numbers!
+     (port "This is not a number!"))))
+
 (define-configuration port-configuration-cs
   (port (number 80) "The port number." empty-serializer))
 
@@ -47,7 +63,6 @@
   80
   (port-configuration-cs-port (port-configuration-cs)))
 
-(define serialize-number "")
 (define-configuration port-configuration-ndv
   (port (number) "The port number."))
 
@@ -101,14 +116,48 @@
 (define-maybe number)
 
 (define-configuration config-with-maybe-number
-  (port (maybe-number 80) "The port number."))
-
-(define (serialize-number field value)
-  (format #f "~a=~a" field value))
+  (port  (maybe-number 80) "")
+  (count maybe-number ""))
 
 (test-equal "maybe value serialization"
   "port=80"
   (serialize-maybe-number "port" 80))
+
+(define (config-with-maybe-number->string x)
+  (eval (gexp->approximate-sexp
+         (serialize-configuration x config-with-maybe-number-fields))
+        (current-module)))
+
+(test-equal "maybe value serialization of the instance"
+  "port=42count=43"
+  (config-with-maybe-number->string
+   (config-with-maybe-number
+    (port 42)
+    (count 43))))
+
+(test-equal "maybe value serialization of the instance, unspecified"
+  "port=42"
+  (config-with-maybe-number->string
+   (config-with-maybe-number
+    (port 42))))
+
+(define (serialize-symbol name value)
+  (format #f "~a=~a~%" name value))
+
+(define-maybe symbol)
+
+(define-configuration config-with-maybe-symbol
+  (protocol maybe-symbol ""))
+
+;;; Maybe symbol values are currently seen as serializable, because the
+;;; unspecified value is '%unset-marker%, which is a symbol itself.
+;;; TODO: Remove expected fail marker after resolution.
+(test-expect-fail 1)
+(test-equal "symbol maybe value serialization, unspecified"
+  ""
+  (gexp->approximate-sexp
+   (serialize-configuration (config-with-maybe-symbol)
+                            config-with-maybe-symbol-fields)))
 
 (define-maybe/no-serialization string)
 
@@ -118,3 +167,15 @@
 
 (test-assert "maybe value without serialization no procedure bound"
   (not (defined? 'serialize-maybe-string)))
+
+(test-assert "maybe type, no default"
+  (eq? %unset-value
+       (config-with-maybe-string/no-serialization-name
+        (config-with-maybe-string/no-serialization))))
+
+(test-assert "maybe type, with default"
+  (equal?
+   "foo"
+   (config-with-maybe-string/no-serialization-name
+    (config-with-maybe-string/no-serialization
+     (name "foo")))))

@@ -5,7 +5,7 @@
 ;;; Copyright © 2017 Chris Marusich <cmmarusich@gmail.com>
 ;;; Copyright © 2017, 2019 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 Maxim Cournoyer <maxim.cournoyer@gmail.com>
-;;; Copyright © 2019 Guillaume Le Vaillant <glv@posteo.net>
+;;; Copyright © 2019, 2021 Guillaume Le Vaillant <glv@posteo.net>
 ;;; Copyright © 2020 Prafulla Giri <pratheblackdiamond@gmail.com>
 ;;; Copyright © 2020 Christopher Lam <christopher.lck@gmail.com>
 ;;;
@@ -63,15 +63,14 @@
   ;; directory.
   (package
     (name "gnucash")
-    (version "4.2")
+    (version "4.10")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://sourceforge/gnucash/gnucash%20%28stable%29/"
                            version "/gnucash-" version ".tar.bz2"))
        (sha256
-        (base32
-         "020k1mm909dcgs52ls4v7xx3yn8gqazi9awyr81l6y7pkq1spn2n"))))
+        (base32 "0fy9p5fgi2i0x7acg5fnkfdrxxd3dypi3ykvnj53hfbfky8vpm3z"))))
     (build-system cmake-build-system)
     (inputs
      `(("guile" ,guile-3.0)
@@ -84,7 +83,7 @@
        ("libofx" ,libofx)
        ("libxml2" ,libxml2)
        ("libxslt" ,libxslt)
-       ("webkitgtk" ,webkitgtk)
+       ("webkitgtk" ,webkitgtk-with-libsoup2)
        ("aqbanking" ,aqbanking)
        ("python" ,python)
        ("perl-date-manip" ,perl-date-manip)
@@ -93,6 +92,7 @@
     (native-inputs
      `(("glib" ,glib "bin")             ; glib-compile-schemas, etc.
        ("intltool" ,intltool)
+       ("gmp" ,gmp)
        ("googlemock" ,(package-source googletest))
        ("googletest" ,googletest)
        ("gnucash-docs" ,gnucash-docs)
@@ -100,7 +100,7 @@
        ("pkg-config" ,pkg-config)))
     (propagated-inputs
      ;; dconf is required at runtime according to README.dependencies.
-     `(("dconf" ,dconf)))
+     (list dconf))
     (outputs '("out" "doc" "debug" "python"))
     (arguments
      `(#:test-target "check"
@@ -229,11 +229,10 @@ installed as well as Yelp, the Gnome help browser.")
        (origin
          (method url-fetch)
          (uri (string-append "mirror://sourceforge/gnucash/gnucash%20%28stable%29/"
-                             version "/gnucash-docs-" version revision ".tar.gz"))
+                             version "/gnucash-docs-" version ".1" revision ".tar.gz"))
          (sha256
-          (base32
-           "1p1rbv0gyi07nh5pzhk3xm46w66kjyaipb6rpaq9yb9gil1nl7q5"))))
-      (build-system gnu-build-system)
+          (base32 "0cf2m1lgpq6if89w8anz522nar5kwpfzi0kacymw17m42fzxz0cg"))))
+      (build-system cmake-build-system)
       ;; These are native-inputs because they are only required for building the
       ;; documentation.
       (native-inputs
@@ -244,6 +243,8 @@ installed as well as Yelp, the Gnome help browser.")
          ("libxslt" ,libxslt)
          ("docbook-xsl" ,docbook-xsl)
          ("scrollkeeper" ,scrollkeeper)))
+      (arguments
+       `(#:tests? #f)) ;no test target
       (home-page "https://www.gnucash.org/")
       (synopsis "Documentation for GnuCash")
       (description
@@ -275,12 +276,9 @@ to be read using the GNOME Yelp program.")
              (string-append "--with-openssl-libs="
                             (assoc-ref %build-inputs "openssl") "/lib"))))
     (inputs
-     `(("libgcrypt" ,libgcrypt)
-       ("gnutls" ,gnutls)
-       ("openssl" ,openssl)
-       ("gtk+" ,gtk+)))
+     (list libgcrypt gnutls openssl gtk+))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (home-page "https://www.aquamaniac.de/sites/aqbanking/index.php")
     (synopsis "Utility library for networking and security applications")
     (description
@@ -305,17 +303,21 @@ applications and libraries.  It is used by AqBanking.")
     (arguments
      `(;; Parallel building fails because aqhbci is required before it's
        ;; built.
-       #:parallel-build? #f))
+       #:parallel-build? #f
+       #:phases
+       (modify-phases %standard-phases
+         ;; Embed the package version instead of the build date
+         (add-after 'unpack 'use-version-instead-of-date
+           (lambda _
+             (substitute*
+                 "src/libs/plugins/backends/aqhbci/header.xml.in"
+               (("@DATETIME@") ,version)))))))
     (propagated-inputs
-     `(("gwenhywfar" ,gwenhywfar)))
+     (list gwenhywfar))
     (inputs
-     `(("gmp" ,gmp)
-       ("xmlsec" ,xmlsec)
-       ("gnutls" ,gnutls)))
+     (list gmp xmlsec gnutls))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("gettext-minimal" ,gettext-minimal)
-       ("libltdl" ,libltdl)))
+     (list pkg-config gettext-minimal libltdl))
     (home-page "https://www.aquamaniac.de/sites/aqbanking/index.php")
     (synopsis "Interface for online banking tasks")
     (description

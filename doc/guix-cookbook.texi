@@ -7,6 +7,9 @@
 @settitle GNU Guix Cookbook
 @c %**end of header
 
+@c Onion service for ci.guix.gnu.org.
+@set SUBSTITUTE-TOR-URL https://4zwzi66wwdaalbhgnix55ea3ab4pvvw66ll2ow53kjub6se4q2bclcyd.onion
+
 @copying
 Copyright @copyright{} 2019 Ricardo Wurmus@*
 Copyright @copyright{} 2019 Efraim Flashner@*
@@ -119,7 +122,7 @@ language, install it with @code{guix install guile} and start a
 @dfn{REPL}---short for @uref{https://en.wikipedia.org/wiki/Read%E2%80%93eval%E2%80%93print_loop,
 @dfn{read-eval-print loop}}---by running @code{guile} from the command line.
 
-Alternatively you can also run @code{guix environment --ad-hoc guile -- guile}
+Alternatively you can also run @code{guix shell guile -- guile}
 if you'd rather not have Guile installed in your user profile.
 
 In the following examples, lines show what you would type at the REPL;
@@ -281,24 +284,41 @@ depends on the @code{(guix store)} module and it exports two variables,
 @code{ruby-build} and @code{ruby-build-system}.
 @end itemize
 
-For a more detailed introduction, check out
-@uref{http://www.troubleshooters.com/codecorn/scheme_guile/hello.htm, Scheme
-at a Glance}, by Steve Litt.
+@quotation Going further
+Scheme is a language that has been widely used to teach programming and
+you'll find plenty of material using it as a vehicle.  Here's a
+selection of documents to learn more about Scheme:
 
-One of the reference Scheme books is the seminal ``Structure and
-Interpretation of Computer Programs'', by Harold Abelson and Gerald Jay
-Sussman, with Julie Sussman.  You'll find a
-@uref{https://mitpress.mit.edu/sites/default/files/sicp/index.html, free copy
-online}, together with
-@uref{https://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-001-structure-and-interpretation-of-computer-programs-spring-2005/video-lectures/,
-videos of the lectures by the authors}.  The book is available in Texinfo
-format as the @code{sicp} Guix package.  Go ahead, run @code{guix install
-sicp} and start reading with @code{info sicp} (@pxref{,,, sicp, Structure and Interpretation of Computer Programs}).
-An @uref{https://sarabander.github.io/sicp/, unofficial ebook is also
-available}.
+@itemize
+@item
+@uref{https://spritely.institute/static/papers/scheme-primer.html, @i{A
+Scheme Primer}}, by Christine Lemmer-Webber and the Spritely Institute.
+
+@item
+@uref{http://www.troubleshooters.com/codecorn/scheme_guile/hello.htm,
+@i{Scheme at a Glance}}, by Steve Litt.
+
+@item
+@uref{https://mitpress.mit.edu/sites/default/files/sicp/index.html,
+@i{Structure and Interpretation of Computer Programs}}, by Harold
+Abelson and Gerald Jay Sussman, with Julie Sussman.  Colloquially known
+as ``SICP'', this book is a reference.
+
+You can also install it and read it from your computer:
+
+@example
+guix install sicp info-reader
+info sicp
+@end example
+
+An @uref{https://sarabander.github.io/sicp/, unofficial ebook} is also
+available.
+
+@end itemize
 
 You'll find more books, tutorials and other resources at
 @url{https://schemers.org/}.
+@end quotation
 
 
 @c *********************************************************************
@@ -795,10 +815,8 @@ another, more sophisticated package (slightly modified from the source):
                   "17pjvprmdrx4h6bb1hhc98w9qi6ki7yl57f090n9kbhswxqfs7s3"))
                 (patches (search-patches "libgit2-mtime-0.patch"))
                 (modules '((guix build utils)))
-                (snippet '(begin
-                            ;; Remove bundled software.
-                            (delete-file-recursively "deps")
-                            #true))))
+                ;; Remove bundled software.
+                (snippet '(delete-file-recursively "deps"))))
       (build-system cmake-build-system)
       (outputs '("out" "debug"))
       (arguments
@@ -812,23 +830,19 @@ another, more sophisticated package (slightly modified from the source):
                  (("#!/bin/sh") (string-append "#!" (which "sh"))))
                (substitute* "tests/clar/fs.h"
                  (("/bin/cp") (which "cp"))
-                 (("/bin/rm") (which "rm")))
-               #true))
+                 (("/bin/rm") (which "rm")))))
            ;; Run checks more verbosely.
            (replace 'check
              (lambda _ (invoke "./libgit2_clar" "-v" "-Q")))
            (add-after 'unpack 'make-files-writable-for-tests
              (lambda _ (for-each make-file-writable (find-files "." ".*")))))))
       (inputs
-       `(("libssh2" ,libssh2)
-         ("http-parser" ,http-parser)
-         ("python" ,python-wrapper)))
+       (list libssh2 http-parser python-wrapper))
       (native-inputs
-       `(("pkg-config" ,pkg-config)))
+       (list pkg-config))
       (propagated-inputs
        ;; These two libraries are in 'Requires.private' in libgit2.pc.
-       `(("openssl" ,openssl)
-         ("zlib" ,zlib)))
+       (list openssl zlib))
       (home-page "https://libgit2.github.com/")
       (synopsis "Library providing Git core methods")
       (description
@@ -892,22 +906,6 @@ Snippets might need additional Guile modules which can be imported from the
 
 @subsubsection Inputs
 
-First, a syntactic comment: See the quasi-quote / comma syntax?
-
-@lisp
-    (native-inputs
-     `(("pkg-config" ,pkg-config)))
-@end lisp
-
-is equivalent to
-
-@lisp
-    (native-inputs
-     (list (list "pkg-config" pkg-config)))
-@end lisp
-
-You'll mostly see the former because it's shorter.
-
 There are 3 different input types.  In short:
 
 @table @asis
@@ -922,7 +920,7 @@ Installed in the store and in the profile, as well as
 being present at build time.
 @end table
 
-@xref{Package Reference,,, guix, GNU Guix Reference Manual} for more details.
+@xref{package Reference,,, guix, GNU Guix Reference Manual} for more details.
 
 The distinction between the various inputs is important: if a dependency can be
 handled as an @emph{input} instead of a @emph{propagated input}, it should be done so, or
@@ -940,6 +938,24 @@ dependencies can be safely garbage-collected.
 It also matters when a substitute is available, in which case only the @emph{inputs}
 and @emph{propagated inputs} will be fetched: the @emph{native inputs} are not required to
 install a package from a substitute.
+
+@quotation Note
+You may see here and there snippets where package inputs are written
+quite differently, like so:
+
+@lisp
+;; The "old style" for inputs.
+(inputs
+ `(("libssh2" ,libssh2)
+   ("http-parser" ,http-parser)
+   ("python" ,python-wrapper)))
+@end lisp
+
+This is the ``old style'', where each input in the list is explicitly
+given a label (a string).  It is still supported but we recommend using
+the style above instead.  @xref{package Reference,,, guix, GNU Guix
+Reference Manual}, for more info.
+@end quotation
 
 @subsubsection Outputs
 
@@ -1226,10 +1242,7 @@ $ guix import cran --recursive walrus
             "1nk2glcvy4hyksl5ipq2mz8jy4fss90hx6cq98m3w96kzjni6jjj"))))
     (build-system r-build-system)
     (propagated-inputs
-      `(("r-ggplot2" ,r-ggplot2)
-        ("r-jmvcore" ,r-jmvcore)
-        ("r-r6" ,r-r6)
-        ("r-wrs2" ,r-wrs2)))
+      (list r-ggplot2 r-jmvcore r-r6 r-wrs2))
     (home-page "https://github.com/jamovi/walrus")
     (synopsis "Robust Statistical Methods")
     (description
@@ -1288,8 +1301,7 @@ noticed that a significant number of them have a @code{inherit} field:
               (sha256
                (base32
                 "17fpahgh5dyckgz7rwqvzgnhx53cx9kr2xw0szprc6bnqy977fi8"))))
-    (native-inputs
-     `(("gtk-encode-symbolic-svg" ,gtk+ "bin")))))
+    (native-inputs (list `(,gtk+ "bin")))))
 @end lisp
 
 All unspecified fields are inherited from the parent package.  This is very
@@ -1438,37 +1450,34 @@ The @code{linux-libre} kernel package definition is actually a procedure which
 creates a package.
 
 @lisp
-(define* (make-linux-libre version hash supported-systems
-                           #:key
-                           ;; A function that takes an arch and a variant.
-                           ;; See kernel-config for an example.
-                           (extra-version #false)
-                           (configuration-file #false)
-                           (defconfig "defconfig")
-                           (extra-options %default-extra-linux-options)
-                           (patches (list %boot-logo-patch)))
+(define* (make-linux-libre* version gnu-revision source supported-systems
+                            #:key
+                            (extra-version #f)
+                            ;; A function that takes an arch and a variant.
+                            ;; See kernel-config for an example.
+                            (configuration-file #f)
+                            (defconfig "defconfig")
+                            (extra-options %default-extra-linux-options))
   ...)
 @end lisp
 
-The current @code{linux-libre} package is for the 5.1.x series, and is
+The current @code{linux-libre} package is for the 5.15.x series, and is
 declared like this:
 
 @lisp
-(define-public linux-libre
-  (make-linux-libre %linux-libre-version
-                    %linux-libre-hash
-                    '("x86_64-linux" "i686-linux" "armhf-linux" "aarch64-linux")
-                    #:patches %linux-libre-5.1-patches
-                    #:configuration-file kernel-config))
+(define-public linux-libre-5.15
+  (make-linux-libre* linux-libre-5.15-version
+                     linux-libre-5.15-gnu-revision
+                     linux-libre-5.15-source
+                     '("x86_64-linux" "i686-linux" "armhf-linux" "aarch64-linux" "riscv64-linux")
+                     #:configuration-file kernel-config))
 @end lisp
 
 Any keys which are not assigned values inherit their default value from the
 @code{make-linux-libre} definition.  When comparing the two snippets above,
-you may notice that the code comment in the first doesn't actually refer to
-the @code{#:extra-version} keyword; it is actually for
-@code{#:configuration-file}.  Because of this, it is not actually easy to
-include a custom kernel configuration from the definition, but don't worry,
-there are other ways to work with what we do have.
+notice the code comment that refers to @code{#:configuration-file}.  Because of
+this, it is not actually easy to include a custom kernel configuration from the
+definition, but don't worry, there are other ways to work with what we do have.
 
 There are two ways to create a kernel with a custom kernel configuration.  The
 first is to provide a standard @file{.config} file during the build process by
@@ -1568,14 +1577,15 @@ custom kernel:
           (@@@@ (gnu packages linux) %default-extra-linux-options)))
 
 (define-public linux-libre-macbook41
-  ;; XXX: Access the internal 'make-linux-libre' procedure, which is
+  ;; XXX: Access the internal 'make-linux-libre*' procedure, which is
   ;; private and unexported, and is liable to change in the future.
-  ((@@@@ (gnu packages linux) make-linux-libre) (@@@@ (gnu packages linux) %linux-libre-version)
-                      (@@@@ (gnu packages linux) %linux-libre-hash)
-                      '("x86_64-linux")
-                      #:extra-version "macbook41"
-                      #:patches (@@@@ (gnu packages linux) %linux-libre-5.1-patches)
-                      #:extra-options %macbook41-config-options))
+  ((@@@@ (gnu packages linux) make-linux-libre*)
+   (@@@@ (gnu packages linux) linux-libre-version)
+   (@@@@ (gnu packages linux) linux-libre-gnu-revision)
+   (@@@@ (gnu packages linux) linux-libre-source)
+   '("x86_64-linux")
+   #:extra-version "macbook41"
+   #:extra-options %macbook41-config-options))
 @end lisp
 
 In the above example @code{%file-systems} is a collection of flags enabling
@@ -1607,7 +1617,7 @@ letting you know what you're missing.  If the file is blank then you're
 missing everything.  The next step is to run:
 
 @example shell
-guix environment linux-libre -- make localmodconfig
+guix shell -D linux-libre -- make localmodconfig
 @end example
 
 and note the output.  Do note that the @file{.config} file is still empty.
@@ -2364,7 +2374,8 @@ follow:
           config => (guix-configuration
                       (inherit config)
                       ;; ci.guix.gnu.org's Onion service
-                      (substitute-urls "https://bp7o7ckwlewr4slm.onion")
+                      (substitute-urls
+                       "@value{SUBSTITUTE-TOR-URL}")
                       (http-proxy "http://localhost:9250")))))))
 @end lisp
 
@@ -2382,7 +2393,8 @@ want to get a substitute from the Tor tunnel run:
 
 @example
 sudo herd set-http-proxy guix-daemon http://localhost:9250
-guix build --substitute-urls=https://bp7o7ckwlewr4slm.onion …
+guix build \
+  --substitute-urls=@value{SUBSTITUTE-TOR-URL} @dots{}
 @end example
 
 @node Setting up NGINX with Lua
@@ -2538,8 +2550,9 @@ Let's dive in the set up!
 @node Basic setup with manifests
 @subsection Basic setup with manifests
 
-A Guix profile can be set up @emph{via} a so-called @emph{manifest specification} that looks like
-this:
+A Guix profile can be set up @i{via} a @dfn{manifest}.  A manifest is a
+snippet of Scheme code that specifies the set of packages you want to
+have in your profile; it looks like this:
 
 @lisp
 (specifications->manifest
@@ -2552,8 +2565,8 @@ this:
     "package-N"))
 @end lisp
 
-@pxref{Invoking guix package,,, guix, GNU Guix Reference Manual}, for
-the syntax details.
+@xref{Writing Manifests,,, guix, GNU Guix Reference Manual}, for
+more information about the syntax.
 
 We can create a manifest specification per profile and install them this way:
 
@@ -2791,7 +2804,7 @@ Maybe a dependency from our manifest has been updated; or we may have run
 garbage-collected.
 
 @item
-Eventually, we set to work on that project again, so we run @code{guix environment
+Eventually, we set to work on that project again, so we run @code{guix shell
    -m manifest.scm}.  But now we have to wait for Guix to build and install
 stuff!
 @end enumerate

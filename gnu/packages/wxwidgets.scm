@@ -26,6 +26,7 @@
 
 (define-module (gnu packages wxwidgets)
   #:use-module (guix packages)
+  #:use-module (guix gexp)
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module ((guix licenses) #:prefix l:)
@@ -33,6 +34,7 @@
   #:use-module (guix build-system python)
   #:use-module (guix utils)
   #:use-module (gnu packages)
+  #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages databases)
   #:use-module (gnu packages freedesktop)
@@ -79,7 +81,7 @@
        ("shared-mime-info" ,shared-mime-info)
        ("xdg-utils" ,xdg-utils)))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (arguments
      `(#:configure-flags
        '("--with-regex" "--with-libmspack"
@@ -100,8 +102,7 @@
        (modify-phases %standard-phases
          (add-after 'unpack 'refer-to-inputs
            (lambda* (#:key inputs #:allow-other-keys)
-             (let* ((mime (string-append (assoc-ref inputs "shared-mime-info")
-                                         "/share/mime")))
+             (let* ((mime (search-input-directory inputs "/share/mime")))
                (substitute* "src/unix/utilsx11.cpp"
                  (("wxExecute\\(xdg_open \\+")
                   (string-append "wxExecute(\"" (which "xdg-open") "\"")))
@@ -163,7 +164,7 @@ and many other languages.")
 ;; This can be removed when wxWidgets is updated to the next stable version.
 (define-public wxwidgets-3.1
   (package (inherit wxwidgets)
-           (version "3.1.0")
+           (version "3.1.5")
            (source
             (origin
               (method git-fetch)
@@ -173,14 +174,32 @@ and many other languages.")
               (file-name (git-file-name "wxwidgets" version))
               (sha256
                (base32
-                "14kl1rsngm70v3mbyv1mal15iz2b18k97avjx8jn7s81znha1c7f"))))
-           (inputs `(("gstreamer" ,gstreamer)
-                     ("gst-plugins-base" ,gst-plugins-base)
-                     ,@(package-inputs wxwidgets)))
+                "0j998nzqmycafignclxmahgqm5kgs1fiqbsiyvzm7bnpnafi333y"))))
+           (inputs (modify-inputs (package-inputs wxwidgets)
+                     (prepend catch-framework gstreamer gst-plugins-base)))
            (arguments
             (substitute-keyword-arguments (package-arguments wxwidgets)
               ((#:configure-flags flags)
-               `(cons "--enable-mediactrl" ,flags))))))
+               '(list "--with-regex" "--with-libmspack" "--with-sdl"
+                      "--enable-mediactrl" "--enable-webviewwebkit"))
+              ((#:phases phases)
+               `(modify-phases ,phases
+                  (add-after 'unpack 'add-catch
+                    (lambda* (#:key inputs #:allow-other-keys)
+                      (install-file
+                       (search-input-file inputs "include/catch.hpp")
+                       "3rdparty/catch/include/")))
+                  (replace 'configure
+                    (lambda* (#:key configure-flags inputs native-inputs outputs
+                         #:allow-other-keys)
+                      (let ((sh (search-input-file (or native-inputs inputs)
+                                                   "bin/sh")))
+                        (apply invoke "./configure"
+                               (string-append "SHELL=" sh)
+                               (string-append "CONFIG_SHELL=" sh)
+                               (string-append "--prefix="
+                                              (assoc-ref outputs "out"))
+                               configure-flags))))))))))
 
 (define-public wxwidgets-gtk2-3.1
   (package/inherit wxwidgets-3.1
@@ -216,7 +235,7 @@ and many other languages.")
              (setenv "WXWIN" (assoc-ref inputs "wxwidgets"))
              ;; Copy the waf executable to the source directory since it needs
              ;; to be in a writable directory.
-             (copy-file (string-append (assoc-ref inputs "python-waf") "/bin/waf")
+             (copy-file (search-input-file inputs "/bin/waf")
                         "bin/waf")
              (setenv "WAF" "bin/waf")
              ;; The build script tries to copy license files from the
@@ -232,15 +251,11 @@ and many other languages.")
                (("'build']") "'build_py', '--use_syswx']"))
              #t)))))
     (inputs
-     `(("gtk+" ,gtk+)
-       ("wxwidgets" ,wxwidgets)))
+     (list gtk+ wxwidgets))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("python-waf" ,python-waf)))
+     (list pkg-config python-waf))
     (propagated-inputs
-     `(("python-numpy" ,python-numpy)
-       ("python-pillow" ,python-pillow)
-       ("python-six" ,python-six)))
+     (list python-numpy python-pillow python-six))
     (home-page "https://wxpython.org/")
     (synopsis "Cross platform GUI toolkit for Python")
     (description "wxPython is a cross-platform GUI toolkit for the Python
@@ -250,100 +265,25 @@ library.  In most cases, wxPython uses the native widgets on each platform to
 provide a 100% native look and feel for the application.")
     (license l:wxwindows3.1+)))
 
-(define-public python2-wxpython
-  (package
-    (name "python2-wxpython")
-    (version "3.0.2.0")
-    (source
-      (origin
-        (method url-fetch)
-        (uri (string-append "mirror://sourceforge/wxpython/wxPython/"
-                            version "/wxPython-src-" version ".tar.bz2"))
-        (sha256
-         (base32
-          "0qfzx3sqx4mwxv99sfybhsij4b5pc03ricl73h4vhkzazgjjjhfm"))
-        (modules '((guix build utils)))
-        (snippet
-         '(begin
-            (lambda (folder)
-              (delete-file-recursively (string-append "src/" folder))
-              '("expat" "jpeg" "png" "tiff" "zlib" "msw" "osx" "msdos"))
-            (substitute* '("wxPython/setup.py")
-              ;; setup.py tries to keep its own license the same as wxwidget's
-              ;; license (which it expects under $WXWIN/docs).
-              (("'preamble.txt', 'licence.txt', 'licendoc.txt', 'lgpl.txt'")
-               ""))
-            #t))))
-    (build-system python-build-system)
-    (arguments
-     `(#:python ,python-2
-       #:tests? #f ; tests fail
-       ;; wxPython directly extends distutils command classes,
-       ;; we can't easily make setup.py use setuptools.
-       #:use-setuptools? #f
-       #:configure-flags (list "WXPORT=gtk2"
-                               "UNICODE=1")
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'chdir
-           (lambda _
-             (chdir "wxPython")
-             #t))
-         (add-after 'chdir 'set-wx-out-dir
-           (lambda* (#:key outputs #:allow-other-keys)
-             ;; By default, install phase tries to copy the wxPython headers in
-             ;; gnu/store/...-wxwidgets-3.0.2 , which it can't, so they are
-             ;; redirected to the output directory by setting WXPREFIX.
-             (substitute* "config.py"
-               (("= getWxConfigValue\\('--prefix'\\)")
-                (string-append "= '" (assoc-ref outputs "out") "'")))
-             (substitute* "wx/build/config.py"
-               (("= getWxConfigValue\\('--prefix'\\)")
-                (string-append "= '" (assoc-ref outputs "out") "'")))
-             #t))
-         (add-after 'set-wx-out-dir 'setenv
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (setenv "WXWIN" (assoc-ref inputs "wxwidgets"))
-             (use-modules (ice-9 popen) (ice-9 rdelim))
-             (let ((port (open-pipe* OPEN_READ
-                                     (string-append (assoc-ref inputs "wxwidgets")
-                                                    "/bin/wx-config") "--cppflags")))
-               (setenv "CPPFLAGS" (read-string port))
-               (close-pipe port))
-             #t)))))
-    (native-inputs
-     `(("mesa" ,mesa) ; for glcanvas
-       ("pkg-config" ,pkg-config)))
-    (inputs
-     `(("gtk+" ,gtk+-2) ; for wxPython/src/helpers.cpp
-       ("wxwidgets" ,wxwidgets-gtk2)))
-    (synopsis "Python 2 Bindings for wxWidgets")
-    (description "@code{wxpython} provides Python 2 bindings for wxWidgets.")
-    (home-page "https://wxpython.org/")
-    (license (package-license wxwidgets))))
-
 (define-public wxsvg
   (package
     (name "wxsvg")
-    (version "1.5.22")
+    (version "1.5.23")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://sourceforge/wxsvg/wxsvg/"
                             version "/wxsvg-" version ".tar.bz2"))
        (sha256
-        (base32 "0agmmwg0zlsw1idygvqjpj1nk41akzlbdha0hsdk1k8ckz6niq8d"))))
+        (base32 "1fdbvihw1w2vm29xj54cqgpdabhlg0ydf3clkb0qrlf7mhgkc1rz"))))
     (build-system glib-or-gtk-build-system)
     (inputs
-     `(("wxwidgets" ,wxwidgets-3.1)
-       ("cairo" ,cairo)
-       ("ffmpeg" ,ffmpeg)))
+     (list wxwidgets-3.1 cairo ffmpeg))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (propagated-inputs
      ;; In Requires.private of libwxsvg.pc.
-     `(("libexif" ,libexif)
-       ("pango" ,pango)))
+     (list libexif pango))
     (synopsis "C++ library to create, manipulate and render SVG files")
     (description "wxSVG is a C++ library to create, manipulate and render
 @dfn{Scalable Vector Graphics} (SVG) files with the wxWidgets toolkit.")

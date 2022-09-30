@@ -6,9 +6,9 @@
      (sentence-end-double-space . t)
 
      ;; For use with 'bug-reference-prog-mode'.
-     (bug-reference-url-format . "http://bugs.gnu.org/%s")
      (bug-reference-bug-regexp
-      . "<https?://\\(debbugs\\|bugs\\)\\.gnu\\.org/\\([0-9]+\\)>")
+      . "\\(<https?://\\bugs\\.gnu\\.org/\\([0-9]+\\)>\\)")
+     (bug-reference-url-format . "https://bugs.gnu.org/%s")
 
      ;; Emacs-Guix
      (eval . (setq-local guix-directory
@@ -52,10 +52,15 @@
    (eval . (put 'test-equal 'scheme-indent-function 1))
    (eval . (put 'test-eq 'scheme-indent-function 1))
    (eval . (put 'call-with-input-string 'scheme-indent-function 1))
+   (eval . (put 'call-with-port 'scheme-indent-function 1))
    (eval . (put 'guard 'scheme-indent-function 1))
    (eval . (put 'lambda* 'scheme-indent-function 1))
    (eval . (put 'substitute* 'scheme-indent-function 1))
    (eval . (put 'match-record 'scheme-indent-function 2))
+
+   ;; 'modify-inputs' and its keywords.
+   (eval . (put 'modify-inputs 'scheme-indent-function 1))
+   (eval . (put 'replace 'scheme-indent-function 1))
 
    ;; 'modify-phases' and its keywords.
    (eval . (put 'modify-phases 'scheme-indent-function 1))
@@ -113,13 +118,16 @@
    (eval . (put 'munless 'scheme-indent-function 1))
    (eval . (put 'mlet* 'scheme-indent-function 2))
    (eval . (put 'mlet 'scheme-indent-function 2))
+   (eval . (put 'mparameterize 'scheme-indent-function 2))
    (eval . (put 'run-with-store 'scheme-indent-function 1))
    (eval . (put 'run-with-state 'scheme-indent-function 1))
    (eval . (put 'wrap-program 'scheme-indent-function 1))
+   (eval . (put 'wrap-script 'scheme-indent-function 1))
    (eval . (put 'with-imported-modules 'scheme-indent-function 1))
    (eval . (put 'with-extensions 'scheme-indent-function 1))
    (eval . (put 'with-parameters 'scheme-indent-function 1))
    (eval . (put 'let-system 'scheme-indent-function 1))
+   (eval . (put 'with-build-variables 'scheme-indent-function 2))
 
    (eval . (put 'with-database 'scheme-indent-function 2))
    (eval . (put 'call-with-database 'scheme-indent-function 1))
@@ -143,11 +151,37 @@
 
    (eval . (put 'with-shepherd-action 'scheme-indent-function 3))
 
+   (eval . (put 'with-http-server 'scheme-indent-function 1))
+
    ;; This notably allows '(' in Paredit to not insert a space when the
    ;; preceding symbol is one of these.
    (eval . (modify-syntax-entry ?~ "'"))
    (eval . (modify-syntax-entry ?$ "'"))
-   (eval . (modify-syntax-entry ?+ "'"))))
+   (eval . (modify-syntax-entry ?+ "'"))
+
+   ;; Emacs 28 changed the behavior of 'lisp-fill-paragraph', which causes the
+   ;; first line of package descriptions to extrude past 'fill-column', and
+   ;; somehow that is deemed more correct upstream (see:
+   ;; https://issues.guix.gnu.org/56197).
+   (eval . (progn
+             (require 'lisp-mode)
+             (defun emacs27-lisp-fill-paragraph (&optional justify)
+               (interactive "P")
+               (or (fill-comment-paragraph justify)
+                   (let ((paragraph-start
+                          (concat paragraph-start
+                                  "\\|\\s-*\\([(;\"]\\|\\s-:\\|`(\\|#'(\\)"))
+                         (paragraph-separate
+                          (concat paragraph-separate "\\|\\s-*\".*[,\\.]$"))
+                         (fill-column (if (and (integerp emacs-lisp-docstring-fill-column)
+                                               (derived-mode-p 'emacs-lisp-mode))
+                                          emacs-lisp-docstring-fill-column
+                                        fill-column)))
+                     (fill-paragraph justify))
+                   ;; Never return nil.
+                   t))
+             (setq-local fill-paragraph-function #'emacs27-lisp-fill-paragraph)))))
+
  (emacs-lisp-mode . ((indent-tabs-mode . nil)))
  (texinfo-mode    . ((indent-tabs-mode . nil)
                      (fill-column . 72))))

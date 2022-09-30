@@ -23,6 +23,7 @@
   #:use-module (gnu packages freedesktop)
   #:use-module (gnu home services utils)
   #:use-module (guix gexp)
+  #:use-module (guix modules)
   #:use-module (guix records)
   #:use-module (guix i18n)
   #:use-module (guix diagnostics)
@@ -106,15 +107,21 @@ services more consistent."))
 
 (define (ensure-xdg-base-dirs-on-activation config)
   #~(map (lambda (xdg-base-dir-variable)
-           ((@@ (guix build utils) mkdir-p)
+           ((@ (guix build utils) mkdir-p)
             (getenv
              xdg-base-dir-variable)))
-         '#$(map (lambda (field)
-                   (format
-                    #f "XDG_~a"
-                    (object->snake-case-string
-                     (configuration-field-name field) 'upper)))
-                 home-xdg-base-directories-configuration-fields)))
+         '#$(filter-map
+             (lambda (field)
+               (let ((variable
+                      (string-append
+                       "XDG_"
+                       (object->snake-case-string
+                        (configuration-field-name field) 'upper))))
+                 ;; XDG_RUNTIME_DIR shouldn't be created during activation
+                 ;; and will be provided by elogind or other service.
+                 (and (not (string=? "XDG_RUNTIME_DIR" variable))
+                      variable)))
+             home-xdg-base-directories-configuration-fields)))
 
 (define (last-extension-or-cfg config extensions)
   "Picks configuration value from last provided extension.  If there
@@ -136,7 +143,7 @@ are no extensions use configuration instead."
                 (description "Configure XDG base directories.  This
 service introduces two additional variables @env{XDG_STATE_HOME},
 @env{XDG_LOG_HOME}.  They are not a part of XDG specification, at
-least yet, but are convinient to have, it improves the consistency
+least yet, but are convenient to have, it improves the consistency
 between different home services.  The services of this service-type is
 instantiated by default, to provide non-default value, extend the
 service-type (using @code{simple-service} for example).")))
@@ -190,11 +197,11 @@ pre-populated content.")
    "Default directory for videos."))
 
 (define (home-xdg-user-directories-files-service config)
-  `(("config/user-dirs.conf"
+  `(("user-dirs.conf"
      ,(mixed-text-file
        "user-dirs.conf"
        "enabled=False\n"))
-    ("config/user-dirs.dirs"
+    ("user-dirs.dirs"
      ,(mixed-text-file
        "user-dirs.dirs"
       (serialize-configuration
@@ -207,8 +214,8 @@ pre-populated content.")
                    home-xdg-user-directories-configuration-fields)))
     #~(let ((ensure-dir
              (lambda (path)
-               (mkdir-p
-                ((@@ (ice-9 string-fun) string-replace-substring)
+               ((@ (guix build utils) mkdir-p)
+                ((@ (ice-9 string-fun) string-replace-substring)
                  path "$HOME" (getenv "HOME"))))))
         (display "Creating XDG user directories...")
         (map ensure-dir '#$dirs)
@@ -218,7 +225,7 @@ pre-populated content.")
   (service-type (name 'home-xdg-user-directories)
                 (extensions
                  (list (service-extension
-                        home-files-service-type
+                        home-xdg-configuration-files-service-type
                         home-xdg-user-directories-files-service)
                        (service-extension
                         home-activation-service-type
@@ -374,7 +381,7 @@ configuration."
             "=" val "\n")))
 
   (define (serialize-alist config)
-    (generic-serialize-alist identity format-config config))
+    (generic-serialize-alist append format-config config))
 
   (define (serialize-xdg-desktop-action action)
     (match action
@@ -417,24 +424,25 @@ that the application cannot open the specified MIME type.")
    "A list of XDG desktop entries to create.  See
 @code{xdg-desktop-entry}."))
 
-(define (home-xdg-mime-applications-files-service config)
+(define (home-xdg-mime-applications-files config)
   (define (add-xdg-desktop-entry-file entry)
     (let ((file (first entry))
           (config (second entry)))
-      (list (format #f "local/share/applications/~a" file)
+      ;; TODO: Use xdg-data-files instead of home-files here
+      (list (format #f "applications/~a" file)
           (apply mixed-text-file
                  (format #f "xdg-desktop-~a-entry" file)
                  config))))
+  (map (compose add-xdg-desktop-entry-file serialize-xdg-desktop-entry)
+       (home-xdg-mime-applications-configuration-desktop-entries config)))
 
-  (append
-   `(("config/mimeapps.list"
-      ,(mixed-text-file
-        "xdg-mime-appplications"
-        (serialize-configuration
-         config
-         home-xdg-mime-applications-configuration-fields))))
-   (map (compose add-xdg-desktop-entry-file serialize-xdg-desktop-entry)
-        (home-xdg-mime-applications-configuration-desktop-entries config))))
+(define (home-xdg-mime-applications-xdg-files config)
+  `(("mimeapps.list"
+     ,(mixed-text-file
+       "xdg-mime-appplications"
+       (serialize-configuration
+        config
+        home-xdg-mime-applications-configuration-fields)))))
 
 (define (home-xdg-mime-applications-extension old-config extension-configs)
   (define (extract-fields config)
@@ -468,8 +476,11 @@ that the application cannot open the specified MIME type.")
   (service-type (name 'home-xdg-mime-applications)
                 (extensions
                  (list (service-extension
-                        home-files-service-type
-                        home-xdg-mime-applications-files-service)))
+                        home-xdg-data-files-service-type
+                        home-xdg-mime-applications-files)
+                       (service-extension
+                        home-xdg-configuration-files-service-type
+                        home-xdg-mime-applications-xdg-files)))
                 (compose identity)
                 (extend home-xdg-mime-applications-extension)
                 (default-value (home-xdg-mime-applications-configuration))

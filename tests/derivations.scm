@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012-2022 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -170,11 +170,15 @@
         #f))))
 
 (test-assert "identical files are deduplicated"
-  (let* ((build1  (add-text-to-store %store "one.sh"
-                                     "echo hello, world > \"$out\"\n"
+  ;; Note: DATA must be longer than %DEDUPLICATION-MINIMUM-SIZE.
+  (let* ((data    (make-string 9000 #\a))
+         (build1  (add-text-to-store %store "one.sh"
+                                     (string-append "echo -n " data
+                                                    " > \"$out\"\n")
                                      '()))
          (build2  (add-text-to-store %store "two.sh"
-                                     "# Hey!\necho hello, world > \"$out\"\n"
+                                     (string-append "# Hey!\necho -n "
+                                                    data " > \"$out\"\n")
                                      '()))
          (drv1    (derivation %store "foo"
                               %bash `(,build1)
@@ -187,7 +191,7 @@
                (file2 (derivation->output-path drv2)))
            (and (valid-path? %store file1) (valid-path? %store file2)
                 (string=? (call-with-input-file file1 get-string-all)
-                          "hello, world\n")
+                          data)
                 (= (stat:ino (lstat file1))
                    (stat:ino (lstat file2))))))))
 
@@ -432,12 +436,48 @@
                                                 (derivation-input fixed2)))))
     (and (derivation? final)
          (match (derivation-inputs final)
-           (((= derivation-input-derivation one)
-             (= derivation-input-derivation two))
-            (and (not (string=? (derivation-file-name one)
-                                (derivation-file-name two)))
-                 (string=? (derivation->output-path one)
-                           (derivation->output-path two))))))))
+           (((= derivation-input-derivation drv))
+            (memq drv (list fixed1 fixed2)))))))
+
+(test-assert "derivation with equivalent fixed-output inputs"
+  ;; Similar as the test above, but indirectly: DRV3A and DRV3B below are
+  ;; equivalent derivations (same output paths) but they depend on
+  ;; different-but-equivalent fixed-output derivations.  Thus, DRV3A and DRV3B
+  ;; must be coalesced as inputs of DRV4.  See <https://bugs.gnu.org/54209>.
+  (let* ((builder1 (add-text-to-store %store "fixed-builder1.sh"
+                                      "echo -n hello > $out"
+                                      '()))
+         (builder2 (add-text-to-store %store "fixed-builder2.sh"
+                                      "echo -n hello    > $out"
+                                      '()))
+         (builder3 (add-text-to-store %store "user-builder.sh"
+                                      "echo 1 > $one; echo 2 > $two"
+                                      '()))
+         (hash     (gcrypt:sha256 (string->utf8 "hello")))
+         (drv1     (derivation %store "fixed" %bash (list builder1)
+                               #:sources (list builder1)
+                               #:hash hash #:hash-algo 'sha256))
+         (drv2     (derivation %store "fixed" %bash (list builder2)
+                               #:sources (list builder2)
+                               #:hash hash #:hash-algo 'sha256))
+         (drv3a    (derivation %store "fixed-user" %bash (list builder3)
+                               #:outputs '("one" "two")
+                               #:sources (list builder3)
+                               #:inputs (list (derivation-input drv1))))
+         (drv3b    (derivation %store "fixed-user" %bash (list builder3)
+                               #:outputs '("one" "two")
+                               #:sources (list builder3)
+                               #:inputs (list (derivation-input drv2))))
+         (drv4     (derivation %store "fixed-user-user" %bash (list builder1)
+                               #:sources (list builder1)
+                               #:inputs (list (derivation-input drv3a '("one"))
+                                              (derivation-input drv3b '("two"))))))
+    (match (derivation-inputs drv4)
+      ((input)
+       (and (memq (derivation-input-derivation input)
+                  (list drv3a drv3b))
+            (lset= string=? (derivation-input-sub-derivations input)
+                   '("one" "two")))))))
 
 (test-assert "multiple-output derivation"
   (let* ((builder    (add-text-to-store %store "my-fixed-builder.sh"

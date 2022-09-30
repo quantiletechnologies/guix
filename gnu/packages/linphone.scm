@@ -24,7 +24,6 @@
   #:use-module (gnu packages admin)
   #:use-module (gnu packages audio)
   #:use-module (gnu packages avahi)
-  #:use-module (gnu packages base)
   #:use-module (gnu packages cpp)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages crypto)
@@ -122,7 +121,7 @@
                   (string-append out "/share/BCUnit/Examples")
                   (string-append doc "/share/BCUnit/Examples"))))))))
       (inputs
-       `(("ncurses" ,ncurses)))
+       (list ncurses))
       (synopsis "Belledonne Communications Unit Testing Framework")
       (description "BCUnit is a fork of the defunct project CUnit, with
 several fixes and patches applied.  It is a unit testing framework for
@@ -235,7 +234,7 @@ Communications software like belle-sip, mediastreamer2 and linphone.")
                 ;; name, so have it match.
                 (string-append tester "/share/belr_tester"))))))))
     (inputs
-     `(("bctoolbox" ,bctoolbox)))
+     (list bctoolbox))
     (synopsis "Belledonne Communications Language Recognition Library")
     (description "Belr is Belledonne Communications' language recognition
 library, written in C++11.  It parses text inputs formatted according to a
@@ -260,8 +259,7 @@ IETF.")
     (build-system cmake-build-system)
     (outputs '("out" "debug" "tester"))
     (arguments
-     `(#:tests? #t
-       #:configure-flags '("-DENABLE_STATIC=OFF")
+     `(#:configure-flags '("-DENABLE_STATIC=OFF")
        #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'patch-vcard-grammar-location
@@ -293,8 +291,7 @@ IETF.")
                                                      "/bin/belcard_tester")))
                  (invoke belcard_tester))))))))
     (inputs
-     `(("bctoolbox" ,bctoolbox)
-       ("belr" ,belr)))
+     (list bctoolbox belr))
     (synopsis "Belledonne Communications VCard Library")
     (description "Belcard is a C++ library to manipulate VCard standard
 format.")
@@ -445,7 +442,7 @@ such as conferencing.")
      `(("dot" ,graphviz)
        ("doxygen" ,doxygen)))
     (inputs
-     `(("bctoolbox" ,bctoolbox)))
+     (list bctoolbox))
     (synopsis "Belledonne Communications RTP Library")
     (description "oRTP is a C library implementing the RTP protocol.  It
 implements the RFC 3550 standard.")
@@ -552,9 +549,7 @@ including both ARM and x86.")
                                ;;"HTTP stack"
                                "Object"))))))))
     (inputs
-     `(("avahi" ,avahi)
-       ("bctoolbox" ,bctoolbox)
-       ("zlib" ,zlib)))
+     (list avahi bctoolbox zlib))
     (synopsis "Belledonne Communications SIP Library")
     (description "Belle-sip is a modern library implementing SIP transport,
 transaction and dialog layers.  It is written in C, with an object-oriented
@@ -721,9 +716,7 @@ including media capture, encoding and decoding, and rendering.")
      `(("dot" ,graphviz)
        ("doxygen" ,doxygen)))
     (inputs
-     `(("bctoolbox" ,bctoolbox)
-       ("belle-sip" ,belle-sip)
-       ("soci" ,soci)))
+     (list bctoolbox belle-sip soci))
     (synopsis "Belledonne Communications Encryption Library")
     (description "LIME is an encryption library for one-to-one and group
 instant messaging, allowing users to exchange messages privately and
@@ -769,31 +762,30 @@ device.")
                (rename-file (string-append out "/share/" tester-name)
                             (string-append tester "/share/" tester-name))))))))
     (native-inputs
-     `(("dot" ,graphviz)
-       ("doxygen" ,doxygen)
-       ("gettext" ,gettext-minimal)
-       ("perl" ,perl)
-       ("python" ,python-wrapper)
-       ("pystache" ,python-pystache)
-       ("six" ,python-six)
-       ("udev" ,eudev)))
+     (list graphviz
+           doxygen
+           gettext-minimal
+           perl
+           python-wrapper
+           python-pystache
+           python-six
+           eudev))
     (inputs
-     `(("bctoolbox" ,bctoolbox)
-       ("belcard" ,belcard)
-       ("bellesip" ,belle-sip)
-       ("belr" ,belr)
-       ("bzrtp" ,bzrtp)
-       ("iconv" ,libiconv)
-       ("ldap" ,openldap)
-       ("libxsd" ,xsd)
-       ("lime" ,lime)
-       ("mediastreamer2" ,mediastreamer2)
-       ("notify" ,libnotify)
-       ("ortp" ,ortp)
-       ("soci" ,soci)
-       ("sqlite" ,sqlite)
-       ("xml2" ,libxml2)
-       ("zlib" ,zlib)))
+     (list bctoolbox
+           belcard
+           belle-sip
+           belr
+           bzrtp
+           openldap
+           xsd
+           lime
+           mediastreamer2
+           libnotify
+           ortp
+           soci
+           sqlite
+           libxml2
+           zlib))
     (synopsis "Belledonne Communications Softphone Library")
     (description "Liblinphone is a high-level SIP library integrating
 all calling and instant messaging features into an unified
@@ -851,21 +843,20 @@ and video calls or instant messaging capabilities to an application.")
                (symlink (string-append liblinphone "/share/belr/grammars")
                         grammar-dest)))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("qttools" ,qttools)))
+     (list pkg-config qttools-5))
     (inputs
-     `(("bctoolbox" ,bctoolbox)
-       ("belcard" ,belcard)
-       ("belr" ,belr)
-       ("liblinphone" ,liblinphone)
-       ("mediastreamer2" ,mediastreamer2)
-       ("ortp" ,ortp)
-       ("qtbase" ,qtbase-5)
-       ("qtdeclarative" ,qtdeclarative)
-       ("qtgraphicaleffects" ,qtgraphicaleffects)
-       ("qtquickcontrols" ,qtquickcontrols)
-       ("qtquickcontrols2" ,qtquickcontrols2)
-       ("qtsvg" ,qtsvg)))
+     (list bctoolbox
+           belcard
+           belr
+           liblinphone
+           mediastreamer2
+           ortp
+           qtbase-5
+           qtdeclarative-5
+           qtgraphicaleffects
+           qtquickcontrols-5
+           qtquickcontrols2-5
+           qtsvg-5))
     (synopsis "Desktop client for the Linphone SIP softphone")
     (description "Linphone is a SIP softphone for voice and video over IP calling
 (VoIP) and instant messaging.  Amongst its features are:
@@ -911,10 +902,7 @@ and video calls or instant messaging capabilities to an application.")
          #:configure-flags
          (list "-DENABLE_STATIC=NO")))  ; Not required
       (inputs
-       `(("bctoolbox" ,bctoolbox)
-         ("mediastreamer2" ,mediastreamer2)
-         ("openh264" ,openh264)
-         ("ortp" ,ortp)))
+       (list bctoolbox mediastreamer2 openh264 ortp))
       (synopsis "Media Streamer H.264 Codec")
       (description "MsOpenH264 is an  H.264 encoder/decoder plugin for
  mediastreamer2 based on the openh264 library.")
@@ -942,9 +930,7 @@ and video calls or instant messaging capabilities to an application.")
          #:configure-flags
          (list "-DENABLE_STATIC=NO")))  ; Not required
       (inputs
-       `(("bctoolbox" ,bctoolbox)
-         ("mediastreamer2" ,mediastreamer2)
-         ("ortp" ,ortp)))
+       (list bctoolbox mediastreamer2 ortp))
       (synopsis "Media Streamer SILK Codec")
       (description "MSSILK is a plugin of MediaStreamer, adding support for AMR
 codec.  It is based on the Skype's SILK implementation.")
@@ -995,9 +981,7 @@ codec.  It is based on the Skype's SILK implementation.")
                "1maqychrgwy0z4zypa03qp726l2finw64z6cymdzhd58ql3p1lvm"))))
          ("python" ,python-wrapper)))
       (inputs
-       `(("bctoolbox" ,bctoolbox)
-         ("mediastreamer2" ,mediastreamer2)
-         ("ortp" ,ortp)))
+       (list bctoolbox mediastreamer2 ortp))
       (synopsis "Media Streamer WebRTC Codec")
       (description "MSWebRTC is a plugin of MediaStreamer, adding support for
 WebRTC codec.  It includes features from WebRTC, such as, iSAC and AECM.")

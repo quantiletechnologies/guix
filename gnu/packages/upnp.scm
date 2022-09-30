@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2014 Sree Harsha Totakura <sreeharsha@totakura.in>
 ;;; Copyright © 2015 Federico Beffa <beffa@fbengineering.ch>
-;;; Copyright © 2016, 2017, 2018, 2020, 2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2016–2018, 2020–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018 Theodoros Foradis <theodoros@foradis.org>
 ;;; Copyright © 2019 Jens Mølgaard <jens@zete.tk>
 ;;; Copyright © 2020 Jan Wielkiewicz <tona_kosmicznego_smiecia@interia.pl>
@@ -63,7 +63,7 @@
      ;; the configure phase.
      `(#:make-flags
        (list
-        (string-append "SH=" (assoc-ref %build-inputs "bash") "/bin/sh")
+        (string-append "SH=" (search-input-file %build-inputs "/bin/sh"))
         (string-append "INSTALLPREFIX=" (assoc-ref %outputs "out"))
         ,(string-append "CC=" (cc-for-target))
 
@@ -96,16 +96,16 @@ over IRC, instant messaging, network games, and most server software.")
 (define-public libupnp
   (package
     (name "libupnp")
-    (version "1.14.12")
+    (version "1.14.13")
     (source
      (origin
       (method url-fetch)
       (uri (string-append "https://github.com/pupnp/pupnp/releases/download"
                           "/release-" version "/libupnp-" version".tar.bz2"))
       (sha256
-       (base32 "1b5mnn01cx840paggxrajg63gqzmw8mi4p14jhi9r4qyvam80709"))))
+       (base32 "0klag10gwrr6yx41v72w1jmyz87wzj1qpdcwv45qzjn53bp7lp82"))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (build-system gnu-build-system)
     (arguments
      ;; The tests require a network device capable of multicasting which is
@@ -126,7 +126,7 @@ and others.")
 (define-public readymedia
   (package
     (name "readymedia")
-    (version "1.3.0")
+    (version "1.3.1")
     (source
      (origin
        (method git-fetch)
@@ -136,8 +136,7 @@ and others.")
                       "v" (string-replace-substring version "." "_")))))
        (file-name (git-file-name name version))
        (sha256
-        (base32
-         "0g04lffj37wdv5bnpl5faxpnmlj6bbk8y7ziaz2wp6h82g6kb5wj"))))
+        (base32 "09fg3697wshg0j46mi3bp2i6ypiqm39vmzx52bci8r6j07yz7fwx"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags '("--with-os-name=Linux")      ; uname -s
@@ -146,21 +145,17 @@ and others.")
          (add-after 'unpack 'patch-source
            (lambda _
              (substitute* "Makefile.am"
-               ((".*LIBAVUTIL_LIBS.*") ""))
-             #t)))))
-    (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("gettext" ,gettext-minimal)))
+               ((".*LIBAVUTIL_LIBS.*") "")))))))
+    (native-inputs (list autoconf automake gettext-minimal))
     (inputs
-     `(("ffmpeg" ,ffmpeg)
-       ("flac" ,flac)
-       ("libexif" ,libexif)
-       ("libid3tag" ,libid3tag)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libvorbis" ,libvorbis)
-       ("sqlite" ,sqlite)
-       ("zlib" ,zlib)))
+     (list ffmpeg
+           flac
+           libexif
+           libid3tag
+           libjpeg-turbo
+           libvorbis
+           sqlite
+           zlib))
     (home-page "https://sourceforge.net/projects/minidlna/")
     (synopsis "DLNA/UPnP-AV media server")
     (description "ReadyMedia (formerly known as MiniDLNA) is a simple media

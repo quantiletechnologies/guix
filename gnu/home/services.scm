@@ -19,6 +19,8 @@
 
 (define-module (gnu home services)
   #:use-module (gnu services)
+  #:use-module ((gnu packages package-management) #:select (guix))
+  #:use-module ((gnu packages base) #:select (coreutils))
   #:use-module (guix channels)
   #:use-module (guix monads)
   #:use-module (guix store)
@@ -28,20 +30,33 @@
   #:use-module (guix ui)
   #:use-module (guix discovery)
   #:use-module (guix diagnostics)
-
+  #:use-module (guix i18n)
+  #:use-module (guix modules)
   #:use-module (srfi srfi-1)
   #:use-module (ice-9 match)
+  #:use-module (ice-9 vlist)
 
   #:export (home-service-type
             home-profile-service-type
             home-environment-variables-service-type
             home-files-service-type
+            home-xdg-configuration-files-service-type
+            home-xdg-data-files-service-type
             home-run-on-first-login-service-type
             home-activation-service-type
             home-run-on-change-service-type
             home-provenance-service-type
 
-            fold-home-service-types)
+            environment-variable-shell-definitions
+            home-files-directory
+            xdg-configuration-files-directory
+            xdg-data-files-directory
+
+            fold-home-service-types
+            lookup-home-service-types
+            home-provenance
+
+            %initialize-gettext)
 
   #:re-export (service
                service-type
@@ -69,12 +84,11 @@
 ;;; file (details described in the manual).
 ;;;
 ;;; home-files-service-type is similar to etc-service-type, but doesn't extend
-;;; home-activation, because deploy mechanism for config files is pluggable and
-;;; can be different for different home environments: The default one is called
-;;; symlink-manager (will be introudced in a separate patch series), which creates
-;;; links for various dotfiles (like $XDG_CONFIG_HOME/$APP/...) to store, but is
-;;; possible to implement alternative approaches like read-only home from Julien's
-;;; guix-home-manager.
+;;; home-activation, because deploy mechanism for config files is pluggable
+;;; and can be different for different home environments: The default one is
+;;; called symlink-manager, which creates links for various dotfiles and xdg
+;;; configuration files to store, but is possible to implement alternative
+;;; approaches like read-only home from Julien's guix-home-manager.
 ;;;
 ;;; home-run-on-first-login-service-type provides an @file{on-first-login} guile
 ;;; script, which runs provided gexps once, when user makes first login.  It can
@@ -157,6 +171,34 @@ packages, configuration files, activation script, and so on.")))
 configuration files that the user has declared in their
 @code{home-environment} record.")))
 
+(define (environment-variable-shell-definitions variables)
+  "Return a gexp that evaluates to a list of POSIX shell statements defining
+VARIABLES, a list of environment variable name/value pairs.  The returned code
+ensures variable values are properly quoted."
+  #~(let ((shell-quote
+           (lambda (value)
+             ;; Double-quote VALUE, leaving dollar sign as is.
+             (let ((quoted (list->string
+                            (string-fold-right
+                             (lambda (chr lst)
+                               (case chr
+                                 ((#\" #\\)
+                                  (append (list chr #\\) lst))
+                                 (else (cons chr lst))))
+                             '()
+                             value))))
+               (string-append "\"" quoted "\"")))))
+      (string-append
+       #$@(map (match-lambda
+                 ((key . #f)
+                  "")
+                 ((key . #t)
+                  #~(string-append "export " #$key "\n"))
+                 ((key . value)
+                  #~(string-append "export " #$key "="
+                                   (shell-quote #$value) "\n")))
+               variables))))
+
 (define (environment-variables->setup-environment-script vars)
   "Return a file that can be sourced by a POSIX compliant shell which
 initializes the environment.  The file will source the home
@@ -169,7 +211,7 @@ If value is @code{#f} variable will be omitted.
 If value is @code{#t} variable will be just exported.
 For any other, value variable will be set to the @code{value} and
 exported."
-  (define (warn-about-duplicate-defenitions)
+  (define (warn-about-duplicate-definitions)
     (fold
      (lambda (x acc)
        (when (equal? (car x) (car acc))
@@ -180,15 +222,18 @@ exported."
      (sort vars (lambda (a b)
                   (string<? (car a) (car b))))))
 
-  (warn-about-duplicate-defenitions)
+  (warn-about-duplicate-definitions)
   (with-monad
    %store-monad
    (return
     `(("setup-environment"
        ;; TODO: It's necessary to source ~/.guix-profile too
        ;; on foreign distros
-       ,(apply mixed-text-file "setup-environment"
-               "\
+       ,(computed-file "setup-environment"
+                       #~(call-with-output-file #$output
+                           (lambda (port)
+                             (set-port-encoding! port "UTF-8")
+                             (display "\
 HOME_ENVIRONMENT=$HOME/.guix-home
 GUIX_PROFILE=\"$HOME_ENVIRONMENT/profile\"
 PROFILE_FILE=\"$HOME_ENVIRONMENT/profile/etc/profile\"
@@ -215,17 +260,10 @@ case $XCURSOR_PATH in
   *) export XCURSOR_PATH=$HOME_ENVIRONMENT/profile/share/icons:$XCURSOR_PATH ;;
 esac
 
-"
-
-               (append-map
-                (match-lambda
-                  ((key . #f)
-                   '())
-                  ((key . #t)
-                   (list "export " key "\n"))
-                  ((key . value)
-                   (list "export " key "=" value "\n")))
-                vars)))))))
+" port)
+                             (display
+                              #$(environment-variable-shell-definitions vars)
+                              port)))))))))
 
 (define home-environment-variables-service-type
   (service-type (name 'home-environment-variables)
@@ -257,11 +295,14 @@ esac
 
   (file-union "files" files))
 
+;; Used by symlink-manager
+(define home-files-directory "files")
+
 (define (files-entry files)
   "Return an entry for the @file{~/.guix-home/files}
 directory containing FILES."
   (with-monad %store-monad
-    (return `(("files" ,(files->files-directory files))))))
+    (return `((,home-files-directory ,(files->files-directory files))))))
 
 (define home-files-service-type
   (service-type (name 'home-files)
@@ -271,29 +312,93 @@ directory containing FILES."
                 (compose concatenate)
                 (extend append)
                 (default-value '())
-                (description "Configuration files for programs that
-will be put in @file{~/.guix-home/files}.")))
+                (description "Files that will be put in
+@file{~~/.guix-home/files}, and further processed during activation.")))
+
+(define xdg-configuration-files-directory ".config")
+
+(define (xdg-configuration-files files)
+  "Add .config/ prefix to each file-path in FILES."
+  (map (match-lambda
+         ((file-path . rest)
+          (cons (string-append xdg-configuration-files-directory "/" file-path)
+                rest)))
+         files))
+
+(define home-xdg-configuration-files-service-type
+  (service-type (name 'home-xdg-configuration)
+                (extensions
+                 (list (service-extension home-files-service-type
+                                          xdg-configuration-files)))
+                (compose concatenate)
+                (extend append)
+                (default-value '())
+                (description "Files that will be put in
+@file{~~/.guix-home/files/.config}, and further processed during activation.")))
+
+(define xdg-data-files-directory ".local/share")
+
+(define (xdg-data-files files)
+  "Add .local/share prefix to each file-path in FILES."
+  (map (match-lambda
+         ((file-path . rest)
+          (cons (string-append xdg-data-files-directory "/" file-path)
+                rest)))
+         files))
+
+(define home-xdg-data-files-service-type
+  (service-type (name 'home-xdg-data)
+                (extensions
+                 (list (service-extension home-files-service-type
+                                          xdg-data-files)))
+                (compose concatenate)
+                (extend append)
+                (default-value '())
+                (description "Files that will be put in
+@file{~~/.guix-home/files/.local/share}, and further processed during
+activation.")))
+
+
+(define %initialize-gettext
+  #~(begin
+      (bindtextdomain %gettext-domain
+                      (string-append #$guix "/share/locale"))
+      (textdomain %gettext-domain)))
 
 (define (compute-on-first-login-script _ gexps)
-  (gexp->script
+  (program-file
    "on-first-login"
-   #~(let* ((xdg-runtime-dir (or (getenv "XDG_RUNTIME_DIR")
-                                 (format #f "/run/user/~a" (getuid))))
-            (flag-file-path (string-append
-                             xdg-runtime-dir "/on-first-login-executed"))
-            (touch (lambda (file-name)
-                     (call-with-output-file file-name (const #t)))))
-       ;; XDG_RUNTIME_DIR dissapears on logout, that means such trick
-       ;; allows to launch on-first-login script on first login only
-       ;; after complete logout/reboot.
-       (when (not (file-exists? flag-file-path))
-         (begin #$@gexps (touch flag-file-path))))))
+   (with-imported-modules (source-module-closure '((guix i18n)
+                                                   (guix diagnostics)))
+     #~(begin
+         (use-modules (guix i18n)
+                      (guix diagnostics))
+       #$%initialize-gettext
 
-(define (on-first-login-script-entry m-on-first-login)
+       (let* ((xdg-runtime-dir (or (getenv "XDG_RUNTIME_DIR")
+                                   (format #f "/run/user/~a" (getuid))))
+              (flag-file-path (string-append
+                               xdg-runtime-dir "/on-first-login-executed"))
+              (touch (lambda (file-name)
+                       (call-with-output-file file-name (const #t)))))
+         ;; XDG_RUNTIME_DIR dissapears on logout, that means such trick
+         ;; allows to launch on-first-login script on first login only
+         ;; after complete logout/reboot.
+         (if (file-exists? xdg-runtime-dir)
+             (unless (file-exists? flag-file-path)
+               (begin #$@gexps (touch flag-file-path)))
+             ;; TRANSLATORS: 'on-first-login' is the name of a service and
+             ;; shouldn't be translated
+             (warning (G_ "XDG_RUNTIME_DIR doesn't exists, on-first-login script
+won't execute anything.  You can check if xdg runtime directory exists,
+XDG_RUNTIME_DIR variable is set to appropriate value and manually execute the
+script by running '$HOME/.guix-home/on-first-login'"))))))))
+
+(define (on-first-login-script-entry on-first-login)
   "Return, as a monadic value, an entry for the on-first-login script
 in the home environment directory."
-  (mlet %store-monad ((on-first-login m-on-first-login))
-        (return `(("on-first-login" ,on-first-login)))))
+  (with-monad %store-monad
+    (return `(("on-first-login" ,on-first-login)))))
 
 (define home-run-on-first-login-service-type
   (service-type (name 'home-run-on-first-login)
@@ -315,8 +420,9 @@ extended with one gexp.")))
             (he-path (string-append (getenv "HOME") "/.guix-home"))
             (new-home-env (getenv "GUIX_NEW_HOME"))
             (new-home (or new-home-env
-                          ;; Path of the activation file if called interactively
-                          (dirname (car (command-line)))))
+                          ;; Absolute path of the directory of the activation
+                          ;; file if called interactively.
+                          (canonicalize-path (dirname (car (command-line))))))
             (old-home-env (getenv "GUIX_OLD_HOME"))
             (old-home (or old-home-env
                           (if (file-exists? (he-init-file he-path))
@@ -324,8 +430,9 @@ extended with one gexp.")))
                               #f))))
        (if (file-exists? (he-init-file new-home))
            (let* ((port   ((@ (ice-9 popen) open-input-pipe)
-                           (format #f "source ~a && env -0"
-                                   (he-init-file new-home))))
+                           (format #f "source ~a && ~a -0"
+                                   (he-init-file new-home)
+                                   #$(file-append coreutils "/bin/env"))))
                   (result ((@ (ice-9 rdelim) read-delimited) "" port))
                   (vars (map (lambda (x)
                                (let ((si (string-index x #\=)))
@@ -346,7 +453,7 @@ extended with one gexp.")))
              (unless new-home-env (setenv "GUIX_NEW_HOME" #f))
              (unless old-home-env (setenv "GUIX_OLD_HOME" #f)))
            (format #t "\
-Activation script was either called or loaded by file from this direcotry:
+Activation script was either called or loaded by file from this directory:
 ~a
 It doesn't seem that home environment is somewhere around.
 Make sure that you call ./activate by symlink from -home store item.\n"
@@ -379,7 +486,12 @@ with one gexp, but many times, and all gexps must be idempotent.")))
 ;;;
 
 (define (compute-on-change-gexp eval-gexps? pattern-gexp-tuples)
-  #~(begin
+  (with-imported-modules (source-module-closure '((guix i18n)))
+    #~(begin
+      (use-modules (guix i18n))
+
+      #$%initialize-gettext
+
       (define (equal-regulars? file1 file2)
         "Check if FILE1 and FILE2 are bit for bit identical."
         (let* ((cmp-binary #$(file-append
@@ -444,21 +556,23 @@ with one gexp, but many times, and all gexps must be idempotent.")))
                               "/gnu/store/non-existing-generation")
                           "/" (car x)))
                   (file2 (string-append (getenv "GUIX_NEW_HOME") "/" (car x)))
-                  (_ (format #t "Comparing ~a and\n~10t~a..." file1 file2))
+                  (_ (format #t (G_ "Comparing ~a and\n~10t~a...") file1 file2))
                   (any-changes? (something-changed? file1 file2))
-                  (_ (format #t " done (~a)\n"
+                  (_ (format #t (G_ " done (~a)\n")
                              (if any-changes? "changed" "same"))))
              (if any-changes? (cadr x) "")))
          '#$pattern-gexp-tuples))
 
       (if #$eval-gexps?
           (begin
-            (display "Evaling on-change gexps.\n\n")
+            ;;; TRANSLATORS: 'on-change' is the name of a service type, it
+            ;;; probably shouldn't be translated.
+            (display (G_ "Evaluating on-change gexps.\n\n"))
             (for-each primitive-eval expressions-to-eval)
-            (display "On-change gexps evaluation finished.\n\n"))
+            (display (G_ "On-change gexps evaluation finished.\n\n")))
           (display "\
-On-change gexps won't be evaluated, disabled by service
-configuration.\n"))))
+On-change gexps won't be evaluated; evaluation has been disabled in the
+service configuration")))))
 
 (define home-run-on-change-service-type
   (service-type (name 'home-run-on-change)
@@ -523,3 +637,13 @@ environment, and its configuration file, when available.")))
 
 (define* (fold-home-service-types proc seed)
   (fold-service-types proc seed (all-home-service-modules)))
+
+(define lookup-home-service-types
+  (let ((table
+         (delay (fold-home-service-types (lambda (type result)
+                                           (vhash-consq (service-type-name type)
+                                                        type result))
+                                         vlist-null))))
+    (lambda (name)
+      "Return the list of services with the given NAME (a symbol)."
+      (vhash-foldq* cons '() name (force table)))))

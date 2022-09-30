@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2015, 2016 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015, 2016, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015 Tomáš Čech <sleep_walker@gnu.org>
 ;;; Copyright © 2016, 2019 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2016, 2017, 2019 Ricardo Wurmus <rekado@elephly.net>
@@ -21,12 +21,17 @@
 ;;; Copyright © 2020 Jakub Kądziołka <kuba@kadziolka.net>
 ;;; Copyright © 2020, 2021 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2020 Raghav Gururajan <raghavgururajan@disroot.org>
-;;; Copyright © 2020 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2020, 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2020 Gabriel Arazas <foo.dogsquared@gmail.com>
 ;;; Copyright © 2021 Antoine Côté <antoine.cote@posteo.net>
 ;;; Copyright © 2021 Andy Tai <atai@atai.org>
 ;;; Copyright © 2021 Ekaitz Zarraga <ekaitz@elenq.tech>
-;;; Copyright © 2021 Vinicius Monego <monego@posteo.net>
+;;; Copyright © 2021, 2022 Vinicius Monego <monego@posteo.net>
+;;; Copyright © 2022 Michael Rohleder <mike@rohleder.de>
+;;; Copyright © 2022 John Kehayias <john.kehayias@protonmail.com>
+;;; Copyright © 2022 Zheng Junjie <873216071@qq.com>
+;;; Copyright © 2022 Tobias Kortkamp <tobias.kortkamp@gmail.com>
+;;; Copyright © 2022 Paul A. Patience <paul@apatience.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -52,6 +57,7 @@
   #:use-module (gnu packages bash)
   #:use-module (gnu packages bison)
   #:use-module (gnu packages boost)
+  #:use-module (gnu packages build-tools)
   #:use-module (gnu packages cdrom)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
@@ -79,10 +85,14 @@
   #:use-module (gnu packages kde-frameworks)
   #:use-module (gnu packages libusb)
   #:use-module (gnu packages linux)
+  #:use-module (gnu packages logging)
+  #:use-module (gnu packages llvm)
   #:use-module (gnu packages lua)
   #:use-module (gnu packages maths)
   #:use-module (gnu packages mp3)
   #:use-module (gnu packages multiprecision)
+  #:use-module (gnu packages ninja)
+  #:use-module (gnu packages pciutils)
   #:use-module (gnu packages pdf)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages photo)
@@ -92,13 +102,16 @@
   #:use-module (gnu packages pth)
   #:use-module (gnu packages pulseaudio)  ; libsndfile, libsamplerate
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages qt)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages sdl)
+  #:use-module (gnu packages serialization)
   #:use-module (gnu packages stb)
   #:use-module (gnu packages swig)
   #:use-module (gnu packages tbb)
+  #:use-module (gnu packages toolkits)
   #:use-module (gnu packages upnp)
   #:use-module (gnu packages video)
   #:use-module (gnu packages vulkan)
@@ -113,90 +126,12 @@
   #:use-module (guix build-system python)
   #:use-module (guix build-system qt)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix hg-download)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
   #:use-module (guix utils))
-
-(define-public eglexternalplatform
-  (package
-    (name "eglexternalplatform")
-    (version "1.1")
-    (source
-     (origin
-       (method git-fetch)
-       (uri
-        (git-reference
-         (url "https://github.com/NVIDIA/eglexternalplatform")
-         (commit version)))
-       (file-name
-        (git-file-name name version))
-       (sha256
-        (base32 "0lr5s2xa1zn220ghmbsiwgmx77l156wk54c7hybia0xpr9yr2nhb"))))
-    (build-system copy-build-system)
-    (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'patch-pkgconfig
-           (lambda* (#:key outputs #:allow-other-keys)
-             (substitute* "eglexternalplatform.pc"
-               (("/usr")
-                (assoc-ref outputs "out")))
-             #t))
-         (add-after 'install 'revise
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out")))
-               (mkdir-p (string-append out "/include/EGL"))
-               (rename-file
-                (string-append out "/interface")
-                (string-append out "/include/EGL"))
-               (mkdir-p (string-append out "/share/pkgconfig"))
-               (rename-file
-                (string-append out "/eglexternalplatform.pc")
-                (string-append out "/share/pkgconfig/eglexternalplatform.pc"))
-               (for-each delete-file-recursively
-                         (list
-                          (string-append out "/samples")
-                          (string-append out "/COPYING")
-                          (string-append out "/README.md"))))
-             #t)))))
-    (synopsis "EGL External Platform interface")
-    (description "EGLExternalPlatform is an specification of the EGL External
-Platform interface for writing EGL platforms and their interactions with modern
-window systems on top of existing low-level EGL platform implementations.  This
-keeps window system implementation specifics out of EGL drivers by using
-application-facing EGL functions.")
-    (home-page "https://github.com/NVIDIA/eglexternalplatform")
-    (license license:expat)))
-
-(define-public egl-wayland
-  (package
-    (name "egl-wayland")
-    (version "1.1.7")
-    (source
-     (origin
-       (method git-fetch)
-       (uri (git-reference
-             (url "https://github.com/NVIDIA/egl-wayland")
-             (commit version)))
-       (file-name (git-file-name name version))
-       (sha256
-        (base32 "0xcx1132zwyp4qps074m72ngjlfmysi1jc2d0lp1ml1r9bllkam6"))))
-    (build-system meson-build-system)
-    (native-inputs
-     `(("pkg-config" ,pkg-config)))
-    (inputs
-     `(("mesa" ,mesa)
-       ("wayland" ,wayland)))
-    (propagated-inputs
-     `(("eglexternalplatform" ,eglexternalplatform)))
-    (synopsis "EGLStream-based Wayland external platform")
-    (description "EGL-Wayland is an implementation of a EGL External Platform
-library to add client-side Wayland support to EGL on top of EGLDevice and
-EGLStream families of extensions.")
-    (home-page "https://github.com/NVIDIA/egl-wayland")
-    (license license:expat)))
 
 (define-public mmm
   (package
@@ -215,12 +150,9 @@ EGLStream families of extensions.")
         (base32 "1xmcv6rwinqsbr863rgl9005h2jlmd7k2qrwsc1h4fb8r61ykpjl"))))
     (build-system meson-build-system)
     (native-inputs
-     `(("luajit" ,luajit)
-       ("pkg-config" ,pkg-config)))
+     (list luajit pkg-config))
     (inputs
-     `(("alsa" ,alsa-lib)
-       ("sdl" ,sdl)
-       ("sdl2" ,sdl2)))
+     (list alsa-lib sdl sdl2))
     (synopsis "Memory Mapped Machine")
     (description "MMM is a shared memory protocol for virtualising access to
 framebuffer graphics, audio output and input event.")
@@ -245,17 +177,18 @@ framebuffer graphics, audio output and input event.")
     (arguments
      `(#:phases
        (modify-phases %standard-phases
+         (add-after 'unpack 'remove-buildtime
+           ;; Remove embedded build time for reproducible builds
+           (lambda _
+             (substitute* "src/core/core.c"
+               (("..BUILDTIME..") ""))))
          (add-after 'unpack 'disable-configure-during-bootstrap
            (lambda _
              (substitute* "autogen.sh"
                (("^.*\\$srcdir/configure.*") ""))
              #t)))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("perl" ,perl)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool perl pkg-config))
     (inputs
      `(("alsa" ,alsa-lib)
        ("ffmpeg" ,ffmpeg)
@@ -268,7 +201,6 @@ framebuffer graphics, audio output and input event.")
        ("libcddb" ,libcddb)
        ("libdrm" ,libdrm)
        ("libtimidity" ,libtimidity)
-       ("linux-headers" ,linux-libre-headers)
        ("mad" ,libmad)
        ("mng" ,libmng)
        ("mpeg2" ,libmpeg2)
@@ -289,7 +221,7 @@ framebuffer graphics, audio output and input event.")
        ("xproto" ,xorgproto)
        ("zlib" ,zlib)))
     (propagated-inputs
-     `(("flux" ,flux)))
+     (list flux))
     (synopsis "DFB Graphics Library")
     (description "DirectFB is a graphics library which was designed with embedded
 systems in mind.  It offers maximum hardware accelerated performance at a
@@ -313,10 +245,7 @@ minimum of resource usage and overhead.")
         (base32 "11f3ypg0sdq5kj69zgz6kih1yrzgm48r16spyvzwvlswng147410"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (synopsis "Interface description language")
     (description "Flux is an interface description language used by DirectFB.
 Fluxcomp compiles .flux files to .cpp or .c files.")
@@ -348,7 +277,7 @@ Fluxcomp compiles .flux files to .cpp or .c files.")
                                 "/include/freetype2"))))
              #t)))))
     (native-inputs
-     `(("doxygen" ,doxygen)))
+     (list doxygen))
     (inputs
      `(("bzip2" ,lbzip2)
        ("freetype" ,freetype)
@@ -454,8 +383,7 @@ with the @command{autotrace} utility or as a C library, @code{libautotrace}.")
          (list
           "-DEMBREE_ISPC_SUPPORT=OFF")))
     (inputs
-     `(("tbb" ,tbb)
-       ("glfw" ,glfw)))
+     (list tbb glfw))
     (home-page "https://www.embree.org/")
     (synopsis "High performance ray tracing kernels")
     (description
@@ -467,7 +395,7 @@ applications.")
 (define-public openvdb
   (package
     (name "openvdb")
-    (version "8.0.1")
+    (version "8.2.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -477,20 +405,16 @@ applications.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0qzx6l5c183k6j9zki31gg9aixf5s1j46wdi7wr1h3bz7k53syg9"))))
+                "0856697hnwk8xsp29kx8y2p1kliy0bdwfsznxm38v4690vna15rk"))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags
        (list (string-append "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath="
                             (assoc-ref %outputs "out") "/lib"))))
     (inputs
-     `(("boost" ,boost)
-       ("c-blosc" ,c-blosc)
-       ("ilmbase" ,ilmbase)
-       ("tbb" ,tbb)
-       ("zlib" ,zlib)))
+     (list boost c-blosc ilmbase tbb zlib))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (home-page "https://www.openvdb.org/")
     (synopsis "Sparse volume data structure and tools")
     (description "OpenVDB is a C++ library comprising a hierarchical data
@@ -503,14 +427,14 @@ typically encountered in feature film production.")
 (define-public blender
   (package
     (name "blender")
-    (version "2.92.0")
+    (version "3.0.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://download.blender.org/source/"
                                   "blender-" version ".tar.xz"))
               (sha256
                (base32
-                "15a5vffn18a920286x0avbc2rap56k6y531wgibq68r90g2cz4g7"))))
+                "0hblgls5pclqamsxk0vb14f4fm30hdiq7fb2bm5mq2ly4sb0mfqr"))))
     (build-system cmake-build-system)
     (arguments
       (let ((python-version (version-major+minor (package-version python))))
@@ -553,14 +477,19 @@ typically encountered in feature film production.")
                #t))
            (add-after 'set-paths 'add-ilmbase-include-path
              (lambda* (#:key inputs #:allow-other-keys)
-               ;; OpenEXR propagates ilmbase, but its include files do not appear
-               ;; in the CPATH, so we need to add "$ilmbase/include/OpenEXR/" to
-               ;; the CPATH to satisfy the dependency on "half.h".
-               (setenv "CPATH"
-                       (string-append (assoc-ref inputs "ilmbase")
-                                      "/include/OpenEXR"
-                                      ":" (or (getenv "CPATH") "")))
-               #t))))))
+               ;; OpenEXR propagates ilmbase, but its include files do not
+               ;; appear in the C_INCLUDE_PATH, so we need to add
+               ;; "$ilmbase/include/OpenEXR/" to the C_INCLUDE_PATH to satisfy
+               ;; the dependency on "half.h" and "Iex.h".
+               (let ((headers (string-append
+                               (assoc-ref inputs "ilmbase")
+                               "/include/OpenEXR")))
+                 (setenv "C_INCLUDE_PATH"
+                         (string-append headers ":"
+                                        (or (getenv "C_INCLUDE_PATH") "")))
+                 (setenv "CPLUS_INCLUDE_PATH"
+                         (string-append headers ":"
+                                        (or (getenv "CPLUS_INCLUDE_PATH") ""))))))))))
     (inputs
      `(("boost" ,boost)
        ("jemalloc" ,jemalloc)
@@ -578,6 +507,7 @@ typically encountered in feature film production.")
        ("libtiff" ,libtiff)
        ("ffmpeg" ,ffmpeg)
        ("fftw" ,fftw)
+       ("gmp" ,gmp) ;; needed for boolean operations on meshes
        ("jack" ,jack-1)
        ("libsndfile" ,libsndfile)
        ("freetype" ,freetype)
@@ -589,6 +519,7 @@ typically encountered in feature film production.")
        ("openvdb" ,openvdb)
        ("tbb" ,tbb)
        ("zlib" ,zlib)
+       ("zstd" ,zstd "lib")
        ("embree" ,embree)))
     (home-page "https://blender.org/")
     (synopsis "3D graphics creation suite")
@@ -597,104 +528,6 @@ typically encountered in feature film production.")
 the 3D pipeline—modeling, rigging, animation, simulation, rendering,
 compositing and motion tracking, even video editing and game creation.  The
 application can be customized via its API for Python scripting.")
-    (license license:gpl2+)))
-
-(define-public blender-2.79
-  (package
-    (name "blender")
-    (version "2.79b")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append "https://download.blender.org/source/"
-                                  "blender-" version ".tar.gz"))
-              (sha256
-               (base32
-                "1g4kcdqmf67srzhi3hkdnr4z1ph4h9sza1pahz38mrj998q4r52c"))
-              (patches (search-patches "blender-2.79-newer-ffmpeg.patch"
-                                       "blender-2.79-oiio2.patch"
-                                       ;; The following patches may be
-                                       ;; needed when the default GCC is
-                                       ;; updated:
-                                       ;;   "blender-2.79-gcc8.patch"
-                                       ;;   "blender-2.79-gcc9.patch"
-                                       "blender-2.79-python-3.7-fix.patch"
-                                       "blender-2.79-python-3.8-fix.patch"))))
-    (build-system cmake-build-system)
-    (arguments
-      (let ((python-version (version-major+minor (package-version python))))
-       `(;; Test files are very large and not included in the release tarball.
-         #:tests? #f
-         #:configure-flags
-         (list "-DWITH_CODEC_FFMPEG=ON"
-               "-DWITH_CODEC_SNDFILE=ON"
-               "-DWITH_CYCLES=ON"
-               "-DWITH_DOC_MANPAGE=ON"
-               "-DWITH_FFTW3=ON"
-               "-DWITH_GAMEENGINE=ON"
-               "-DWITH_IMAGE_OPENJPEG=ON"
-               "-DWITH_INPUT_NDOF=ON"
-               "-DWITH_INSTALL_PORTABLE=OFF"
-               "-DWITH_JACK=ON"
-               "-DWITH_MOD_OCEANSIM=ON"
-               "-DWITH_PLAYER=ON"
-               "-DWITH_PYTHON_INSTALL=OFF"
-               "-DWITH_PYTHON_INSTALL=OFF"
-               "-DWITH_SYSTEM_OPENJPEG=ON"
-               (string-append "-DPYTHON_LIBRARY=python" ,python-version)
-               (string-append "-DPYTHON_LIBPATH=" (assoc-ref %build-inputs "python")
-                              "/lib")
-               (string-append "-DPYTHON_INCLUDE_DIR=" (assoc-ref %build-inputs "python")
-                              "/include/python" ,python-version)
-               (string-append "-DPYTHON_VERSION=" ,python-version))
-         #:phases
-         (modify-phases %standard-phases
-           (add-after 'unpack 'fix-broken-import
-             (lambda _
-               (substitute* "release/scripts/addons/io_scene_fbx/json2fbx.py"
-                 (("import encode_bin") "from . import encode_bin"))
-               #t))
-           (add-after 'set-paths 'add-ilmbase-include-path
-             (lambda* (#:key inputs #:allow-other-keys)
-               ;; OpenEXR propagates ilmbase, but its include files do not appear
-               ;; in the CPATH, so we need to add "$ilmbase/include/OpenEXR/" to
-               ;; the CPATH to satisfy the dependency on "half.h".
-               (setenv "CPATH"
-                       (string-append (assoc-ref inputs "ilmbase")
-                                      "/include/OpenEXR"
-                                      ":" (or (getenv "CPATH") "")))
-               #t))))))
-    (inputs
-     `(("boost" ,boost)
-       ("jemalloc" ,jemalloc)
-       ("libx11" ,libx11)
-       ("opencolorio" ,opencolorio)
-       ("openimageio" ,openimageio)
-       ("openexr" ,openexr-2)
-       ("ilmbase" ,ilmbase)
-       ("openjpeg" ,openjpeg)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libtiff" ,libtiff)
-       ("ffmpeg" ,ffmpeg)
-       ("fftw" ,fftw)
-       ("jack" ,jack-1)
-       ("libsndfile" ,libsndfile)
-       ("freetype" ,freetype)
-       ("glew" ,glew)
-       ("openal" ,openal)
-       ("pugixml" ,pugixml)
-       ("python" ,python)
-       ("zlib" ,zlib)))
-    (home-page "https://blender.org/")
-    (synopsis "3D graphics creation suite")
-    (description
-     "Blender is a 3D graphics creation suite.  It supports the entirety of
-the 3D pipeline—modeling, rigging, animation, simulation, rendering,
-compositing and motion tracking, even video editing and game creation.  The
-application can be customized via its API for Python scripting.
-
-NOTE: This older version of Blender is the last release that does not require
-OpenGL 3.  It is retained for use with older computers.")
     (license license:gpl2+)))
 
 (define-public goxel
@@ -717,7 +550,7 @@ OpenGL 3.  It is retained for use with older computers.")
        #:make-flags (list (string-append "PREFIX=" (assoc-ref %outputs "out"))
                           "release")))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
      `(("gtk3" ,gtk+)
        ("glfw" ,glfw)
@@ -733,7 +566,7 @@ and export to various formats including the format used by Magicavoxel.")
 (define-public assimp
   (package
     (name "assimp")
-    (version "4.1.0")
+    (version "5.2.2")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -742,10 +575,10 @@ and export to various formats including the format used by Magicavoxel.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1rhyqfhzifdj7yibyanph3rh13ykw3i98dnn8mz65j780472hw28"))))
+                "1kjifakjnpm89410pw27wq21fn975gfq46kn9zs3h8bryldvvlgk"))))
     (build-system cmake-build-system)
     (inputs
-     `(("zlib" ,zlib)))
+     (list zlib))
     (home-page "http://www.assimp.org/")
     (synopsis "Asset import library")
     (description
@@ -755,6 +588,111 @@ processing tools: normals and tangent space generation, triangulation, vertex
 cache locality optimization, removal of degenerate primitives and duplicate
 vertices, sorting by primitive type, merging of redundant materials and many
 more.")
+    (license license:bsd-3)))
+
+(define-public mikktspace
+  ;; The latest commit is used as there is no release.
+  (let ((commit   "3e895b49d05ea07e4c2133156cfa94369e19e409")
+        (revision "0"))
+    (package
+      (name "mikktspace")
+      (version (git-version "0.0.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/mmikk/MikkTSpace")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "1rjh9zflx51hdhnfadal87v4hhkrbprkv692hjkg9wkxx0ch39zi"))))
+      (build-system gnu-build-system)
+      (arguments
+       (list #:tests? #f
+             #:phases
+             #~(modify-phases %standard-phases
+                 (delete 'configure)
+                 (replace 'build
+                   (lambda* (#:key make-flags parallel-build? #:allow-other-keys)
+                     (invoke #$(cc-for-target) "mikktspace.c" "-O2" "-g" "-fPIC"
+                             "-shared" "-o" "libmikktspace.so")))
+                 (replace 'install
+                   (lambda _
+                     (install-file "mikktspace.h"
+                                   (string-append #$output "/include"))
+                     (install-file "libmikktspace.so"
+                                   (string-append #$output "/lib")))))))
+      (home-page "http://www.mikktspace.com/")
+      (synopsis "Library for a common standard for tangent spaces")
+      (description
+       "This package provides a common standard tangent space library used in
+baking tools to produce normal maps.")
+      (license license:zlib))))
+
+(define-public openshadinglanguage
+  (package
+    (name "openshadinglanguage")
+    (version "1.11.16.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/AcademySoftwareFoundation/OpenShadingLanguage")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "0x0lc163vl2b57l75bf5zxlr6vm2y1f1izlxdnrw3vsapv3r9k9g"))))
+    (build-system cmake-build-system)
+    (arguments
+     `(#:configure-flags (list "-DUSE_PARTIO=OFF") ; TODO: not packaged
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'set-paths 'add-ilmbase-include-path
+           (lambda* (#:key inputs #:allow-other-keys)
+             ;; OpenEXR 2 propagates ilmbase, but its include files do not
+             ;; appear in the C_INCLUDE_PATH.
+             (let ((headers (string-append
+                             (assoc-ref inputs "ilmbase")
+                             "/include/OpenEXR")))
+               (setenv "C_INCLUDE_PATH"
+                       (string-append headers ":"
+                                      (or (getenv "C_INCLUDE_PATH") "")))
+               (setenv "CPLUS_INCLUDE_PATH"
+                       (string-append headers ":"
+                                      (or (getenv "CPLUS_INCLUDE_PATH") ""))))))
+         (replace 'check
+           (lambda* (#:key tests? #:allow-other-keys)
+             (when tests?
+               (invoke "ctest" "--exclude-regex"
+                       (string-join
+                        (list
+                         "osl-imageio"       ; OIIO not compiled with freetype
+                         "osl-imageio.opt"   ; OIIO not compiled with freetype
+                         "texture-udim"      ; file does not exist
+                         "texture-udim.opt"  ; file does not exist
+                         "example-deformer"  ; could not find OSLConfig
+                         "python-oslquery")  ; no module oslquery
+                        "|"))))))))
+    (native-inputs
+     (list bison
+           clang-9
+           flex
+           llvm-9
+           pybind11
+           python-wrapper))
+    (inputs
+     (list boost
+           imath
+           openexr-2
+           openimageio
+           pugixml
+           qtbase-5
+           zlib))
+    (home-page "https://github.com/AcademySoftwareFoundation/OpenShadingLanguage")
+    (synopsis "Shading language for production GI renderers")
+    (description "Open Shading Language (OSL) is a language for programmable
+shading in advanced renderers and other applications, ideal for describing
+materials, lights, displacement, and pattern generation.")
     (license license:bsd-3)))
 
 (define-public cgal
@@ -778,9 +716,7 @@ more.")
                             ,name "-" ,version))
        #:tests? #f))                    ; no test target
     (inputs
-     `(("mpfr" ,mpfr)
-       ("gmp" ,gmp)
-       ("boost" ,boost)))
+     (list mpfr gmp boost))
     (home-page "https://www.cgal.org/")
     (synopsis "Computational geometry algorithms library")
     (description
@@ -851,94 +787,128 @@ exception-handling library.")
     (license license:bsd-3)))
 
 (define-public lib2geom
-  ;; Use the latest master commit, as the 1.0 release suffer build problems.
-  (let ((revision "4")
-        (commit "b29d60e49a58f4e8069544b44863b1a623e4ee59"))
-    (package
-      (name "lib2geom")
-      (version (git-version "1.0" revision commit))
-      (source (origin
-                (method git-fetch)
-                (uri (git-reference
-                      (url "https://gitlab.com/inkscape/lib2geom.git")
-                      (commit commit)))
-                (file-name (git-file-name name version))
-                (sha256
-                 (base32
-                  "0xd8f3cgfnipdav4w8j54r7hzy9f3m7xk42ppcfhdjz2hriggyk6"))
-                (patches
-                 ;; Patch submitted to upstream (see:
-                 ;; https://gitlab.com/inkscape/lib2geom/-/merge_requests/32).
-                 (search-patches "lib2geom-fix-tests.patch"))
-                (modules '((guix build utils)))
-                (snippet
-                 '(begin
-                    ;; Fix py2geom module initialization (see:
-                    ;; https://gitlab.com/inkscape/lib2geom/merge_requests/18).
-                    (substitute* "src/py2geom/__init__.py"
-                      (("_py2geom") "py2geom._py2geom"))
-                    #t))))
-      (build-system cmake-build-system)
-      (arguments
-       `(#:imported-modules ((guix build python-build-system)
-                             ,@%cmake-build-system-modules)
-         #:configure-flags '("-D2GEOM_BUILD_SHARED=ON"
-                             "-D2GEOM_BOOST_PYTHON=ON"
-                             ;; Compiling the Cython bindings fail (see:
-                             ;; https://gitlab.com/inkscape/lib2geom/issues/21).
-                             "-D2GEOM_CYTHON_BINDINGS=OFF")
-         #:phases
-         (modify-phases %standard-phases
-           (add-after 'unpack 'patch-python-lib-install-path
-             (lambda* (#:key inputs outputs #:allow-other-keys)
-               (let* ((python-version (@ (guix build python-build-system)
-                                         python-version))
-                      (python-maj-min-version (python-version
-                                               (assoc-ref inputs "python")))
-                      (site-package (string-append
-                                     (assoc-ref outputs "out")
-                                     "/lib/python" python-maj-min-version
-                                     "/site-packages")))
-                 (substitute* '("src/cython/CMakeLists.txt"
-                                "src/py2geom/CMakeLists.txt")
-                   (("PYTHON_LIB_INSTALL \"[^\"]*\"")
-                    (format #f "PYTHON_LIB_INSTALL ~s" site-package))))
-               #t)))))
-      (native-inputs `(("python" ,python-wrapper)
-                       ("googletest" ,googletest)
-                       ("pkg-config" ,pkg-config)))
-      (inputs `(("cairo" ,cairo)
-                ("pycairo" ,python-pycairo)
-                ("double-conversion" ,double-conversion)
-                ("glib" ,glib)
-                ("gsl" ,gsl)))
-      (propagated-inputs
-       `(("boost" ,boost)))             ;referred to in 2geom/pathvector.h.
-      (home-page "https://gitlab.com/inkscape/lib2geom/")
-      (synopsis "C++ 2D graphics library")
-      (description "2geom is a C++ library of mathematics for paths, curves,
+  (package
+    (name "lib2geom")
+    (version "1.1")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitlab.com/inkscape/lib2geom.git")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "03bx9k1m4bfhmx0ldsg0bks6i8h7fmvl5vbg6gmpq0bk0nkmpnmv"))))
+    (build-system cmake-build-system)
+    (arguments
+     `(#:imported-modules ((guix build python-build-system)
+                           ,@%cmake-build-system-modules)
+       #:configure-flags '("-D2GEOM_BUILD_SHARED=ON"
+                           "-D2GEOM_BOOST_PYTHON=ON"
+                           ;; Compiling the Cython bindings fail (see:
+                           ;; https://gitlab.com/inkscape/lib2geom/issues/21).
+                           "-D2GEOM_CYTHON_BINDINGS=OFF")
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'patch-python-lib-install-path
+           (lambda* (#:key inputs outputs #:allow-other-keys)
+             (let* ((python-version (@ (guix build python-build-system)
+                                       python-version))
+                    (python-maj-min-version (python-version
+                                             (assoc-ref inputs "python")))
+                    (site-package (string-append
+                                   (assoc-ref outputs "out")
+                                   "/lib/python" python-maj-min-version
+                                   "/site-packages")))
+               (substitute* '("src/cython/CMakeLists.txt"
+                              "src/py2geom/CMakeLists.txt")
+                 (("PYTHON_LIB_INSTALL \"[^\"]*\"")
+                  (format #f "PYTHON_LIB_INSTALL ~s" site-package))))))
+         ,@(if (target-x86-32?)
+               `((add-after 'unpack 'skip-faulty-test
+                   (lambda _
+                     ;; This test fails on i686 when comparing floating point
+                     ;; values, probably due to excess precision.  However,
+                     ;; '-fexcess-precision' is not implemented for C++ in
+                     ;; GCC 10 so just skip it.
+                     (substitute* "tests/CMakeLists.txt"
+                       (("bezier-test") "")))))
+               '()))))
+    (native-inputs `(("python" ,python-wrapper)
+                     ("googletest" ,googletest)
+                     ("pkg-config" ,pkg-config)))
+    (inputs `(("cairo" ,cairo)
+              ("pycairo" ,python-pycairo)
+              ("double-conversion" ,double-conversion)
+              ("glib" ,glib)
+              ("gsl" ,gsl)))
+    (propagated-inputs
+     (list boost))               ;referred to in 2geom/pathvector.h.
+    (home-page "https://gitlab.com/inkscape/lib2geom/")
+    (synopsis "C++ 2D graphics library")
+    (description "2geom is a C++ library of mathematics for paths, curves,
 and other geometric calculations.  Designed for vector graphics, it tackles
 Bézier curves, conic sections, paths, intersections, transformations, and
 basic geometries.")
-      ;; Because the library is linked with the GNU Scientific Library
-      ;; (GPLv3+), the combined work must be licensed as GPLv3+ (see:
-      ;; https://gitlab.com/inkscape/inkscape/issues/784).
-      (license license:gpl3+))))
+    ;; Because the library is linked with the GNU Scientific Library
+    ;; (GPLv3+), the combined work must be licensed as GPLv3+ (see:
+    ;; https://gitlab.com/inkscape/inkscape/issues/784).
+    (license license:gpl3+)))
+
+(define-public lib2geom-1.2
+  (package
+    (inherit lib2geom)
+    (version "1.2")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitlab.com/inkscape/lib2geom")
+                    (commit version)))
+              (file-name (git-file-name "lib2geom" version))
+              (sha256
+               (base32
+                "0dq981g894hmvhd6rmfl1w32mksg9hpvpjs1qvfxrnz87rhkknj8"))))))
+
+(define-public python-booleanoperations
+  (package
+    (name "python-booleanoperations")
+    (version "0.9.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "booleanOperations" version ".zip"))
+       (sha256
+        (base32 "1f41lb19m8azchl1aqz6j5ycbspb8jsf1cnn42hlydxd68f85ylc"))))
+    (build-system python-build-system)
+    (propagated-inputs (list python-fonttools python-pyclipper))
+    (native-inputs
+     (list python-defcon-bootstrap
+           python-fontpens-bootstrap
+           python-setuptools-scm
+           python-pytest
+           python-wheel
+           unzip))
+    (home-page "https://github.com/typemytype/booleanOperations")
+    (synopsis "Boolean operations on paths")
+    (description "Boolean operations on paths which uses a super fast
+@url{http://www.angusj.com/delphi/clipper.php, polygon clipper library by
+Angus Johnson}.")
+    (license license:expat)))
 
 (define-public pstoedit
   (package
     (name "pstoedit")
-    (version "3.75")
+    (version "3.77")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://sourceforge/pstoedit/pstoedit/"
                                   version "/pstoedit-" version ".tar.gz"))
               (sha256
                (base32
-                "1kv46g2wsvsvcngkavxl5gnw3l6g5xqnh4kmyx4b39a01d8xiddp"))))
+                "02av76j75g5sq3bg353yl6dlllda9ihmmk4c8hvgiscix816nv4s"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
      `(("ghostscript" ,ghostscript)
        ("imagemagick" ,imagemagick)
@@ -964,82 +934,108 @@ other vector formats such as:
 @end itemize")
     (license license:gpl2+)))
 
-(define-public dear-imgui
+(define-public alembic
   (package
-    (name "dear-imgui")
-    (version "1.79")
+    (name "alembic")
+    (version "1.8.3")
     (source
      (origin
        (method git-fetch)
        (uri (git-reference
-             (url "https://github.com/ocornut/imgui")
+             (url "https://github.com/alembic/alembic")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "0glfx3cm7r8zn3cn7j4x4ch1ab6igfis0i2lcy23jc56q87r8yj2"))))
+    (build-system cmake-build-system)
+    (arguments
+     `(#:configure-flags (list "-DUSE_HDF5=ON")))
+    (inputs
+     (list hdf5 imath zlib))
+    (home-page "http://www.alembic.io/")
+    (synopsis "Framework for storing and sharing scene data")
+    (description "Alembic is a computer graphics interchange framework.  It
+distills complex, animated scenes into a set of baked geometric results.")
+    (license license:bsd-3)))
+
+(define-public mangohud
+  (package
+    (name "mangohud")
+    (version "0.6.7")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/flightlessmango/MangoHud/")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0x26igynxp6rlpp2wfc5dr7x6yh583ajb7p23pgycn9vqikn318q"))))
-    (build-system gnu-build-system)
+        (base32 "0n2x6agv2j8nd6h1998dqsphb7k57zx8vsayv47dqix28kg5kixz"))))
+    (build-system meson-build-system)
     (arguments
-     `(#:make-flags
-       (list (string-append "CC=" ,(cc-for-target))
-             (string-append "PREFIX=" (assoc-ref %outputs "out"))
-             (string-append "VERSION=" ,version))
-       #:tests? #f                      ; no test suite
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'unpack-debian-files
-           (lambda* (#:key inputs #:allow-other-keys)
-             (invoke "tar" "xvf" (assoc-ref inputs "debian-files"))
-             (apply invoke "patch" "-Np1" "-i"
-                    (find-files "debian/patches" "\\.patch$"))
-             (substitute* "Makefile"
-               (("<stb/") "<")          ; Guix doesn't use this subdirectory
-               ;; Don't build or install the static library.
-               (("^all: .*") "all: $(SHLIB) $(PCFILE)"))
-             (substitute* (list "imgui.pc.in"
-                                "Makefile")
-               ;; Don't link against a non-existent library.
-               (("-lstb") ""))
-             #t))
-         (delete 'configure)            ; no configure script
-         (replace 'install
-           ;; The default ‘install’ target installs the static library.  Don't.
-           (lambda* (#:key make-flags #:allow-other-keys)
-             (apply invoke "make" "install-shared" "install-header"
-                    make-flags))))))
-    (native-inputs
-     `(("debian-files"
-        ;; Upstream doesn't provide a build system.  Use Debian's.
-        ,(origin
-           (method url-fetch)
-           (uri (string-append "mirror://debian/pool/main/i/imgui/imgui_"
-                               version "+ds-1.debian.tar.xz"))
-           (sha256
-            (base32 "1xhk34pzpha6k5l2j150capq66y8czhmsi04ib09wvb34ahqxpby"))))
-       ("pkg-config" ,pkg-config)))
+     (list
+      #:build-type "release"
+      #:configure-flags
+      #~(list "-Duse_system_vulkan=enabled"
+              "-Duse_system_spdlog=enabled"
+              "-Dwith_xnvctrl=disabled"
+              "-Dappend_libdir_mangohud=false"
+              (string-append "-Dvulkan_datadir="
+                             #$(this-package-input "vulkan-headers") "/share"))
+      #:phases
+      #~(modify-phases %standard-phases
+          ;; Mangohud tries to build the imgui library as a meson submodule,
+          ;; so we change the dependency to the imgui input instead.
+          (add-after 'unpack 'unbundle-imgui
+            (lambda _
+              (substitute* "meson.build"
+                (("dearimgui_sp = .*")
+                 "")
+                (("dearimgui_sp.get_variable\\('imgui_dep'\\)")
+                 (string-append
+                  "declare_dependency(dependencies: "
+                  "cpp.find_library('imgui'), include_directories: '"
+                  #$(this-package-input "imgui") "/include/imgui')")))))
+          (add-after 'unpack 'patch-paths
+            (lambda* (#:key inputs #:allow-other-keys)
+              (substitute* "src/meson.build"
+                (("\\\\\\$LIB")
+                 "lib"))
+              (substitute* "src/overlay.cpp"
+                (("glxinfo")
+                 (search-input-file inputs "bin/glxinfo")))
+              (substitute* "src/loaders/loader_x11.cpp"
+                (("libX11.so.6")
+                 (search-input-file inputs "lib/libX11.so.6")))
+              (substitute* "src/pci_ids.cpp"
+                (("/usr/share/hwdata/pci.ids")
+                 (search-input-file inputs "share/hwdata/pci.ids")))
+              (substitute* "src/dbus.cpp"
+                (("libdbus-1.so.3")
+                 (search-input-file inputs "lib/libdbus-1.so.3"))))))))
     (inputs
-     `(("freetype" ,freetype)
-       ("stb-rect-pack" ,stb-rect-pack)
-       ("stb-truetype" ,stb-truetype)))
-    (home-page "https://github.com/ocornut/imgui")
-    (synopsis "Immediate-mode C++ GUI library with minimal dependencies")
-    (description
-     "Dear ImGui is a @acronym{GUI, graphical user interface} library for C++.
-It creates optimized vertex buffers that you can render anytime in your
-3D-pipeline-enabled application.  It's portable, renderer-agnostic, and
-self-contained, without external dependencies.
-
-Dear ImGui is aimed at content creation, visualization, and debugging tools as
-opposed to average end-user interfaces.  Hence it favors simplicity and
-productivity but lacks certain features often found in higher-level libraries.
-It is particularly suited to integration in game engine tooling, real-time 3D
-applications, full-screen applications, and embedded platforms without standard
-operating system features.")
-    (license license:expat)))           ; some examples/ use the zlib licence
+     (list dbus
+           glslang
+           `(,hwdata "pci")
+           imgui-1.86
+           libx11
+           mesa
+           mesa-utils
+           python-mako
+           spdlog
+           vulkan-headers
+           vulkan-loader))
+    (native-inputs (list pkg-config python))
+    (home-page "https://github.com/flightlessmango/MangoHud/")
+    (synopsis "Vulkan and OpenGL overlay for monitoring performance and hardware")
+    (description "MangoHud is a Vulkan and OpenGL overlay for monitoring
+frames per second (FPS), temperatures, CPU/GPU load and more.")
+    (license license:expat)))
 
 (define-public ogre
   (package
     (name "ogre")
-    (version "1.12.9")
+    (version "13.3.1")
     (source
      (origin
        (method git-fetch)
@@ -1048,24 +1044,22 @@ operating system features.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0b0pwh31nykrfhka6jqwclfx1pxzhj11vkl91951d63kwr5bbzms"))))
+        (base32 "157vpfzivg2wf349glyd0cpbyaw1j3fm4nggban70pghql3x48kb"))))
     (build-system cmake-build-system)
     (arguments
      '(#:phases
        (modify-phases %standard-phases
-         (add-before 'configure 'unpack-dear-imgui
+         (add-before 'configure 'unpack-imgui
            (lambda* (#:key inputs #:allow-other-keys)
-             (copy-recursively (assoc-ref inputs "dear-imgui-source")
-                               "../dear-imgui-source")
-             #t))
+             (copy-recursively (assoc-ref inputs "imgui-source")
+                               "../imgui-source")))
          (add-before 'configure 'pre-configure
            ;; CMakeLists.txt forces a CMAKE_INSTALL_RPATH value.  As
            ;; a consequence, we cannot suggest ours in configure flags.  Fix
            ;; it.
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (substitute* "CMakeLists.txt"
-               (("set\\(CMAKE_INSTALL_RPATH .*") ""))
-             #t)))
+               (("set\\(CMAKE_INSTALL_RPATH .*") "")))))
        #:configure-flags
        (let* ((out (assoc-ref %outputs "out"))
               (runpath
@@ -1073,29 +1067,26 @@ operating system features.")
                                   (string-append out "/lib/OGRE"))
                             ";")))
          (list (string-append "-DCMAKE_INSTALL_RPATH=" runpath)
-               "-DIMGUI_DIR=../dear-imgui-source"
+               "-DIMGUI_DIR=../imgui-source"
                "-DOGRE_BUILD_DEPENDENCIES=OFF"
                "-DOGRE_BUILD_TESTS=TRUE"
                "-DOGRE_INSTALL_DOCS=TRUE"
                "-DOGRE_INSTALL_SAMPLES=TRUE"
                "-DOGRE_INSTALL_SAMPLES_SOURCE=TRUE"))))
-    (native-inputs
-     `(("boost" ,boost)
-       ("dear-imgui-source" ,(package-source dear-imgui))
-       ("doxygen" ,doxygen)
-       ("googletest" ,googletest-1.8)
-       ("pkg-config" ,pkg-config)))
-    (inputs
-     `(("font-dejavu" ,font-dejavu)
-       ("freeimage" ,freeimage)
-       ("freetype" ,freetype)
-       ("glu" ,glu)
-       ("libxaw" ,libxaw)
-       ("libxrandr" ,libxrandr)
-       ("pugixml" ,pugixml)
-       ("sdl2" ,sdl2)
-       ("tinyxml" ,tinyxml)
-       ("zziplib" ,zziplib)))
+    (native-inputs `(("doxygen" ,doxygen)
+                     ("imgui-source" ,(package-source imgui-1.86))
+                     ("googletest" ,googletest)
+                     ("pkg-config" ,pkg-config)
+                     ("python" ,python)))
+    (inputs (list freeimage
+                  freetype
+                  libxaw
+                  libxrandr
+                  libxt
+                  mesa
+                  pugixml
+                  sdl2
+                  zlib))
     (synopsis "Scene-oriented, flexible 3D engine written in C++")
     (description
      "OGRE (Object-Oriented Graphics Rendering Engine) is a scene-oriented,
@@ -1108,7 +1099,7 @@ graphics.")
 (define-public openexr
   (package
     (name "openexr")
-    (version "3.1.2")
+    (version "3.1.3")
     (source
      (origin
        (method git-fetch)
@@ -1117,20 +1108,21 @@ graphics.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0vyclrrikphwkkpyjg8kzh3qzflzk3d6xsidgqllgfdgllr9wmgv"))
-       (modules '((guix build utils)))
-       (snippet
-        '(begin
-           (with-directory-excursion "src/test"
-             (substitute* (append (find-files "." "tmpDir\\.h")
-                                  '("OpenEXRCoreTest/main.cpp"))
-               (("\"/var/tmp/\"")
-                "\"/tmp/\"")))
-           #t))))
+        (base32 "0c9vla0kbsbbhkk42jlbf94nzfb1anqh7dy9b0b3nna1qr6v4bh6"))))
     (build-system cmake-build-system)
+    (arguments
+     '(#:phases
+       (modify-phases %standard-phases
+         ;; /var/tmp does not exist in the Guix build environment
+         (add-after 'unpack 'patch-test-directory
+           (lambda _
+             (substitute* '("src/test/OpenEXRUtilTest/tmpDir.h"
+                            "src/test/OpenEXRFuzzTest/tmpDir.h"
+                            "src/test/OpenEXRTest/tmpDir.h"
+                            "src/test/OpenEXRCoreTest/main.cpp")
+               (("/var/tmp") "/tmp")))))))
     (inputs
-     `(("imath" ,imath)
-       ("zlib" ,zlib)))
+     (list imath zlib))
     (home-page "https://www.openexr.com/")
     (synopsis "High-dynamic-range file format library")
     (description
@@ -1146,14 +1138,7 @@ with strong support for multi-part, multi-channel use cases.")
     (version (package-version ilmbase))
     (source (origin
               (inherit (package-source ilmbase))
-              (file-name (git-file-name "openexr" version))
-              (modules '((guix build utils)))
-              (snippet
-               '(begin
-                  (substitute* (find-files "OpenEXR" "tmpDir\\.h")
-                    (("\"/var/tmp/\"")
-                     "\"/tmp/\""))
-                  #t))))
+              (file-name (git-file-name "openexr" version))))
     (build-system cmake-build-system)
     (arguments
      `(#:phases
@@ -1162,6 +1147,12 @@ with strong support for multi-part, multi-channel use cases.")
            (lambda _
              (chdir "OpenEXR")
              #t))
+         (add-after 'change-directory 'patch-test-directory
+           (lambda _
+             (substitute* '("IlmImfFuzzTest/tmpDir.h"
+                            "IlmImfTest/tmpDir.h"
+                            "IlmImfUtilTest/tmpDir.h")
+               (("/var/tmp") "/tmp"))))
          (add-after 'change-directory 'increase-test-timeout
            (lambda _
              ;; On armhf-linux, we need to override the CTest default
@@ -1183,10 +1174,10 @@ with strong support for multi-part, multi-channel use cases.")
                      #t)))
                '()))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (propagated-inputs
-     `(("ilmbase" ,ilmbase)                       ;used in public headers
-       ("zlib" ,zlib)))                           ;OpenEXR.pc reads "-lz"
+     (list ilmbase ;used in public headers
+           zlib))                           ;OpenEXR.pc reads "-lz"
     (home-page (package-home-page openexr))
     (synopsis (package-synopsis openexr))
     (description (package-description openexr))
@@ -1195,7 +1186,7 @@ with strong support for multi-part, multi-channel use cases.")
 (define-public openimageio
   (package
     (name "openimageio")
-    (version "2.2.10.1")
+    (version "2.2.11.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1204,7 +1195,7 @@ with strong support for multi-part, multi-channel use cases.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0wzh5n527l7ia1754cf9xmbvv4ya6hj34dy6cbq9xk9372h8gd9q"))))
+                "1i9r6vgz15aj1yzbf5a9lqhlyakjs793yrw5gw720l84lcyigad7"))))
     (build-system cmake-build-system)
     ;; FIXME: To run all tests successfully, test image sets from multiple
     ;; third party sources have to be present.  For details see
@@ -1213,10 +1204,11 @@ with strong support for multi-part, multi-channel use cases.")
      `(#:tests? #f
        #:configure-flags (list "-DUSE_EXTERNAL_PUGIXML=1")))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
      `(("boost" ,boost)
        ("fmt" ,fmt)
+       ("libheif" ,libheif)
        ("libpng" ,libpng)
        ("libjpeg" ,libjpeg-turbo)
        ("libtiff" ,libtiff)
@@ -1263,8 +1255,7 @@ visual effects work for film.")
                             (assoc-ref %outputs "out") "/lib:"
                             (assoc-ref %outputs "out") "/lib64"))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("unzip" ,unzip)))
+     (list pkg-config unzip))
     (inputs
      `(("giflib" ,giflib)
        ("libjpeg" ,libjpeg-turbo)       ; required for the JPEG texture plugin.
@@ -1282,32 +1273,6 @@ virtual reality, scientific visualization and modeling.")
     ;; The 'LICENSE' file explains that the source is licensed under
     ;; LGPL 2.1, but with 4 exceptions. This version is called OSGPL.
     (license license:lgpl2.1)))
-
-;; We need this for simgear
-(define-public openscenegraph-3.4
-  (package (inherit openscenegraph)
-    (name "openscenegraph")
-    (version "3.4.1")
-    (source
-     (origin
-       (method git-fetch)
-       (uri (git-reference
-             (url "https://github.com/openscenegraph/OpenSceneGraph")
-             (commit (string-append "OpenSceneGraph-" version))))
-       (file-name (git-file-name name version))
-       (sha256
-        (base32
-         "1fbzg1ihjpxk6smlq80p3h3ggllbr16ihd2fxpfwzam8yr8yxip9"))))
-    (arguments
-     (substitute-keyword-arguments (package-arguments openscenegraph)
-       ((#:configure-flags flags)
-        `(cons
-          ;; The jpeg plugin requires conversion between integers and booleans
-          "-DCMAKE_CXX_FLAGS=-fpermissive"
-          ,flags))))
-    (inputs
-     `(("libjpeg" ,libjpeg-turbo)
-       ,@(package-inputs openscenegraph)))))
 
 (define-public gr-framework
   (package
@@ -1416,9 +1381,7 @@ in Julia).")
                   #t))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake pkg-config))
     (inputs
      `(("boost" ,boost)
        ("libjpeg" ,libjpeg-turbo)
@@ -1459,77 +1422,6 @@ realistic reflections, shading, perspective and other effects.")
     (home-page "http://www.povray.org/")
     (license license:agpl3+)))
 
-(define-public rapicorn
-  (package
-    (name "rapicorn")
-    (version "16.0.0")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append "https://testbit.eu/pub/dists/rapicorn/"
-                                  "rapicorn-" version ".tar.xz"))
-              (sha256
-               (base32
-                "1y51yjrpsihas1jy905m9p3r8iiyhq6bwi2690c564i5dnix1f9d"))
-              (patches (search-patches "rapicorn-isnan.patch"))))
-    (build-system gnu-build-system)
-    (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'fix-tests
-           (lambda _
-             ;; Our grep does not support perl regular expressions.
-             (substitute* "taptool.sh"
-               (("grep -P") "grep -E"))
-             ;; Disable path tests because we cannot access /bin or /sbin.
-             (substitute* "rcore/tests/multitest.cc"
-               (("TCMP \\(Path::equals \\(\"/bin\"") "//"))
-             #t))
-         (add-before 'check 'pre-check
-           (lambda _
-             ;; The test suite requires a running X server (with DISPLAY
-             ;; number 99 or higher).
-             (system "Xvfb :99 &")
-             (setenv "DISPLAY" ":99")
-             #t))
-         (add-after 'unpack 'replace-fhs-paths
-           (lambda _
-             (substitute* (cons "Makefile.decl"
-                                (find-files "." "^Makefile\\.in$"))
-               (("/bin/ls") (which "ls"))
-               (("/usr/bin/env") (which "env")))
-             #t)))))
-    ;; These libraries are listed in the "Required" section of the pkg-config
-    ;; file.
-    (propagated-inputs
-     `(("librsvg" ,librsvg)
-       ("cairo" ,cairo)
-       ("pango" ,pango)
-       ("libxml2" ,libxml2)
-       ("python2-enum34" ,python2-enum34)))
-    (inputs
-     `(("gdk-pixbuf" ,gdk-pixbuf)
-       ("libpng" ,libpng-1.2)
-       ("readline" ,readline)
-       ("libcroco" ,libcroco)
-       ("python" ,python-2)
-       ("cython" ,python2-cython)))
-    (native-inputs
-     `(("pandoc" ,pandoc)
-       ("bison" ,bison)
-       ("flex" ,flex)
-       ("doxygen" ,doxygen)
-       ("graphviz" ,graphviz)
-       ("intltool" ,intltool)
-       ("pkg-config" ,pkg-config)
-       ("xvfb" ,xorg-server-for-tests)))
-    (home-page "https://rapicorn.testbit.org/")
-    (synopsis "Toolkit for rapid development of user interfaces")
-    (description
-     "Rapicorn is a toolkit for rapid development of user interfaces in C++
-and Python.  The user interface is designed in a declarative markup language
-and is connected to the programming logic using data bindings and commands.")
-    (license license:mpl2.0)))
-
 (define-public ctl
   (package
     (name "ctl")
@@ -1545,7 +1437,7 @@ and is connected to the programming logic using data bindings and commands.")
     (arguments '(#:tests? #f))                    ;no 'test' target
 
     ;; Headers include OpenEXR and IlmBase headers.
-    (propagated-inputs `(("openexr" ,openexr-2)))
+    (propagated-inputs (list openexr-2))
 
     (home-page "http://ampasctl.sourceforge.net")
     (synopsis "Color Transformation Language")
@@ -1606,13 +1498,9 @@ exec -a \"$0\" ~a/.brdf-real~%"
                             (chmod "brdf" #o555)))
                         #t)))))
       (native-inputs
-       `(("qttools" ,qttools))) ;for 'qmake'
+       (list qttools-5)) ;for 'qmake'
       (inputs
-       `(("qtbase" ,qtbase-5)
-         ("mesa" ,mesa)
-         ("glew" ,glew)
-         ("freeglut" ,freeglut)
-         ("zlib" ,zlib)))
+       (list qtbase-5 mesa glew freeglut zlib))
       (home-page "https://www.disneyanimation.com/technology/brdf.html")
       (synopsis
        "Analyze bidirectional reflectance distribution functions (BRDFs)")
@@ -1644,7 +1532,8 @@ and understanding different BRDFs (and other component functions).")
                                         version ".tar.gz")))
               (sha256
                (base32 "07wii4i824vy9qsvjsgqxppgqmfdxq0xa87i5yk53fijriadq7mb"))
-              (patches (search-patches "agg-am_c_prototype.patch"))))
+              (patches (search-patches "agg-am_c_prototype.patch"
+                                       "agg-2.5-gcc8.patch"))))
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags
@@ -1661,14 +1550,9 @@ and understanding different BRDFs (and other component functions).")
              (substitute* "autogen.sh" (("./configure") "# ./configure"))
              (invoke "sh" "autogen.sh"))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("libtool" ,libtool)
-       ("autoconf" ,autoconf)
-       ("automake" ,automake)))
+     (list pkg-config libtool autoconf automake))
     (inputs
-     `(("libx11" ,libx11)
-       ("freetype" ,freetype)
-       ("sdl" ,sdl)))
+     (list libx11 freetype sdl))
 
     ;; Antigrain.com was discontinued.
     (home-page "http://agg.sourceforge.net/antigrain.com/index.html")
@@ -1696,15 +1580,12 @@ rendering @acronym{SVG, Scalable Vector Graphics}.")
                   (replace 'check
                     (lambda _ (invoke "pytest" "pastel" "tests/"))))))
     (native-inputs
-     `(("python-pytest" ,python-pytest)))
+     (list python-pytest))
     (home-page "https://github.com/sdispater/pastel")
     (synopsis "Library to colorize strings in your terminal")
     (description "Pastel is a simple library to help you colorize strings in
 your terminal.")
     (license license:expat)))
-
-(define-public python2-pastel
-  (package-with-python2 python-pastel))
 
 (define-public fgallery
   (package
@@ -1767,7 +1648,7 @@ your terminal.")
                  `("PERL5LIB" ":" prefix (,perl5lib)))
                #t))))))
     (native-inputs
-     `(("unzip" ,unzip)))
+     (list unzip))
     ;; TODO: Add missing optional dependency: facedetect.
     (inputs
      `(("imagemagick" ,imagemagick)
@@ -1813,20 +1694,19 @@ requirements.")
                   (add-before 'check 'start-xorg-server
                     (lambda* (#:key inputs #:allow-other-keys)
                       ;; The test suite requires a running X server.
-                      (system (string-append (assoc-ref inputs "xorg-server")
-                                             "/bin/Xvfb :1 &"))
+                      (system "Xvfb :1 &")
                       (setenv "DISPLAY" ":1")
                       #t)))))
     (native-inputs
-     `(("xorg-server" ,xorg-server-for-tests)))
+     (list xorg-server-for-tests))
     (inputs
-     `(("glew" ,glew)
-       ("libxrandr" ,libxrandr)
-       ("libxcursor" ,libxcursor)
-       ("libxinerama" ,libxinerama)
-       ("libxi" ,libxi)
-       ("zlib" ,zlib)
-       ("glfw" ,glfw)))
+     (list glew
+           libxrandr
+           libxcursor
+           libxinerama
+           libxi
+           zlib
+           glfw))
     (home-page "https://graphics.pixar.com/opensubdiv/")
     (synopsis "High performance subdivision surface evaluation")
     (description "OpenSubdiv is a set of libraries that implement high
@@ -1863,8 +1743,7 @@ and GPU architectures.")
            (add-before 'build 'skip-example
              (lambda _ (chdir "src") #t)))))
       (inputs
-       `(("glew" ,glew)
-         ("freeglut" ,freeglut)))
+       (list glew freeglut))
       (synopsis "Library for rendering Constructive Solid Geometry (CSG)")
       (description
        "OpenCSG is a library for rendering Constructive Solid Geometry (CSG) using
@@ -1901,12 +1780,9 @@ or by subtracting one shape from the other.")
              #t))))
       (build-system cmake-build-system)
       (native-inputs
-       `(("doxygen" ,doxygen)
-         ("graphviz" ,graphviz)))
+       (list doxygen graphviz))
       (inputs
-       `(("boost" ,boost)
-         ("freeglut" ,freeglut)
-         ("glew" ,glew)))
+       (list boost freeglut glew))
       (arguments
        `(#:configure-flags
          (list
@@ -1954,12 +1830,9 @@ software in the scientific and engineering community.")
              #t))))
     (build-system cmake-build-system)
     (native-inputs
-      `(("doxygen" ,doxygen)
-        ("graphviz" ,graphviz)))
+      (list doxygen graphviz))
     (inputs
-      `(("boost" ,boost)
-        ("freeglut" ,freeglut)
-        ("glew" ,glew)))
+      (list boost freeglut glew))
     (arguments
       `(#:configure-flags
         (list
@@ -1977,6 +1850,114 @@ library, written in C++, which has become the de facto standard graphics
 library for 3D visualization and visual simulation software in the scientific
 and engineering community.")
       (license license:bsd-3)))
+
+(define-public skia
+  ;; Releases follow those of Chromium, about every 6 weeks.  The release
+  ;; version can be found on this page:
+  ;; https://skia.org/docs/user/release/release_notes/.  The commit used
+  ;; should be the last commit, as recommended at
+  ;; https://skia.org/docs/user/release/.
+  (let ((version "98")
+        (revision "0")
+        (commit "55c56abac381e1ae3f0116c410bed81b05e0a38a"))
+    (package
+      (name "skia")
+      (version (git-version version revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://skia.googlesource.com/skia.git")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "1ldns2j1g2wj2phlxr9zqkdgs5g64pisxhwxcrq9ijn8a3jhafr2"))))
+      (build-system gnu-build-system)   ;actually GN + Ninja
+      (arguments
+       (list
+        ;; Running the test suite would require 'dm'; unfortunately the tool
+        ;; can only be built for debug builds, which require fetching third
+        ;; party sources.
+        #:tests? #f
+        #:phases
+        #~(modify-phases %standard-phases
+            (replace 'configure
+              (lambda* (#:key inputs #:allow-other-keys)
+                (substitute* "BUILD.gn"
+                  ;; Workaround a bug in the zlib third_party definition, that
+                  ;; fails the build even when zlib is found from the system.
+                  (("deps = \\[ \"//third_party/zlib\" ]")
+                   "deps = []"))
+                (invoke "gn" "gen" "build"
+                        (string-append
+                         ;;
+                         "--args="
+                         "cc=\"gcc\" "              ;defaults to 'cc'
+                         "is_official_build=true "  ;to use system libraries
+                         "is_component_build=true " ;build as a shared library
+                         ;; Specify where locate the harfbuzz and freetype
+                         ;; includes.
+                         (format #f "extra_cflags=[\"-I~a\",\"-I~a\"] "
+                                 (search-input-directory inputs
+                                                         "include/harfbuzz")
+                                 (search-input-directory inputs
+                                                         "include/freetype2"))
+                         ;; Otherwise the validate-runpath phase fails.
+                         "extra_ldflags=[\"-Wl,-rpath=" #$output "/lib\"] "
+                         ;; Disabled, otherwise the build system attempts to
+                         ;; download the SDK at build time.
+                         "skia_use_dng_sdk=false "))))
+            (replace 'build
+              (lambda* (#:key parallel-build? #:allow-other-keys)
+                (let ((job-count (if parallel-build?
+                                     (number->string (parallel-job-count))
+                                     "1")))
+                  (invoke "ninja" "-j" job-count "-C" "build"))))
+            (replace 'install
+              (lambda _
+                ;; Install headers.
+                (for-each (lambda (h)
+                            (install-file h (string-append
+                                             #$output "/include/skia/"
+                                             (dirname h))))
+                          (find-files "." "\\.h$"))
+                ;; Install libraries.
+                (for-each (lambda (lib)
+                            (install-file lib (string-append #$output "/lib")))
+                          (find-files "build" "^lib.*\\.(a|so)"))
+                ;; This pkgconfig file is useful at least to the
+                ;; python-skia-pathops package.
+                (define skia.pc (string-append #$output
+                                               "/lib/pkgconfig/skia.pc"))
+                (mkdir-p (dirname skia.pc))
+                (call-with-output-file skia.pc
+                  (lambda (port)
+                    (format port "\
+prefix=~a
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include/skia
+
+Name: skia
+Description: 2D graphic library for drawing text, geometries and images.
+URL: https://skia.org/
+Version: ~a
+Libs: -L${libdir} -lskia
+Cflags: -I${includedir}~%" #$output #$version))))))))
+      (native-inputs (list gn libjpeg-turbo ninja pkg-config python-wrapper))
+      (inputs (list expat fontconfig freetype harfbuzz mesa libwebp zlib))
+      (home-page "https://skia.org/")
+      (synopsis "2D graphics library")
+      (description
+       "Skia is a 2D graphics library for drawing text, geometries, and images.
+It supports:
+@itemize
+@item 3x3 matrices with perspective
+@item antialiasing, transparency, filters
+@item shaders, xfermodes, maskfilters, patheffects
+@item subpixel text
+@end itemize")
+      (license license:bsd-3))))
 
 (define-public superfamiconv
   (package
@@ -2033,22 +2014,21 @@ Automated palette selection is supported.")
        '(#:configure-flags
          (list "-DTESTS=ON" "-DTOOLS=ON" "-DKIS_TABLET=ON")))
       (native-inputs
-       `(("extra-cmake-modules" ,extra-cmake-modules)
-         ("pkg-config" ,pkg-config)))
+       (list extra-cmake-modules pkg-config))
       (inputs
-       `(("giflib" ,giflib)
-         ("karchive" ,karchive)
-         ("kdnssd" ,kdnssd)
-         ("libmicrohttpd" ,libmicrohttpd)
-         ("libsodium" ,libsodium)
-         ("libvpx" ,libvpx)
-         ("libxi" ,libxi)
-         ;; ("miniupnpc" ,miniupnpc) ;segfaults for some reason
-         ("qtbase" ,qtbase-5)
-         ("qtkeychain" ,qtkeychain)
-         ("qtmultimedia" ,qtmultimedia)
-         ("qtsvg" ,qtsvg)
-         ("qtx11extras" ,qtx11extras)))
+       (list giflib
+             karchive
+             kdnssd
+             libmicrohttpd
+             libsodium
+             libvpx
+             libxi
+             ;; ("miniupnpc" ,miniupnpc) ;segfaults for some reason
+             qtbase-5
+             qtkeychain
+             qtmultimedia-5
+             qtsvg-5
+             qtx11extras))
       (home-page "https://drawpile.net")
       (synopsis "Collaborative drawing program")
       (description "Drawpile is a drawing program that allows share the canvas
@@ -2069,6 +2049,38 @@ Some feature highlights:
 @end itemize\n")
       (license license:gpl3+))))
 
+(define-public openxr
+  (package
+    (name "openxr")
+    (version "1.0.24")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/KhronosGroup/OpenXR-SDK")
+             (commit (string-append "release-" version))))
+       (file-name (git-file-name name version))
+       (modules '((guix build utils)))
+       (snippet
+        '(begin
+           ;; Delete bundled jsoncpp.
+           (delete-file-recursively "src/external/jsoncpp")))
+       (sha256
+        (base32 "1lkbw03hpwnqcbn0fmxs4cnp5m04hc0ys6y111n7vlrg11sjdpq5"))))
+    (build-system cmake-build-system)
+    (arguments
+     `(#:tests? #f))                    ; there are no tests
+    (native-inputs
+     (list pkg-config python shaderc vulkan-headers))
+    (inputs
+     (list jsoncpp mesa vulkan-loader wayland))
+    (home-page "https://www.khronos.org/openxr/")
+    (synopsis "Generated headers and sources for OpenXR loader")
+    (description "This package contains OpenXR headers, as well as source code
+and build scripts for the OpenXR loader.")
+    ;; Dual licensed.  Either license applies.
+    (license (list license:asl2.0 license:expat))))
+
 (define-public monado
   (package
     (name "monado")
@@ -2083,19 +2095,18 @@ Some feature highlights:
             "0n04k7a8b0i8ga0kbzh7qxmvni1ijawgk98s83519vxg4d0yyjbq"))))
     (build-system meson-build-system)
     (inputs
-     `(("ffmpeg" ,ffmpeg)
-       ("glslang" ,glslang)
-       ("libudev" ,eudev)
-       ("libusb" ,libusb)
-       ("libxcb" ,libxcb)
-       ("libxrandr" ,libxrandr)
-       ("opengl" ,mesa)
-       ("v4l" ,v4l-utils)
-       ("vulkan-loader" ,vulkan-loader)))
+     (list ffmpeg
+           glslang
+           eudev
+           libusb
+           libxcb
+           libxrandr
+           mesa
+           python
+           v4l-utils
+           vulkan-loader))
     (native-inputs
-     `(("eigen" ,eigen)
-       ("pkg-config" ,pkg-config)
-       ("vulkan-headers" ,vulkan-headers)))
+     (list eigen pkg-config vulkan-headers))
     (arguments
      `(#:configure-flags
        (list "-Dinstall-active-runtime=false")))
@@ -2105,3 +2116,138 @@ Some feature highlights:
 such as VR and AR on mobile, PC/desktop, and any other device.  Monado aims to be
 a complete and conforming implementation of the OpenXR API made by Khronos.")
     (license license:boost1.0)))
+
+(define-public azpainter
+  (package
+    (name "azpainter")
+    (version "3.0.5")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitlab.com/azelpg/azpainter")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1iplp3p8pw9q44kb43hrk89sv2aff6bdy9fk58j2v6k5lqbk6kvf"))))
+    (build-system gnu-build-system) ;actually a home grown build system
+    (arguments
+     (list #:tests? #f
+           #:phases
+           #~(modify-phases %standard-phases
+               (replace 'configure
+                 (lambda _
+                   (invoke "./configure"
+                           (string-append "--prefix="
+                                          #$output))))
+               (replace 'build
+                 (lambda* (#:key parallel-build? #:allow-other-keys)
+                   (let ((job-count (if parallel-build?
+                                        (number->string (parallel-job-count))
+                                        "1")))
+                     (invoke "ninja" "-j" job-count "-C" "build"))))
+               (add-before 'install 'disable-cache-generation
+                 (lambda _
+                   (setenv "DESTDIR" "/") #t))
+               (replace 'install
+                 (lambda _
+                   (invoke "ninja" "-C" "build" "install"))))))
+    (inputs (list fontconfig
+                  freetype
+                  libjpeg-turbo
+                  libpng
+                  libtiff
+                  libwebp
+                  libx11
+                  libxcursor
+                  libxext
+                  libxi
+                  zlib))
+    (native-inputs (list ninja pkg-config))
+    (home-page "http://azsky2.html.xdomain.jp/soft/azpainter.html")
+    (synopsis "Paint software for editing illustrations and images")
+    (description
+     "AzPainter is a lightweight full color painting application for editing
+illustrations and images.
+
+Features include:
+@itemize
+@item Layers
+@item Many artistic filters
+@item Good range of selection tools
+@item Pen pressure support with automatic brush size adjustment
+@item Support for 16-bit color images with transparency (RGBA)
+@item Support for image formats like PSD, PNG, JPEG, TIFF, WebP
+@end itemize
+")
+    (license license:gpl3+)))
+
+(define-public f3d
+  ;; There have been many improvements since the last tagged version (1.2.1,
+  ;; released in December 2021), including support for the Alembic file
+  ;; format.
+  (let ((commit "9cc79b65ed750b178f58012dbba091aa24722dab")
+        (revision "0"))
+    (package
+      (name "f3d")
+      (version (git-version "1.2.1" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://github.com/f3d-app/f3d")
+               (commit commit)))
+         (file-name (git-file-name name version))
+         (sha256
+          (base32 "041gqi2wfny2br4j68vhifg0bd18kbl0qsaallkz7yywk47njxfi"))))
+      (build-system cmake-build-system)
+      (arguments
+       (list
+        ;; Many tests require files supplied by git-lfs.
+        ;; Also, some tests segfault (after an exception?) but the tested
+        ;; behavior, i.e., when the program is run manually, does not (for
+        ;; example, TestNonExistentConfigFile and TestInvalidConfigFile).
+        ;; Upstream is aware of occasionally flaky tests (see
+        ;; https://github.com/f3d-app/f3d/issues/92) but the tests run in CI
+        ;; seem to be passing.
+        ;; Anyway, the program runs and is able to open at least STL files
+        ;; without issue.
+        #:tests? #f
+        #:configure-flags
+        #~(list "-DBUILD_TESTING=OFF"
+                "-DF3D_MODULE_ALEMBIC=ON"
+                "-DF3D_MODULE_ASSIMP=ON"
+                "-DF3D_MODULE_OCCT=ON"
+                ;; Prefer Guix's versioned documentation directory to F3D's
+                ;; unversioned one.
+                (string-append "-DCMAKE_INSTALL_DOCDIR=" #$output
+                               "/share/doc/" #$name "-" #$version))))
+      (inputs
+       (list alembic
+             assimp
+             double-conversion
+             eigen
+             expat
+             fontconfig
+             freetype
+             glew
+             hdf5
+             imath
+             jsoncpp
+             libjpeg-turbo
+             libpng
+             libtiff
+             libx11
+             lz4
+             netcdf
+             opencascade-occt
+             vtk
+             zlib))
+      (home-page "https://f3d-app.github.io/f3d/")
+      (synopsis "VTK based 3D viewer")
+      (description "F3D (pronounced @samp{/fɛd/}) is a VTK-based 3D viewer, it
+has simple interaction mechanisms and is fully controllable using arguments on
+the command line.  It supports a range of file formats (including animated
+glTF, STL, STEP, PLY, OBJ, FBX), and provides numerous rendering and texturing
+options.")
+      (license license:bsd-3))))

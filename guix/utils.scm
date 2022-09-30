@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013, 2014, 2015 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2014 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2014 Ian Denhardt <ian@zenhack.net>
@@ -7,11 +7,15 @@
 ;;; Copyright © 2015 David Thompson <davet@gnu.org>
 ;;; Copyright © 2017 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2018, 2020 Marius Bakke <marius@gnu.org>
-;;; Copyright © 2020 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2020, 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Simon Tournier <zimon.toutoune@gmail.com>
 ;;; Copyright © 2021 Chris Marusich <cmmarusich@gmail.com>
+;;; Copyright © 2021 Maxime Devos <maximedevos@telenet.be>
 ;;; Copyright © 2018 Steve Sprang <scs@stevesprang.com>
-;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Taiju HIGASHI <higashi@taiju.info>
+;;; Copyright © 2022 Denis 'GNUtoo' Carikli <GNUtoo@cyberdimension.org>
+;;; Copyright © 2022 Antero Mejr <antero@mailbox.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -35,19 +39,23 @@
   #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-39)
-  #:use-module (ice-9 ftw)
+  #:use-module (srfi srfi-71)
   #:use-module (rnrs io ports)                    ;need 'port-position' etc.
   #:use-module ((rnrs bytevectors) #:select (bytevector-u8-set!))
   #:use-module (guix memoization)
-  #:use-module ((guix build utils) #:select (dump-port mkdir-p delete-file-recursively))
+  #:use-module ((guix build utils)
+                #:select (dump-port mkdir-p delete-file-recursively
+                          call-with-temporary-output-file %xz-parallel-args))
   #:use-module ((guix build syscalls) #:select (mkdtemp! fdatasync))
   #:use-module ((guix combinators) #:select (fold2))
   #:use-module (guix diagnostics)           ;<location>, &error-location, etc.
   #:use-module (ice-9 format)
-  #:use-module (ice-9 regex)
-  #:use-module (ice-9 match)
-  #:use-module (ice-9 format)
+  #:use-module (ice-9 ftw)
   #:use-module ((ice-9 iconv) #:prefix iconv:)
+  #:use-module (ice-9 match)
+  #:use-module (ice-9 regex)
+  #:use-module (ice-9 rdelim)
+  #:use-module (ice-9 vlist)
   #:autoload   (zlib) (make-zlib-input-port make-zlib-output-port)
   #:use-module (system foreign)
   #:re-export (<location>                         ;for backwards compatibility
@@ -65,12 +73,15 @@
 
                &fix-hint
                fix-hint?
-               condition-fix-hint)
+               condition-fix-hint
+
+               call-with-temporary-output-file)
   #:export (strip-keyword-arguments
             default-keyword-arguments
             substitute-keyword-arguments
             ensure-keyword-arguments
 
+            %guix-source-root-directory
             current-source-directory
 
             nix-system->gnu-triplet
@@ -78,14 +89,26 @@
             %current-system
             %current-target-system
             package-name->name+version
+            target-linux?
+            target-hurd?
             target-mingw?
+            target-x86-32?
+            target-x86-64?
+            target-x86?
             target-arm32?
             target-aarch64?
             target-arm?
+            target-ppc32?
+            target-ppc64le?
             target-powerpc?
+            target-riscv64?
+            target-mips64el?
             target-64bit?
+            ar-for-target
+            as-for-target
             cc-for-target
             cxx-for-target
+            ld-for-target
             pkg-config-for-target
 
             version-compare
@@ -104,7 +127,6 @@
             tarball-sans-extension
             compressed-file?
             switch-symlinks
-            call-with-temporary-output-file
             call-with-temporary-directory
             with-atomic-file-output
 
@@ -115,7 +137,9 @@
             cache-directory
 
             readlink*
+            go-to-location
             edit-expression
+            delete-expression
 
             filtered-port
             decompressed-port
@@ -140,6 +164,8 @@
     (dynamic-wind
       (lambda ()
         (for-each (match-lambda
+                    ((variable #false)
+                     (unsetenv variable))
                     ((variable value)
                      (setenv variable value)))
                   variables))
@@ -246,6 +272,18 @@ a symbol such as 'xz."
                            '()))
     (_             (error "unsupported compression scheme" compression))))
 
+(define (compressed-port compression input)
+  "Return an input port where INPUT is compressed according to COMPRESSION,
+a symbol such as 'xz."
+  (match compression
+    ((or #f 'none) (values input '()))
+    ('bzip2        (filtered-port `(,%bzip2 "-c") input))
+    ('xz           (filtered-port `(,%xz "-c" ,@(%xz-parallel-args)) input))
+    ('gzip         (filtered-port `(,%gzip "-c") input))
+    ('lzip         (values (lzip-port 'make-lzip-input-port/compressed input)
+                           '()))
+    (_             (error "unsupported compression scheme" compression))))
+
 (define (call-with-decompressed-port compression port proc)
   "Call PROC with a wrapper around PORT, a file port, that decompresses data
 read from PORT according to COMPRESSION, a symbol such as 'xz."
@@ -325,43 +363,139 @@ a list of command-line arguments passed to the compression program."
         (unless (every (compose zero? cdr waitpid) pids)
           (error "compressed-output-port failure" pids))))))
 
-(define* (edit-expression source-properties proc #:key (encoding "UTF-8"))
+(define %source-location-map
+  ;; Maps inode/device tuples to "source location maps" used by
+  ;; 'go-to-location'.
+  (make-hash-table))
+
+(define (source-location-key/stamp stat)
+  "Return two values: the key for STAT in %SOURCE-LOCATION-MAP, and a stamp
+used to invalidate corresponding entries."
+  (let ((key   (list (stat:ino stat) (stat:dev stat)))
+        (stamp (list (stat:mtime stat) (stat:mtimensec stat)
+                     (stat:size stat))))
+    (values key stamp)))
+
+(define* (go-to-location port line column)
+  "Jump to LINE and COLUMN (both one-indexed) in PORT.  Maintain a source
+location map such that this can boil down to seek(2) and a few read(2) calls,
+which can drastically speed up repetitive operations on large files."
+  (let* ((stat       (stat port))
+         (key stamp  (source-location-key/stamp stat))
+
+         ;; Look for an up-to-date source map for KEY.  The map is a vlist
+         ;; where each entry gives the byte offset of the beginning of a line:
+         ;; element 0 is the offset of the first line, element 1 the offset of
+         ;; the second line, etc.  The map is filled lazily.
+         (source-map (match (hash-ref %source-location-map key)
+                       (#f
+                        (vlist-cons 0 vlist-null))
+                       ((cache-stamp ... map)
+                        (if (equal? cache-stamp stamp) ;invalidate?
+                            map
+                            (vlist-cons 0 vlist-null)))))
+         (last       (vlist-length source-map)))
+    ;; Jump to LINE, ideally via SOURCE-MAP.
+    (if (<= line last)
+        (seek port (vlist-ref source-map (- line 1)) SEEK_SET)
+        (let ((target line)
+              (offset (vlist-ref source-map (- last 1))))
+          (seek port offset SEEK_SET)
+          (let loop ((source-map (vlist-reverse source-map))
+                     (line last))
+            (if (< line target)
+                (match (read-char port)
+                  (#\newline
+                   (loop (vlist-cons (ftell port) source-map)
+                         (+ 1 line)))
+                  ((? eof-object?)
+                   (error "unexpected end of file" port line))
+                  (chr (loop source-map line)))
+                (hash-set! %source-location-map key
+                           `(,@stamp
+                             ,(vlist-reverse source-map)))))))
+
+    ;; Read up to COLUMN.
+    (let ((target column))
+      (let loop ((column 1))
+        (when (< column target)
+          (match (read-char port)
+            (#\newline (error "unexpected end of line" port))
+            (#\tab (loop (+ 8 column)))
+            (chr (loop (+ 1 column)))))))
+
+    ;; Update PORT's position info.
+    (set-port-line! port (- line 1))
+    (set-port-column! port (- column 1))))
+
+(define (move-source-location-map! source target line)
+  "Move the source location map from SOURCE up to LINE to TARGET.  SOURCE and
+TARGET must be stat buffers as returned by 'stat'."
+  (let* ((source-key (source-location-key/stamp source))
+         (target-key target-stamp (source-location-key/stamp target)))
+    (match (hash-ref %source-location-map source-key)
+      (#f #t)
+      ((_ ... source-map)
+       ;; Strip the source map and update the associated stamp.
+       (let ((source-map (vlist-take source-map (max line 1))))
+         (hash-remove! %source-location-map source-key)
+         (hash-set! %source-location-map target-key
+                    `(,@target-stamp ,source-map)))))))
+
+(define* (edit-expression source-properties proc #:key (encoding "UTF-8")
+                          include-trailing-newline?)
   "Edit the expression specified by SOURCE-PROPERTIES using PROC, which should
 be a procedure that takes the original expression in string and returns a new
-one.  ENCODING will be used to interpret all port I/O, it default to UTF-8.
-This procedure returns #t on success."
+one.  ENCODING will be used to interpret all port I/O, it defaults to UTF-8.
+This procedure returns #t on success.  When INCLUDE-TRAILING-NEWLINE? is true,
+the trailing line is included in the edited expression."
+  (define file   (assq-ref source-properties 'filename))
+  (define line   (assq-ref source-properties 'line))
+  (define column (assq-ref source-properties 'column))
+
   (with-fluids ((%default-port-encoding encoding))
-    (let* ((file   (assq-ref source-properties 'filename))
-           (line   (assq-ref source-properties 'line))
-           (column (assq-ref source-properties 'column))
-           (in     (open-input-file file))
-           ;; The start byte position of the expression.
-           (start  (begin (while (not (and (= line (port-line in))
-                                           (= column (port-column in))))
-                            (when (eof-object? (read-char in))
-                              (error (format #f "~a: end of file~%" in))))
-                          (ftell in)))
-           ;; The end byte position of the expression.
-           (end    (begin (read in) (ftell in))))
-      (seek in 0 SEEK_SET) ; read from the beginning of the file.
-      (let* ((pre-bv  (get-bytevector-n in start))
-             ;; The expression in string form.
-             (str     (iconv:bytevector->string
-                       (get-bytevector-n in (- end start))
-                       (port-encoding in)))
-             (post-bv (get-bytevector-all in))
-             (str*    (proc str)))
-        ;; Verify the edited expression is still a scheme expression.
-        (call-with-input-string str* read)
-        ;; Update the file with edited expression.
-        (with-atomic-file-output file
-          (lambda (out)
-            (put-bytevector out pre-bv)
-            (display str* out)
-            ;; post-bv maybe the end-of-file object.
-            (when (not (eof-object? post-bv))
-              (put-bytevector out post-bv))
-            #t))))))
+    (call-with-input-file file
+      (lambda (in)
+        (let* ( ;; The start byte position of the expression.
+               (start  (begin (go-to-location
+                               in (+ 1 line) (+ 1 column))
+                              (ftell in)))
+               ;; The end byte position of the expression.
+               (end    (begin (read in)
+                              (when include-trailing-newline?
+                                (read-line in))
+                              (ftell in))))
+          (seek in 0 SEEK_SET)          ; read from the beginning of the file.
+          (let* ((pre-bv  (get-bytevector-n in start))
+                 ;; The expression in string form.
+                 (str     (iconv:bytevector->string
+                           (get-bytevector-n in (- end start))
+                           (port-encoding in)))
+                 (str*    (proc str)))
+            ;; Modify FILE only if there are changes.
+            (unless (string=? str* str)
+              ;; Verify the edited expression is still a scheme expression.
+              (call-with-input-string str* read)
+
+              (let ((post-bv (get-bytevector-all in)))
+                ;; Update the file with edited expression.
+                (with-atomic-file-output file
+                  (lambda (out)
+                    (put-bytevector out pre-bv)
+                    (display str* out)
+                    (unless (eof-object? post-bv)
+                      ;; Copy everything that came after STR.
+                      (put-bytevector out post-bv))))
+
+                ;; Due to 'with-atomic-file-output', IN and FILE no longer
+                ;; share the same inode, but we can reassign the source map up
+                ;; to LINE to the new file.
+                (move-source-location-map! (stat in) (stat file)
+                                           (+ 1 line))))))))))
+
+(define (delete-expression source-properties)
+  "Delete the expression specified by SOURCE-PROPERTIES."
+  (edit-expression source-properties (const "") #:include-trailing-newline? #t))
 
 
 ;;;
@@ -531,9 +665,46 @@ a character other than '@'."
     (idx (values (substring spec 0 idx)
                  (substring spec (1+ idx))))))
 
+(define* (target-linux? #:optional (target (or (%current-target-system)
+                                               (%current-system))))
+  "Does the operating system of TARGET use the Linux kernel?"
+  (->bool (string-contains target "linux")))
+
+(define* (target-hurd? #:optional (target (or (%current-target-system)
+                                              (%current-system))))
+  "Does TARGET represent the GNU(/Hurd) system?"
+  (and (string-suffix? "-gnu" target)
+       (not (string-contains target "linux"))))
+
 (define* (target-mingw? #:optional (target (%current-target-system)))
+  "Is the operating system of TARGET Windows?"
   (and target
+       ;; The "-32" doesn't mean TARGET is 32-bit, as "x86_64-w64-mingw32"
+       ;; is a valid triplet (see the (gnu ci) module) and 'w64' and 'x86_64'
+       ;; are 64-bit.
        (string-suffix? "-mingw32" target)))
+
+(define* (target-x86-32? #:optional (target (or (%current-target-system)
+                                                (%current-system))))
+  "Is the architecture of TARGET a variant of Intel's 32-bit architecture
+(IA32)?"
+  ;; Intel also has a 16-bit architecture in the iN86 series, i286
+  ;; (see, e.g., https://en.wikipedia.org/wiki/Intel_80286) so this
+  ;; procedure is not named target-x86?.
+  (or (string-prefix? "i386-" target)
+      (string-prefix? "i486-" target)
+      (string-prefix? "i586-" target)
+      (string-prefix? "i686-" target)))
+
+(define* (target-x86-64? #:optional (target (or (%current-target-system)
+                                                 (%current-system))))
+  "Is the architecture of TARGET a variant of Intel/AMD's 64-bit
+architecture (x86_64)?"
+  (string-prefix? "x86_64-" target))
+
+(define* (target-x86? #:optional (target (or (%current-target-system)
+                                             (%current-system))))
+  (or (target-x86-32? target) (target-x86-64? target)))
 
 (define* (target-arm32? #:optional (target (or (%current-target-system)
                                                (%current-system))))
@@ -547,13 +718,41 @@ a character other than '@'."
                                              (%current-system))))
   (or (target-arm32? target) (target-aarch64? target)))
 
+(define* (target-ppc32? #:optional (target (or (%current-target-system)
+                                               (%current-system))))
+  (string-prefix? "powerpc-" target))
+
+(define* (target-ppc64le? #:optional (target (or (%current-target-system)
+                                               (%current-system))))
+  (string-prefix? "powerpc64le-" target))
+
 (define* (target-powerpc? #:optional (target (or (%current-target-system)
                                                  (%current-system))))
   (string-prefix? "powerpc" target))
 
+(define* (target-riscv64? #:optional (target (or (%current-target-system)
+                                                 (%current-system))))
+  "Is the architecture of TARGET a 'riscv64' machine?"
+  (string-prefix? "riscv64" target))
+
+(define* (target-mips64el? #:optional (target (or (%current-target-system)
+                                                  (%current-system))))
+  (string-prefix? "mips64el-" target))
+
 (define* (target-64bit? #:optional (system (or (%current-target-system)
                                                (%current-system))))
-  (any (cut string-prefix? <> system) '("x86_64" "aarch64" "mips64" "powerpc64")))
+  (any (cut string-prefix? <> system) '("x86_64" "aarch64" "mips64"
+                                        "powerpc64" "riscv64")))
+
+(define* (ar-for-target #:optional (target (%current-target-system)))
+  (if target
+      (string-append target "-ar")
+      "ar"))
+
+(define* (as-for-target #:optional (target (%current-target-system)))
+  (if target
+      (string-append target "-as")
+      "as"))
 
 (define* (cc-for-target #:optional (target (%current-target-system)))
   (if target
@@ -564,6 +763,11 @@ a character other than '@'."
   (if target
       (string-append target "-g++")
       "g++"))
+
+(define* (ld-for-target #:optional (target (%current-target-system)))
+  (if target
+      (string-append target "-ld")
+      "ld"))
 
 (define* (pkg-config-for-target #:optional (target (%current-target-system)))
   (if target
@@ -738,22 +942,6 @@ REPLACEMENT."
                        (substring str start index)
                        pieces))))))))
 
-(define (call-with-temporary-output-file proc)
-  "Call PROC with a name of a temporary file and open output port to that
-file; close the file and delete it when leaving the dynamic extent of this
-call."
-  (let* ((directory (or (getenv "TMPDIR") "/tmp"))
-         (template  (string-append directory "/guix-file.XXXXXX"))
-         (out       (mkstemp! template)))
-    (dynamic-wind
-      (lambda ()
-        #t)
-      (lambda ()
-        (proc template out))
-      (lambda ()
-        (false-if-exception (close out))
-        (false-if-exception (delete-file template))))))
-
 (define (call-with-temporary-directory proc)
   "Call PROC with a name of a temporary directory; close the directory and
 delete it when leaving the dynamic extent of this call."
@@ -865,6 +1053,10 @@ environment variable name like \"XDG_CONFIG_HOME\"; SUFFIX is a suffix like
 ;;; Source location.
 ;;;
 
+(define (%guix-source-root-directory)
+  "Return the source root directory of the Guix found in %load-path."
+  (dirname (absolute-dirname "guix/packages.scm")))
+
 (define absolute-dirname
   ;; Memoize to avoid repeated 'stat' storms from 'search-path'.
   (mlambda (file)
@@ -944,11 +1136,11 @@ according to THRESHOLD, then #f is returned."
 ;;; Prettified output.
 ;;;
 
-(define* (pretty-print-table rows #:key (max-column-width 20))
+(define* (pretty-print-table rows #:key (max-column-width 20) (left-pad 0))
   "Print ROWS in neat columns.  All rows should be lists of strings and each
 row should have the same length.  The columns are separated by a tab
 character, and aligned using spaces.  The maximum width of each column is
-bound by MAX-COLUMN-WIDTH."
+bound by MAX-COLUMN-WIDTH.  Each row is prefixed with LEFT-PAD spaces."
   (let* ((number-of-columns-to-pad (if (null? rows)
                                        0
                                        (1- (length (first rows)))))
@@ -963,7 +1155,7 @@ bound by MAX-COLUMN-WIDTH."
                               (map (cut min <> max-column-width)
                                    column-widths)))
          (fmt (string-append (string-join column-formats "\t") "\t~a")))
-    (for-each (cut format #t "~?~%" fmt <>) rows)))
+    (for-each (cut format #t "~v_~?~%" left-pad fmt <>) rows)))
 
 ;;; Local Variables:
 ;;; eval: (put 'call-with-progress-reporter 'scheme-indent-function 1)

@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2015 David Thompson <davet@gnu.org>
-;;; Copyright © 2015, 2016 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015, 2016, 2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2016 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2017 Christopher Baines <mail@cbaines.net>
 ;;; Copyright © 2018 Clément Lassieur <clement@lassieur.org>
@@ -55,6 +55,7 @@
             postgresql-configuration-file
             postgresql-configuration-log-directory
             postgresql-configuration-data-directory
+            postgresql-configuration-extension-packages
 
             postgresql-service
             postgresql-service-type
@@ -116,7 +117,7 @@ host	all	all	::1/128 	md5"))
   (ident-file        postgresql-config-file-ident-file
                      (default %default-postgres-ident))
   (socket-directory  postgresql-config-file-socket-directory
-                     (default #false))
+                     (default "/var/run/postgresql"))
   (extra-config      postgresql-config-file-extra-config
                      (default '())))
 
@@ -164,7 +165,7 @@ host	all	all	::1/128 	md5"))
 (define-record-type* <postgresql-configuration>
   postgresql-configuration make-postgresql-configuration
   postgresql-configuration?
-  (postgresql         postgresql-configuration-postgresql) ;<package>
+  (postgresql         postgresql-configuration-postgresql) ;file-like
   (port               postgresql-configuration-port
                       (default 5432))
   (locale             postgresql-configuration-locale
@@ -327,7 +328,8 @@ host	all	all	::1/128 	md5"))
            profile-service-type
            (compose list postgresql-configuration-postgresql))))
    (default-value (postgresql-configuration
-                   (postgresql postgresql-10)))))
+                   (postgresql postgresql-10)))
+   (description "Run the PostgreSQL database server.")))
 
 (define-deprecated (postgresql-service #:key (postgresql postgresql)
                                        (port 5432)
@@ -364,7 +366,7 @@ and stores the database cluster in @var{data-directory}."
   postgresql-role-configuration make-postgresql-role-configuration
   postgresql-role-configuration?
   (host             postgresql-role-configuration-host ;string
-                    (default "/tmp"))
+                    (default "/var/run/postgresql"))
   (log              postgresql-role-configuration-log ;string
                     (default "/var/log/postgresql_roles.log"))
   (roles            postgresql-role-configuration-roles
@@ -448,7 +450,7 @@ created after the PostgreSQL database is started.")))
 (define-record-type* <memcached-configuration>
   memcached-configuration make-memcached-configuration
   memcached-configuration?
-  (memcached          memcached-configuration-memcached ;<package>
+  (memcached          memcached-configuration-memcached ;file-like
                       (default memcached))
   (interfaces         memcached-configuration-interfaces
                       (default '("0.0.0.0")))
@@ -513,7 +515,10 @@ created after the PostgreSQL database is started.")))
                                           (const memcached-activation))
                        (service-extension account-service-type
                                           (const %memcached-accounts))))
-                (default-value (memcached-configuration))))
+                (default-value (memcached-configuration))
+                (description "Run @command{memcached}, a daemon that provides
+an in-memory caching service, intended for use by dynamic web
+applications.")))
 
 
 ;;;
@@ -679,7 +684,9 @@ FLUSH PRIVILEGES;
                              %mysql-activation)
           (service-extension shepherd-root-service-type
                              mysql-shepherd-services)))
-   (default-value (mysql-configuration))))
+   (default-value (mysql-configuration))
+   (description "Run the MySQL or MariaDB database server,
+@command{mysqld}.")))
 
 (define-deprecated (mysql-service #:key (config (mysql-configuration)))
   mysql-service-type
@@ -693,7 +700,7 @@ FLUSH PRIVILEGES;
 (define-record-type* <redis-configuration>
   redis-configuration make-redis-configuration
   redis-configuration?
-  (redis             redis-configuration-redis ;<package>
+  (redis             redis-configuration-redis ;file-like
                      (default redis))
   (bind              redis-configuration-bind
                      (default "127.0.0.1"))
@@ -758,4 +765,5 @@ FLUSH PRIVILEGES;
                                           redis-activation)
                        (service-extension account-service-type
                                           (const %redis-accounts))))
-                (default-value (redis-configuration))))
+                (default-value (redis-configuration))
+                (description "Run Redis, a caching key/value store.")))

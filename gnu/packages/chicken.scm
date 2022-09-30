@@ -68,7 +68,7 @@
             (variable "CHICKEN_REPOSITORY_PATH")
             ;; TODO extract binary version into a module level definition.
             (files (list "var/lib/chicken/11")))))
-    (propagated-inputs `(("gcc-toolchain" ,gcc-toolchain)))
+    (propagated-inputs (list gcc-toolchain))
     (home-page "https://www.call-cc.org/")
     (synopsis "R5RS Scheme implementation that compiles native code via C")
     (description
@@ -99,7 +99,7 @@ language standard, and includes many enhancements and extensions.")
     (build-system chicken-build-system)
     (arguments '(#:egg-name "srfi-1"))
     (inputs
-     `(("chicken-test" ,chicken-test)))
+     (list chicken-test))
     (home-page "https://wiki.call-cc.org/eggref/5/srfi-1")
     (synopsis "SRFI-1 list library")
     (description
@@ -107,6 +107,26 @@ language standard, and includes many enhancements and extensions.")
 @uref{https://srfi.schemers.org/srfi-1/srfi-1.html, SRFI-1} contains a lot of
 useful list processing procedures for construction, examining, destructuring
 and manipulating lists and pairs.")
+    (license license:bsd-3)))
+
+(define-public chicken-srfi-13
+  (package
+    (name "chicken-srfi-13")
+    (version "0.3.2")
+    (source (origin
+              (method url-fetch)
+              (uri (egg-uri "srfi-13" version))
+              (sha256
+               (base32
+                "18clbmaampaxivwx9bya9fxnkzqbczhlz0kbs9bfapm77mxkwclc"))))
+    (build-system chicken-build-system)
+    (arguments '(#:egg-name "srfi-13"))
+    (native-inputs (list chicken-test))
+    (propagated-inputs (list chicken-srfi-14))
+    (home-page "https://wiki.call-cc.org/egg/srfi-13")
+    (synopsis "SRFI-13 string library for Chicken scheme")
+    (description "This package provides the SRFI-13 string library for Chicken
+scheme.")
     (license license:bsd-3)))
 
 (define-public chicken-srfi-14
@@ -182,11 +202,9 @@ CHICKEN Scheme, along with
     ;; TODO do we really have to make these propagated?
     ;; I don't know Chicken's module system well enough to tell
     (propagated-inputs
-     `(("chicken-datatype" ,chicken-datatype)
-       ("chicken-srfi-1" ,chicken-srfi-1)
-       ("chicken-srfi-14" ,chicken-srfi-14)))
+     (list chicken-datatype chicken-srfi-1 chicken-srfi-14))
     (inputs
-     `(("chicken-test" ,chicken-test)))
+     (list chicken-test))
     (build-system chicken-build-system)
     (arguments '(#:egg-name "agrep"))
     (synopsis "Approximate string matching library")
@@ -217,8 +235,7 @@ file indexing tool.")
     (build-system chicken-build-system)
     (arguments '(#:egg-name "datatype"))
     (inputs
-     `(("chicken-srfi-1" ,chicken-srfi-1)
-       ("chicken-test" ,chicken-test)))
+     (list chicken-srfi-1 chicken-test))
     (home-page "https://wiki.call-cc.org/eggref/5/datatype")
     (synopsis "Facility for creating and using variant records")
     (description
@@ -245,7 +262,7 @@ Languages} by Friedman, Wand, and Haynes.")
         (base32
          "0gz50n5i561n5sk9prry0lrxz6bfrq9if5bclaq6a0f7lzinhnzb"))))
     (inputs
-     `(("chicken-test" ,chicken-test)))
+     (list chicken-test))
     (build-system chicken-build-system)
     (arguments '(#:egg-name "iset"))
     (synopsis "Integer set library")
@@ -281,3 +298,34 @@ with integers.")
      "This package provides a simple testing utility for CHICKEN Scheme.")
     (license license:bsd-3)))
 
+(define-public chicken-crypto-tools
+  (package
+    (name "chicken-crypto-tools")
+    (version "1.4")
+    (source (origin
+              (method url-fetch)
+              (uri (egg-uri "crypto-tools" version))
+              (sha256
+               (base32
+                "0ajf0qfnhp99f4x1dll2fhlxrsxamgrrwyksc7rrym77xmv8f1pd"))))
+    (build-system chicken-build-system)
+    (arguments '(#:egg-name "crypto-tools"))
+    (home-page "https://wiki.call-cc.org/egg/crypto-tools")
+    (synopsis "Useful cryptographic primitives")
+    (description "The crypto-tools egg implements useful cryptographic
+primitives.  More specifically, provided are:
+
+@itemize
+@item binary blobs
+@itemize
+@item marshallers to and from hex strings
+@item blob xor
+@item blob padding using either PKCS#5 or ISO7816-4
+@end itemize
+@item Block cipher modes of operation
+@itemize
+@item CBC with or without incorporated encrypted IV in the ciphertext
+@item CTR with or without incorporated IV in the ciphertext
+@end itemize
+@end itemize")
+    (license license:bsd-3)))

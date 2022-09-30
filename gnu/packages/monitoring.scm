@@ -7,9 +7,11 @@
 ;;; Copyright © 2018, 2019, 2020 Oleg Pykhalov <go.wigust@gmail.com>
 ;;; Copyright © 2020 Alex ter Weele <alex.ter.weele@gmail.com>
 ;;; Copyright © 2020 Lars-Dominik Braun <ldb@leibniz-psychology.org>
-;;; Copyright © 2021 Marius Bakke <marius@gnu.org>
+;;; Copyright © 2021, 2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2021 Stefan Reichör <stefan@xsteve.at>
 ;;; Copyright © 2021 Raphaël Mélotte <raphael.melotte@mind.be>
+;;; Copyright © 2022 Paul A. Patience <paul@apatience.com>
+;;; Copyright © 2022 Hartmut Goebel <h.goebel@crazy-compilers.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -27,6 +29,7 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages monitoring)
+  #:use-module (guix gexp)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
@@ -56,9 +59,11 @@
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages rrdtool)
+  #:use-module (gnu packages sphinx)
   #:use-module (gnu packages time)
   #:use-module (gnu packages tls)
   #:use-module (gnu packages web))
@@ -86,7 +91,7 @@
                   #t))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("unzip" ,unzip)))
+     (list unzip))
     (inputs
      `(("zlib" ,zlib)
        ("libpng-apng" ,libpng)
@@ -162,7 +167,7 @@ etc. via a Web interface.  Features include:
 (define-public zabbix-agentd
   (package
     (name "zabbix-agentd")
-    (version "5.2.6")
+    (version "6.0.5")
     (source
      (origin
        (method url-fetch)
@@ -170,24 +175,28 @@ etc. via a Web interface.  Features include:
              "https://cdn.zabbix.com/zabbix/sources/stable/"
              (version-major+minor version) "/zabbix-" version ".tar.gz"))
        (sha256
-        (base32 "100n1rv7r4pqagxxifzpcza5bhrr2fklzx7gndxwiyq4597p1jvn"))))
+        (base32 "1hmx6dgsag84dpv867p12bkln141nypgkp6zhipxbnn5xxip1sry"))
+       (modules '((guix build utils)))
+       (snippet
+        '(substitute* '("src/zabbix_proxy/proxy.c"
+                        "src/zabbix_server/server.c")
+           ;; 'fping' must be setuid, so look for it in the usual location.
+           (("/usr/sbin/fping6?")
+            "/run/setuid-programs/fping")))))
     (build-system gnu-build-system)
     (arguments
-     `(#:configure-flags
-       (list "--enable-agent"
-             "--enable-ipv6"
-             (string-append "--with-iconv="
-                            (assoc-ref %build-inputs "libiconv"))
-             (string-append "--with-libpcre="
-                            (assoc-ref %build-inputs "pcre")))))
+     '(#:configure-flags
+       '("--enable-agent" "--enable-ipv6" "--with-libpcre2")))
     (inputs
-     `(("libiconv" ,libiconv)
-       ("pcre" ,pcre)))
+     (list pcre2))
     (home-page "https://www.zabbix.com/")
     (synopsis "Distributed monitoring solution (client-side agent)")
     (description "This package provides a distributed monitoring
 solution (client-side agent)")
-    (license license:gpl2)))
+    (license license:gpl2+)
+    (properties
+     '((release-monitoring-url . "https://www.zabbix.com/download_sources")
+       (upstream-name . "zabbix")))))
 
 (define-public zabbix-server
   (package
@@ -195,10 +204,10 @@ solution (client-side agent)")
     (name "zabbix-server")
     (outputs '("out" "front-end" "schema"))
     (arguments
-     (substitute-keyword-arguments
-         `(#:phases
-           (modify-phases %standard-phases
-             (add-after 'install 'install-front-end
+     (substitute-keyword-arguments (package-arguments zabbix-agentd)
+       ((#:phases phases '%standard-phases)
+        #~(modify-phases #$phases
+            (add-after 'install 'install-front-end
                (lambda* (#:key outputs #:allow-other-keys)
                  (let* ((php (string-append (assoc-ref outputs "front-end")
                                             "/share/zabbix/php"))
@@ -206,11 +215,10 @@ solution (client-side agent)")
                         (etc (string-append php "/etc")))
                    (mkdir-p php)
                    (copy-recursively "ui" php)
-                   ;; Make front-end write config to ‘/etc/zabbix’ directory.
+                   ;; Make front-end read config from ‘/etc/zabbix’ directory.
                    (rename-file front-end-conf
                                 (string-append front-end-conf "-example"))
-                   (symlink "/etc/zabbix" front-end-conf))
-                 #t))
+                   (symlink "/etc/zabbix" front-end-conf))))
              (add-after 'install 'install-schema
                (lambda* (#:key outputs #:allow-other-keys)
                  (let ((database-directory
@@ -219,30 +227,27 @@ solution (client-side agent)")
                    (for-each delete-file
                              (find-files "database" "Makefile\\.in|\\.am$"))
                    (mkdir-p database-directory)
-                   (copy-recursively "database" database-directory))
-                 #t)))
-           ,@(package-arguments zabbix-agentd))
-       ((#:configure-flags flags)
-        `(cons* "--enable-server"
-                "--with-postgresql"
-                (string-append "--with-libevent="
-                               (assoc-ref %build-inputs "libevent"))
-                "--with-net-snmp"
-                (string-append "--with-gnutls="
-                               (assoc-ref %build-inputs "gnutls"))
-                "--with-libcurl"
-                (string-append "--with-zlib="
-                               (assoc-ref %build-inputs "zlib"))
-                ,flags))))
+                   (copy-recursively "database" database-directory))))))
+       ((#:configure-flags flags ''())
+        #~(append (list "--enable-server"
+                        "--with-postgresql"
+                        (string-append "--with-libevent="
+                                       (assoc-ref %build-inputs "libevent"))
+                        "--with-net-snmp"
+                        (string-append "--with-gnutls="
+                                       (assoc-ref %build-inputs "gnutls"))
+                        "--with-libcurl"
+                        (string-append "--with-zlib="
+                                       (assoc-ref %build-inputs "zlib")))
+                  (delete "--enable-agent" #$flags)))))
     (inputs
-     `(("curl" ,curl)
-       ("libevent" ,libevent)
-       ("gnutls" ,gnutls)
-       ("postgresql" ,postgresql)
-       ("zlib" ,zlib)
-       ("net-snmp" ,net-snmp)
-       ("curl" ,curl)
-       ,@(package-inputs zabbix-agentd)))
+     (modify-inputs (package-inputs zabbix-agentd)
+       (prepend curl
+                libevent
+                gnutls
+                net-snmp
+                postgresql
+                zlib)))
     (synopsis "Distributed monitoring solution (server-side)")
     (description "This package provides a distributed monitoring
 solution (server-side)")))
@@ -250,7 +255,7 @@ solution (server-side)")))
 (define-public zabbix-cli
   (package
     (name "zabbix-cli")
-    (version "2.2.1")
+    (version "2.3.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -259,23 +264,40 @@ solution (server-side)")))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0wzmrn8p09ksqhhgawr179c4az7p2liqr0l4q2dra62bxliawyqz"))))
+                "1p8xkq3mxg476srwrgqax76vjzji0rjx32njmgnpa409vaqrbj5p"))))
     (build-system python-build-system)
     (arguments
-     '(#:phases (modify-phases %standard-phases
-                  (add-after 'unpack 'use-absolute-ncurses
-                    (lambda _
-                      (substitute* "bin/zabbix-cli"
-                        (("'clear'")
-                         (string-append "'" (which "clear") "'")))))
-                  (add-after 'unpack 'patch-setup.py
-                    (lambda _
-                      ;; Install data_files to $out/share instead of /usr/share.
-                      (substitute* "setup.py"
-                        (("/usr/") "")))))))
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'use-absolute-ncurses
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (let ((clear (search-input-file inputs "bin/clear")))
+                     (substitute* "bin/zabbix-cli"
+                       (("'clear'")
+                        (string-append "'" clear "'"))))))
+               (add-after 'unpack 'patch-setup.py
+                 (lambda _
+                   ;; Install data_files to $out/share instead of /usr/share.
+                   (substitute* "setup.py"
+                     (("/usr/") ""))))
+               (add-after 'build 'build-docs
+                 (lambda _
+                   (invoke "make" "-C" "docs" "manual")
+                   (invoke "make" "-C" "docs" "singlehtml")))
+               (add-after 'install 'install-docs
+                 (lambda _
+                   (install-file "docs/_build/man/zabbix-cli.1"
+                                 (string-append #$output "/share/man/man1"))
+                   (copy-recursively "docs/_build/singlehtml"
+                                     (string-append #$output "/share/doc/"
+                                                    #$name "/html"))))
+               (replace 'check
+                 (lambda _
+                   (invoke "pytest" "-vv"))))))
+    (native-inputs
+     (list python-pytest python-sphinx))
     (inputs
-     `(("clear" ,ncurses)
-       ("python-requests" ,python-requests)))
+     (list ncurses python-requests))
     (home-page "https://github.com/unioslo/zabbix-cli")
     (synopsis "Command-line interface to Zabbix")
     (description
@@ -287,7 +309,7 @@ through a text-based interface.")
 (define-public python-pyzabbix
   (package
     (name "python-pyzabbix")
-    (version "0.8.2")
+    (version "1.0.0")
     (home-page "https://github.com/lukecyca/pyzabbix")
     ;; No tests on PyPI, use the git checkout.
     (source
@@ -297,7 +319,7 @@ through a text-based interface.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "15rrnpkv94wx6748hh4sd120v6x25rkbd6vlz6hfrhvjwxz5lgjl"))))
+         "146pv8bj6pv8max1lkm07560b9zcc268c927kff6rcib47qxfnn2"))))
     (build-system python-build-system)
     (arguments
      '(#:phases (modify-phases %standard-phases
@@ -310,14 +332,13 @@ through a text-based interface.")
                   (replace 'check
                     (lambda* (#:key tests? #:allow-other-keys)
                       (if tests?
-                          (invoke "python" "setup.py" "nosetests")
-                          (format #t "test suite not run~")))))))
+                          (invoke "nosetests")
+                          (format #t "test suite not run~%")))))))
     (native-inputs
-     `(;; For tests.
-       ("python-httpretty" ,python-httpretty)
-       ("python-nose" ,python-nose)))
+     ;; For tests.
+     (list python-httpretty python-nose))
     (propagated-inputs
-     `(("python-requests" ,python-requests)))
+     (list python-requests python-semantic-version))
     (synopsis "Python interface to the Zabbix API")
     (description
      "@code{pyzabbix} is a Python module for working with the Zabbix API.")
@@ -337,8 +358,7 @@ through a text-based interface.")
     (build-system gnu-build-system)
     (arguments '(#:tests? #f))          ; no tests
     (inputs
-     `(("libpcap" ,libpcap)
-       ("zlib" ,zlib)))
+     (list libpcap zlib))
     (home-page "https://unix4lyfe.org/darkstat/")
     (synopsis "Network statistics gatherer")
     (description
@@ -358,15 +378,16 @@ HTTP.  Features:
 (define-public python-whisper
   (package
     (name "python-whisper")
-    (version "1.0.2")
+    (version "1.1.8")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "whisper" version))
        (sha256
         (base32
-         "1v1bi3fl1i6p4z4ki692bykrkw6907dn3mfq0151f70lvi3zpns3"))))
+         "1bk29w09zcpsv8hp0g0al7nwrxa07z0ycls3mbh83wfavk83aprl"))))
     (build-system python-build-system)
+    (native-inputs (list python-six))
     (home-page "http://graphiteapp.org/")
     (synopsis "Fixed size round-robin style database for Graphite")
     (description "Whisper is one of three components within the Graphite
@@ -396,10 +417,7 @@ historical data.")
          (add-after 'unpack 'do-not-install-to-/opt
            (lambda _ (setenv "GRAPHITE_NO_PREFIX" "1") #t)))))
     (propagated-inputs
-     `(("python-cachetools" ,python-cachetools)
-       ("python-txamqp" ,python-txamqp)
-       ("python-urllib3" ,python-urllib3)
-       ("python-whisper" ,python-whisper)))
+     (list python-cachetools python-txamqp python-urllib3 python-whisper))
     (home-page "http://graphiteapp.org/")
     (synopsis "Backend data caching and persistence daemon for Graphite")
     (description "Carbon is a backend data caching and persistence daemon for
@@ -435,24 +453,21 @@ and persisting them to disk using the Whisper time-series library.")
          (add-after 'unpack 'do-not-install-to-/opt
            (lambda _ (setenv "GRAPHITE_NO_PREFIX" "1") #t)))))
     (propagated-inputs
-     `(("python-cairocffi" ,python-cairocffi)
-       ("python-pytz" ,python-pytz)
-       ("python-whisper" ,python-whisper)
-       ("python-django" ,python-django-2.2)
-       ("python-django-tagging" ,python-django-tagging)
-       ("python-scandir" ,python-scandir)
-       ("python-urllib3" ,python-urllib3)
-       ("python-pyparsing" ,python-pyparsing)
-       ("python-txamqp" ,python-txamqp)))
+     (list python-cairocffi
+           python-pytz
+           python-whisper
+           python-django-2.2
+           python-django-tagging
+           python-scandir
+           python-urllib3
+           python-pyparsing
+           python-txamqp))
     (home-page "https://graphiteapp.org/")
     (synopsis "Scalable realtime graphing system")
     (description "Graphite is a scalable real-time graphing system that does
 two things: store numeric time-series data, and render graphs of this data on
 demand.")
     (license license:asl2.0)))
-
-(define-public python2-graphite-web
-  (deprecated-package "python2-graphite-web" graphite-web))
 
 (define-public python-prometheus-client
   (package
@@ -469,7 +484,7 @@ demand.")
      '(;; No included tests.
        #:tests? #f))
     (propagated-inputs
-     `(("python-twisted" ,python-twisted)))
+     (list python-twisted))
     (home-page
      "https://github.com/prometheus/client_python")
     (synopsis "Python client for the Prometheus monitoring system")
@@ -538,12 +553,9 @@ written in Go with pluggable metric collectors.")
                                             "/lib/udev/rules.d"))
                #t)))))
       (inputs
-       `(("python-prometheus-client" ,python-prometheus-client)
-         ("python-pyudev" ,python-pyudev)))
+       (list python-prometheus-client python-pyudev))
       (native-inputs
-       `(("python-pytest" ,python-pytest)
-         ("python-pytest-mock" ,python-pytest-mock)
-         ("python-pytest-runner" ,python-pytest-runner)))
+       (list python-pytest python-pytest-mock python-pytest-runner))
       (home-page "https://github.com/yrro/temper-exporter")
       (synopsis "Prometheus exporter for PCSensor TEMPer sensor devices")
       (description
@@ -554,7 +566,7 @@ devices.")
 (define-public fswatch
   (package
     (name "fswatch")
-    (version "1.15.0")
+    (version "1.16.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -563,13 +575,13 @@ devices.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1yz65jsbgdx4cmy16x24wz5di352lvyi7fp6jm90bhgl1vpzxlsx"))))
+                "1zsvc8arza2ypnnmv4m0qfpnldmy1zh10q6wss05ibmanslfj2ql"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("gettext" ,gettext-minimal)
-       ("libtool" ,libtool)))
+     (list autoconf automake gettext-minimal libtool))
+    (arguments
+     (list #:configure-flags
+           #~(list "--disable-static")))
     (synopsis "File system monitor")
     (description "This package provides a file system monitor.")
     (home-page "https://github.com/emcrisostomo/fswatch")
@@ -598,14 +610,9 @@ devices.")
                       ;; Required because of patched sources.
                       (invoke "autoreconf" "-vfi"))))))
     (inputs
-     `(("rrdtool" ,rrdtool)
-       ("curl" ,curl)
-       ("libyajl" ,libyajl)))
+     (list rrdtool curl libyajl))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (home-page "https://collectd.org/")
     (synopsis "Collect system and application performance metrics periodically")
     (description
@@ -631,7 +638,7 @@ future system load (i.e., capacity planning).")
                (base32
                 "0jw6yij8va0f292g4xkf9lp9sxkzfgv67ajw49g3vq42q47ld7cv"))))
     (build-system gnu-build-system)
-    (inputs `(("ncurses" ,ncurses)))
+    (inputs (list ncurses))
     (arguments '(#:tests? #f)) ;; No included tests.
     (home-page "http://www.maier-komor.de/hostscope.html")
     (properties `((release-monitoring-url . ,home-page)))
@@ -677,3 +684,81 @@ processes which keep waking up the disk unnecessarily and thus prevent some
 power saving.")
     (home-page "https://github.com/martinpitt/fatrace")
     (license license:gpl3+)))
+
+(define-public pw
+  (package
+    (name "pw")
+    (version "2")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://www.kylheku.com/git/pw")
+             (commit (string-append "pw-" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1xn3qnzz48xan78cp83hfrcifrxx9lgnm14134qhyr5wvj7dk246"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list #:tests? #f                  ; There are no tests
+           #:make-flags
+           #~(list (string-append "CC=" #$(cc-for-target))
+                   (string-append "DESTDIR=" #$output))
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'fix-makefile
+                 (lambda _
+                   (substitute* "Makefile"
+                     (("/share/man/man1 \\\\") "/share/man/man1; \\"))))
+               (delete 'configure)
+               (add-before 'install 'make-install-dirs
+                 (lambda _
+                   (mkdir-p (string-append #$output "/bin"))
+                   (mkdir-p (string-append #$output "/share/man/man1"))
+                   (mkdir-p (string-append #$output "/share/man/man5")))))))
+    (home-page "https://www.kylheku.com/cgit/pw/")
+    (synopsis "Monitor recent lines of output from pipe")
+    (description
+     "@command{pw} is Pipe Watch, a utility that continuously reads lines of
+text from a pipe or pipe-like source, passes them through a FIFO buffer, and
+maintains a display based on the occasional sampling of the contents of the
+FIFO buffer, with useful features such as triggering and filtering.
+
+With @command{pw} you can:
+
+@itemize
+@item Interactively apply and remove filters on-the-fly, without interrupting
+the source.
+
+@item Make recurring patterns in the stream appear to ``freeze'' on the
+screen, using triggers.
+
+@item Prevent the overwhelming amount of output from a program from flooding
+the terminal, while consuming all of that output so that the program isn't
+blocked.  @command{pw} can pause its display updates entirely.
+
+@item Juggle multiple shell background jobs that produce output, yet execute
+indefinitely without blocking.  When @command{pw} runs as part of a shell
+background job, it continues to consume input, process filters and take
+snapshots, without displaying anything.  When put into the foreground again,
+display resumes.
+@end itemize")
+    (license license:bsd-2)))
+
+(define-public python-statsd
+  (package
+    (name "python-statsd")
+    (version "3.3.0")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "statsd" version))
+              (sha256
+               (base32
+                "07yxnlalvcglgwa9pjs1clwrmwx7a4575jai7q05jz3g4i6dprp3"))))
+    (build-system python-build-system)
+    (native-inputs (list python-mock python-nose))
+    (home-page "https://github.com/jsocol/pystatsd")
+    (synopsis "Simple StatsD client")
+    (description "StatsD is a friendly front-end to Graphite.  This package
+provides a simple Python client for the StatsD daemon.")
+    (license license:expat)))

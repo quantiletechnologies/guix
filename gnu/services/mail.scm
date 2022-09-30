@@ -30,6 +30,7 @@
   #:use-module (gnu services shepherd)
   #:use-module (gnu system pam)
   #:use-module (gnu system shadow)
+  #:use-module (gnu system setuid)
   #:use-module (gnu packages mail)
   #:use-module (gnu packages admin)
   #:use-module (gnu packages dav)
@@ -285,7 +286,7 @@ the section name.")
     (serialize-fifo-listener-configuration field-name val))
    ((inet-listener-configuration? val)
     (serialize-inet-listener-configuration field-name val))
-   (else (configuration-field-error field-name val))))
+   (else (configuration-field-error #f field-name val))))
 (define (listener-configuration-list? val)
   (and (list? val) (and-map listener-configuration? val)))
 (define (serialize-listener-configuration-list field-name val)
@@ -498,7 +499,7 @@ as @code{#t}.)")
 
 (define-configuration dovecot-configuration
   (dovecot
-   (package dovecot)
+   (file-like dovecot)
    "The dovecot package.")
 
   (listen
@@ -1472,7 +1473,7 @@ greyed out, instead of only later giving \"not selectable\" popup error.
 
 (define-configuration opaque-dovecot-configuration
   (dovecot
-   (package dovecot)
+   (file-like dovecot)
    "The dovecot package.")
 
   (string
@@ -1600,7 +1601,9 @@ greyed out, instead of only later giving \"not selectable\" popup error.
                        (service-extension pam-root-service-type
                                           (const %dovecot-pam-services))
                        (service-extension activation-service-type
-                                          %dovecot-activation)))))
+                                          %dovecot-activation)))
+                (description "Run Dovecot, a mail server that can run POP3,
+IMAP, and LMTP.")))
 
 (define* (dovecot-service #:key (config (dovecot-configuration)))
   "Return a service that runs @command{dovecot}, a mail server that can run
@@ -1608,10 +1611,6 @@ POP3, IMAP, and LMTP.  @var{config} should be a configuration object created
 by @code{dovecot-configuration}.  @var{config} may also be created by
 @code{opaque-dovecot-configuration}, which allows specification of the
 @code{dovecot.conf} as a string."
-  (validate-configuration config
-                          (if (opaque-dovecot-configuration? config)
-                              opaque-dovecot-configuration-fields
-                              dovecot-configuration-fields))
   (service dovecot-service-type config))
 
 ;; A little helper to make it easier to document all those fields.
@@ -1655,7 +1654,8 @@ by @code{dovecot-configuration}.  @var{config} may also be created by
   (package     opensmtpd-configuration-package
                (default opensmtpd))
   (config-file opensmtpd-configuration-config-file
-               (default %default-opensmtpd-config-file)))
+               (default %default-opensmtpd-config-file))
+  (setgid-commands? opensmtpd-setgid-commands? (default #t)))
 
 (define %default-opensmtpd-config-file
   (plain-file "smtpd.conf" "
@@ -1716,6 +1716,43 @@ match from local for any action outbound
 (define %opensmtpd-pam-services
   (list (unix-pam-service "smtpd")))
 
+(define opensmtpd-set-gids
+  (match-lambda
+    (($ <opensmtpd-configuration> package config-file set-gids?)
+     (if set-gids?
+         (list
+          (setuid-program
+           (program (file-append package "/sbin/smtpctl"))
+           (setuid? #false)
+           (setgid? #true)
+           (group "smtpq"))
+          (setuid-program
+           (program (file-append package "/sbin/sendmail"))
+           (setuid? #false)
+           (setgid? #true)
+           (group "smtpq"))
+          (setuid-program
+           (program (file-append package "/sbin/send-mail"))
+           (setuid? #false)
+           (setgid? #true)
+           (group "smtpq"))
+          (setuid-program
+           (program (file-append package "/sbin/makemap"))
+           (setuid? #false)
+           (setgid? #true)
+           (group "smtpq"))
+          (setuid-program
+           (program (file-append package "/sbin/mailq"))
+           (setuid? #false)
+           (setgid? #true)
+           (group "smtpq"))
+          (setuid-program
+           (program (file-append package "/sbin/newaliases"))
+           (setuid? #false)
+           (setgid? #true)
+           (group "smtpq")))
+         '()))))
+
 (define opensmtpd-service-type
   (service-type
    (name 'opensmtpd)
@@ -1729,7 +1766,11 @@ match from local for any action outbound
           (service-extension profile-service-type
                              (compose list opensmtpd-configuration-package))
           (service-extension shepherd-root-service-type
-                             opensmtpd-shepherd-service)))))
+                             opensmtpd-shepherd-service)
+          (service-extension setuid-program-service-type
+                             opensmtpd-set-gids)))
+   (description "Run the OpenSMTPD, a lightweight @acronym{SMTP, Simple Mail
+Transfer Protocol} server.")))
 
 
 ;;;
@@ -1754,7 +1795,9 @@ match from local for any action outbound
    (extensions
     (list (service-extension etc-service-type mail-aliases-etc)))
    (compose concatenate)
-   (extend append)))
+   (extend append)
+   (description "Provide a @file{/etc/aliases} file---an email alias
+database---computed from the given alias list.")))
 
 
 ;;;
@@ -1764,7 +1807,7 @@ match from local for any action outbound
 (define-record-type* <exim-configuration> exim-configuration
   make-exim-configuration
   exim-configuration?
-  (package       exim-configuration-package ;<package>
+  (package       exim-configuration-package ;file-like
                  (default exim))
   (config-file   exim-configuration-config-file ;file-like
                  (default #f)))
@@ -1831,7 +1874,8 @@ exim_group = exim
           (service-extension account-service-type (const %exim-accounts))
           (service-extension activation-service-type exim-activation)
           (service-extension profile-service-type exim-profile)
-          (service-extension mail-aliases-service-type (const '()))))))
+          (service-extension mail-aliases-service-type (const '()))))
+   (description "Run the Exim mail transfer agent (MTA).")))
 
 
 ;;;

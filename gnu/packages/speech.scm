@@ -2,9 +2,9 @@
 ;;; Copyright © 2016 David Thompson <davet@gnu.org>
 ;;; Copyright © 2016, 2019, 2020 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2017 Leo Famulari <leo@famulari.name>
-;;; Copyright © 2018, 2020, 2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2018, 2020–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2016 Kei Kebreau <kkebreau@posteo.net>
-;;; Copyright © 2019 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2019, 2021 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2020 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2020 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2021 qblade <qblade@protonmail.com>
@@ -110,7 +110,7 @@
                          (find-files out "\\.a$"))
                #t))))))
     (native-inputs
-     `(("perl" ,perl)))
+     (list perl))
     (inputs
      `(("alsa" ,alsa-lib)))
     (synopsis "Speech synthesis system")
@@ -162,12 +162,11 @@ building tools.")
              ;; corresponding file to be sure that espeak compiles correctly.
              (copy-file "portaudio19.h" "portaudio.h")
              (substitute* "Makefile"
-               (("/bin/ln") "ln"))
-             #t)))))
+               (("/bin/ln") "ln")
+               (("\\$\\(INSTALL\\).*\\$\\(STATIC_LIB.*") "")))))))
        (inputs
-        `(("portaudio" ,portaudio)
-          ("pulseaudio" ,pulseaudio)))
-       (native-inputs `(("unzip" ,unzip)))
+        (list portaudio pulseaudio))
+       (native-inputs (list unzip))
        (home-page "http://espeak.sourceforge.net/")
        (synopsis "Software speech synthesizer")
        (description "eSpeak is a software speech synthesizer for English and
@@ -180,18 +179,16 @@ based on human speech recordings.")
 (define-public espeak-ng
   (package
     (name "espeak-ng")
-    (version "1.50")
-    (home-page "https://github.com/espeak-ng/espeak-ng")
-    ;; Note: eSpeak NG publishes release tarballs, but the 1.50 tarball is
-    ;; broken: <https://github.com/espeak-ng/espeak-ng/issues/683>.
-    ;; Download the raw repository to work around it; remove 'native-inputs'
-    ;; below when switching back to the release tarball.
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference (url home-page) (commit version)))
-              (file-name (git-file-name name version))
-              (sha256
-               (base32 "0jkqhf2h94vbqq7mg7mmm23bq372fa7mdk941my18c3vkldcir1b"))))
+    (version "1.51")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/espeak-ng/espeak-ng")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "0xhgdmvpgi464x9ba586c6hvscfkbhry75cv796hl9pz1nawq31b"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags '("--disable-static")
@@ -200,13 +197,10 @@ based on human speech recordings.")
        ;; XXX: Some tests require an audio device.
        #:tests? #f))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("which" ,which)))
+     (list autoconf automake libtool which))
     (inputs
-     `(("libcap" ,libcap)
-       ("pcaudiolib" ,pcaudiolib)))
+     (list libcap pcaudiolib))
+    (home-page "https://github.com/espeak-ng/espeak-ng")
     (synopsis "Software speech synthesizer")
     (description
      "eSpeak NG is a software speech synthesizer for more than 100 languages.
@@ -228,7 +222,7 @@ synthesis, and the ability to use MBROLA voices.")
                 "09fv4fcpmw9g1j0zml0k5kk1lgjw2spr8gn51llbkaaph6v8d62a"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("gfortran" ,gfortran)))
+     (list gfortran))
     (synopsis "The MIT Language Modeling toolkit")
     (description "The MIT Language Modeling (MITLM) toolkit is a set of
 tools designed for the efficient estimation of statistical n-gram language
@@ -240,7 +234,7 @@ efficiency through the use of a compact vector representation of n-grams.")
 (define-public speech-dispatcher
   (package
     (name "speech-dispatcher")
-    (version "0.10.2")
+    (version "0.11.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://github.com/brailcom/speechd/releases"
@@ -248,7 +242,7 @@ efficiency through the use of a compact vector representation of n-grams.")
                                   version ".tar.gz"))
               (sha256
                (base32
-                "1p72x9vsqvmhz1ym2bcpiqscn063rxdsylv65735cpp107r1jqxh"))))
+                "1inxqabbml2vhp0lvx4khhda4g1dp8wyr8mnk4vz315c7pni5nni"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags '("--disable-static"
@@ -257,17 +251,15 @@ efficiency through the use of a compact vector representation of n-grams.")
                            "--with-voxin=no" "--with-ibmtts=no"
                            "--with-kali=no" "--with-baratinoo=no")))
     (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("pkg-config" ,pkg-config)
-       ("texinfo" ,texinfo)))
+     (list gettext-minimal pkg-config texinfo))
     (inputs
-     `(("dotconf" ,dotconf)
-       ("espeak" ,espeak-ng)
-       ("glib" ,glib)
-       ("libltdl" ,libltdl)
-       ("libsndfile" ,libsndfile)
-       ("pulseaudio" ,pulseaudio)
-       ("python" ,python)))
+     (list dotconf
+           espeak-ng
+           glib
+           libltdl
+           libsndfile
+           pulseaudio
+           python))
     (synopsis "Common interface to speech synthesizers")
     (description "The Speech Dispatcher project provides a high-level
 device independent layer for access to speech synthesis through a simple,
@@ -347,7 +339,8 @@ be used by the sighted.")
                             "/bin/rm")
              (string-append "ECHO_N="
                             (assoc-ref %build-inputs "coreutils")
-                            "/bin/printf \"%s\""))
+                            "/bin/printf \"%s\"")
+             "LINUXAUDIO=alsa")
        #:parallel-build? #f ; not supported
        #:modules ((guix build gnu-build-system)
                   (guix build utils)
@@ -366,6 +359,11 @@ be used by the sighted.")
                               "config/make_system.mak")
                  (("/bin/sh") (which "sh"))))
              #t))
+         (add-after 'unpack-and-patch-speech-tools 'set-fcommon
+           (lambda _
+             (substitute* "../speech_tools/config/rules/defaults.mak"
+               (("\\(CFLAGS\\)") "(CFLAGS) -fcommon")
+               (("\\(CXXFLAGS\\)") "(CXXFLAGS) -fcommon"))))
          (add-after 'unpack 'patch-/bin/sh
            (lambda _
              (substitute* '("config/test_make_rules"
@@ -505,7 +503,8 @@ be used by the sighted.")
          (add-before 'configure 'bootstrap
            (lambda _ (invoke "autoreconf" "-vif"))))))
     (inputs
-     `(("ncurses" ,ncurses)))
+     (list alsa-lib
+           ncurses))
     (native-inputs
      `(("autoconf" ,autoconf)
        ("automake" ,automake)
@@ -572,12 +571,9 @@ control.")
        (sha256
         (base32 "1v476kpw09ljj8mavasj4hya2w11jwlx7q22rh1lsn9jkkam5i2a"))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("espeak-ng" ,espeak-ng)
-       ("libsndfile" ,libsndfile)
-       ("pulseaudio" ,pulseaudio)))
+     (list alsa-lib espeak-ng libsndfile pulseaudio))
     (build-system gnu-build-system)
     (native-search-paths
      (list (search-path-specification
@@ -610,13 +606,13 @@ It can also speak English through eSpeak or Festival.")
     (arguments
      `(#:parallel-tests? #f))           ;tests fail otherwise
     (native-inputs
-     `(("bison" ,bison)
-       ("doxygen" ,doxygen)
-       ("perl" ,perl)                   ;for tests
-       ("python" ,python)
-       ("swig" ,swig)))
+     (list bison
+           doxygen
+           perl ;for tests
+           python
+           swig))
     (inputs
-     `(("pulseaudio" ,pulseaudio)))
+     (list pulseaudio))
     (home-page "https://cmusphinx.github.io/")
     (synopsis "Support library required by Pocketsphinx and Sphinxtrain")
     (description "This package contains the basic libraries shared by
@@ -639,15 +635,10 @@ manipulating acoustic feature and audio files.")
         (base32 "1n9yazzdgvpqgnfzsbl96ch9cirayh74jmpjf7svs4i7grabanzg"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("perl" ,perl)                   ;for tests
-       ("python" ,python)
-       ("swig" ,swig)))
+     (list pkg-config perl ;for tests
+           python swig))
     (inputs
-     `(("gstreamer" ,gstreamer)
-       ("libcap" ,libcap)
-       ("pulseaudio" ,pulseaudio)
-       ("sphinxbase" ,sphinxbase)))
+     (list gstreamer libcap pulseaudio sphinxbase))
     (home-page "https://cmusphinx.github.io/")
     (synopsis "Recognizer library written in C")
     (description "PocketSphinx is one of Carnegie Mellon University's

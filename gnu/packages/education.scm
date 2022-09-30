@@ -2,9 +2,9 @@
 ;;; Copyright © 2016 Danny Milosavljevic <dannym@scratchpost.org>
 ;;; Copyright © 2016, 2017 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2016 Hartmut Goebel <h.goebel@crazy-compilers.com>
-;;; Copyright © 2017, 2018, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2017, 2018, 2019, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
-;;; Copyright © 2018, 2019, 2020, 2021 Nicolas Goaziou <mail@nicolasgoaziou.fr>
+;;; Copyright © 2018-2022 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2020 Robert Smith <robertsmith@posteo.net>
 ;;; Copyright © 2020 Guy Fleury Iteriteka <gfleury@disroot.org>
 ;;; Copyright © 2020 Jakub Kądziołka <kuba@kadziolka.net>
@@ -37,6 +37,7 @@
   #:use-module (gnu packages databases)
   #:use-module (gnu packages flex)
   #:use-module (gnu packages fonts)
+  #:use-module (gnu packages fontutils)
   #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages game-development)
   #:use-module (gnu packages gettext)
@@ -48,8 +49,10 @@
   #:use-module (gnu packages javascript)
   #:use-module (gnu packages kde)
   #:use-module (gnu packages kde-frameworks) ; extra-cmake-modules
+  #:use-module (gnu packages linux)
   #:use-module (gnu packages mp3)
   #:use-module (gnu packages ncurses)
+  #:use-module (gnu packages pdf)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
@@ -62,8 +65,10 @@
   #:use-module (gnu packages texinfo)
   #:use-module (gnu packages tls)
   #:use-module (gnu packages video)
+  #:use-module (gnu packages xiph)
   #:use-module (gnu packages xorg)
   #:use-module (gnu packages xml)
+  #:use-module (guix gexp)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
   #:use-module (guix download)
@@ -96,15 +101,16 @@
        ;; of Gstreamer.
        (list "--enable-sdlmixer"
              "LDFLAGS=-lgmodule-2.0")
+       #:make-flags
+       (list "CFLAGS=-fcommon")
        #:phases
        (modify-phases %standard-phases
          (add-after 'set-paths 'set-sdl-paths
            (lambda* (#:key inputs #:allow-other-keys)
              (setenv "CPATH"
-                     (string-append (assoc-ref inputs "sdl-mixer")
-                                    "/include/SDL:"
-                                    (or (getenv "CPATH") "")))
-             #t)))))
+                     (string-append
+                      (search-input-directory inputs "include/SDL")
+                      ":" (or (getenv "CPATH") ""))))))))
     (inputs
      `(("gtk+" ,gtk+-2)
        ("librsvg" ,librsvg)
@@ -141,15 +147,15 @@ of categories with some of the activities available in that category.
 (define-public gcompris-qt
   (package
     (name "gcompris-qt")
-    (version "1.1")
+    (version "2.3")
     (source
      (origin
        (method url-fetch)
        (uri (string-append
-             "https://gcompris.net/download/qt/src/gcompris-qt-"
+             "mirror://kde/stable/gcompris/qt/src/gcompris-qt-"
              version ".tar.xz"))
        (sha256
-        (base32 "1bpjwrv83rhikbycpyfpf6dbqr0xfq6amgdpqfgfph6nzr3zka7h"))))
+        (base32 "0qncknaaf168anh4cjp7dqz6qzgx948kvgr32j2vga8mjakqn1aj"))))
     (build-system qt-build-system)
     (arguments
      `(#:phases
@@ -157,32 +163,30 @@ of categories with some of the activities available in that category.
          (add-before 'check 'start-xorg-server
            (lambda* (#:key inputs #:allow-other-keys)
              ;; The test suite requires a running X server.
-             (system (string-append (assoc-ref inputs "xorg-server")
-                                    "/bin/Xvfb :1 &"))
+             (system "Xvfb :1 &")
              (setenv "DISPLAY" ":1")
              ;; The test suite wants to write to /homeless-shelter
-             (setenv "HOME" (getcwd))
-             #t)))
+             (setenv "HOME" (getcwd)))))
        #:configure-flags (list "-DQML_BOX2D_MODULE=disabled"
                                "-DBUILD_TESTING=TRUE")))
     (native-inputs
-     `(("extra-cmake-modules" ,extra-cmake-modules)
-       ("gettext" ,gettext-minimal)
-       ("kdoctools" ,kdoctools)
-       ("perl" ,perl)
-       ("qttools" ,qttools)
-       ("xorg-server" ,xorg-server-for-tests)))
+     (list extra-cmake-modules
+           gettext-minimal
+           kdoctools
+           perl
+           qttools-5
+           xorg-server-for-tests))
     (inputs
-     `(("openssl" ,openssl)
-       ("python" ,python-wrapper)
-       ("qtbase" ,qtbase-5)
-       ("qtdeclarative" ,qtdeclarative)
-       ("qtgraphicaleffects" ,qtgraphicaleffects)
-       ("qtmultimedia" ,qtmultimedia)
-       ("qtquickcontrols" ,qtquickcontrols)
-       ("qtsensors" ,qtsensors)
-       ("qtsvg" ,qtsvg)
-       ("qtxmlpatterns" ,qtxmlpatterns)))
+     (list openssl
+           python-wrapper
+           qtbase-5
+           qtdeclarative-5
+           qtgraphicaleffects
+           qtmultimedia-5
+           qtquickcontrols-5
+           qtsensors
+           qtsvg-5
+           qtxmlpatterns))
     (home-page "https://gcompris.net/index-en.html")
     (synopsis "Educational games for small children")
     (description
@@ -198,9 +202,9 @@ Currently available boards include:
 @item recognize letters after hearing their names
 @item reading practice
 @item small games (memory games, jigsaw puzzles, ...)
-@end enumerate\n")
+@end enumerate")
     (license (list license:silofl1.1    ; bundled fonts
-                   license:gpl3+))))
+                   license:agpl3+))))
 
 (define-public gotypist
   (let ((revision "0")
@@ -243,8 +247,7 @@ Currently available boards include:
                  (with-directory-excursion bin
                    (rename-file "v1" "gotypist"))))))))
       (native-inputs
-       `(("go-github-com-gizak-termui" ,go-github-com-gizak-termui)
-         ("go-github-com-stretchr-testify" ,go-github-com-stretchr-testify)))
+       (list go-github-com-gizak-termui go-github-com-stretchr-testify))
       (home-page "https://github.com/KappaDistributive/gotypist")
       (synopsis "Simple typing trainer for text terminals")
       (description
@@ -299,8 +302,7 @@ frequently used words in American English.")
                ;; Recreate Makefile
                (invoke "qmake")))))))
     (inputs
-     `(("qtbase" ,qtbase-5)
-       ("qtmultimedia" ,qtmultimedia)))
+     (list qtbase-5 qtmultimedia-5))
     (home-page "https://www.tipp10.com/")
     (synopsis "Touch typing tutor")
     (description "Tipp10 is a touch typing tutor.  The ingenious thing about
@@ -316,7 +318,7 @@ easy.")
 (define-public snap
   (package
     (name "snap")
-    (version "6.9.0")
+    (version "7.0.5")
     (source
      (origin
        (method git-fetch)
@@ -325,7 +327,7 @@ easy.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1wppz57lrrribrfnaiv6jrrf703w7i6ja0dnz8yx8naxhbsglwyf"))))
+        (base32 "13j52r810yijvkj85c356c342drc3947j28z3va7kz75mi26whsf"))))
     (build-system trivial-build-system)
     (arguments
      `(#:modules ((guix build utils))
@@ -339,26 +341,23 @@ easy.")
            ;; Replace the sole minified file in the package.
            (with-directory-excursion (string-append share "/src")
              (delete-file "FileSaver.min.js")
-             (symlink (string-append (assoc-ref %build-inputs "js-filesaver")
-                                     "/share/javascript/FileSaver.min.js")
+             (symlink (search-input-file %build-inputs
+                                         "/share/javascript/FileSaver.min.js")
                       "FileSaver.min.js"))
            ;; Create a "snap" executable.
            (let* ((bin (string-append out "/bin"))
                   (script (string-append bin "/snap"))
                   (snap (string-append share "/snap.html"))
-                  (bash (string-append (assoc-ref %build-inputs "bash")
-                                       "/bin/sh"))
-                  (xdg-open (string-append (assoc-ref %build-inputs "xdg-utils")
-                                           "/bin/xdg-open")))
+                  (bash (search-input-file %build-inputs "/bin/sh"))
+                  (xdg-open (search-input-file %build-inputs
+                                               "/bin/xdg-open")))
              (mkdir-p bin)
              (call-with-output-file script
                (lambda (port)
                  (format port "#!~a\n~a '~a'" bash xdg-open snap)))
              (chmod script #o555))))))
     (inputs
-     `(("bash" ,bash-minimal)
-       ("js-filesaver" ,js-filesaver)
-       ("xdg-utils" ,xdg-utils)))
+     (list bash-minimal js-filesaver xdg-utils))
     (home-page "https://snap.berkeley.edu")
     (synopsis "Visual, blocks based programming language")
     (description "Snap! (formerly BYOB) is a visual, drag-and-drop
@@ -380,8 +379,12 @@ to open the application in a web browser, for offline usage.")
     (source
      (origin
        (method url-fetch)
-       (uri (string-append "http://www.bipede.fr/downloads/logiciels/"
-                           "ToutEnClic-" version "-src.zip"))
+       (uri (list
+             ;; XXX: Upstream does not exist anymore.
+             (string-append "http://www.bipede.fr/downloads/logiciels/"
+                            "ToutEnClic-" version "-src.zip")
+             (string-append "https://archive.org/download/tout-en-clic-" version
+                            "-src/ToutEnClic-" version "-src.zip")))
        (sha256
         (base32 "0xg24p925rl5bfqsq3jb2lrkidb0f3kbmay5iyxxmjsn3ra0blyh"))))
     (build-system python-build-system)
@@ -409,8 +412,7 @@ to open the application in a web browser, for offline usage.")
                (mkdir-p bin)
                (with-directory-excursion bin
                  (symlink (string-append share "/" executable ".py")
-                          executable)))
-             #t))
+                          executable)))))
          (add-after 'install 'create-desktop-file
            (lambda* (#:key outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
@@ -428,12 +430,11 @@ to open the application in a web browser, for offline usage.")
                             Terminal=false~@
                             Icon=toutenclic~@
                             Type=Application~%"
-                           out)))
-               #t))))))
+                           out)))))))))
     (native-inputs
-     `(("unzip" ,unzip)))
+     (list unzip))
     (inputs
-     `(("python-pyqt" ,python-pyqt)))
+     (list python-pyqt))
     (synopsis "School tools for physically disabled children")
     (description "ToutEnClic is intended to facilitate the schooling
 of physically disabled children in ordinary schools.  It is both
@@ -444,216 +445,141 @@ specialized device.")
     (home-page "https://bipede.fr/contrib/")
     (license license:gpl3)))
 
-(define-public childsplay
-  (package
-    (name "childsplay")
-    (version "3.4")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append
-                    "mirror://sourceforge/schoolsplay/"
-                    "childsplay-" version ".tgz"))
-              (sha256
-               (base32
-                "0z7yp2swjnbz51vn2zyfnjn40jq38l5mbh15yafmx1z3vn2z1m77"))))
-    (build-system python-build-system)
-    (arguments
-     `(#:python ,python-2
-       #:tests? #f
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'unbundle-dejavu-font
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let* ((dejavu-dir
-                     (string-append (assoc-ref inputs "font-dejavu")
-                                    "/share/fonts/truetype"))
-                    (dejavu-font
-                     (string-append dejavu-dir
-                                    "/DejaVuSansCondensed-Bold.ttf")))
-               (substitute* "SPConstants.py"
-                 (("^(TTF(BOLD)? = ).*" _ prefix)
-                  (string-append prefix "'" dejavu-font "'\n")))
-               (for-each (lambda (f) (delete-file f))
-                         (find-files "lib/SPData" "DejaVu"))
-               #t)))
-         (delete 'build)
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (pixmaps (string-append out "/share/pixmaps"))
-                    (share (string-append out "/share/childsplay"))
-                    (doc (string-append out "/share/doc/" ,name "-",version)))
-               ;; Install icon.
-               (install-file "lib/SPData/themes/childsplay/logo_cp.svg" pixmaps)
-               ;; Install data.
-               (mkdir-p share)
-               (for-each (lambda (f)
-                           (copy-recursively f (string-append share "/" f)))
-                         '("alphabet-sounds" "lib" "locale" "SPWidgets"))
-               (for-each (lambda (f) (install-file f share))
-                         (find-files "." "\\.(py|dev|db)$"))
-               ;; Install documentation.
-               (mkdir-p doc)
-               (copy-recursively "docs" doc)
-               #t)))
-         (add-after 'install 'create-executable
-           (lambda* (#:key outputs inputs #:allow-other-keys)
-             (let* ((python (string-append (assoc-ref inputs "python")
-                                           "/bin/python"))
-                    (out (assoc-ref outputs "out"))
-                    (bin (string-append out "/bin"))
-                    (executable (string-append bin "/childsplay")))
-               (mkdir-p bin)
-               (call-with-output-file executable
-                 (lambda (file)
-                   (format file
-                           "~a ~a"
-                           python
-                           (string-append out "/share/childsplay/childsplay.py"))))
-               (chmod executable #o555)
-               #t)))
-         (add-after 'install 'create-desktop-file
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (applications (string-append out "/share/applications")))
-               (mkdir-p applications)
-               (call-with-output-file
-                   (string-append applications "/childsplay.desktop")
-                 (lambda (file)
-                   (format file
-                           "[Desktop Entry]~@
-                            Name=Childsplay~@
-                            Comment=Suite of educational games for young children~@
-                            Comment[ca]=Conjunt de jocs educatius per a xiquets~@
-                            Comment[es]=Conjunto de juegos educativos para niños~@
-                            Comment[de]=Sammlung mit lehrreichen Spielen für kleine Kinder~@
-                            Exec=~a/bin/childsplay~@
-                            Terminal=false~@
-                            Icon=logo_cp.svg~@
-                            Type=Application~@
-                            Categories=Application;Game;Education;KidsGame;~@
-                            Keywords=suite;children;games;young;educational;~%"
-                           out)))
-               #t))))))
-    (inputs
-     `(("font-dejavu" ,font-dejavu)
-       ("pygame" ,python2-pygame)
-       ("sqlalchemy" ,python2-sqlalchemy)))
-    (synopsis "Suite of educational games for young children")
-    (description "Childsplay is a collection of educational activities
-for young children.  Childsplay can be used at home, kindergartens and
-pre-schools.  Childsplay is a fun and safe way to let young children
-use the computer and at the same time teach them a little math,
-letters of the alphabet, spelling, eye-hand coordination, etc.")
-    (home-page "http://www.schoolsplay.org")
-    (license license:gpl3+)))
-
-(define-public omnitux
-  (package
-    (name "omnitux")
-    (version "1.2.1")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "mirror://sourceforge/omnitux/omnitux/"
-                           "v" version "/omnitux-" version ".tar.bz2"))
-       (sha256
-        (base32 "1wmmmbzmxd0blhn00d4g91xwavnab143a31ca3i8hrqgzh6qz9w6"))
-       (modules '((guix build utils)))
-       (snippet
-        '(begin
-           ;; Remove pre-compiled .pyc files from source.
-           (for-each delete-file (find-files "bin" "\\.pyc$"))
-           #t))))
-    (build-system python-build-system)
-    (inputs
-     `(("python2-pygame" ,python2-pygame)
-       ("python2-pygtk" ,python2-pygtk)))
-    (arguments
-     `(#:tests? #f                      ;no test
-       #:python ,python-2
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'build)                ;no setup.py
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (share (string-append out "/share"))
-                    (data (string-append share "/omnitux")))
-               ;; Install documentation.
-               (let ((doc (string-append share "/doc/" ,name "-" ,version)))
-                 (for-each (lambda (f) (install-file f doc))
-                           '("LICENSE.txt" "README.txt")))
-               ;; Install data.
-               (install-file "omnitux.sh" data)
-               (for-each (lambda (d)
-                           (copy-recursively d (string-append data "/" d)))
-                         '("bin" "data"))
-               ;; Install the launcher.
-               (let* ((bin (string-append out "/bin"))
-                      (script (string-append bin "/omnitux"))
-                      (bash (string-append (assoc-ref %build-inputs "bash")
-                                           "/bin/bash"))
-                      (python (string-append (assoc-ref %build-inputs "python")
-                                             "/bin/python2")))
-                 (mkdir-p bin)
-                 (with-output-to-file script
-                   (lambda ()
-                     (format #t "#!~a~%" bash)
-                     (format #t
-                             "cd ~a; ~a menu.py~%"
-                             (string-append data "/bin")
-                             python)))
-                 (chmod script #o755))
-               ;; Install icon and desktop file.
-               (let ((pixmaps (string-append share "/pixmaps")))
-                 (install-file "data/default/icons/Omnitux_logo.svg" pixmaps))
-               (let ((apps (string-append out "/share/applications")))
-                 (mkdir-p apps)
-                 (with-output-to-file (string-append apps "/omnitux.desktop")
-                   (lambda _
-                     (format #t
-                             "[Desktop Entry]~@
-                              Name=Omnitux~@
-                              GenericName=Omnitux
-                              Comment=An educational game based on multimedia elements.~@
-                              Comment[fr]=Un jeu ludo-éducatif basé sur des éléments multimédias.~@
-                              Exec=~a/bin/omnitux~@
-                              Type=Application~@
-                              Categories=Game;Education;~@
-                              Terminal=false~@
-                              Icon=Omnitux_logo.svg~@"
-                             out))))
-               #t))))))
-    (home-page "http://omnitux.sourceforge.net/")
-    (synopsis "Educational activities based on multimedia elements")
-    (description "The project aims to provide various educational
-activities around multimedia elements (images, sounds, texts).  Types
-of activities include:
-@itemize
-@item associations,
-@item items to place on a map or a schema,
-@item counting activities,
-@item puzzles,
-@item card faces to remember,
-@item find differences between two pictures,
-@item ...
-@end itemize
-
-Activities are available in English, French, German, Polish,
-Portuguese, Spanish and Italian.")
-    ;; Project's license is GPL3+, but multimedia elements are
-    ;; released under various licenses.
-    (license (list license:gpl3+
-                   license:gpl2+
-                   license:cc-by-sa2.0
-                   license:cc-by-sa3.0
-                   license:public-domain))))
+(define-public openboard
+  ;; The last release builds from qtwebkit, which is planned for removal in
+  ;; Guix, so use the latest commit of the 1.7-dev branch, which builds with
+  ;; qtwebengine-5.
+  (let ((commit "39e914f600d26565706f0e5b6ea2482b8b4038c7") ;1.6.2-rc0311
+        (revision "1"))
+    (package
+      (name "openboard")
+      (version (git-version "1.6.1" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://github.com/OpenBoard-org/OpenBoard")
+               (commit commit)))
+         (file-name (git-file-name name version))
+         (sha256
+          (base32 "1763l5dywirzidzc93726dggf9819p47hh6a7p7dwzd1bfq1wb2q"))))
+      (build-system qt-build-system)
+      (arguments
+       (list
+        #:tests? #f                     ;no tests
+        #:phases
+        #~(modify-phases %standard-phases
+            (add-after 'unpack 'set-initial-values
+              ;; Remove useless "Check for updates" action from menu.
+              ;; Also prevent pop-up window about importing Open Sankore
+              ;; documents since we don't package OpenBoard-Importer.
+              (lambda _
+                (substitute* "src/core/UBSettings.cpp"
+                  (("(appHideCheckForSoftwareUpdate = .*?)false(\\);)" _ beg end)
+                   (string-append beg "true" end))
+                  (("(appLookForOpenSankoreInstall = .*?)true(\\);)" _ beg end)
+                   (string-append beg "false" end)))))
+            (add-after 'unpack 'fix-build-error
+              ;; XXX: `errorOpeningVirtualKeyboard' variable is only
+              ;; defined when building for OSX.  Yet,
+              ;; "UBBoardController.cpp" relies on it unconditionally,
+              ;; resulting in a build failure.  Here, we get rid of
+              ;; that variable, assuming it is always false (its
+              ;; default value when building for OSX).
+              (lambda _
+                (substitute* "src/board/UBBoardController.cpp"
+                  (("if \\(!UBPlatformUtils::errorOpeningVirtualKeyboard\\)")
+                   ""))))
+            (add-after 'unpack 'fix-hard-coded-env
+              (lambda* (#:key inputs #:allow-other-keys)
+                (substitute* "src/frameworks/UBPlatformUtils_linux.cpp"
+                  (("/usr/bin/env") (search-input-file inputs "/bin/env")))))
+            (add-after 'unpack 'fix-library-path
+              (lambda* (#:key inputs #:allow-other-keys)
+                (substitute* "OpenBoard.pro"
+                  (("/usr/include/quazip")
+                   (search-input-directory inputs "/include/quazip5"))
+                  (("/usr/include/poppler")
+                   (search-input-directory inputs "/include/poppler")))))
+            (replace 'configure
+              (lambda _
+                (invoke "qmake" "OpenBoard.pro")))
+            (replace 'install
+              (lambda* (#:key inputs #:allow-other-keys)
+                (let* ((share (string-append #$output "/share"))
+                       (openboard (string-append share "/openboard"))
+                       (i18n (string-append openboard "/i18n")))
+                  ;; Install data.
+                  (with-directory-excursion "resources"
+                    (for-each (lambda (directory)
+                                (let ((target
+                                       (string-append openboard "/" directory)))
+                                  (mkdir-p target)
+                                  (copy-recursively directory target)))
+                              '("customizations" "etc" "library"))
+                    (mkdir-p i18n)
+                    (for-each (lambda (f)
+                                (install-file f i18n))
+                              (find-files "i18n" "\\.qm$")))
+                  ;; Install desktop file an icon.
+                  (install-file "resources/images/OpenBoard.png"
+                                (string-append share
+                                               "/icons/hicolor/64x64/apps/"))
+                  (make-desktop-entry-file
+                   (string-append share "/applications/" #$name ".desktop")
+                   #:name "OpenBoard"
+                   #:comment "Interactive whiteboard application"
+                   #:exec "openboard %f"
+                   #:icon "OpenBoard"
+                   #:mime-type "application/ubz"
+                   #:categories '("Education"))
+                  ;; Install executable.
+                  (install-file "build/linux/release/product/OpenBoard" openboard)
+                  (let ((bin (string-append #$output "/bin")))
+                    (mkdir-p bin)
+                    (symlink (string-append openboard "/OpenBoard")
+                             (string-append bin "/openboard")))))))))
+      (native-inputs
+       (list qttools-5))
+      (inputs
+       (list alsa-lib
+             coreutils-minimal          ;for patched 'env' shebang
+             ffmpeg
+             freetype
+             lame
+             libass
+             libfdk
+             libressl
+             libtheora
+             libva
+             libvorbis
+             libvpx
+             libx264
+             opus
+             poppler
+             qtbase-5
+             qtdeclarative-5
+             qtmultimedia-5
+             qtsvg-5
+             qtwebchannel-5
+             qtwebengine-5
+             qtxmlpatterns
+             quazip-0
+             sdl
+             zlib))
+      (home-page "https://openboard.ch/")
+      (synopsis "Interactive whiteboard for schools and universities")
+      (description
+       "OpenBoard is a teaching software for interactive whiteboard
+designed primarily for use in schools and universities.  It can be
+used both with interactive whiteboards or in a dual-screen setup with
+a pen-tablet display and a beamer.")
+      (license license:gpl3))))
 
 (define-public fet
   (package
     (name "fet")
-    (version "6.1.8")
+    (version "6.5.3")
     (source
      (origin
        (method url-fetch)
@@ -662,22 +588,23 @@ Portuguese, Spanish and Italian.")
               (list (string-append directory base)
                     (string-append directory "old/" base))))
        (sha256
-        (base32 "16m20vbhv8i7saxqb731bhds1f86d6x1f935j3ivg357805fqzll"))))
+        (base32 "030njv53azzw6fn2d5mkxn7hyvyb45yss2y49wxb8bgj3ayv1rgp"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'fix-hardcoded-directories
-           (lambda* (#:key outputs #:allow-other-keys)
-             (substitute* (list "fet.pro"
-                                "src/src.pro"
-                                "src/src-cl.pro"
-                                "src/interface/fet.cpp")
-               (("/usr") (assoc-ref outputs "out")))))
-         (replace 'configure
-           (lambda _ (invoke "qmake" "fet.pro"))))))
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'fix-hardcoded-directories
+            (lambda _
+              (substitute* (list "fet.pro"
+                                 "src/src.pro"
+                                 "src/src-cl.pro"
+                                 "src/interface/fet.cpp")
+                (("/usr") #$output))))
+          (replace 'configure
+            (lambda _ (invoke "qmake" "fet.pro"))))))
     (inputs
-     `(("qtbase" ,qtbase)))
+     (list qtbase))
     (home-page "https://www.lalescu.ro/liviu/fet/")
     (synopsis "Timetabling software")
     (description
@@ -703,14 +630,9 @@ hours.")
          (base32 "0z6c3lqikk50mkz3ipm93l48qj7b98lxyip8y6ndg9y9k0z0n878"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("intltool" ,intltool)
-       ("pkg-config" ,pkg-config)))
+     (list intltool pkg-config))
     (inputs
-     `(("cairo" ,cairo)
-       ("curl" ,curl)
-       ("gtk+" ,gtk+)
-       ("gtkdatabox" ,gtkdatabox)
-       ("pango" ,pango)))
+     (list cairo curl gtk+ gtkdatabox pango))
     (home-page "https://klavaro.sourceforge.io/en/index.html")
     (synopsis "Touch typing tutor")
     (description
@@ -731,32 +653,30 @@ language and very flexible regarding to new or unknown keyboard layouts.")
          (base32 "10lm2p8w26c9n6lhvw3301myfss0dq7hl7rawzb3hsy1lqvmvdib"))))
     (build-system qt-build-system)
     (native-inputs
-     `(("extra-cmake-modules" ,extra-cmake-modules)
-       ("kdoctools" ,kdoctools)
-       ("pkg-config" ,pkg-config)))
+     (list extra-cmake-modules kdoctools pkg-config))
     (inputs
-     `(("kcmutils" ,kcmutils)
-       ("kcompletion" ,kcompletion)
-       ("kconfig" ,kconfig)
-       ("kconfigwidgets" ,kconfigwidgets)
-       ("kcoreaddons" ,kcoreaddons)
-       ("kdeclarative" ,kdeclarative)
-       ("ki18n" ,ki18n)
-       ("kiconthemes" ,kiconthemes)
-       ("kitemviews" ,kitemviews)
-       ("kqtquickcharts" ,kqtquickcharts)
-       ("ktextwidgets" ,ktextwidgets)
-       ("kwidgetsaddons" ,kwidgetsaddons)
-       ("kwindowsystem" ,kwindowsystem)
-       ("kxmlgui" ,kxmlgui)
-       ("libxcb" ,libxcb)
-       ("libxkbfile" ,libxkbfile)
-       ("qtbase" ,qtbase-5)
-       ("qtdeclarative" ,qtdeclarative)
-       ("qtgraphicaleffects" ,qtgraphicaleffects)
-       ("qtquickcontrols2" ,qtquickcontrols2)
-       ("qtx11extras" ,qtx11extras)
-       ("qtxmlpatterns" ,qtxmlpatterns)))
+     (list kcmutils
+           kcompletion
+           kconfig
+           kconfigwidgets
+           kcoreaddons
+           kdeclarative
+           ki18n
+           kiconthemes
+           kitemviews
+           kqtquickcharts
+           ktextwidgets
+           kwidgetsaddons
+           kwindowsystem
+           kxmlgui
+           libxcb
+           libxkbfile
+           qtbase-5
+           qtdeclarative-5
+           qtgraphicaleffects
+           qtquickcontrols2-5
+           qtx11extras
+           qtxmlpatterns))
     (home-page "https://edu.kde.org/ktouch/")
     (synopsis "Touch typing tutor")
     (description
@@ -786,11 +706,10 @@ adjust the level of difficulty.")
           (base32 "0dz63m9p4ggzw0yb309qmgnl664qb5q268vaa3i9v0i8qsl66d78"))))
       (build-system gnu-build-system)
       (native-inputs
-       `(("gettext" ,gettext-minimal)   ; for msgfmt
-         ("pkg-config" ,pkg-config)))
+       (list gettext-minimal ; for msgfmt
+             pkg-config))
       (inputs
-       `(("libxml2" ,libxml2)
-         ("gtk+" ,gtk+)))
+       (list libxml2 gtk+))
       (home-page "https://kanatest.sourceforge.io/")
       (synopsis "Hiragana and Katakana simple flashcard tool")
       (description "Kanatest is a Japanese kana (Hiragana and Katakana) simple
@@ -854,8 +773,8 @@ stored and user can review his performance in any time.")
                                     (string-prefix? "python-" label)))
                                  inputs)))
                    (qtwebengineprocess
-                    (string-append (assoc-ref inputs "qtwebengine")
-                                   "/lib/qt5/libexec/QtWebEngineProcess")))
+                    (search-input-file inputs
+                                       "lib/qt5/libexec/QtWebEngineProcess")))
                ;; The program fails to find the QtWebEngineProcess program, so
                ;; we set QTWEBENGINEPROCESS_PATH to help it.  PYTHONPATH is
                ;; wrapped to avoid declaring Python libraries as propagated
@@ -867,11 +786,11 @@ stored and user can review his performance in any time.")
                              `("PATH" prefix (,(string-append
                                                 (assoc-ref inputs "mpv")
                                                 "/bin")))
-                             `("PYTHONPATH" = ,site-packages)))
+                             `("GUIX_PYTHONPATH" = ,site-packages)))
                          (find-files bin ".")))
              #t)))))
     (native-inputs
-     `(("xdg-utils" ,xdg-utils)))
+     (list xdg-utils))
     (inputs
      `(("lame" ,lame)
        ("mpv" ,mpv)
@@ -884,13 +803,13 @@ stored and user can review his performance in any time.")
        ("python-pyaudio" ,python-pyaudio)
        ;; `python-pyqtwebengine' must precede `python-pyqt' in PYTHONPATH.
        ("python-pyqtwebengine" ,python-pyqtwebengine)
-       ("python-pyqt" ,python-pyqt)
+       ("python-pyqt" ,python-pyqt-without-qtwebkit)
        ("python-requests" ,python-requests)
        ("python-send2trash" ,python-send2trash)
        ("python-sip" ,python-sip)
-       ;; `qtwebengine' is included in `pyqtwebengine', included here for easy
+       ;; `qtwebengine-5' is included in `pyqtwebengine', included here for easy
        ;; wrapping.
-       ("qtwebengine" ,qtwebengine)))
+       ("qtwebengine-5" ,qtwebengine-5)))
     (home-page "https://apps.ankiweb.net/")
     (synopsis "Powerful, intelligent flash cards")
     (description "Anki is a program which makes remembering things
@@ -925,8 +844,13 @@ endless.  For example:
        (file-name (git-file-name name version))
        (sha256
         (base32 "13q02xpmps9qg8zrzzy2gzv4a6afgi28lxk4z242j780v0gphchp"))
-       (patches
-        (search-patches "t4k-common-libpng16.patch"))))
+       (patches (search-patches "t4k-common-libpng16.patch"))
+       (modules '((guix build utils)))
+       (snippet
+        `(begin
+           (substitute* "src/t4k_common.h"
+             (("char wrapped_lines") "extern char wrapped_lines"))
+           #t))))
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #f                      ;FIXME: cannot find how to run tests
@@ -934,9 +858,10 @@ endless.  For example:
        (modify-phases %standard-phases
          (add-after 'set-paths 'set-sdl-paths
            (lambda* (#:key inputs #:allow-other-keys)
-             (setenv "CPATH" (string-append (assoc-ref inputs "sdl")
-                                            "/include/SDL:"
-                                            (or (getenv "CPATH") "")))))
+             (setenv "CPATH"
+                     (string-append
+                      (search-input-directory inputs "/include/SDL")
+                      ":" (or (getenv "CPATH") "")))))
          (add-after 'unpack 'fix-andika-font-path
            (lambda* (#:key inputs #:allow-other-keys)
              (substitute* "src/t4k_sdl.c"
@@ -945,7 +870,7 @@ endless.  For example:
                                "/share/fonts/truetype")))
              #t)))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
      `(("font-andika" ,font-sil-andika)
        ("libpng" ,libpng)
@@ -975,6 +900,9 @@ TuxMath and TuxType.")
        ;; Unbundle fonts.
        (snippet
         `(begin
+           ;; Remove duplicate definition.
+           (substitute* "src/menu_lan.c"
+             (("lan_player_type.*MAX_CLIENTS\\];") ""))
            (for-each delete-file (find-files "data/fonts" "\\.ttf$"))
            #t))))
     (build-system gnu-build-system)
@@ -985,10 +913,10 @@ TuxMath and TuxType.")
          (add-after 'set-paths 'set-sdl-paths
            (lambda* (#:key inputs #:allow-other-keys)
              (setenv "CPATH"
-                     (string-append (assoc-ref inputs "sdl")
-                                    "/include/SDL:"
-                                    (or (getenv "CPATH") "")))
-             #t))
+                     (string-append
+                      (search-input-directory inputs "/include/SDL")
+                      ":"
+                      (or (getenv "CPATH") "")))))
          (add-after 'install 'install-desktop-file
            (lambda* (#:key outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
@@ -1000,7 +928,7 @@ TuxMath and TuxType.")
                                      "tuxmath\\.(png|ico|svg)$"))
                #t))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
      `(("librsvg" ,librsvg)
        ("libxml2" ,libxml2)
@@ -1034,9 +962,9 @@ floating through space.")
          "0psbdzirazfnn02hp3gsx7xxss9f1brv4ywp6a15ihvggjki1rxb"))))
     (build-system gnu-build-system)
     (native-inputs ; Required for building docs
-     `(("perl" ,perl)))
+     (list perl))
     (inputs
-     `(("zlib" ,zlib)))
+     (list zlib))
     (synopsis "C library for accessing Japanese CD-ROM books")
     (description "The EB library is a library for accessing CD-ROM
 books, which are a common way to distribute electronic dictionaries in
@@ -1063,16 +991,16 @@ formats.")
     (arguments
      '(#:tests? #f)) ; no test target
     (native-inputs
-     `(("qttools", qttools)))
+     (list qttools-5))
     (inputs
-     `(("libeb" ,libeb)
-       ("qtbase" ,qtbase-5)
-       ("qtmultimedia" ,qtmultimedia)
-       ("qtquickcontrols2" ,qtquickcontrols2)
-       ("qtdeclarative" ,qtdeclarative)
-       ("qtwebchannel" ,qtwebchannel)
-       ("qtwebengine" ,qtwebengine)
-       ("zlib" ,zlib)))
+     (list libeb
+           qtbase-5
+           qtmultimedia-5
+           qtquickcontrols2-5
+           qtdeclarative-5
+           qtwebchannel-5
+           qtwebengine-5
+           zlib))
     (synopsis "EPWING dictionary reader")
     (description "qolibri is a dictionary viewer for the EPWING dictionary
 format.  Most monolingual Japanese dictionaries can only be found in the
@@ -1096,16 +1024,14 @@ EPWING format.")
     (arguments
      `(#:configure-flags (list "--enable-gui=yes" "-with-readline=yes")))
     (native-inputs
-     `(("flex" ,flex)
-       ("intltool" ,intltool)
-       ("pkg-config" ,pkg-config)))
+     (list flex intltool pkg-config))
     (inputs
-     `(("glib" ,glib)
-       ("gtk+" ,gtk+)
-       ("libglade" ,libglade)
-       ("ncurses" ,ncurses)
-       ("pango" ,pango)
-       ("readline" ,readline)))
+     (list glib
+           gtk+
+           libglade
+           ncurses
+           pango
+           readline))
     (home-page "https://www.gnu.org/software/mdk/manual/")
     (synopsis "Virtual development environment for Knuth's MIX")
     (description

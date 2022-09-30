@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015, 2016 Alex Kost <alezost@gmail.com>
 ;;; Copyright © 2015, 2016, 2020 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2015 Sou Bunnbu <iyzsong@gmail.com>
@@ -15,7 +15,10 @@
 ;;; Copyright © 2020, 2021 Brice Waegeneire <brice@waegenei.re>
 ;;; Copyright © 2021 qblade <qblade@protonmail.com>
 ;;; Copyright © 2021 Hui Lu <luhuins@163.com>
-;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2021 muradm <mail@muradm.net>
+;;; Copyright © 2022 Guillaume Le Vaillant <glv@posteo.net>
+;;; Copyright © 2022 Justin Veilleux <terramorpha@cock.li>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -35,6 +38,9 @@
 (define-module (gnu services base)
   #:use-module (guix store)
   #:use-module (guix deprecation)
+  #:autoload   (guix diagnostics) (warning &fix-hint)
+  #:autoload   (guix i18n) (G_)
+  #:use-module (guix combinators)
   #:use-module (gnu services)
   #:use-module (gnu services admin)
   #:use-module (gnu services shepherd)
@@ -52,19 +58,27 @@
                 #:select (alsa-utils crda eudev e2fsprogs fuse gpm kbd lvm2 rng-tools))
   #:use-module (gnu packages bash)
   #:use-module ((gnu packages base)
-                #:select (coreutils glibc glibc-utf8-locales))
+                #:select (coreutils glibc glibc-utf8-locales tar))
+  #:use-module ((gnu packages compression) #:select (gzip))
+  #:autoload   (gnu packages guile-xyz) (guile-netlink)
+  #:autoload   (gnu packages hurd) (hurd)
   #:use-module (gnu packages package-management)
   #:use-module ((gnu packages gnupg) #:select (guile-gcrypt))
   #:use-module (gnu packages linux)
   #:use-module (gnu packages terminals)
   #:use-module ((gnu build file-systems)
-                #:select (mount-flags->bit-mask))
+                #:select (mount-flags->bit-mask
+                          swap-space->flags-bit-mask))
   #:use-module (guix gexp)
   #:use-module (guix records)
   #:use-module (guix modules)
   #:use-module ((guix self) #:select (make-config.scm))
+  #:use-module (guix diagnostics)
+  #:use-module (guix i18n)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-26)
+  #:use-module (srfi srfi-34)
+  #:use-module (srfi srfi-35)
   #:use-module (ice-9 match)
   #:use-module (ice-9 format)
   #:re-export (user-processes-service-type        ;backwards compatibility
@@ -80,16 +94,37 @@
             virtual-terminal-service-type
 
             static-networking
-
             static-networking?
-            static-networking-interface
-            static-networking-ip
-            static-networking-netmask
-            static-networking-gateway
+            static-networking-addresses
+            static-networking-links
+            static-networking-routes
             static-networking-requirement
+
+            network-address
+            network-address?
+            network-address-device
+            network-address-value
+            network-address-ipv6?
+
+            network-link
+            network-link?
+            network-link-name
+            network-link-type
+            network-link-arguments
+
+            network-route
+            network-route?
+            network-route-destination
+            network-route-source
+            network-route-device
+            network-route-ipv6?
+            network-route-gateway
 
             static-networking-service
             static-networking-service-type
+
+            %loopback-static-networking
+            %qemu-static-networking
 
             udev-configuration
             udev-configuration?
@@ -150,8 +185,15 @@
             guix-configuration-authorized-keys
             guix-configuration-use-substitutes?
             guix-configuration-substitute-urls
+            guix-configuration-generate-substitute-key?
             guix-configuration-extra-options
             guix-configuration-log-file
+
+            guix-extension
+            guix-extension?
+            guix-extension-authorized-keys
+            guix-extension-substitute-urls
+            guix-extension-chroot-directories
 
             guix-service-type
             guix-publish-configuration
@@ -164,6 +206,7 @@
             guix-publish-configuration-nar-path
             guix-publish-configuration-cache
             guix-publish-configuration-ttl
+            guix-publish-configuration-negative-ttl
             guix-publish-service-type
 
             gpm-configuration
@@ -184,7 +227,10 @@
             pam-limits-service-type
             pam-limits-service
 
-            references-file
+            greetd-service-type
+            greetd-configuration
+            greetd-terminal-configuration
+            greetd-agreety-session
 
             %base-services))
 
@@ -254,27 +300,36 @@ system objects.")))
              ;; Return #f if successfully stopped.
              (sync)
 
-             (call-with-blocked-asyncs
-              (lambda ()
-                (let ((null (%make-void-port "w")))
-                  ;; Close 'shepherd.log'.
-                  (display "closing log\n")
-                  ((@ (shepherd comm) stop-logging))
+             (let ((null (%make-void-port "w")))
+               ;; Close 'shepherd.log'.
+               (display "closing log\n")
+               ((@ (shepherd comm) stop-logging))
 
-                  ;; Redirect the default output ports..
-                  (set-current-output-port null)
-                  (set-current-error-port null)
+               ;; Redirect the default output ports..
+               (set-current-output-port null)
+               (set-current-error-port null)
 
-                  ;; Close /dev/console.
-                  (for-each close-fdes '(0 1 2))
+               ;; Close /dev/console.
+               (for-each close-fdes '(0 1 2))
 
-                  ;; At this point, there are no open files left, so the
-                  ;; root file system can be re-mounted read-only.
-                  (mount #f "/" #f
-                         (logior MS_REMOUNT MS_RDONLY)
-                         #:update-mtab? #f)
+               ;; At this point, there should be no open files left so the
+               ;; root file system can be re-mounted read-only.
+               (let loop ((n 10))
+                 (unless (catch 'system-error
+                           (lambda ()
+                             (mount #f "/" #f
+                                    (logior MS_REMOUNT MS_RDONLY)
+                                    #:update-mtab? #f)
+                             #t)
+                           (const #f))
+                   (unless (zero? n)
+                     ;; Yield to the other fibers.  That gives logging fibers
+                     ;; an opportunity to close log files so the 'mount' call
+                     ;; doesn't fail with EBUSY.
+                     ((@ (fibers) sleep) 1)
+                     (loop (- n 1)))))
 
-                  #f)))))
+               #f)))
    (respawn? #f)))
 
 (define root-file-system-service-type
@@ -557,7 +612,7 @@ down.")))
 (define-record-type* <rngd-configuration>
   rngd-configuration make-rngd-configuration
   rngd-configuration?
-  (rng-tools rngd-configuration-rng-tools)        ;package
+  (rng-tools rngd-configuration-rng-tools)        ;file-like
   (device    rngd-configuration-device))          ;string
 
 (define rngd-service-type
@@ -772,7 +827,7 @@ the message of the day, among other things."
 (define-record-type* <agetty-configuration>
   agetty-configuration make-agetty-configuration
   agetty-configuration?
-  (agetty           agetty-configuration-agetty   ;<package>
+  (agetty           agetty-configuration-agetty   ;file-like
                     (default util-linux))
   (tty              agetty-configuration-tty)     ;string | #f
   (term             agetty-term                   ;string | #f
@@ -842,6 +897,8 @@ the message of the day, among other things."
   ;; "Escape hatch" for passing arbitrary command-line arguments.
   (extra-options    agetty-extra-options          ;list of strings
                     (default '()))
+  (shepherd-requirement agetty-shepherd-requirement  ;list of SHEPHERD requirements
+                    (default '()))
 ;;; XXX Unimplemented for now!
 ;;; (issue-file     agetty-issue-file             ;file-like
 ;;;                 (default #f))
@@ -890,17 +947,19 @@ to use as the tty.  This is primarily useful for headless systems."
         host no-issue? init-string no-clear? local-line extract-baud?
         skip-login? no-newline? login-options chroot hangup? keep-baud? timeout
         detect-case? wait-cr? no-hints? no-hostname? long-hostname?
-        erase-characters kill-characters chdir delay nice extra-options)
+        erase-characters kill-characters chdir delay nice extra-options
+        shepherd-requirement)
      (list
        (shepherd-service
          (documentation "Run agetty on a tty.")
-         (provision (list (symbol-append 'term- (string->symbol (or tty "auto")))))
+         (provision (list (symbol-append 'term- (string->symbol (or tty "console")))))
 
          ;; Since the login prompt shows the host name, wait for the 'host-name'
          ;; service to be done.  Also wait for udev essentially so that the tty
          ;; text is not lost in the middle of kernel messages (see also
          ;; mingetty-shepherd-service).
-         (requirement '(user-processes host-name udev))
+         (requirement (cons* 'user-processes 'host-name 'udev
+                             shepherd-requirement))
 
          (modules '((ice-9 match) (gnu build linux-boot)))
          (start
@@ -1040,7 +1099,7 @@ the tty to run, among other things."
 (define-record-type* <mingetty-configuration>
   mingetty-configuration make-mingetty-configuration
   mingetty-configuration?
-  (mingetty         mingetty-configuration-mingetty ;<package>
+  (mingetty         mingetty-configuration-mingetty ;file-like
                     (default mingetty))
   (tty              mingetty-configuration-tty)     ;string
   (auto-login       mingetty-auto-login             ;string | #f
@@ -1112,9 +1171,9 @@ the tty to run, among other things."
   ;; TODO: See nscd.conf in glibc for other options to add.
   (caches     nscd-configuration-caches           ;list of <nscd-cache>
               (default %nscd-default-caches))
-  (name-services nscd-configuration-name-services ;list of <packages>
+  (name-services nscd-configuration-name-services ;list of file-like
                  (default '()))
-  (glibc      nscd-configuration-glibc            ;<package>
+  (glibc      nscd-configuration-glibc            ;file-like
               (default glibc)))
 
 (define-record-type* <nscd-cache> nscd-cache make-nscd-cache
@@ -1360,23 +1419,24 @@ responsible for logging system messages.")))
      # level notice or higher and anything of level err or
      # higher to the console.
      # Don't log private authentication messages!
-     *.alert;auth.notice;authpriv.none       /dev/console
+     *.alert;auth.notice;authpriv.none      -/dev/console
 
      # Log anything (except mail) of level info or higher.
      # Don't log private authentication messages!
-     *.info;mail.none;authpriv.none          /var/log/messages
+     *.info;mail.none;authpriv.none         -/var/log/messages
 
-     # Like /var/log/messages, but also including \"debug\"-level logs.
-     *.debug;mail.none;authpriv.none         /var/log/debug
+     # Log \"debug\"-level entries and nothing else.
+     *.=debug                               -/var/log/debug
 
      # Same, in a different place.
-     *.info;mail.none;authpriv.none          /dev/tty12
+     *.info;mail.none;authpriv.none         -/dev/tty12
 
      # The authpriv file has restricted access.
+     # 'fsync' the file after each line (hence the lack of a leading dash).
      authpriv.*                              /var/log/secure
 
      # Log all the mail messages in one place.
-     mail.*                                  /var/log/maillog
+     mail.*                                 -/var/log/maillog
 "))
 
 (define* (syslog-service #:optional (config (syslog-configuration)))
@@ -1401,7 +1461,8 @@ information on the configuration file syntax."
                               (module "pam_limits.so")
                               (arguments '("conf=/etc/security/limits.conf")))))
              (if (member (pam-service-name pam)
-                         '("login" "su" "slim" "gdm-password" "sddm"))
+                         '("login" "greetd" "su" "slim" "gdm-password" "sddm"
+                           "sudo" "sshd"))
                  (pam-service
                   (inherit pam)
                   (session (cons pam-limits
@@ -1513,7 +1574,7 @@ archive' public keys, with GUIX."
 (define-record-type* <guix-configuration>
   guix-configuration make-guix-configuration
   guix-configuration?
-  (guix             guix-configuration-guix       ;<package>
+  (guix             guix-configuration-guix       ;file-like
                     (default guix))
   (build-group      guix-configuration-build-group ;string
                     (default "guixbuild"))
@@ -1527,6 +1588,8 @@ archive' public keys, with GUIX."
                     (default #t))
   (substitute-urls  guix-configuration-substitute-urls ;list of strings
                     (default %default-substitute-urls))
+  (generate-substitute-key? guix-configuration-generate-substitute-key?
+                            (default #t))         ;Boolean
   (chroot-directories guix-configuration-chroot-directories ;list of file-like/strings
                       (default '()))
   (max-silent-time  guix-configuration-max-silent-time ;integer
@@ -1534,7 +1597,7 @@ archive' public keys, with GUIX."
   (timeout          guix-configuration-timeout    ;integer
                     (default 0))
   (log-compression  guix-configuration-log-compression
-                    (default 'bzip2))
+                    (default 'gzip))
   (discover?        guix-configuration-discover?
                     (default #f))
   (extra-options    guix-configuration-extra-options ;list of strings
@@ -1678,7 +1741,14 @@ proxy of 'guix-daemon'...~%")
                                  (string-append "GUIX_LOCPATH="
                                                 #$glibc-utf8-locales
                                                 "/lib/locale")
-                                 "LC_ALL=en_US.utf8")
+                                 "LC_ALL=en_US.utf8"
+                                 ;; Make 'tar' and 'gzip' available so
+                                 ;; that 'guix perform-download' can use
+                                 ;; them when downloading from Software
+                                 ;; Heritage via '(guix swh)'.
+                                 (string-append "PATH="
+                                                #$(file-append tar "/bin") ":"
+                                                #$(file-append gzip "/bin")))
                            (if proxy
                                (list (string-append "http_proxy=" proxy)
                                      (string-append "https_proxy=" proxy))
@@ -1704,14 +1774,15 @@ proxy of 'guix-daemon'...~%")
 (define (guix-activation config)
   "Return the activation gexp for CONFIG."
   (match-record config <guix-configuration>
-    (guix authorize-key? authorized-keys)
+    (guix generate-substitute-key? authorize-key? authorized-keys)
     #~(begin
         ;; Assume that the store has BUILD-GROUP as its group.  We could
         ;; otherwise call 'chown' here, but the problem is that on a COW overlayfs,
         ;; chown leads to an entire copy of the tree, which is a bad idea.
 
         ;; Generate a key pair and optionally authorize substitute server keys.
-        (unless (file-exists? "/etc/guix/signing-key.pub")
+        (unless (or #$(not generate-substitute-key?)
+                    (file-exists? "/etc/guix/signing-key.pub"))
           (system* #$(file-append guix "/bin/guix") "archive"
                    "--generate-key"))
 
@@ -1719,25 +1790,24 @@ proxy of 'guix-daemon'...~%")
               (substitute-key-authorization authorized-keys guix)
               #~#f))))
 
-(define* (references-file item #:optional (name "references"))
-  "Return a file that contains the list of references of ITEM."
-  (if (struct? item)                              ;lowerable object
-      (computed-file name
-                     (with-extensions (list guile-gcrypt) ;for store-copy
-                       (with-imported-modules (source-module-closure
-                                               '((guix build store-copy)))
-                         #~(begin
-                             (use-modules (guix build store-copy))
+(define-record-type* <guix-extension>
+  guix-extension make-guix-extension
+  guix-extension?
+  (authorized-keys guix-extension-authorized-keys ;list of file-like
+                    (default '()))
+  (substitute-urls guix-extension-substitute-urls ;list of strings
+                    (default '()))
+  (chroot-directories guix-extension-chroot-directories ;list of file-like/strings
+                      (default '())))
 
-                             (call-with-output-file #$output
-                               (lambda (port)
-                                 (write (map store-info-item
-                                             (call-with-input-file "graph"
-                                               read-reference-graph))
-                                        port))))))
-                     #:options `(#:local-build? #f
-                                 #:references-graphs (("graph" ,item))))
-      (plain-file name "()")))
+(define (guix-extension-merge a b)
+  (guix-extension
+   (authorized-keys (append (guix-extension-authorized-keys a)
+                            (guix-extension-authorized-keys b)))
+   (substitute-urls (append (guix-extension-substitute-urls a)
+                            (guix-extension-substitute-urls b)))
+   (chroot-directories (append (guix-extension-chroot-directories a)
+                               (guix-extension-chroot-directories b)))))
 
 (define guix-service-type
   (service-type
@@ -1749,14 +1819,19 @@ proxy of 'guix-daemon'...~%")
           (service-extension profile-service-type
                              (compose list guix-configuration-guix))))
 
-   ;; Extensions can specify extra directories to add to the build chroot.
-   (compose concatenate)
-   (extend (lambda (config directories)
+   ;; Extensions can specify extra directories to add to the build chroot,
+   ;; extra substitute urls and extra authorized keys
+   (compose (lambda (args) (fold guix-extension-merge (guix-extension) args)))
+   (extend (lambda (config extension)
              (guix-configuration
               (inherit config)
+              (authorized-keys (append (guix-extension-authorized-keys extension)
+                                       (guix-configuration-authorized-keys config)))
+              (substitute-urls (append (guix-extension-substitute-urls extension)
+                                       (guix-configuration-substitute-urls config)))
               (chroot-directories
-               (append (guix-configuration-chroot-directories config)
-                       directories)))))
+               (append (guix-extension-chroot-directories extension)
+                       (guix-configuration-chroot-directories config))))))
 
    (default-value (guix-configuration))
    (description
@@ -1766,13 +1841,13 @@ proxy of 'guix-daemon'...~%")
 (define-record-type* <guix-publish-configuration>
   guix-publish-configuration make-guix-publish-configuration
   guix-publish-configuration?
-  (guix    guix-publish-configuration-guix        ;package
+  (guix    guix-publish-configuration-guix        ;file-like
            (default guix))
   (port    guix-publish-configuration-port        ;number
            (default 80))
   (host    guix-publish-configuration-host        ;string
            (default "localhost"))
-  (advertise? guix-publish-advertise?       ;boolean
+  (advertise? guix-publish-advertise?             ;boolean
               (default #f))
   (compression       guix-publish-configuration-compression
                      (thunked)
@@ -1789,7 +1864,9 @@ proxy of 'guix-daemon'...~%")
   (workers     guix-publish-configuration-workers ;#f | integer
                (default #f))
   (ttl         guix-publish-configuration-ttl     ;#f | integer
-               (default #f)))
+               (default #f))
+  (negative-ttl guix-publish-configuration-negative-ttl ;#f | integer
+                (default #f)))
 
 (define-deprecated (guix-publish-configuration-compression-level config)
   "Return a compression level, the old way."
@@ -1824,15 +1901,9 @@ raise a deprecation warning if the 'compression-level' field was used."
                    lst))))
 
   (match-record config <guix-publish-configuration>
-    (guix port host nar-path cache workers ttl cache-bypass-threshold
-          advertise?)
-    (list (shepherd-service
-           (provision '(guix-publish))
-           (requirement `(user-processes
-                          guix-daemon
-                          ,@(if advertise? '(avahi-daemon) '())))
-           (start #~(make-forkexec-constructor
-                     (list #$(file-append guix "/bin/guix")
+    (guix port host nar-path cache workers ttl negative-ttl
+          cache-bypass-threshold advertise?)
+    (let ((command #~(list #$(file-append guix "/bin/guix")
                            "publish" "-u" "guix-publish"
                            "-p" #$(number->string port)
                            #$@(config->compression-options config)
@@ -1851,23 +1922,50 @@ raise a deprecation warning if the 'compression-level' field was used."
                                                     #$(number->string ttl)
                                                     "s"))
                                   #~())
+                           #$@(if negative-ttl
+                                  #~((string-append "--negative-ttl="
+                                                    #$(number->string negative-ttl)
+                                                    "s"))
+                                  #~())
                            #$@(if cache
                                   #~((string-append "--cache=" #$cache)
                                      #$(string-append
                                         "--cache-bypass-threshold="
                                         (number->string
                                          cache-bypass-threshold)))
-                                  #~()))
+                                  #~())))
+          (options #~(#:environment-variables
+                      ;; Make sure we run in a UTF-8 locale so we can produce
+                      ;; nars for packages that contain UTF-8 file names such
+                      ;; as 'nss-certs'.  See <https://bugs.gnu.org/26948>.
+                      (list (string-append "GUIX_LOCPATH="
+                                           #$glibc-utf8-locales "/lib/locale")
+                            "LC_ALL=en_US.utf8")
+                      #:log-file "/var/log/guix-publish.log"))
+          (endpoints #~(let ((ai (false-if-exception
+                                  (getaddrinfo #$host
+                                               #$(number->string port)
+                                               AI_NUMERICSERV))))
+                         (if (pair? ai)
+                             (list (endpoint (addrinfo:addr (car ai))))
+                             '()))))
+      (list (shepherd-service
+             (provision '(guix-publish))
+             (requirement `(user-processes
+                            guix-daemon
+                            ,@(if advertise? '(avahi-daemon) '())))
 
-                     ;; Make sure we run in a UTF-8 locale so we can produce
-                     ;; nars for packages that contain UTF-8 file names such
-                     ;; as 'nss-certs'.  See <https://bugs.gnu.org/26948>.
-                     #:environment-variables
-                     (list (string-append "GUIX_LOCPATH="
-                                          #$glibc-utf8-locales "/lib/locale")
-                           "LC_ALL=en_US.utf8")
-                     #:log-file "/var/log/guix-publish.log"))
-           (stop #~(make-kill-destructor))))))
+             ;; Use lazy socket activation unless ADVERTISE? is true: in that
+             ;; case the process should start right away to advertise itself.
+             (start #~(if (and (defined? 'make-systemd-constructor) ;> 0.9.0?
+                               #$(not advertise?))
+                          (make-systemd-constructor
+                           #$command #$endpoints #$@options)
+                          (make-forkexec-constructor #$command #$@options)))
+             (stop #~(if (and (defined? 'make-systemd-destructor)
+                              #$(not advertise?))
+                         (make-systemd-destructor)
+                         (make-kill-destructor))))))))
 
 (define %guix-publish-accounts
   (list (user-group (name "guix-publish") (system? #t))
@@ -1921,9 +2019,9 @@ command that allows you to share pre-built binaries with others over HTTP.")))
 (define-record-type* <udev-configuration>
   udev-configuration make-udev-configuration
   udev-configuration?
-  (udev   udev-configuration-udev                 ;<package>
+  (udev   udev-configuration-udev                 ;file-like
           (default eudev))
-  (rules  udev-configuration-rules                ;list of <package>
+  (rules  udev-configuration-rules                ;list of file-like
           (default '())))
 
 (define (udev-rules-union packages)
@@ -1947,8 +2045,7 @@ item of @var{packages}."
             (find directory-exists?
                   (map (cut string-append directory <>) %standard-locations)))
 
-          (mkdir-p (string-append #$output "/lib/udev"))
-          (union-build (string-append #$output "/lib/udev/rules.d")
+          (union-build #$output
                        (filter-map rules-sub-directory '#$packages)))))
 
   (computed-file "udev-rules" build))
@@ -1998,115 +2095,114 @@ item of @var{packages}."
 (define udev-shepherd-service
   ;; Return a <shepherd-service> for UDEV with RULES.
   (match-lambda
+    (($ <udev-configuration> udev)
+     (list
+      (shepherd-service
+       (provision '(udev))
+
+       ;; Udev needs /dev to be a 'devtmpfs' mount so that new device nodes can
+       ;; be added: see
+       ;; <http://www.linuxfromscratch.org/lfs/view/development/chapter07/udev.html>.
+       (requirement '(root-file-system))
+
+       (documentation "Populate the /dev directory, dynamically.")
+       (start
+        (with-imported-modules (source-module-closure
+                                '((gnu build linux-boot)))
+          #~(lambda ()
+              (define udevd
+                ;; 'udevd' from eudev.
+                #$(file-append udev "/sbin/udevd"))
+
+              (define (wait-for-udevd)
+                ;; Wait until someone's listening on udevd's control
+                ;; socket.
+                (let ((sock (socket AF_UNIX SOCK_SEQPACKET 0)))
+                  (let try ()
+                    (catch 'system-error
+                      (lambda ()
+                        (connect sock PF_UNIX "/run/udev/control")
+                        (close-port sock))
+                      (lambda args
+                        (format #t "waiting for udevd...~%")
+                        (usleep 500000)
+                        (try))))))
+
+              ;; Allow udev to find the modules.
+              (setenv "LINUX_MODULE_DIRECTORY"
+                      "/run/booted-system/kernel/lib/modules")
+
+              (let* ((kernel-release
+                      (utsname:release (uname)))
+                     (linux-module-directory
+                      (getenv "LINUX_MODULE_DIRECTORY"))
+                     (directory
+                      (string-append linux-module-directory "/"
+                                     kernel-release))
+                     (old-umask (umask #o022)))
+                ;; If we're in a container, DIRECTORY might not exist,
+                ;; for instance because the host runs a different
+                ;; kernel.  In that case, skip it; we'll just miss a few
+                ;; nodes like /dev/fuse.
+                (when (file-exists? directory)
+                  (make-static-device-nodes directory))
+                (umask old-umask))
+
+              (let ((pid (fork+exec-command
+                          (list udevd)
+                          #:environment-variables
+                          (cons*
+                           ;; The first one is for udev, the second one for
+                           ;; eudev.
+                           "UDEV_CONFIG_FILE=/etc/udev/udev.conf"
+                           "EUDEV_RULES_DIRECTORY=/etc/udev/rules.d"
+                           (string-append "LINUX_MODULE_DIRECTORY="
+                                          (getenv "LINUX_MODULE_DIRECTORY"))
+                           (default-environment-variables)))))
+                ;; Wait until udevd is up and running.  This appears to
+                ;; be needed so that the events triggered below are
+                ;; actually handled.
+                (wait-for-udevd)
+
+                ;; Trigger device node creation.
+                (system* #$(file-append udev "/bin/udevadm")
+                         "trigger" "--action=add")
+
+                ;; Wait for things to settle down.
+                (system* #$(file-append udev "/bin/udevadm")
+                         "settle")
+                pid))))
+       (stop #~(make-kill-destructor))
+
+       ;; When halting the system, 'udev' is actually killed by
+       ;; 'user-processes', i.e., before its own 'stop' method was called.
+       ;; Thus, make sure it is not respawned.
+       (respawn? #f)
+       ;; We need additional modules.
+       (modules `((gnu build linux-boot)        ;'make-static-device-nodes'
+                  ,@%default-modules)))))))
+
+(define udev.conf
+  (computed-file "udev.conf"
+                 #~(call-with-output-file #$output
+                     (lambda (port)
+                       (format port "udev_rules=\"/etc/udev/rules.d\"~%")))))
+
+(define udev-etc
+  (match-lambda
     (($ <udev-configuration> udev rules)
-     (let* ((rules     (udev-rules-union (cons* udev kvm-udev-rule rules)))
-            (udev.conf (computed-file "udev.conf"
-                                      #~(call-with-output-file #$output
-                                          (lambda (port)
-                                            (format port
-                                                    "udev_rules=\"~a/lib/udev/rules.d\"\n"
-                                                    #$rules))))))
-       (list
-        (shepherd-service
-         (provision '(udev))
-
-         ;; Udev needs /dev to be a 'devtmpfs' mount so that new device nodes can
-         ;; be added: see
-         ;; <http://www.linuxfromscratch.org/lfs/view/development/chapter07/udev.html>.
-         (requirement '(root-file-system))
-
-         (documentation "Populate the /dev directory, dynamically.")
-         (start
-          (with-imported-modules (source-module-closure
-                                  '((gnu build linux-boot)))
-            #~(lambda ()
-                (define udevd
-                  ;; 'udevd' from eudev.
-                  #$(file-append udev "/sbin/udevd"))
-
-                (define (wait-for-udevd)
-                  ;; Wait until someone's listening on udevd's control
-                  ;; socket.
-                  (let ((sock (socket AF_UNIX SOCK_SEQPACKET 0)))
-                    (let try ()
-                      (catch 'system-error
-                        (lambda ()
-                          (connect sock PF_UNIX "/run/udev/control")
-                          (close-port sock))
-                        (lambda args
-                          (format #t "waiting for udevd...~%")
-                          (usleep 500000)
-                          (try))))))
-
-                ;; Allow udev to find the modules.
-                (setenv "LINUX_MODULE_DIRECTORY"
-                        "/run/booted-system/kernel/lib/modules")
-
-                (let* ((kernel-release
-                        (utsname:release (uname)))
-                       (linux-module-directory
-                        (getenv "LINUX_MODULE_DIRECTORY"))
-                       (directory
-                        (string-append linux-module-directory "/"
-                                       kernel-release))
-                       (old-umask (umask #o022)))
-                  ;; If we're in a container, DIRECTORY might not exist,
-                  ;; for instance because the host runs a different
-                  ;; kernel.  In that case, skip it; we'll just miss a few
-                  ;; nodes like /dev/fuse.
-                  (when (file-exists? directory)
-                    (make-static-device-nodes directory))
-                  (umask old-umask))
-
-                (let ((pid (fork+exec-command (list udevd)
-                            #:environment-variables
-                            (cons*
-                             ;; The first one is for udev, the second one for
-                             ;; eudev.
-                             (string-append "UDEV_CONFIG_FILE=" #$udev.conf)
-                             (string-append "EUDEV_RULES_DIRECTORY="
-                                            #$(file-append
-                                               rules "/lib/udev/rules.d"))
-                             (string-append "LINUX_MODULE_DIRECTORY="
-                                            (getenv "LINUX_MODULE_DIRECTORY"))
-                             (default-environment-variables)))))
-                  ;; Wait until udevd is up and running.  This appears to
-                  ;; be needed so that the events triggered below are
-                  ;; actually handled.
-                  (wait-for-udevd)
-
-                  ;; Trigger device node creation.
-                  (system* #$(file-append udev "/bin/udevadm")
-                           "trigger" "--action=add")
-
-                  ;; Wait for things to settle down.
-                  (system* #$(file-append udev "/bin/udevadm")
-                           "settle")
-                  pid))))
-         (stop #~(make-kill-destructor))
-
-         ;; When halting the system, 'udev' is actually killed by
-         ;; 'user-processes', i.e., before its own 'stop' method was called.
-         ;; Thus, make sure it is not respawned.
-         (respawn? #f)
-         ;; We need additional modules.
-         (modules `((gnu build linux-boot)        ;'make-static-device-nodes'
-                    ,@%default-modules))
-
-         (actions (list (shepherd-action
-                         (name 'rules)
-                         (documentation "Display the directory containing
-the udev rules in use.")
-                         (procedure #~(lambda (_)
-                                        (display #$rules)
-                                        (newline))))))))))))
+     `(("udev"
+        ,(file-union
+          "udev" `(("udev.conf" ,udev.conf)
+                   ("rules.d" ,(udev-rules-union (cons* udev kvm-udev-rule
+                                                        rules))))))))))
 
 (define udev-service-type
   (service-type (name 'udev)
                 (extensions
                  (list (service-extension shepherd-root-service-type
-                                          udev-shepherd-service)))
-
+                                          udev-shepherd-service)
+                       (service-extension etc-service-type udev-etc)))
                 (compose concatenate)           ;concatenate the list of rules
                 (extend (lambda (config rules)
                           (match config
@@ -2143,65 +2239,102 @@ instance."
                              (service-extension
                               account-service-type account-extension)
                              (service-extension
-                              udev-service-type udev-extension))))))
+                              udev-service-type udev-extension)))
+                (description "This service adds udev rules."))))
     (service type #f)))
+
+(define (swap-space->shepherd-service-name space)
+  (let ((target (swap-space-target space)))
+    (symbol-append 'swap-
+                   (string->symbol
+                    (cond ((uuid? target)
+                           (uuid->string target))
+                          ((file-system-label? target)
+                           (file-system-label->string target))
+                          (else
+                           target))))))
+
+; TODO Remove after deprecation
+(define (swap-deprecated->shepherd-service-name sdep)
+  (symbol-append 'swap-
+                 (string->symbol
+                  (cond ((uuid? sdep)
+                         (string-take (uuid->string sdep) 6))
+                        ((file-system-label? sdep)
+                         (file-system-label->string sdep))
+                        (else
+                         sdep)))))
+
+(define swap->shepherd-service-name
+  (match-lambda ((? swap-space? space)
+                 (swap-space->shepherd-service-name space))
+                (sdep
+                 (swap-deprecated->shepherd-service-name sdep))))
 
 (define swap-service-type
   (shepherd-service-type
    'swap
-   (lambda (device)
-     (define requirement
-       (if (and (string? device)
-                (string-prefix? "/dev/mapper/" device))
-           (list (symbol-append 'device-mapping-
-                                (string->symbol (basename device))))
-           '()))
+   (lambda (swap)
+     (define requirements
+       (cond ((swap-space? swap)
+              (map dependency->shepherd-service-name
+                   (swap-space-dependencies swap)))
+             ; TODO Remove after deprecation
+             ((and (string? swap) (string-prefix? "/dev/mapper/" swap))
+              (list (symbol-append 'device-mapping-
+                                   (string->symbol (basename swap)))))
+             (else
+              '())))
 
-     (define (device-lookup device)
+     (define device-lookup
        ;; The generic 'find-partition' procedures could return a partition
        ;; that's not swap space, but that's unlikely.
-       (cond ((uuid? device)
-              #~(find-partition-by-uuid #$(uuid-bytevector device)))
-             ((file-system-label? device)
+       (cond ((swap-space? swap)
+              (let ((target (swap-space-target swap)))
+                (cond ((uuid? target)
+                       #~(find-partition-by-uuid #$(uuid-bytevector target)))
+                      ((file-system-label? target)
+                       #~(find-partition-by-label
+                          #$(file-system-label->string target)))
+                      (else
+                       target))))
+             ; TODO Remove after deprecation
+             ((uuid? swap)
+              #~(find-partition-by-uuid #$(uuid-bytevector swap)))
+             ((file-system-label? swap)
               #~(find-partition-by-label
-                 #$(file-system-label->string device)))
+                 #$(file-system-label->string swap)))
              (else
-              device)))
-
-     (define service-name
-       (symbol-append 'swap-
-                      (string->symbol
-                       (cond ((uuid? device)
-                              (string-take (uuid->string device) 6))
-                             ((file-system-label? device)
-                              (file-system-label->string device))
-                             (else
-                              device)))))
+              swap)))
 
      (with-imported-modules (source-module-closure '((gnu build file-systems)))
        (shepherd-service
-        (provision (list service-name))
-        (requirement `(udev ,@requirement))
-        (documentation "Enable the given swap device.")
+        (provision (list (swap->shepherd-service-name swap)))
+        (requirement `(udev ,@requirements))
+        (documentation "Enable the given swap space.")
         (modules `((gnu build file-systems)
                    ,@%default-modules))
         (start #~(lambda ()
-                   (let ((device #$(device-lookup device)))
+                   (let ((device #$device-lookup))
                      (and device
                           (begin
-                            (restart-on-EINTR (swapon device))
+                            (restart-on-EINTR (swapon device
+                                                      #$(if (swap-space? swap)
+                                                            (swap-space->flags-bit-mask
+                                                             swap)
+                                                            0)))
                             #t)))))
         (stop #~(lambda _
-                  (let ((device #$(device-lookup device)))
+                  (let ((device #$device-lookup))
                     (when device
                       (restart-on-EINTR (swapoff device)))
                     #f)))
         (respawn? #f))))
    (description "Turn on the virtual memory swap area.")))
 
-(define (swap-service device)
-  "Return a service that uses @var{device} as a swap device."
-  (service swap-service-type device))
+(define (swap-service swap)
+  "Return a service that uses @var{swap} as a swap space."
+  (service swap-service-type swap))
 
 (define %default-gpm-options
   ;; Default options for GPM.
@@ -2209,7 +2342,7 @@ instance."
 
 (define-record-type* <gpm-configuration>
   gpm-configuration make-gpm-configuration gpm-configuration?
-  (gpm      gpm-configuration-gpm                 ;package
+  (gpm      gpm-configuration-gpm                 ;file-like
             (default gpm))
   (options  gpm-configuration-options             ;list of strings
             (default %default-gpm-options)))
@@ -2315,71 +2448,284 @@ notably to select, copy, and paste text.  The default options use the
    (description "Start the @command{kmscon} virtual terminal emulator for the
 Linux @dfn{kernel mode setting} (KMS).")))
 
+
+;;;
+;;; Static networking.
+;;;
+
+(define (ipv6-address? str)
+  "Return true if STR denotes an IPv6 address."
+  (false-if-exception (->bool (inet-pton AF_INET6 str))))
+
+(define-compile-time-procedure (assert-valid-address (address string?))
+  "Ensure ADDRESS has a valid netmask."
+  (unless (cidr->netmask address)
+    (raise
+     (make-compound-condition
+      (formatted-message (G_ "address '~a' lacks a network mask")
+                         address)
+      (condition (&error-location
+                  (location
+                   (source-properties->location procedure-call-location))))
+      (condition (&fix-hint
+                  (hint (format #f (G_ "\
+Write, say, @samp{\"~a/24\"} for a 24-bit network mask.")
+                                address)))))))
+  address)
+
 (define-record-type* <static-networking>
   static-networking make-static-networking
   static-networking?
-  (interface static-networking-interface)
-  (ip static-networking-ip)
-  (netmask static-networking-netmask
-           (default #f))
-  (gateway static-networking-gateway              ;FIXME: doesn't belong here
-           (default #f))
+  (addresses static-networking-addresses)         ;list of <network-address>
+  (links     static-networking-links (default '())) ;list of <network-link>
+  (routes    static-networking-routes (default '())) ;list of <network-routes>
   (provision static-networking-provision
-             (default #f))
+             (default '(networking)))
   (requirement static-networking-requirement
-               (default '()))
+               (default '(udev)))
   (name-servers static-networking-name-servers    ;FIXME: doesn't belong here
                 (default '())))
 
-(define static-networking-shepherd-service
+(define-record-type* <network-address>
+  network-address make-network-address
+  network-address?
+  (device    network-address-device)              ;string--e.g., "en01"
+  (value     network-address-value                ;string--CIDR notation
+             (sanitize assert-valid-address))
+  (ipv6?     network-address-ipv6?                ;Boolean
+             (thunked)
+             (default
+               (ipv6-address? (cidr->ip (network-address-value this-record))))))
+
+(define-record-type* <network-link>
+  network-link make-network-link
+  network-link?
+  (name      network-link-name)                   ;string--e.g, "v0p0"
+  (type      network-link-type)                   ;symbol--e.g.,'veth
+  (arguments network-link-arguments))             ;list
+
+(define-record-type* <network-route>
+  network-route make-network-route
+  network-route?
+  (destination network-route-destination)
+  (source      network-route-source (default #f))
+  (device      network-route-device (default #f))
+  (ipv6?       network-route-ipv6? (thunked)
+               (default
+                 (or (ipv6-address? (network-route-destination this-record))
+                     (and=> (network-route-gateway this-record)
+                            ipv6-address?))))
+  (gateway     network-route-gateway (default #f)))
+
+(define* (cidr->netmask str #:optional (family AF_INET))
+  "Given @var{str}, a string in CIDR notation (e.g., \"1.2.3.4/24\"), return
+the netmask as a string like \"255.255.255.0\"."
+  (match (string-split str #\/)
+    ((ip (= string->number bits))
+     (let ((mask (ash (- (expt 2 bits) 1)
+                      (- (if (= family AF_INET6) 128 32)
+                         bits))))
+       (inet-ntop family mask)))
+    (_ #f)))
+
+(define (cidr->ip str)
+  "Strip the netmask bit of @var{str}, a CIDR-notation IP/netmask address."
+  (match (string-split str #\/)
+    ((or (ip _) (ip))
+     ip)))
+
+(define* (ip+netmask->cidr ip netmask #:optional (family AF_INET))
+  "Return the CIDR notation (a string) for @var{ip} and @var{netmask}, two
+@var{family} address strings, where @var{family} is @code{AF_INET} or
+@code{AF_INET6}."
+  (let* ((netmask (inet-pton family netmask))
+         (bits    (logcount netmask)))
+    (string-append ip "/" (number->string bits))))
+
+(define (static-networking->hurd-pfinet-options config)
+  "Return command-line options for the Hurd's pfinet translator corresponding
+to CONFIG."
+  (unless (null? (static-networking-links config))
+    ;; XXX: Presumably this is not supported, or perhaps could be approximated
+    ;; by running separate pfinet instances in some cases?
+    (warning (G_ "network links are currently ignored on GNU/Hurd~%")))
+
+  (match (static-networking-addresses config)
+    ((and addresses (first _ ...))
+     `("--ipv6" "/servers/socket/26"
+       "--interface" ,(network-address-device first)
+       ,@(append-map (lambda (address)
+                       `(,(if (network-address-ipv6? address)
+                              "--address6"
+                              "--address")
+                         ,(cidr->ip (network-address-value address))
+                         ,@(match (cidr->netmask (network-address-value address)
+                                                 (if (network-address-ipv6? address)
+                                                     AF_INET6
+                                                     AF_INET))
+                             (#f '())
+                             (mask (list "--netmask" mask)))))
+                     addresses)
+       ,@(append-map (lambda (route)
+                       (match route
+                         (($ <network-route> "default" #f device _ gateway)
+                          (if (network-route-ipv6? route)
+                              `("--gateway6" ,gateway)
+                              `("--gateway" ,gateway)))
+                         (($ <network-route> destination)
+                          (warning (G_ "ignoring network route for '~a'~%")
+                                   destination)
+                          '())))
+                     (static-networking-routes config))))))
+
+(define (network-set-up/hurd config)
+  "Set up networking for the Hurd."
+  ;; The Hurd implements SIOCGIFADDR and other old-style ioctls, but the only
+  ;; way to set up IPv6 is by starting pfinet with the right options.
+  (if (equal? (static-networking-provision config) '(loopback))
+      (scheme-file "set-up-pflocal" #~(begin 'nothing-to-do! #t))
+      (scheme-file "set-up-pfinet"
+                   (with-imported-modules '((guix build utils))
+                     #~(begin
+                         (use-modules (guix build utils)
+                                      (ice-9 format))
+
+                         ;; TODO: Do that without forking.
+                         (let ((options '#$(static-networking->hurd-pfinet-options
+                                            config)))
+                           (format #t "starting '~a~{ ~s~}'~%"
+                                   #$(file-append hurd "/hurd/pfinet")
+                                   options)
+                           (apply invoke #$(file-append hurd "/bin/settrans") "-fac"
+                                  "/servers/socket/2"
+                                  #$(file-append hurd "/hurd/pfinet")
+                                  options)))))))
+
+(define (network-tear-down/hurd config)
+  (scheme-file "tear-down-pfinet"
+               (with-imported-modules '((guix build utils))
+                 #~(begin
+                     (use-modules (guix build utils))
+
+                     ;; Forcefully terminate pfinet.  XXX: In theory this
+                     ;; should just undo the addresses and routes of CONFIG;
+                     ;; this could be done using ioctls like SIOCDELRT, but
+                     ;; these are IPv4-only; another option would be to use
+                     ;; fsysopts but that seems to crash pfinet.
+                     (invoke #$(file-append hurd "/bin/settrans") "-fg"
+                             "/servers/socket/2")
+                     #f))))
+
+(define network-set-up/linux
   (match-lambda
-    (($ <static-networking> interface ip netmask gateway provision
-                            requirement name-servers)
+    (($ <static-networking> addresses links routes)
+     (scheme-file "set-up-network"
+                  (with-extensions (list guile-netlink)
+                    #~(begin
+                        (use-modules (ip addr) (ip link) (ip route))
+
+                        #$@(map (lambda (address)
+                                  #~(begin
+                                      (addr-add #$(network-address-device address)
+                                                #$(network-address-value address)
+                                                #:ipv6?
+                                                #$(network-address-ipv6? address))
+                                      ;; FIXME: loopback?
+                                      (link-set #$(network-address-device address)
+                                                #:multicast-on #t
+                                                #:up #t)))
+                                addresses)
+                        #$@(map (match-lambda
+                                  (($ <network-link> name type arguments)
+                                   #~(link-add #$name #$type
+                                               #:type-args '#$arguments)))
+                                links)
+                        #$@(map (lambda (route)
+                                  #~(route-add #$(network-route-destination route)
+                                               #:device
+                                               #$(network-route-device route)
+                                               #:ipv6?
+                                               #$(network-route-ipv6? route)
+                                               #:via
+                                               #$(network-route-gateway route)
+                                               #:src
+                                               #$(network-route-source route)))
+                                routes)
+                        #t))))))
+
+(define network-tear-down/linux
+  (match-lambda
+    (($ <static-networking> addresses links routes)
+     (scheme-file "tear-down-network"
+                  (with-extensions (list guile-netlink)
+                    #~(begin
+                        (use-modules (ip addr) (ip link) (ip route)
+                                     (netlink error)
+                                     (srfi srfi-34))
+
+                        (define-syntax-rule (false-if-netlink-error exp)
+                          (guard (c ((netlink-error? c) #f))
+                            exp))
+
+                        ;; Wrap calls in 'false-if-netlink-error' so this
+                        ;; script goes as far as possible undoing the effects
+                        ;; of "set-up-network".
+
+                        #$@(map (lambda (route)
+                                  #~(false-if-netlink-error
+                                     (route-del #$(network-route-destination route)
+                                                #:device
+                                                #$(network-route-device route)
+                                                #:ipv6?
+                                                #$(network-route-ipv6? route)
+                                                #:via
+                                                #$(network-route-gateway route)
+                                                #:src
+                                                #$(network-route-source route))))
+                                routes)
+                        #$@(map (match-lambda
+                                  (($ <network-link> name type arguments)
+                                   #~(false-if-netlink-error
+                                      (link-del #$name))))
+                                links)
+                        #$@(map (lambda (address)
+                                  #~(false-if-netlink-error
+                                     (addr-del #$(network-address-device
+                                                  address)
+                                               #$(network-address-value address)
+                                               #:ipv6?
+                                               #$(network-address-ipv6? address))))
+                                addresses)
+                        #f))))))
+
+(define (static-networking-shepherd-service config)
+  (match config
+    (($ <static-networking> addresses links routes
+                            provision requirement name-servers)
      (let ((loopback? (and provision (memq 'loopback provision))))
        (shepherd-service
 
         (documentation
          "Bring up the networking interface using a static IP address.")
         (requirement requirement)
-        (provision (or provision
-                       (list (symbol-append 'networking-
-                                            (string->symbol interface)))))
+        (provision provision)
 
         (start #~(lambda _
                    ;; Return #t if successfully started.
-                   (let* ((addr     (inet-pton AF_INET #$ip))
-                          (sockaddr (make-socket-address AF_INET addr 0))
-                          (mask     (and #$netmask
-                                         (inet-pton AF_INET #$netmask)))
-                          (maskaddr (and mask
-                                         (make-socket-address AF_INET
-                                                              mask 0)))
-                          (gateway  (and #$gateway
-                                         (inet-pton AF_INET #$gateway)))
-                          (gatewayaddr (and gateway
-                                            (make-socket-address AF_INET
-                                                                 gateway 0))))
-                     (configure-network-interface #$interface sockaddr
-                                                  (logior IFF_UP
-                                                          #$(if loopback?
-                                                                #~IFF_LOOPBACK
-                                                                0))
-                                                  #:netmask maskaddr)
-                     (when gateway
-                       (let ((sock (socket AF_INET SOCK_DGRAM 0)))
-                         (add-network-route/gateway sock gatewayaddr)
-                         (close-port sock))))))
+                   (load #$(let-system (system target)
+                             (if (string-contains (or target system) "-linux")
+                                 (network-set-up/linux config)
+                                 (network-set-up/hurd config))))))
         (stop #~(lambda _
                   ;; Return #f is successfully stopped.
-                  (let ((sock (socket AF_INET SOCK_STREAM 0)))
-                    (when #$gateway
-                      (delete-network-route sock
-                                            (make-socket-address
-                                             AF_INET INADDR_ANY 0)))
-                    (set-network-interface-flags sock #$interface 0)
-                    (close-port sock)
-                    #f)))
+                  (load #$(let-system (system target)
+                            (if (string-contains (or target system) "-linux")
+                                (network-tear-down/linux config)
+                                (network-tear-down/hurd config))))))
         (respawn? #f))))))
+
+(define (static-networking-shepherd-services networks)
+  (map static-networking-shepherd-service networks))
 
 (define (static-networking-etc-files interfaces)
   "Return a /etc/resolv.conf entry for INTERFACES or the empty list."
@@ -2399,30 +2745,6 @@ Linux @dfn{kernel mode setting} (KMS).")))
 # Generated by 'static-networking-service'.\n"
                                       content))))))))
 
-(define (static-networking-shepherd-services interfaces)
-  "Return the list of Shepherd services to bring up INTERFACES, a list of
-<static-networking> objects."
-  (define (loopback? service)
-    (memq 'loopback (shepherd-service-provision service)))
-
-  (let ((services (map static-networking-shepherd-service interfaces)))
-    (match (remove loopback? services)
-      (()
-       ;; There's no interface other than 'loopback', so we assume that the
-       ;; 'networking' service will be provided by dhclient or similar.
-       services)
-      ((non-loopback ...)
-       ;; Assume we're providing all the interfaces, and thus, provide a
-       ;; 'networking' service.
-       (cons (shepherd-service
-              (provision '(networking))
-              (requirement (append-map shepherd-service-provision
-                                       services))
-              (start #~(const #t))
-              (stop #~(const #f))
-              (documentation "Bring up all the networking interfaces."))
-             services)))))
-
 (define static-networking-service-type
   ;; The service type for statically-defined network interfaces.
   (service-type (name 'static-networking)
@@ -2440,12 +2762,13 @@ with the given IP address, gateway, netmask, and so on.  The value for
 services of this type is a list of @code{static-networking} objects, one per
 network interface.")))
 
-(define* (static-networking-service interface ip
-                                    #:key
-                                    netmask gateway provision
-                                    ;; Most interfaces require udev to be usable.
-                                    (requirement '(udev))
-                                    (name-servers '()))
+(define-deprecated (static-networking-service interface ip
+                                              #:key
+                                              netmask gateway provision
+                                              ;; Most interfaces require udev to be usable.
+                                              (requirement '(udev))
+                                              (name-servers '()))
+  static-networking-service-type
   "Return a service that starts @var{interface} with address @var{ip}.  If
 @var{netmask} is true, use it as the network mask.  If @var{gateway} is true,
 it must be a string specifying the default network gateway.
@@ -2456,11 +2779,266 @@ interface of interest.  Behind the scenes what it does is extend
 to handle."
   (simple-service 'static-network-interface
                   static-networking-service-type
-                  (list (static-networking (interface interface) (ip ip)
-                                           (netmask netmask) (gateway gateway)
-                                           (provision provision)
-                                           (requirement requirement)
-                                           (name-servers name-servers)))))
+                  (list (static-networking
+                         (addresses
+                          (list (network-address
+                                 (device interface)
+                                 (value (if netmask
+                                            (ip+netmask->cidr ip netmask)
+                                            ip))
+                                 (ipv6? #f))))
+                         (routes
+                          (if gateway
+                              (list (network-route
+                                     (destination "default")
+                                     (gateway gateway)
+                                     (ipv6? #f)))
+                              '()))
+                         (requirement requirement)
+                         (provision (or provision '(networking)))
+                         (name-servers name-servers)))))
+
+(define %loopback-static-networking
+  ;; The loopback device.
+  (static-networking
+   (addresses (list (network-address
+                     (device "lo")
+                     (value "127.0.0.1/8"))))
+   (requirement '())
+   (provision '(loopback))))
+
+(define %qemu-static-networking
+  ;; Networking configuration for QEMU's user-mode network stack (info "(QEMU)
+  ;; Using the user mode network stack").
+  (static-networking
+   (addresses (list (network-address
+                     (device "eth0")
+                     (value "10.0.2.15/24"))))
+   (routes (list (network-route
+                  (destination "default")
+                  (gateway "10.0.2.2"))))
+   (requirement '())
+   (provision '(networking))
+   (name-servers '("10.0.2.3"))))
+
+
+;;;
+;;; greetd-service-type -- minimal and flexible login manager daemon
+;;;
+
+(define-record-type* <greetd-agreety-session>
+  greetd-agreety-session make-greetd-agreety-session
+  greetd-agreety-session?
+  (agreety greetd-agreety (default greetd))
+  (command greetd-agreety-command (default (file-append bash "/bin/bash")))
+  (command-args greetd-agreety-command-args (default '("-l")))
+  (extra-env greetd-agreety-extra-env (default '()))
+  (xdg-env? greetd-agreety-xdg-env? (default #t)))
+
+(define greetd-agreety-tty-session-command
+  (match-lambda
+    (($ <greetd-agreety-session> _ command args extra-env)
+     (program-file
+      "agreety-tty-session-command"
+      #~(begin
+          (use-modules (ice-9 match))
+          (for-each (match-lambda ((var . val) (setenv var val)))
+                    (quote (#$@extra-env)))
+          (apply execl #$command #$command (list #$@args)))))))
+
+(define greetd-agreety-tty-xdg-session-command
+  (match-lambda
+    (($ <greetd-agreety-session> _ command args extra-env)
+     (program-file
+      "agreety-tty-xdg-session-command"
+      #~(begin
+          (use-modules (ice-9 match))
+          (let*
+              ((username (getenv "USER"))
+               (useruid (passwd:uid (getpwuid username)))
+               (useruid (number->string useruid)))
+            (setenv "XDG_SESSION_TYPE" "tty")
+            (setenv "XDG_RUNTIME_DIR" (string-append "/run/user/" useruid)))
+          (for-each (match-lambda ((var . val) (setenv var val)))
+                    (quote (#$@extra-env)))
+          (apply execl #$command #$command (list #$@args)))))))
+
+(define (make-greetd-agreety-session-command config command)
+  (let ((agreety (file-append (greetd-agreety config) "/bin/agreety")))
+    (program-file
+     "agreety-command"
+     #~(execl #$agreety #$agreety "-c" #$command))))
+
+(define (make-greetd-default-session-command config-or-command)
+  (cond ((greetd-agreety-session? config-or-command)
+         (cond ((greetd-agreety-xdg-env? config-or-command)
+                (make-greetd-agreety-session-command
+                 config-or-command
+                 (greetd-agreety-tty-xdg-session-command config-or-command)))
+               (#t
+                (make-greetd-agreety-session-command
+                 config-or-command
+                 (greetd-agreety-tty-session-command config-or-command)))))
+        (#t config-or-command)))
+
+(define-record-type* <greetd-terminal-configuration>
+  greetd-terminal-configuration make-greetd-terminal-configuration
+  greetd-terminal-configuration?
+  (greetd greetd-package (default greetd))
+  (config-file-name greetd-config-file-name (thunked)
+                    (default (default-config-file-name this-record)))
+  (log-file-name greetd-log-file-name (thunked)
+                 (default (default-log-file-name this-record)))
+  (terminal-vt greetd-terminal-vt (default "7"))
+  (terminal-switch greetd-terminal-switch (default #f))
+  (default-session-user greetd-default-session-user (default "greeter"))
+  (default-session-command greetd-default-session-command
+    (default (greetd-agreety-session))
+    (sanitize make-greetd-default-session-command)))
+
+(define (default-config-file-name config)
+  (string-join (list "config-" (greetd-terminal-vt config) ".toml") ""))
+
+(define (default-log-file-name config)
+  (string-join (list "/var/log/greetd-" (greetd-terminal-vt config) ".log") ""))
+
+(define (make-greetd-terminal-configuration-file config)
+  (let*
+      ((config-file-name (greetd-config-file-name config))
+       (terminal-vt (greetd-terminal-vt config))
+       (terminal-switch (greetd-terminal-switch config))
+       (default-session-user (greetd-default-session-user config))
+       (default-session-command (greetd-default-session-command config)))
+    (mixed-text-file
+     config-file-name
+     "[terminal]\n"
+     "vt = " terminal-vt "\n"
+     "switch = " (if terminal-switch "true" "false") "\n"
+     "[default_session]\n"
+     "user = " default-session-user "\n"
+     "command = " default-session-command "\n")))
+
+(define %greetd-accounts
+  (list (user-account
+         (name "greeter")
+         (group "greeter")
+         ;; video group is required for graphical greeters.
+         (supplementary-groups '("video"))
+         (system? #t))
+        (user-group
+         (name "greeter")
+         (system? #t))))
+
+(define %greetd-file-systems
+  (list (file-system
+          (device "none")
+          (mount-point "/run/greetd/pam_mount")
+          (type "tmpfs")
+          (check? #f)
+          (flags '(no-suid no-dev no-exec))
+          (options "mode=0755")
+          (create-mount-point? #t))))
+
+(define %greetd-pam-mount-rules
+  `((debug (@ (enable "0")))
+    (volume (@ (sgrp "users")
+               (fstype "tmpfs")
+               (mountpoint "/run/user/%(USERUID)")
+               (options "noexec,nosuid,nodev,size=1g,mode=0700,uid=%(USERUID),gid=%(USERGID)")))
+    (logout (@ (wait "0")
+               (hup "0")
+               (term "yes")
+               (kill "no")))
+    (mkmountpoint (@ (enable "1") (remove "true")))))
+
+(define-record-type* <greetd-configuration>
+  greetd-configuration make-greetd-configuration
+  greetd-configuration?
+  (motd greetd-motd (default %default-motd))
+  (allow-empty-passwords? greetd-allow-empty-passwords? (default #t))
+  (terminals greetd-terminals (default '())))
+
+(define (make-greetd-pam-mount-conf-file config)
+  (computed-file
+   "greetd_pam_mount.conf.xml"
+   #~(begin
+       (use-modules (sxml simple))
+       (call-with-output-file #$output
+         (lambda (port)
+           (sxml->xml
+            '(*TOP*
+              (*PI* xml "version='1.0' encoding='utf-8'")
+              (pam_mount
+               #$@%greetd-pam-mount-rules
+               (pmvarrun
+                #$(file-append greetd-pam-mount
+                               "/sbin/pmvarrun -u '%(USER)' -o '%(OPERATION)'"))))
+            port))))))
+
+(define (greetd-etc-service config)
+  `(("security/greetd_pam_mount.conf.xml"
+     ,(make-greetd-pam-mount-conf-file config))))
+
+(define (greetd-pam-service config)
+  (define optional-pam-mount
+    (pam-entry
+     (control "optional")
+     (module #~(string-append #$greetd-pam-mount "/lib/security/pam_mount.so"))
+     (arguments '("disable_interactive"))))
+
+  (list
+   (unix-pam-service "greetd"
+                     #:login-uid? #t
+                     #:allow-empty-passwords?
+                     (greetd-allow-empty-passwords? config)
+                     #:motd
+                     (greetd-motd config))
+   (lambda (pam)
+     (if (member (pam-service-name pam)
+                 '("login" "greetd" "su" "slim" "gdm-password"))
+         (pam-service
+          (inherit pam)
+          (auth (append (pam-service-auth pam)
+                        (list optional-pam-mount)))
+          (session (append (pam-service-session pam)
+                           (list optional-pam-mount))))
+         pam))))
+
+(define (greetd-shepherd-services config)
+  (map
+   (lambda (tc)
+     (let*
+         ((greetd-bin (file-append (greetd-package tc) "/sbin/greetd"))
+          (greetd-conf (make-greetd-terminal-configuration-file tc))
+          (greetd-log (greetd-log-file-name tc))
+          (greetd-vt (greetd-terminal-vt tc)))
+       (shepherd-service
+        (documentation "Minimal and flexible login manager daemon")
+        (requirement '(user-processes host-name udev virtual-terminal))
+        (provision (list (symbol-append
+                          'term-tty
+                          (string->symbol (greetd-terminal-vt tc)))))
+        (start #~(make-forkexec-constructor
+                  (list #$greetd-bin "-c" #$greetd-conf)
+                  #:log-file #$greetd-log))
+        (stop #~(make-kill-destructor)))))
+   (greetd-terminals config)))
+
+(define greetd-service-type
+  (service-type
+   (name 'greetd)
+   (description "Provides necessary infrastructure for logging into the
+system including @code{greetd} PAM service, @code{pam-mount} module to
+mount/unmount /run/user/<uid> directory for user and @code{greetd}
+login manager daemon.")
+   (extensions
+    (list
+     (service-extension account-service-type (const %greetd-accounts))
+     (service-extension file-system-service-type (const %greetd-file-systems))
+     (service-extension etc-service-type greetd-etc-service)
+     (service-extension pam-root-service-type greetd-pam-service)
+     (service-extension shepherd-root-service-type greetd-shepherd-services)))
+   (default-value (greetd-configuration))))
 
 
 (define %base-services
@@ -2473,10 +3051,12 @@ to handle."
                         (cons tty %default-console-font))
                       '("tty1" "tty2" "tty3" "tty4" "tty5" "tty6")))
 
+        (syslog-service)
         (service agetty-service-type (agetty-configuration
                                        (extra-options '("-L")) ; no carrier detect
                                        (term "vt100")
-                                       (tty #f))) ; automatic
+                                       (tty #f) ; automatic
+                                       (shepherd-requirement '(syslogd))))
 
         (service mingetty-service-type (mingetty-configuration
                                          (tty "tty1")))
@@ -2492,16 +3072,17 @@ to handle."
                                          (tty "tty6")))
 
         (service static-networking-service-type
-                 (list (static-networking (interface "lo")
-                                          (ip "127.0.0.1")
-                                          (requirement '())
-                                          (provision '(loopback)))))
-        (syslog-service)
+                 (list %loopback-static-networking))
         (service urandom-seed-service-type)
         (service guix-service-type)
         (service nscd-service-type)
 
         (service rottlog-service-type)
+
+        ;; Periodically delete old build logs.
+        (service log-cleanup-service-type
+                 (log-cleanup-configuration
+                  (directory "/var/log/guix/drvs")))
 
         ;; The LVM2 rules are needed as soon as LVM2 or the device-mapper is
         ;; used, so enable them by default.  The FUSE and ALSA rules are

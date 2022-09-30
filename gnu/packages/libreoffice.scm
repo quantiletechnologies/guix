@@ -6,8 +6,8 @@
 ;;; Copyright © 2017 Thomas Danckaert <post@thomasdanckaert.be>
 ;;; Copyright © 2017–2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2017 Andy Wingo <wingo@igalia.com>
-;;; Copyright © 2017, 2018, 2019 Ludovic Courtès <ludo@gnu.org>
-;;; Copyright © 2017, 2018, 2019 Marius Bakke <mbakke@fastmail.com>
+;;; Copyright © 2017, 2018, 2019, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2017, 2018, 2019, 2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2017 Rutger Helling <rhelling@mykolab.com>
 ;;; Copyright © 2018, 2019 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2018, 2020 Jonathan Brielmaier <jonathan.brielmaier@web.de>
@@ -34,6 +34,7 @@
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system python)
   #:use-module (guix build-system trivial)
+  #:use-module (guix gexp)
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module ((guix licenses) #:prefix license:)
@@ -53,6 +54,7 @@
   #:use-module (gnu packages curl)
   #:use-module (gnu packages cyrus-sasl)
   #:use-module (gnu packages databases)
+  #:use-module (gnu packages datastructures)
   #:use-module (gnu packages documentation)
   #:use-module (gnu packages flex)
   #:use-module (gnu packages fontutils)
@@ -89,7 +91,7 @@
 (define-public ixion
   (package
     (name "ixion")
-    (version "0.16.1")
+    (version "0.17.0")
     (source
      (origin
        (method url-fetch)
@@ -97,14 +99,12 @@
                            version ".tar.xz"))
        (sha256
         (base32
-         "17q84mhy4rb3masvjw24x549irdjmccnc8n04xh58v9l7hxn8v22"))))
+         "07hhqkvns4da8xv990gr1smqz1zf40m531lg95nphfrz48wp3jak"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("mdds" ,mdds)
-       ("python" ,python)
-       ("spdlog" ,spdlog)))
+     (list mdds python spdlog))
     (home-page "https://gitlab.com/ixion/ixion")
     (synopsis "General purpose formula parser and interpreter")
     (description "Ixion is a library for calculating the results of formula
@@ -116,7 +116,7 @@ their dependencies automatically upon calculation.")
 (define-public orcus
   (package
     (name "orcus")
-    (version "0.16.1")
+    (version "0.17.2")
     (source
      (origin
        (method url-fetch)
@@ -124,17 +124,14 @@ their dependencies automatically upon calculation.")
                            "orcus-" version ".tar.xz"))
        (sha256
         (base32
-         "1bps34sqz7wlrl01ssywjd5fbmssplifs0rskivgrg801lr6pcm4"))))
+         "1as04qb74jnlnwy4wh5jwaw2nnzgn2s3230ymvh3kx1w9r0rsl1h"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags '("--disable-static")))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("ixion" ,ixion)
-       ("mdds" ,mdds)
-       ("python" ,python)
-       ("zlib" ,zlib)))
+     (list ixion mdds python zlib))
     (home-page "https://gitlab.com/orcus/orcus")
     (synopsis "File import filter library for spreadsheet documents")
     (description "Orcus is a library that provides a collection of standalone
@@ -186,7 +183,7 @@ CSV, CSS and XML.")
                    "None)]\n")))
                #t))))))
     (inputs
-     `(("libreoffice" ,libreoffice)))
+     (list libreoffice))
     (home-page "http://dag.wiee.rs/home-made/unoconv/")
     (synopsis "Convert between any document format supported by LibreOffice")
     (description
@@ -215,13 +212,11 @@ All required fonts must be installed on the converting system.")
                "1cj76cz4mqcy2mgv9l5xlc95bypyk8zbq0ls9cswqrs2y0lhfgwk"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("cppunit" ,cppunit)
-       ("doxygen" ,doxygen)
-       ("pkg-config" ,pkg-config)))
+     (list cppunit doxygen pkg-config))
     (inputs
-     `(("zlib" ,zlib)))
+     (list zlib))
     (propagated-inputs                  ; Referenced by .la files
-     `(("boost" ,boost)))
+     (list boost))
     (arguments
      ;; avoid triggering configure errors by simple inclusion of boost headers
      `(#:configure-flags '("--disable-werror"
@@ -249,12 +244,11 @@ spreadsheets and presentations.")
     (arguments
      `(#:configure-flags '("--disable-werror")))
     (native-inputs
-     `(("doxygen" ,doxygen)
-       ("pkg-config" ,pkg-config)))
+     (list doxygen pkg-config))
     (propagated-inputs
-     `(("librevenge" ,librevenge))) ; in Requires field of .pkg
+     (list librevenge)) ; in Requires field of .pkg
     (inputs
-     `(("zlib" ,zlib)))
+     (list zlib))
     (home-page "http://libwpd.sourceforge.net/")
     (synopsis "Library for importing WordPerfect documents")
     (description "Libwpd is a C++ library designed to help process
@@ -272,20 +266,23 @@ into other word processors.")
         (uri (string-append "mirror://sourceforge/libebook/libe-book-"
                             version "/libe-book-" version ".tar.xz"))
         (sha256
-          (base32
-            "1yg1vws1wggzhjw672bpgh2x541g5i9wryf67g51m0r79zrqz3by"))))
+         (base32
+          "1yg1vws1wggzhjw672bpgh2x541g5i9wryf67g51m0r79zrqz3by"))
+        (modules '((guix build utils)))
+        (snippet
+         '(begin
+            ;; This can be removed with the next release.
+            ;; Needed for icu4c compatibility >= 68.0.
+            (substitute* "src/lib/EBOOKCharsetConverter.cpp"
+              (("TRUE, TRUE, &status")
+              "true, true, &status"))))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("cppunit" ,cppunit)
-       ("gperf" ,gperf)
-       ("pkg-config" ,pkg-config)))
+     (list cppunit gperf pkg-config))
     (propagated-inputs ; in Requires or Requires.private field of .pkg
-     `(("icu4c" ,icu4c)
-       ("liblangtag" ,liblangtag)
-       ("librevenge" ,librevenge)
-       ("libxml2" ,libxml2)))
+     (list icu4c liblangtag librevenge libxml2))
     (inputs
-      `(("boost" ,boost)))
+      (list boost))
     (arguments
      ;; avoid triggering configure errors by simple inclusion of boost headers
      `(#:configure-flags '("--disable-werror")))
@@ -313,13 +310,11 @@ ZVR (simple compressed text format).")
          "1b8mc9zzrqypj1v9zdy3ybc48pw0rfr06cyi7n6grvybjjwq9q03"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("cppunit" ,cppunit)
-       ("pkg-config" ,pkg-config)))
+     (list cppunit pkg-config))
     (inputs
-     `(("libxml2" ,libxml2)
-       ("boost" ,boost)))
+     (list libxml2 boost))
     (propagated-inputs         ; in Requires field of .pkg
-     `(("librevenge" ,librevenge)))
+     (list librevenge))
     (home-page "https://sourceforge.net/projects/libepubgen/")
     (synopsis "EPUB generator library for librevenge")
     (description "libepubgen is an EPUB generator for librevenge.  It supports
@@ -340,13 +335,11 @@ way--presentation and vector drawing interfaces.")
                "074x159immf139szkswv2zapnq75p7xk10dbha2p9193hgwggcwr"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("doxygen" ,doxygen)
-       ("pkg-config" ,pkg-config)))
+     (list doxygen pkg-config))
     (propagated-inputs
-     `(("libwpd" ,libwpd))) ; in Requires field of .pkg
+     (list libwpd)) ; in Requires field of .pkg
     (inputs
-     `(("perl" ,perl)
-       ("zlib" ,zlib)))
+     (list perl zlib))
     (home-page "http://libwpg.sourceforge.net/")
     (synopsis "Library and tools for the WordPerfect Graphics format")
     (description "The libwpg project provides a library and tools for
@@ -356,39 +349,48 @@ working with graphics in the WPG (WordPerfect Graphics) format.")
 (define-public libcmis
   (package
     (name "libcmis")
-    (version "0.5.2")
+    ;; Note: Use an unreleased version because libreoffice requires it and
+    ;; is the only user (see <https://github.com/tdf/libcmis/pull/43>).
+    (version "0.5.2-46-gf264a61")
+    (home-page "https://github.com/tdf/libcmis")
     (source
      (origin
-      (method url-fetch)
-      (uri (string-append "https://github.com/tdf/libcmis/releases/download/v"
-                          version "/libcmis-" version ".tar.xz"))
-      (sha256
-       (base32
-        "18h0a2gsfxvlv03nlcfvw9bzsflq5sin9agq6za103hr0ab8vcfp"))))
+       (method git-fetch)
+       (uri (git-reference (url home-page)
+                           (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "06ff5vw0xrymvvna18wlaayyk20755sk2541i1gh7zpbmncs2ni6"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("cppunit" ,cppunit)
-       ("pkg-config" ,pkg-config)))
-    (propagated-inputs ; in Requires field of .pkg
-     `(("curl" ,curl)
-       ("libxml2" ,libxml2)))
+     (list autoconf automake libtool cppunit pkg-config))
+    (propagated-inputs                  ;in Requires field of .pkg
+     (list curl libxml2))
     (inputs
-     `(("boost" ,boost)
-       ("cyrus-sasl" ,cyrus-sasl)
-       ("openssl" ,openssl)))
+     (list boost cyrus-sasl openssl))
     (arguments
-     `(#:configure-flags
-        (list
-          ;; FIXME: Man pages generation requires docbook-to-man; reenable
-          ;; it once this is available.
-          "--without-man"
-          ;; XXX: A configure test fails with GCC7 when including Boost headers.
-          "--disable-werror"
-          ;; During configure, the boost headers are found, but linking
-          ;; fails without the following flag.
-          (string-append "--with-boost="
-                         (assoc-ref %build-inputs "boost")))))
-    (home-page "https://github.com/tdf/libcmis")
+     (list
+      #:configure-flags
+      #~(list
+         ;; FIXME: Man pages generation requires docbook-to-man; reenable
+         ;; it once this is available.
+         "--without-man"
+         ;; XXX: A configure test fails with GCC7 when including Boost headers.
+         "--disable-werror"
+         ;; During configure, the boost headers are found, but linking
+         ;; fails without the following flag.
+         (string-append "--with-boost="
+                        (dirname (dirname
+                                  (search-input-directory %build-inputs
+                                                          "include/boost")))))
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'bootstrap
+            (lambda _
+              ;; Override the bootstrap phase as the ancient autogen.sh
+              ;; script exits with a non-zero code when NOCONFIGURE=1.
+              (invoke "autoreconf" "-vif"))))))
     (synopsis "CMIS client library")
     (description "LibCMIS is a C++ client library for the CMIS interface.  It
 allows C++ applications to connect to any ECM behaving as a CMIS server such
@@ -409,15 +411,11 @@ as Alfresco or Nuxeo.")
                "1vbfrmnvib3cym0yyyabnd8xpx4f7wp20vnn09s6dln347fajqz7"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("doxygen" ,doxygen)
-       ("gperf" ,gperf)
-       ("perl" ,perl)
-       ("pkg-config" ,pkg-config)))
+     (list doxygen gperf perl pkg-config))
     (propagated-inputs ; in Requires or Requires.private field of .pkg
-     `(("librevenge" ,librevenge)
-       ("libxml2" ,libxml2)))
+     (list librevenge libxml2))
     (inputs
-     `(("boost" ,boost)))
+     (list boost))
     (home-page "https://wiki.documentfoundation.org/DLP/Libraries/libabw")
     (synopsis "Library for parsing the AbiWord format")
     (description "Libabw is a library that parses the file format of
@@ -437,16 +435,11 @@ AbiWord documents.")
                "1m6dirmyhqwnrpv80z97x5k5hdh4kh8a8zlq3smbjrilc6fj8rjn"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("cppunit" ,cppunit)
-       ("doxygen" ,doxygen)
-       ("pkg-config" ,pkg-config)))
+     (list cppunit doxygen pkg-config))
     (propagated-inputs ; in Requires or Requires.private field of .pkg
-     `(("icu4c" ,icu4c)
-       ("lcms" ,lcms)
-       ("librevenge" ,librevenge)
-       ("zlib" ,zlib)))
+     (list icu4c lcms librevenge zlib))
     (inputs
-     `(("boost" ,boost)))
+     (list boost))
     (home-page "https://wiki.documentfoundation.org/DLP/Libraries/libcdr")
     (synopsis "Library for parsing the CorelDRAW format")
     (description "Libcdr is a library that parses the file format of
@@ -466,21 +459,17 @@ CorelDRAW documents of all versions.")
                "16hy60ws29pb4pz3z5l4920yn9hnk2vlij0xfs5qi1w4drd46c5l"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:configure-flags '("--with-mdds=1.5")))
+     (list #:configure-flags
+           #~(list (string-append "--with-mdds="
+                                  #$(version-major+minor
+                                     (package-version
+                                      (this-package-input "mdds")))))))
     (native-inputs
-     `(("cppunit" ,cppunit)
-       ("doxygen" ,doxygen)
-       ("gperf" ,gperf)
-       ("pkg-config" ,pkg-config)))
+     (list cppunit doxygen gperf pkg-config))
     (propagated-inputs ; in Requires or Requires.private field of .pkg
-     `(("liblangtag" ,liblangtag)
-       ("librevenge" ,librevenge)
-       ("libxml2" ,libxml2)
-       ("zlib" ,zlib)))
+     (list liblangtag librevenge libxml2 zlib))
     (inputs
-     `(("boost" ,boost)
-       ("glm" ,glm)
-       ("mdds" ,mdds)))
+     (list boost glm mdds))
     (home-page "https://wiki.documentfoundation.org/DLP/Libraries/libetonyek")
     (synopsis "Library for parsing the Apple Keynote format")
     (description "Libetonyek is a library that parses the file format of
@@ -500,10 +489,9 @@ Apple Keynote documents.  It currently supports Keynote versions 2 to 5.")
          (base32 "1g9kwxx60q0hpwvs66ys1cb9qg54hfvbivadwli8sfpc085a44hz"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list libtool pkg-config))
     (inputs
-     `(("libxml2" ,libxml2)))
+     (list libxml2))
     (home-page "https://bitbucket.org/tagoh/liblangtag")
     (synopsis "Library to access tags for identifying languages")
     (description "Liblangtag implements an interface to work with tags
@@ -545,7 +533,8 @@ library primarily intended for language guessing.")
                "1b1lvqh68rwij1yvmxy02hsmh7i74ma5767mk8mg5nx6chajshhf"))))
     (build-system gnu-build-system)
     (arguments
-     '(#:phases (modify-phases %standard-phases
+     '(#:configure-flags '("--disable-werror")
+       #:phases (modify-phases %standard-phases
                   (add-before 'build 'adjust-for-ICU-65
                     (lambda _
                       ;; Fix build with ICU 65 and later.  Taken from this
@@ -556,17 +545,11 @@ library primarily intended for language guessing.")
                          (string-append all ";\n")))
                       #t)))))
     (native-inputs
-     `(("cppunit" ,cppunit)
-       ("doxygen" ,doxygen)
-       ("gperf" ,gperf)
-       ("perl" ,perl)
-       ("pkg-config" ,pkg-config)))
+     (list cppunit doxygen gperf perl pkg-config))
     (inputs
-     `(("icu4c" ,icu4c)
-       ("lcms" ,lcms)))
+     (list icu4c lcms))
     (propagated-inputs ; in Requires or Requires.private field of .pkg
-     `(("librevenge" ,librevenge)
-       ("zlib" ,zlib)))
+     (list librevenge zlib))
     (home-page "https://wiki.documentfoundation.org/DLP/Libraries/libfreehand")
     (synopsis "Library for parsing the FreeHand format")
     (description "Libfreehand is a library that parses the file format of
@@ -583,17 +566,22 @@ Aldus/Macromedia/Adobe FreeHand documents.")
       (uri (string-append "https://dev-www.libreoffice.org/src/" name "/"
                           name "-" version ".tar.xz"))
       (sha256 (base32
-               "1fhkn013gzg59f4z7rldpbi0nj7lgdqzxanspsqa6axvmahw2dpg"))))
+               "1fhkn013gzg59f4z7rldpbi0nj7lgdqzxanspsqa6axvmahw2dpg"))
+      (modules '((guix build utils)))
+      (snippet
+       '(begin
+          ;; This can be removed with the next release.
+          ;; https://gerrit.libreoffice.org/c/libmspub/+/73814
+          (substitute* "src/lib/MSPUBMetaData.h"
+            (("include <vector>" all)
+             (string-append all "\n#include <cstdint>")))))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("doxygen" ,doxygen)
-       ("pkg-config" ,pkg-config)))
+     (list doxygen pkg-config))
     (propagated-inputs ; in Requires or Requires.private field of .pkg
-     `(("icu4c" ,icu4c)
-       ("librevenge" ,librevenge)
-       ("zlib" ,zlib)))
+     (list icu4c librevenge zlib))
     (inputs
-     `(("boost" ,boost)))
+     (list boost))
     (home-page "https://wiki.documentfoundation.org/DLP/Libraries/libmspub")
     (synopsis "Library for parsing the Microsoft Publisher format")
     (description "Libmspub is a library that parses the file format of
@@ -638,13 +626,11 @@ Java.")
     (arguments
      `(#:configure-flags '("--disable-werror")))
     (native-inputs
-     `(("doxygen" ,doxygen)
-       ("pkg-config" ,pkg-config)))
+     (list doxygen pkg-config))
     (propagated-inputs ; in Requires field of .pkg
-     `(("librevenge" ,librevenge)))
+     (list librevenge))
     (inputs
-     `(("boost" ,boost)
-       ("zlib" ,zlib)))
+     (list boost zlib))
     (home-page "https://wiki.documentfoundation.org/DLP/Libraries/libpagemaker")
     (synopsis "Library for parsing the PageMaker format")
     (description "Libpagemaker is a library that parses the file format of
@@ -665,17 +651,11 @@ created by PageMaker version 6.x and 7.")
                "0k7adcbbf27l7n453cca1m6s9yj6qvb5j6bsg2db09ybf3w8vbwg"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("cppunit" ,cppunit)
-       ("doxygen" ,doxygen)
-       ("gperf" ,gperf)
-       ("perl" ,perl)
-       ("pkg-config" ,pkg-config)))
+     (list cppunit doxygen gperf perl pkg-config))
     (propagated-inputs ; in Requires or Requires.private field of .pkg
-     `(("icu4c" ,icu4c)
-       ("librevenge" ,librevenge)
-       ("libxml2" ,libxml2)))
+     (list icu4c librevenge libxml2))
     (inputs
-     `(("boost" ,boost)))
+     (list boost))
     (home-page "https://wiki.documentfoundation.org/DLP/Libraries/libvisio")
     (synopsis "Library for parsing the Microsoft Visio format")
     (description "Libvisio is a library that parses the file format of
@@ -695,14 +675,11 @@ Microsoft Visio documents of all versions.")
                "0986c5gw4vdfz7bcmpdfz07inba5wxsx4f6xvndknqj6zlkh082m"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("doxygen" ,doxygen)
-       ("pkg-config" ,pkg-config)))
+     (list doxygen pkg-config))
     (propagated-inputs ; in Requires field of .pkg
-     `(("librevenge" ,librevenge)))
+     (list librevenge))
     (inputs
-     `(("boost" ,boost)
-       ("libxml2" ,libxml2)
-       ("zlib" ,zlib)))
+     (list boost libxml2 zlib))
     (arguments
      ;; Avoid triggering configure errors by simple inclusion of Boost headers.
      `(#:configure-flags '("--disable-werror")))
@@ -727,13 +704,11 @@ text documents, vector drawings, presentations and spreadsheets.")
        (base32 "1bx5xnw8sk5h26x2z7hfac7hfbm68zqg0jilp15qr0pwxqsf4wmj"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("doxygen" ,doxygen)
-       ("pkg-config" ,pkg-config)))
+     (list doxygen pkg-config))
     (propagated-inputs                  ; in Requires field of .pc file
-     `(("librevenge" ,librevenge)))
+     (list librevenge))
     (inputs
-     `(("boost" ,boost)
-       ("zlib" ,zlib)))
+     (list boost zlib))
     (home-page "https://sourceforge.net/p/libmwaw/wiki/Home/")
     (synopsis "Import library for some old Macintosh text documents")
     (description "Libmwaw contains some import filters for old Macintosh
@@ -754,10 +729,9 @@ spreadsheet documents.")
                 "1ny8411273k2bq7mnpmcvri3rd46b2j67wfypqkp3y8nhanv0kzr"))))
     (build-system gnu-build-system)
     (inputs
-     `(("librevenge" ,librevenge)
-       ("zlib" ,zlib)))
+     (list librevenge zlib))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (home-page "https://github.com/fosnola/libstaroffice")
     (synopsis "Provides LibreOffice support for old StarOffice documents")
     (description "@code{libstaroffice} is an import filter for the document formats
@@ -777,13 +751,11 @@ from the old StarOffice (.sdc, .sdw, ...).")
                "1nsfacqp5sfkyayw7q0wp68lidksd1wjdix8qmsbf0vdl19gn6p2"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("doxygen" ,doxygen)
-       ("pkg-config" ,pkg-config)))
+     (list doxygen pkg-config))
     (propagated-inputs                  ; in Requires field of .pkg
-     `(("librevenge" ,librevenge)))
+     (list librevenge))
     (inputs
-     `(("boost" ,boost)
-       ("zlib" ,zlib)))
+     (list boost zlib))
     (home-page "http://libwps.sourceforge.net/")
     (synopsis "Import library for Microsoft Works text documents")
     (description "Libwps is a library for importing files in the Microsoft
@@ -806,15 +778,9 @@ Works word processor file format.")
     ;; A harmless 'sign-compare' error pops up on i686 so disable '-Werror'.
     '(#:configure-flags '("--disable-werror")))
    (inputs
-    `(("boost" ,boost)
-      ("icu4c" ,icu4c)
-      ("libpng" ,libpng)
-      ("librevenge" ,librevenge)
-      ("zlib" ,zlib)))
+    (list boost icu4c libpng librevenge zlib))
     (native-inputs
-     `(("cppunit" ,cppunit)
-       ("doxygen" ,doxygen)
-       ("pkg-config" ,pkg-config)))
+     (list cppunit doxygen pkg-config))
     (home-page "https://wiki.documentfoundation.org/DLP/Libraries/libzmf")
     (synopsis "Parses file format of Zoner Callisto/Draw documents")
     (description "Libzmf is a library that parses the file format of Zoner
@@ -838,11 +804,9 @@ Zoner Draw version 4 and 5.")
           "0qxlkd012r45ppd21kldbq9k5ac5nmxz290z6m2kch9l56v768k1"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (inputs
-     `(("perl" ,perl)))
+     (list perl))
     (native-search-paths (list (search-path-specification
                                 (variable "DICPATH")
                                 (files '("share/hunspell")))))
@@ -871,7 +835,7 @@ word compounding or character encoding.")
                (base32
                 "139hfrn5p87sl8hqmgkf6sgvnxrk2mm8vd8xsm8sm98qjnwlg0f9"))))
     (build-system trivial-build-system)
-    (native-inputs `(("unzip" ,unzip)))
+    (native-inputs (list unzip))
     (arguments
      `(#:modules ((guix build utils))
        #:builder (begin
@@ -943,7 +907,7 @@ library.")
                 "14mzf8glxkp2775dcqisb1zv6r8ncm3bvzl46q352rwyl2dg1c59"))))
 
     (build-system trivial-build-system)
-    (native-inputs `(("unzip" ,unzip)))
+    (native-inputs (list unzip))
     (arguments
      `(#:modules ((guix build utils))
        #:builder (begin
@@ -955,8 +919,8 @@ library.")
                           (myspell  (string-append out "/share/myspell"))
                           (doc      (string-append out "/share/doc/"
                                                    ,name))
-                          (unzip (string-append (assoc-ref %build-inputs "unzip")
-                                                "/bin/unzip")))
+                          (unzip (search-input-file %build-inputs
+                                                    "/bin/unzip")))
                      (invoke unzip "-j" "-o" (assoc-ref %build-inputs "source"))
                      (invoke unzip "-j" "-o" "pl_PL.zip")
                      (for-each (cut install-file <> hunspell)
@@ -1002,9 +966,7 @@ library.")
                #t))))
        #:tests? #f))        ; no tests
     (native-inputs
-     `(("hunspell" ,hunspell)
-       ("ispell" ,ispell)
-       ("perl" ,perl)))
+     (list hunspell ispell perl))
     (synopsis "Hunspell dictionary for German (de_DE)")
     (description "This package provides a dictionary for the Hunspell
 spell-checking library.")
@@ -1025,7 +987,7 @@ spell-checking library.")
                "01ap9pr6zzzbp4ky0vy7i1983fwyqy27pl0ld55s30fdxka3ciih"))))
     (build-system gnu-build-system)
     (inputs
-     `(("perl" ,perl)))
+     (list perl))
     (home-page "http://hunspell.sourceforge.net/")
     (synopsis "Hyphenation library")
     (description "Hyphen is a hyphenation library using TeX hyphenation
@@ -1047,10 +1009,9 @@ patterns, which are pre-processed by a perl script.")
                "0prh19wy1c74kmzkkavm9qslk99gz8h8wmjvwzjc6lf8v2az708y"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("hunspell" ,hunspell)
-       ("perl" ,perl)))
+     (list hunspell perl))
     (home-page "http://hunspell.sourceforge.net/")
     (synopsis "Thesaurus")
     (description "MyThes is a simple thesaurus that uses a structured text
@@ -1072,26 +1033,30 @@ and to return information on pronunciations, meanings and synonyms.")
                 "0p4lb84m05wqd8qr8ni9sp80ivlm83ffn0nxiv4m42hj22qvcdz1"))))
     (build-system gnu-build-system)
     (inputs
-     `(("boost" ,boost)
-       ("icu4c" ,icu4c)
-       ("zlib" ,zlib)))
+     (list boost icu4c zlib))
     (native-inputs
-     `(("cppunit" ,cppunit)
-       ("pkg-config" ,pkg-config)))
+     (list cppunit pkg-config))
     (propagated-inputs
-     `(("librevenge" ,librevenge))) ; mentioned in Requires field
+     (list librevenge)) ; mentioned in Requires field
     (home-page "https://www.libreoffice.org")
     (synopsis "Library and tools for the QuarkXPress file format")
     (description "libqxp is a library and a set of tools for reading and
 converting QuarkXPress file format.  It supports versions 3.1 to 4.1.")
     (license license:mpl2.0)))
 
+(define dtoa
+  (origin
+    (method url-fetch)
+    (uri "https://dev-www.libreoffice.org/src/dtoa-20180411.tgz")
+    (sha256
+     (base32 "1d0iwy0q5sjznv23d3nbwmy0r7m1mdzlnv5pc4izddkx9xld10h0"))))
+
 ;; When updating libreoffice, also make sure to update the
 ;; hunspell dictionaries! They use the libreoffice version.
 (define-public libreoffice
   (package
     (name "libreoffice")
-    (version "7.1.4.2")
+    (version "7.3.5.2")
     (source
      (origin
        (method url-fetch)
@@ -1100,193 +1065,184 @@ converting QuarkXPress file format.  It supports versions 3.1 to 4.1.")
          "https://download.documentfoundation.org/libreoffice/src/"
          (version-prefix version 3) "/libreoffice-" version ".tar.xz"))
        (sha256
-        (base32 "1jsskhnlyra7q6d12kkc8dxq5fgrnd8grl32bdck7j9hkwv6d13m"))))
+        (base32 "14g9873x8m5yakpq7v9f7lhc5fkxh6yhjhgh0pm30cqmxsqhsglv"))))
     (build-system glib-or-gtk-build-system)
     (native-inputs
-     `(("bison" ,bison)
-       ("cppunit" ,cppunit)
-       ("flex" ,flex)
-       ("pkg-config" ,pkg-config)
-       ("python" ,python-wrapper)
-       ("which" ,which)
-       ("ziptime" ,ziptime)))
+     (list bison
+           cppunit
+           flex
+           pkg-config
+           python-wrapper
+           which
+           ziptime))
     (inputs
-     `(("bluez" ,bluez)
-       ("boost" ,boost)
-       ("box2d" ,box2d)
-       ("clucene" ,clucene)
-       ("cups" ,cups)
-       ("dbus-glib" ,dbus-glib)
-       ("firebird" ,firebird)
-       ("fontconfig" ,fontconfig)
-       ("fontforge" ,fontforge)
-       ("gconf" ,gconf)
-       ("glew" ,glew)
-       ("glm" ,glm)
-       ("gnupg" ,gnupg)
-       ("gobject-introspection" ,gobject-introspection)
-       ("gperf" ,gperf)
-       ("gpgme" ,gpgme)
-       ("graphite2" ,graphite2)
-       ("gst-plugins-base" ,gst-plugins-base)
-       ("gtk+" ,gtk+)
-       ("harfbuzz" ,harfbuzz)
-       ("hunspell" ,hunspell)
-       ("hyphen" ,hyphen)
-       ("libabw" ,libabw)
-       ("libcdr" ,libcdr)
-       ("libcmis" ,libcmis)
-       ("libjpeg-turbo" ,libjpeg-turbo)
-       ("libe-book" ,libe-book)
-       ("libepubgen" ,libepubgen)
-       ("libetonyek" ,libetonyek)
-       ("libexttextcat" ,libexttextcat)
-       ("libfreehand" ,libfreehand)
-       ("liblangtag" ,liblangtag)
-       ;; XXX: Perhaps this should be propagated from xmlsec.
-       ("libltdl" ,libltdl)
-       ("libmspub" ,libmspub)
-       ("libmwaw" ,libmwaw)
-       ("libnumbertext" ,libnumbertext)
-       ("libodfgen" ,libodfgen)
-       ("libpagemaker" ,libpagemaker)
-       ("libqxp" ,libqxp)
-       ("libstaroffice" ,libstaroffice)
-       ("libvisio" ,libvisio)
-       ("libwpg" ,libwpg)
-       ("libwps" ,libwps)
-       ("libxrandr" ,libxrandr)
-       ("libxrender" ,libxrender)
-       ("libxslt" ,libxslt)
-       ("libxt" ,libxt)
-       ("libzmf" ,libzmf)
-       ("lpsolve" ,lpsolve)
-       ("mariadb" ,mariadb "dev")
-       ("mdds" ,mdds)
-       ("mythes" ,mythes)
-       ("neon" ,neon)
-       ("nspr" ,nspr)
-       ("nss" ,nss)
-       ("openldap" ,openldap)
-       ("openssl" ,openssl)
-       ("orcus" ,orcus)
-       ("perl" ,perl)
-       ("perl-archive-zip" ,perl-archive-zip)
-       ("poppler" ,poppler)
-       ("postgresql" ,postgresql)
-       ("python" ,python)
-       ("python-lxml" ,python-lxml)
-       ("qrcodegen-cpp" ,qrcodegen-cpp)
-       ("redland" ,redland)
-       ("sane-backends" ,sane-backends)
-       ("unixodbc" ,unixodbc)
-       ("unzip" ,unzip)
-       ("vigra" ,vigra)
-       ("xdg-utils" ,xdg-utils)
-       ("xmlsec" ,xmlsec-nss)
-       ("zip" ,zip)
-       ("dtoa"              ; needed after version 6.4.7.2.
-        ,(origin
-           (method url-fetch)
-           (uri "https://dev-www.libreoffice.org/src/dtoa-20180411.tgz")
-           (sha256
-            (base32 "1d0iwy0q5sjznv23d3nbwmy0r7m1mdzlnv5pc4izddkx9xld10h0"))))))
+     (list bluez
+           boost
+           box2d
+           clucene
+           cups
+           dbus-glib
+           firebird
+           fontconfig
+           fontforge
+           gconf
+           glew
+           glm
+           gnupg
+           gobject-introspection
+           gperf
+           gpgme
+           graphite2
+           gst-plugins-base
+           gtk+
+           harfbuzz
+           hunspell
+           hyphen
+           libabw
+           libcdr
+           libcmis
+           libcuckoo
+           libjpeg-turbo
+           libe-book
+           libepubgen
+           libetonyek
+           libexttextcat
+           libfreehand
+           liblangtag
+           ;; XXX: Perhaps this should be propagated from xmlsec.
+           libltdl
+           libmspub
+           libmwaw
+           libnumbertext
+           libodfgen
+           libpagemaker
+           libqxp
+           libstaroffice
+           libvisio
+           libwpg
+           libwps
+           libxrandr
+           libxrender
+           libxslt
+           libxt
+           libzmf
+           lpsolve
+           `(,mariadb "dev")
+           mdds
+           mythes
+           neon
+           nspr
+           nss
+           openldap
+           openssl
+           orcus
+           perl
+           perl-archive-zip
+           poppler
+           postgresql
+           python
+           python-lxml
+           qrcodegen-cpp
+           redland
+           sane-backends
+           unixodbc
+           unzip
+           vigra
+           xdg-utils
+           xmlsec-nss
+           zip
+           zxing-cpp))
     (arguments
-     `(#:tests? #f                     ; Building the tests already fails.
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'insert-external-tarballs
-           (lambda* (#:key inputs #:allow-other-keys)
-             (mkdir-p "external/tarballs")
-             (copy-file (assoc-ref inputs "dtoa")
-                        "external/tarballs/dtoa-20180411.tgz")
-             #t))
-         (add-before 'configure 'prepare-src
-           (lambda* (#:key inputs #:allow-other-keys)
-             (substitute*
-                 (list "sysui/CustomTarget_share.mk"
-                       "solenv/gbuild/gbuild.mk"
-                       "solenv/gbuild/platform/unxgcc.mk")
-               (("/bin/sh") (which "sh")))
+     (list
+      #:tests? #f                       ; Building the tests already fails.
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'insert-external-tarballs
+            (lambda _
+              (mkdir-p "external/tarballs")
+              (copy-file #$dtoa "external/tarballs/dtoa-20180411.tgz")))
+          (add-before 'configure 'prepare-src
+            (lambda* (#:key inputs #:allow-other-keys)
+              (substitute*
+                  (list "sysui/CustomTarget_share.mk"
+                        "solenv/gbuild/gbuild.mk"
+                        "solenv/gbuild/platform/unxgcc.mk")
+                (("/bin/sh") (which "sh")))
 
-             ;; Use store references for strictly necessary commands,
-             ;; but not for optional tools like ‘gdb’ and ‘valgrind’.
-             (for-each (lambda (command)
-                         (substitute* "desktop/scripts/soffice.sh"
-                           (((format #f"~a " command))
-                            (format #f "~a " (which command)))))
-                       (list "dirname" "grep" "uname"))
+              ;; Use store references for strictly necessary commands,
+              ;; but not for optional tools like ‘gdb’ and ‘valgrind’.
+              (for-each (lambda (command)
+                          (substitute* "desktop/scripts/soffice.sh"
+                            (((format #f "~a " command))
+                             (format #f "~a " (which command)))))
+                        (list "dirname" "grep" "uname"))
 
-             ;; GPGME++ headers are installed in a gpgme++ subdirectory, but
-             ;; configure is hardcoded to use FHS directories.
-             (substitute* "configure"
-               (("GPGMEPP_CFLAGS=-I/usr")
-                (string-append "GPGMEPP_CFLAGS=-I"
-                               (assoc-ref inputs "gpgme"))))
+              ;; GPGME++ headers are installed in a gpgme++ subdirectory, but
+              ;; configure is hardcoded to use FHS directories.
+              (substitute* "configure"
+                (("GPGMEPP_CFLAGS=-I/usr/include/gpgme\\+\\+")
+                 (string-append "GPGMEPP_CFLAGS=-I"
+                                (search-input-directory inputs
+                                                        "include/gpgme++"))))
 
-             ;; /usr/bin/xdg-open doesn't exist on Guix System.
-             (substitute* '("shell/source/unix/exec/shellexec.cxx"
-                            "shell/source/unix/misc/senddoc.sh")
-               (("/usr/bin/xdg-open")
-                (string-append (assoc-ref inputs "xdg-utils")
-                               "/bin/xdg-open")))
-
-             #t))
-         (add-after 'install 'reset-zip-timestamps
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (for-each (lambda (file)
-                           (invoke "ziptime" file))
-                         ;; So many different extensions for .zip files.
-                         (find-files out "\\.(bau|dat|otp|ott|zip)$")))))
-         (add-after 'install 'bin-and-desktop-install
-           ;; Create 'soffice' and 'libreoffice' symlinks to the executable
-           ;; script.
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (define (symlink-output src dst)
-                 (mkdir-p (dirname (string-append out dst)))
-                 (symlink (string-append out src) (string-append out dst)))
-               (define (install src dst)
-                 (let ((dst (string-append out dst)))
-                   (mkdir-p (dirname dst))
-                   (copy-file src dst)))
-               (define (install-desktop-file app)
-                 (let ((src (string-append "/lib/libreoffice/share/xdg/"
-                                           app ".desktop"))
-                       (dst (string-append "/share/applications/libreoffice-"
-                                           app ".desktop")))
-                   (substitute* (string-append out src)
-                     (("Exec=libreoffice[0-9]+\\.[0-9]+ ")
-                      (string-append "Exec=" out "/bin/libreoffice "))
-                     (("Icon=libreoffice.*")
-                      (string-append "Icon=" app "\n"))
-                     (("LibreOffice [0-9]+\\.[0-9]+")
-                      "LibreOffice"))
-                   (symlink-output src dst)))
-               (define (install-appdata app)
-                 (install-file (string-append
-                                "sysui/desktop/appstream-appdata/"
-                                "libreoffice-" app ".appdata.xml")
-                               (string-append out "/share/appdata")))
-               (symlink-output "/lib/libreoffice/program/soffice"
-                               "/bin/soffice")
-               (symlink-output "/lib/libreoffice/program/soffice"
-                               "/bin/libreoffice")
-               (install
-                "workdir/CustomTarget/sysui/share/libreoffice/openoffice.org.xml"
-                "/share/mime/packages/libreoffice.xml")
-               (for-each install-desktop-file
-                         '("base" "calc" "draw" "impress" "writer"
-                           "math" "startcenter"))
-               (for-each install-appdata
-                         '("base" "calc" "draw" "impress" "writer"))
-               (mkdir-p (string-append out "/share/icons/hicolor"))
-               (copy-recursively "sysui/desktop/icons/hicolor"
-                                 (string-append out "/share/icons/hicolor")))
-             #t)))
-       #:configure-flags
-       (list
+              ;; /usr/bin/xdg-open doesn't exist on Guix System.
+              (substitute* '("shell/source/unix/exec/shellexec.cxx"
+                             "shell/source/unix/misc/senddoc.sh")
+                (("/usr/bin/xdg-open")
+                 (search-input-file inputs "/bin/xdg-open")))))
+          (add-after 'install 'reset-zip-timestamps
+            (lambda _
+              (for-each (lambda (file)
+                          (invoke "ziptime" file))
+                        ;; So many different extensions for .zip files.
+                        (find-files #$output "\\.(bau|dat|otp|ott|zip)$"))))
+      (add-after 'install 'bin-and-desktop-install
+        ;; Create 'soffice' and 'libreoffice' symlinks to the executable
+        ;; script.
+        (lambda _
+          (let ((out #$output))
+            (define (symlink-output src dst)
+              (mkdir-p (dirname (string-append out dst)))
+              (symlink (string-append out src) (string-append out dst)))
+            (define (install src dst)
+              (let ((dst (string-append out dst)))
+                (mkdir-p (dirname dst))
+                (copy-file src dst)))
+            (define (install-desktop-file app)
+              (let ((src (string-append "/lib/libreoffice/share/xdg/"
+                                        app ".desktop"))
+                    (dst (string-append "/share/applications/libreoffice-"
+                                        app ".desktop")))
+                (substitute* (string-append out src)
+                  (("Exec=libreoffice[0-9]+\\.[0-9]+ ")
+                   (string-append "Exec=" out "/bin/libreoffice "))
+                  (("Icon=libreoffice.*")
+                   (string-append "Icon=" app "\n"))
+                  (("LibreOffice [0-9]+\\.[0-9]+")
+                   "LibreOffice"))
+                (symlink-output src dst)))
+            (define (install-appdata app)
+              (install-file (string-append
+                             "sysui/desktop/appstream-appdata/"
+                             "libreoffice-" app ".appdata.xml")
+                            (string-append out "/share/appdata")))
+            (symlink-output "/lib/libreoffice/program/soffice"
+                            "/bin/soffice")
+            (symlink-output "/lib/libreoffice/program/soffice"
+                            "/bin/libreoffice")
+            (install
+             "workdir/CustomTarget/sysui/share/libreoffice/openoffice.org.xml"
+             "/share/mime/packages/libreoffice.xml")
+            (for-each install-desktop-file
+                      '("base" "calc" "draw" "impress" "writer"
+                        "math" "startcenter"))
+            (for-each install-appdata
+                      '("base" "calc" "draw" "impress" "writer"))
+            (mkdir-p (string-append out "/share/icons/hicolor"))
+            (copy-recursively "sysui/desktop/icons/hicolor"
+                              (string-append out "/share/icons/hicolor"))))))
+     #:configure-flags
+     #~(list
         "--enable-release-build"
         "--with-vendor=GNU Guix"
         ;; Avoid using all cpu cores by default
@@ -1294,9 +1250,9 @@ converting QuarkXPress file format.  It supports versions 3.1 to 4.1.")
         "--disable-fetch-external"      ; disable downloads
         "--with-system-libs"            ; enable all --with-system-* flags
         (string-append "--with-boost-libdir="
-                       (assoc-ref %build-inputs "boost") "/lib")
-        ;; Avoid undefined symbols required by boost::spirit
-        "LDFLAGS=-lboost_system"
+                       (dirname
+                        (search-input-file %build-inputs
+                                           "lib/libboost_system.so")))
         ;; Avoid a dependency on ucpp.
         "--with-idlc-cpp=cpp"
         ;; The fonts require an external tarball (crosextrafonts).
@@ -1316,11 +1272,11 @@ converting QuarkXPress file format.  It supports versions 3.1 to 4.1.")
         "--disable-pdfium"
         "--without-doxygen"
         "--enable-build-opensymbol")))
-    (home-page "https://www.libreoffice.org/")
-    (synopsis "Office suite")
-    (description "LibreOffice is a comprehensive office suite.  It contains
+  (home-page "https://www.libreoffice.org/")
+  (synopsis "Office suite")
+  (description "LibreOffice is a comprehensive office suite.  It contains
 a number of components: Writer, a word processor; Calc, a spreadsheet
 application; Impress, a presentation engine; Draw, a drawing and
 flowcharting application; Base, a database and database frontend;
 Math for editing mathematics.")
-    (license license:mpl2.0)))
+  (license license:mpl2.0)))

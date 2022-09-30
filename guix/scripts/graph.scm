@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2019 Simon Tournier <zimon.toutoune@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -39,7 +39,9 @@
                           options->transformation
                           %transformation-options))
   #:use-module ((guix scripts build)
-                #:select (%standard-build-options))
+                #:select (%standard-build-options
+                          %standard-native-build-options
+                          show-native-build-options-help))
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
@@ -429,13 +431,6 @@ package modules, while attempting to retain user package modules."
             %node-types)
       (leave (G_ "~a: unknown node type~%") name)))
 
-(define (lookup-backend name)
-  "Return the graph backend called NAME.  Raise an error if it is not found."
-  (or (find (lambda (backend)
-              (string=? (graph-backend-name backend) name))
-            %graph-backends)
-      (leave (G_ "~a: unknown backend~%") name)))
-
 (define (list-node-types)
   "Print the available node types along with their synopsis."
   (display (G_ "The available node types are:\n"))
@@ -511,10 +506,6 @@ package modules, while attempting to retain user package modules."
          (option '(#\e "expression") #t #f
                  (lambda (opt name arg result)
                    (alist-cons 'expression arg result)))
-         (option '(#\s "system") #t #f
-                 (lambda (opt name arg result)
-                   (alist-cons 'system arg
-                               (alist-delete 'system result eq?))))
          (find (lambda (option)
                 (member "load-path" (option-names option)))
               %standard-build-options)
@@ -526,7 +517,8 @@ package modules, while attempting to retain user package modules."
                  (lambda args
                    (show-version-and-exit "guix graph")))
 
-         %transformation-options))
+         (append %transformation-options
+                 %standard-native-build-options)))
 
 (define (show-help)
   ;; TRANSLATORS: Here 'dot' is the name of a program; it must not be
@@ -542,13 +534,11 @@ Emit a representation of the dependency graph of PACKAGE...\n"))
   (display (G_ "
       --list-types       list the available graph types"))
   (display (G_ "
-      --max-depth=DEPTH  limit to nodes within distance DEPTH"))
+  -M, --max-depth=DEPTH  limit to nodes within distance DEPTH"))
   (display (G_ "
       --path             display the shortest path between the given nodes"))
   (display (G_ "
   -e, --expression=EXPR  consider the package EXPR evaluates to"))
-  (display (G_ "
-  -s, --system=SYSTEM    consider the graph for SYSTEM--e.g., \"i686-linux\""))
   (newline)
   (display (G_ "
   -L, --load-path=DIR    prepend DIR to the package module search path"))
@@ -559,6 +549,8 @@ Emit a representation of the dependency graph of PACKAGE...\n"))
   -h, --help             display this help and exit"))
   (display (G_ "
   -V, --version          display version information and exit"))
+  (newline)
+  (show-native-build-options-help)
   (newline)
   (show-bug-report-information))
 

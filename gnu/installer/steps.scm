@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2018, 2019 Mathieu Othacehe <m.othacehe@gmail.com>
-;;; Copyright © 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2020-2022 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -21,20 +21,14 @@
   #:use-module (guix records)
   #:use-module (guix build utils)
   #:use-module (guix i18n)
+  #:use-module (guix read-print)
   #:use-module (gnu installer utils)
   #:use-module (ice-9 match)
-  #:use-module (ice-9 pretty-print)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
   #:use-module (rnrs io ports)
-  #:export (&installer-step-abort
-            installer-step-abort?
-
-            &installer-step-break
-            installer-step-break?
-
-            <installer-step>
+  #:export (<installer-step>
             installer-step
             make-installer-step
             installer-step?
@@ -52,15 +46,13 @@
             %installer-configuration-file
             %installer-target-dir
             format-configuration
-            configuration->file))
+            configuration->file
 
-;; This condition may be raised to abort the current step.
-(define-condition-type &installer-step-abort &condition
-  installer-step-abort?)
+            %current-result))
 
-;; This condition may be raised to break out from the steps execution.
-(define-condition-type &installer-step-break &condition
-  installer-step-break?)
+;; Hash table storing the step results. Use it only for logging and debug
+;; purposes.
+(define %current-result (make-hash-table))
 
 ;; An installer-step record is basically an id associated to a compute
 ;; procedure. The COMPUTE procedure takes exactly one argument, an association
@@ -88,8 +80,10 @@
                               (rewind-strategy 'previous)
                               (menu-proc (const #f)))
   "Run the COMPUTE procedure of all <installer-step> records in STEPS
-sequentially.  If the &installer-step-abort condition is raised, fallback to a
-previous install-step, accordingly to the specified REWIND-STRATEGY.
+sequentially, inside a the 'installer-step prompt.  When aborted to with a
+parameter of 'abort, fallback to a previous install-step, accordingly to the
+specified REWIND-STRATEGY.  When aborted to with a parameter of 'break, stop
+the computation and return the accumalated result so far.
 
 REWIND-STRATEGY possible values are 'previous, 'menu and 'start.  If 'previous
 is selected, the execution will resume at the previous installer-step. If
@@ -106,10 +100,7 @@ the form:
 where STEP-ID is the ID field of the installer-step and COMPUTE-RESULT the
 result of the associated COMPUTE procedure. This result association list is
 passed as argument of every COMPUTE procedure. It is finally returned when the
-computation is over.
-
-If the &installer-step-break condition is raised, stop the computation and
-return the accumalated result so far."
+computation is over."
   (define (pop-result list)
     (cdr list))
 
@@ -143,62 +134,61 @@ return the accumalated result so far."
     (match todo-steps
       (() (reverse result))
       ((step . rest-steps)
-       (guard (c ((installer-step-abort? c)
-                  (case rewind-strategy
-                    ((previous)
-                     (match done-steps
-                       (()
-                        ;; We cannot go previous the first step. So re-raise
-                        ;; the exception. It might be useful in the case of
-                        ;; nested run-installer-steps. Abort to 'raise-above
-                        ;; prompt to prevent the condition from being catched
-                        ;; by one of the previously installed guard.
-                        (abort-to-prompt 'raise-above c))
-                       ((prev-done ... last-done)
-                        (run (pop-result result)
-                             #:todo-steps (cons last-done todo-steps)
-                             #:done-steps prev-done))))
-                    ((menu)
-                     (let ((goto-step (menu-proc
-                                       (append done-steps (list step)))))
-                       (if (eq? goto-step step)
-                           (run result
-                                #:todo-steps todo-steps
-                                #:done-steps done-steps)
-                           (skip-to-step goto-step result
-                                         #:todo-steps todo-steps
-                                         #:done-steps done-steps))))
-                    ((start)
-                     (if (null? done-steps)
-                         ;; Same as above, it makes no sense to jump to start
-                         ;; when we are at the first installer-step. Abort to
-                         ;; 'raise-above prompt to re-raise the condition.
-                         (abort-to-prompt 'raise-above c)
-                         (run '()
-                              #:todo-steps steps
-                              #:done-steps '())))))
-                 ((installer-step-break? c)
-                  (reverse result)))
-         (syslog "running step '~a'~%" (installer-step-id step))
-         (let* ((id (installer-step-id step))
-                (compute (installer-step-compute step))
-                (res (compute result done-steps)))
-           (run (alist-cons id res result)
-                #:todo-steps rest-steps
-                #:done-steps (append done-steps (list step))))))))
+       (call-with-prompt 'installer-step
+         (lambda ()
+           (installer-log-line "running step '~a'" (installer-step-id step))
+           (let* ((id (installer-step-id step))
+                  (compute (installer-step-compute step))
+                  (res (compute result done-steps)))
+             (hash-set! %current-result id res)
+             (run (alist-cons id res result)
+                  #:todo-steps rest-steps
+                  #:done-steps (append done-steps (list step)))))
+         (lambda (k action)
+           (match action
+             ('abort
+              (case rewind-strategy
+                ((previous)
+                 (match done-steps
+                   (()
+                    ;; We cannot go previous the first step. Abort again to
+                    ;; 'installer-step prompt. It might be useful in the case
+                    ;; of nested run-installer-steps.
+                    (abort-to-prompt 'installer-step action))
+                   ((prev-done ... last-done)
+                    (run (pop-result result)
+                         #:todo-steps (cons last-done todo-steps)
+                         #:done-steps prev-done))))
+                ((menu)
+                 (let ((goto-step (menu-proc
+                                   (append done-steps (list step)))))
+                   (if (eq? goto-step step)
+                       (run result
+                            #:todo-steps todo-steps
+                            #:done-steps done-steps)
+                       (skip-to-step goto-step result
+                                     #:todo-steps todo-steps
+                                     #:done-steps done-steps))))
+                ((start)
+                 (if (null? done-steps)
+                     ;; Same as above, it makes no sense to jump to start
+                     ;; when we are at the first installer-step. Abort to
+                     ;; 'installer-step prompt again.
+                     (abort-to-prompt 'installer-step action)
+                     (run '()
+                          #:todo-steps steps
+                          #:done-steps '())))))
+             ('break
+              (reverse result))))))))
 
   ;; Ignore SIGPIPE so that we don't die if a client closes the connection
   ;; prematurely.
   (sigaction SIGPIPE SIG_IGN)
 
   (with-server-socket
-    (call-with-prompt 'raise-above
-      (lambda ()
-        (run '()
-             #:todo-steps steps
-             #:done-steps '()))
-      (lambda (k condition)
-        (raise condition)))))
+    (run '()
+         #:todo-steps steps
+         #:done-steps '())))
 
 (define (find-step-by-id steps id)
   "Find and return the step in STEPS whose id is equal to ID."
@@ -234,10 +224,14 @@ found in RESULTS."
                   (conf-formatter result-step)
                   '())))
           steps))
-        (modules '((use-modules (gnu))
+        (modules `(,(vertical-space 1)
+                   ,(comment (G_ "\
+;; Indicate which modules to import to access the variables
+;; used in this configuration.\n"))
+                   (use-modules (gnu))
                    (use-service-modules cups desktop networking ssh xorg))))
     `(,@modules
-      ()
+      ,(vertical-space 1)
       (operating-system ,@configuration))))
 
 (define* (configuration->file configuration
@@ -251,14 +245,22 @@ found in RESULTS."
       ;; length below 60 characters.
       (display (G_ "\
 ;; This is an operating system configuration generated
-;; by the graphical installer.\n")
+;; by the graphical installer.
+;;
+;; Once installation is complete, you can learn and modify
+;; this file to tweak the system configuration, and pass it
+;; to the 'guix system reconfigure' command to effect your
+;; changes.\n")
                port)
       (newline port)
-      (for-each (lambda (part)
-                  (if (null? part)
-                      (newline port)
-                      (pretty-print part port)))
-                configuration)
+      (pretty-print-with-comments/splice port configuration
+                                         #:max-width 75
+                                         #:format-comment
+                                         (lambda (c indent)
+                                           ;; Localize C.
+                                           (comment (G_ (comment->string c))
+                                                    (comment-margin? c))))
+
       (flush-output-port port))))
 
 ;;; Local Variables:
