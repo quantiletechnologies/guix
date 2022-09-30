@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2016, 2017, 2019, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016, 2017, 2019, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2017 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2017 Clément Lassieur <clement@lassieur.org>
 ;;; Copyright © 2017 Ricardo Wurmus <rekado@elephly.net>
@@ -24,6 +24,7 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
+  #:use-module (guix gexp)
   #:use-module (guix licenses)
   #:use-module (guix utils)
   #:use-module (gnu packages)
@@ -45,48 +46,60 @@
 (define-public connman
   (package
     (name "connman")
-    (version "1.40")
+    (version "1.41")
     (source
       (origin
         (method url-fetch)
         (uri (string-append "mirror://kernel.org/linux/network/connman/"
                             "connman-" version ".tar.xz"))
         (sha256
-         (base32 "04nbxpaxykncp65fyh4lk778vn9145fbxhxa8hbkmailw9yawmqs"))))
+         (base32 "12g5ilcnymx6i45z3359yds3cgd2dfqjyncfm92hqlymzps41yvr"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:configure-flags
-       (list "--enable-nmcompat"
-             "--enable-polkit" ; Polkit doesn't need to be present at build time.
-             "--enable-openconnect"
-             "--enable-openvpn"
-             "--enable-vpnc"
-             "--enable-l2tp"
-             "--localstatedir=/var"
-             (string-append
-              "--with-dbusconfdir=" (assoc-ref %outputs "out") "/etc")
-             (string-append
-              "--with-dbusdatadir=" (assoc-ref %outputs "out") "/share"))))
+     (list #:configure-flags
+           #~(list "--enable-nmcompat"
+                   ;; PolKit doesn't need to be present at build time.
+                   "--enable-polkit"
+                   "--enable-iwd"
+                   "--enable-l2tp"
+                   "--enable-openconnect"
+                   "--enable-openvpn"
+                   "--enable-vpnc"
+                   "--localstatedir=/var"
+                   (string-append "--with-l2tp="
+                                  #$(this-package-input "xl2tpd")
+                                  "/sbin/xl2tpd")
+                   (string-append "--with-openconnect="
+                                  #$(this-package-input "openconnect")
+                                  "/sbin/openconnect")
+                   (string-append "--with-openvpn="
+                                  #$(this-package-input "openvpn")
+                                  "/sbin/openvpn")
+                   (string-append "--with-vpnc="
+                                  #$(this-package-input "vpnc")
+                                  "/sbin/vpnc")
+                   (string-append "--with-dbusconfdir=" #$output "/etc")
+                   (string-append "--with-dbusdatadir=" #$output "/share"))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("python" ,python-wrapper)))
+     (list pkg-config
+           python-wrapper))
     (inputs
-     `(("dbus" ,dbus)
-       ("glib" ,glib)
-       ("gnutls" ,gnutls)
-       ("iptables" ,iptables)
-       ("libmnl" ,libmnl)
-       ("lz4" ,lz4)                     ; required by openconnect.pc
-       ("readline" ,readline)
-       ;; These inputs are needed for connman to include the interface to
-       ;; these technologies so IF they are installed they can be used.
-       ;; TODO: add neard, ofono
-       ("openconnect" ,openconnect)
-       ("openvpn" ,openvpn)
-       ("ppp" ,ppp)
-       ("vpnc" ,vpnc)
-       ("wpa-supplicant" ,wpa-supplicant)
-       ("xl2tpd" ,xl2tpd)))
+     (list dbus
+           glib
+           gnutls
+           iptables
+           libmnl
+           lz4 ; required by openconnect.pc
+           readline
+           ;; These inputs are needed for connman to include the interface to
+           ;; these technologies so IF they are installed they can be used.
+           ;; TODO: add neard, ofono
+           openconnect
+           openvpn
+           ppp
+           vpnc
+           wpa-supplicant
+           xl2tpd))
     (home-page "https://01.org/connman")
     (synopsis "Connection management daemon")
     (description "Connman provides a daemon for managing Internet connections.
@@ -123,9 +136,9 @@ sharing) to clients via USB, ethernet, WiFi, cellular and Bluetooth.")
              (let* ((out (assoc-ref outputs "out"))
                     (bin (string-append out "/bin/econnman-bin")))
                (wrap-program bin
-                 `("PYTHONPATH" ":" prefix (,(getenv "PYTHONPATH"))))
+                 `("GUIX_PYTHONPATH" ":" prefix (,(getenv "GUIX_PYTHONPATH"))))
                #t))))))
-    (native-inputs `(("pkg-config" ,pkg-config)))
+    (native-inputs (list pkg-config))
     (inputs
      `(("efl" ,efl)
        ("python" ,python-wrapper)
@@ -150,9 +163,9 @@ sharing) to clients via USB, ethernet, WiFi, cellular and Bluetooth.")
        (sha256
         (base32 "0jn12wxwjznady6aniwmvahg1dj25p902sdwj0070biv6vx5c7dq"))))
     (inputs
-     `(("qtbase" ,qtbase-5)))
+     (list qtbase-5))
     (native-inputs
-     `(("qttools" ,qttools)))
+     (list qttools-5))
     (build-system gnu-build-system)
     (arguments
      '(#:phases

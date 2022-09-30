@@ -1,12 +1,12 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2014, 2015, 2020 Eric Bavier <bavier@posteo.net>
 ;;; Copyright © 2014 Ian Denhardt <ian@zenhack.net>
-;;; Copyright © 2015, 2016, 2017 Leo Famulari <leo@famulari.name>
-;;; Copyright © 2017–2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2015, 2016, 2017, 2021, 2022 Leo Famulari <leo@famulari.name>
+;;; Copyright © 2017–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2017 Thomas Danckaert <post@thomasdanckaert.be>
-;;; Copyright © 2017 Arun Isaac <arunisaac@systemreboot.net>
+;;; Copyright © 2017, 2021 Arun Isaac <arunisaac@systemreboot.net>
 ;;; Copyright © 2017 Kei Kebreau <kkebreau@posteo.net>
-;;; Copyright © 2017, 2020 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2017, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2017 Christine Lemmer-Webber <cwebber@dustycloud.org>
 ;;; Copyright © 2017 Rutger Helling <rhelling@mykolab.com>
 ;;; Copyright © 2018 Mark H Weaver <mhw@netris.org>
@@ -21,6 +21,8 @@
 ;;; Copyright © 2021 Timothy Sample <samplet@ngyro.com>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
 ;;; Copyright © 2021 Sarah Morgensen <iskarian@mgsn.dev>
+;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Feng Shu <tumashu@163.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -38,24 +40,30 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages backup)
+  #:use-module (guix gexp)
   #:use-module (guix packages)
   #:use-module ((guix licenses) #:prefix license:)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix download)
   #:use-module (guix utils)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system go)
+  #:use-module (guix build-system perl)
   #:use-module (guix build-system python)
+  #:use-module (guix build-system qt)
   #:use-module (gnu packages)
   #:use-module (gnu packages acl)
   #:use-module (gnu packages autotools)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages base)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages crypto)
   #:use-module (gnu packages databases)
   #:use-module (gnu packages datastructures)
+  #:use-module (gnu packages digest)
   #:use-module (gnu packages dbm)
   #:use-module (gnu packages dejagnu)
   #:use-module (gnu packages ftp)
@@ -64,23 +72,31 @@
   #:use-module (gnu packages gnupg)
   #:use-module (gnu packages golang)
   #:use-module (gnu packages gperf)
+  #:use-module (gnu packages gtk)
   #:use-module (gnu packages guile)
   #:use-module (gnu packages guile-xyz)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages mcrypt)
   #:use-module (gnu packages ncurses)
   #:use-module (gnu packages nettle)
+  #:use-module (gnu packages networking)
   #:use-module (gnu packages onc-rpc)
   #:use-module (gnu packages pcre)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages protobuf)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-build)
+  #:use-module (gnu packages python-check)
   #:use-module (gnu packages python-crypto)
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
+  #:use-module (gnu packages qt)
   #:use-module (gnu packages rsync)
+  #:use-module (gnu packages ruby)
+  #:use-module (gnu packages serialization)
   #:use-module (gnu packages ssh)
+  #:use-module (gnu packages time)
   #:use-module (gnu packages tls)
   #:use-module (gnu packages valgrind)
   #:use-module (gnu packages xml))
@@ -88,7 +104,7 @@
 (define-public duplicity
   (package
     (name "duplicity")
-    (version "0.8.20")
+    (version "0.8.21")
     (source
      (origin
       (method url-fetch)
@@ -97,7 +113,7 @@
                           "-series/" version "/+download/duplicity-"
                           version ".tar.gz"))
       (sha256
-       (base32 "0d125mxknpn44xwgqzzak9y5ydigscrpjv9d63126mfc6yfngr5v"))))
+       (base32 "0ld4bhsi6iv4bvy99pblbr7vlwy9jbgfd6flyvb8qwbl8rvadzjp"))))
     (build-system python-build-system)
     (native-inputs
      `(("gettext" ,gettext-minimal)     ; for msgfmt
@@ -117,11 +133,11 @@
        ("pygobject" ,python-pygobject)
        ("urllib3" ,python-urllib3)))
     (inputs
-     `(("dbus" ,dbus)                   ; dbus-launch (Gio backend)
-       ("librsync" ,librsync)
-       ("lftp" ,lftp)
-       ("gnupg" ,gnupg)                 ; gpg executable needed
-       ("util-linux" ,util-linux)))     ; for setsid
+     (list dbus ; dbus-launch (Gio backend)
+           librsync
+           lftp
+           gnupg ; gpg executable needed
+           util-linux))     ; for setsid
     (arguments
      `(#:test-target "test"
        #:phases
@@ -138,18 +154,15 @@
                                "/bin/dbus-launch']")))
              (substitute* '("testing/functional/__init__.py"
                             "testing/overrides/bin/lftp")
-               (("/bin/sh") (which "sh")))
-             #t))
+               (("/bin/sh") (which "sh")))))
          (add-before 'check 'set-up-tests
            (lambda* (#:key inputs #:allow-other-keys)
              (setenv "HOME" (getcwd))   ; gpg needs to write to $HOME
              (setenv "TZDIR"            ; some timestamp checks need TZDIR
-                     (string-append (assoc-ref inputs "tzdata")
-                                    "/share/zoneinfo"))
+                     (search-input-directory inputs "share/zoneinfo"))
              ;; Some things respect TMPDIR, others hard-code /tmp, and the
              ;; defaults don't match up, breaking test_restart.  Fix it.
-             (setenv "TMPDIR" "/tmp")
-             #t)))))
+             (setenv "TMPDIR" "/tmp"))))))
     (home-page "https://duplicity.gitlab.io/duplicity-web/")
     (synopsis "Encrypted backup using rsync algorithm")
     (description
@@ -175,8 +188,7 @@ spying and/or modification by the server.")
                (base32
                 "11mx8q29cr0sryd11awab7y4mhqgbamb1ss77rffjj6in8pb4hdk"))))
     (native-inputs
-     `(("automake" ,automake)
-       ("autoconf" ,autoconf)))
+     (list automake autoconf))
     (build-system gnu-build-system)
     (synopsis "File verification and repair tools")
     (description "Par2cmdline uses Reed-Solomon error-correcting codes to
@@ -202,14 +214,14 @@ can even repair them.")
        (base32
         "02bnczg01cyhajmm4rhbnc0ja0dd9ikv9fwv28asxh1rlx9yr0b7"))))
     (build-system gnu-build-system)
-    (native-inputs `(("pkg-config" ,pkg-config)))
+    (native-inputs (list pkg-config))
     (inputs
-     `(("glib" ,glib)
-       ("tar" ,tar)
-       ("lzop" ,lzop)
-       ("mcrypt" ,mcrypt)
-       ("openssh" ,openssh)
-       ("gnupg" ,gnupg-1)))
+     (list glib
+           tar
+           lzop
+           mcrypt
+           openssh
+           gnupg-1))
     (arguments
      `(#:configure-flags
        `(,(string-append "--sbindir=" (assoc-ref %outputs "out") "/bin"))
@@ -227,7 +239,7 @@ backups (called chunks) to allow easy burning to CD/DVD.")
 (define-public libarchive
   (package
     (name "libarchive")
-    (version "3.4.2")
+    (version "3.5.1")
     (source
      (origin
        (method url-fetch)
@@ -238,16 +250,16 @@ backups (called chunks) to allow easy burning to CD/DVD.")
                                  version ".tar.xz")))
        (sha256
         (base32
-         "18dd01ahs2hv74xm7axjc3yhq839p0x0s4vssvlmm8fknja09qfq"))))
+         "16r95rlmikll1k8vbhh06vq6x3srkc10hzxjjf3021mjs2ld65qf"))))
     (build-system gnu-build-system)
     (inputs
-     `(("bzip2" ,bzip2)
-       ("libxml2" ,libxml2)
-       ("lzo" ,lzo)
-       ("nettle" ,nettle)
-       ("xz" ,xz)
-       ("zlib" ,zlib)
-       ("zstd" ,zstd "lib")))
+     (list bzip2
+           libxml2
+           lzo
+           nettle
+           xz
+           zlib
+           `(,zstd "lib")))
     (arguments
      `(#:configure-flags '("--disable-static")
        #:phases
@@ -339,21 +351,15 @@ random access nor for in-place modification.")
         (base32 "0bzyv6qmnivxnv9nw7lnfn46k0m1dlxcjj53zcva6v8y8084l1iw"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("pkg-config" ,pkg-config)
-
-       ;; For tests.
-       ("dejagnu" ,dejagnu)))
+     (list autoconf automake pkg-config
+           ;; For tests.
+           dejagnu))
     (inputs
      ;; XXX Compiling with nettle (encryption) support requires patching out
      ;; -Werror from GNUmakefile.in.  Then, rdup-tr-{en,de}crypt tests fail:
      ;; free(): invalid pointer
      ;; ** rdup-tr: SIGPIPE received, exiting
-     `(("glib" ,glib)
-       ("pcre" ,pcre)
-       ("libarchive" ,libarchive)
-       ("mcrypt" ,mcrypt)))
+     (list glib pcre libarchive mcrypt))
     (arguments
      `(#:parallel-build? #f             ;race conditions
        #:phases
@@ -394,7 +400,7 @@ list and implement the backup strategy.")
 (define-public snapraid
   (package
     (name "snapraid")
-    (version "11.6")
+    (version "12.0")
     (source
      (origin
        (method git-fetch)
@@ -403,26 +409,24 @@ list and implement the backup strategy.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1jpg97my0akh2ayzy0nm4yqiv4gcx79rgyrkzd19yyv3iy719vcw"))))
+        (base32 "0k8pynafkx8bhnqnjhc3jsds5p40sflz4drm88i6dg6ifv35mhh9"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:configure-flags
-       (list "--enable-valgrind"
-             "--with-blkid")
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'bootstrap 'set-version
-           (lambda _
-             (setenv "VERSION" ,version)
-             (patch-shebang "autover.sh"))))))
+     (list #:configure-flags
+           ;; XXX --enable-valgrind fails with ‘A must-be-redirected function
+           ;; whose name matches the pattern: strlen in an object with soname
+           ;; matching: ld-linux-x86-64.so.2 was not found […]’; used to work.
+           #~(list "--with-blkid")
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-before 'bootstrap 'set-version
+                 (lambda _
+                   (setenv "VERSION" #$version)
+                   (patch-shebang "autover.sh"))))))
     (native-inputs
-     `(("automake" ,automake)
-       ("autoconf" ,autoconf)
-
-       ;; For the tests.
-       ("valgrind" ,valgrind)))
+     (list automake autoconf))
     (inputs
-     `(("util-linux" ,util-linux "lib"))) ; libblkid
+     (list `(,util-linux "lib"))) ; libblkid
     (home-page "https://www.snapraid.it/")
     (synopsis "Efficient backups using parity snapshots across disk arrays")
     (description
@@ -464,7 +468,7 @@ remain fully idle, saving power and producing less noise.")
          "0miklk4bqblpyzh1bni4x6lqn88fa8fjn15x1k1n8bxkx60nlymd"))))
     (build-system gnu-build-system)
     (inputs
-     `(("librsync" ,librsync-0.9)))
+     (list librsync-0.9))
     (arguments
      `(#:make-flags `(,(string-append "PREFIX=" (assoc-ref %outputs "out"))
                       ,(string-append "CC=" ,(cc-for-target)))
@@ -495,10 +499,9 @@ errors.")
         (base32 "11rvjcp77zwgkphz1kyf5yqgr3rlss7dm9xzmvpvc4lp99xq7drb"))))
     (build-system python-build-system)
     (native-inputs
-     `(("python-setuptools-scm" ,python-setuptools-scm)))
+     (list python-setuptools-scm))
     (inputs
-     `(("python" ,python)
-       ("librsync" ,librsync)))
+     (list python librsync))
     (arguments
      `(#:tests? #f))                    ; Tests require root/sudo
     (home-page "https://rdiff-backup.net/")
@@ -537,8 +540,7 @@ rdiff-backup is easy to use and settings have sensible defaults.")
            (lambda _
              (invoke "make" "test"))))))
     (inputs
-     `(("perl" ,perl)
-       ("rsync" ,rsync)))
+     (list perl rsync))
     (home-page "https://rsnapshot.org")
     (synopsis "Deduplicating snapshot backup utility based on rsync")
     (description "rsnapshot is a file system snapshot utility based on rsync.
@@ -558,7 +560,6 @@ rsnapshot uses hard links to deduplicate identical files.")
               (sha256
                (base32
                 "0fpdyxww41ba52d98blvnf543xvirq1v9xz1i3x1gm9lzlzpmc2g"))
-              (patches (search-patches "diffutils-gets-undeclared.patch"))
               (modules '((guix build utils)))
               (snippet
                '(begin
@@ -585,41 +586,38 @@ rsnapshot uses hard links to deduplicate identical files.")
                       (substitute* "configure"
                         (("GUILE=(.*)--variable bindir`" _ middle)
                          (string-append "GUILE=" middle
-                                        "--variable bindir`/guile")))
-                      #t))
+                                        "--variable bindir`/guile")))))
                   (add-before 'build 'set-libtirpc-include-path
                     (lambda* (#:key inputs #:allow-other-keys)
                       ;; Allow <rpc/rpc.h> & co. to be found.
-                      (let ((libtirpc (assoc-ref inputs "libtirpc")))
-                        (setenv "CPATH"
-                                (string-append (getenv "CPATH")
-                                               ":" libtirpc
-                                               "/include/tirpc"))
-                        #t)))
+                      (let ((tirpc (string-append (assoc-ref inputs "libtirpc")
+                                                  "/include/tirpc")))
+                        (if (getenv "CPATH")
+                          (setenv "CPATH"
+                                  (string-append (getenv "CPATH")
+                                                 ":" tirpc))
+                          (setenv "CPATH" tirpc)))))
                   (add-before 'check 'skip-test
                     (lambda _
                       ;; XXX: This test fails (1) because current GnuTLS no
                       ;; longer supports OpenPGP authentication, and (2) for
                       ;; some obscure reason.  Better skip it.
-                      (setenv "XFAIL_TESTS" "utils/block-server")
-                      #t)))))
+                      (setenv "XFAIL_TESTS" "utils/block-server"))))))
     (native-inputs
-     `(("guile" ,guile-2.0)
-       ("gperf" ,gperf-3.0)                  ;see <https://bugs.gnu.org/32382>
-       ("pkg-config" ,pkg-config)
-       ("rpcsvc-proto" ,rpcsvc-proto)))           ;for 'rpcgen'
+     (list guile-2.0 gperf-3.0 ;see <https://bugs.gnu.org/32382>
+           pkg-config rpcsvc-proto))           ;for 'rpcgen'
     (inputs
-     `(("guile" ,guile-2.0)
-       ("util-linux" ,util-linux)
-       ("libtirpc" ,libtirpc)
-       ("gnutls" ,gnutls)
-       ("tdb" ,tdb)
-       ("bdb" ,bdb)
-       ("gdbm" ,gdbm)
-       ("libgcrypt" ,libgcrypt)
-       ("lzo" ,lzo)
-       ("bzip2" ,bzip2)
-       ("zlib" ,zlib)))
+     (list guile-2.0
+           util-linux
+           libtirpc
+           gnutls
+           tdb
+           bdb
+           gdbm
+           libgcrypt
+           lzo
+           bzip2
+           zlib))
     (home-page "https://nongnu.org/libchop/")
     (synopsis "Tools & library for data backup and distributed storage")
     (description
@@ -635,13 +633,13 @@ detection, and lossless compression.")
 (define-public borg
   (package
     (name "borg")
-    (version "1.1.17")
+    (version "1.2.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "borgbackup" version))
        (sha256
-        (base32 "0x0ncy0b0bmf586hbdgrif3gjmkdw760vfnfxndr493v07y29fbs"))
+        (base32 "0cy6chpa053rlvy4448vf9klb5v0v1vq3l76gqa3mcrwjb8y574z"))
        (modules '((guix build utils)))
        (snippet
         '(begin
@@ -651,8 +649,6 @@ detection, and lossless compression.")
            ;; generate the wrong list.
            (for-each delete-file
                      '("src/borg/algorithms/checksums.c"
-                       "src/borg/algorithms/msgpack/_packer.cpp"
-                       "src/borg/algorithms/msgpack/_unpacker.cpp"
                        "src/borg/chunker.c"
                        "src/borg/compress.c"
                        "src/borg/crypto/low_level.c"
@@ -662,11 +658,12 @@ detection, and lossless compression.")
                        "src/borg/platform/freebsd.c"
                        "src/borg/platform/linux.c"
                        "src/borg/platform/posix.c"
-                       "src/borg/platform/syncfilerange.c"))
+                       "src/borg/platform/syncfilerange.c"
+                       "src/borg/platform/windows.c"))
            ;; Remove bundled shared libraries.
            (with-directory-excursion "src/borg/algorithms"
              (for-each delete-file-recursively
-                       (list "blake2" "lz4" "zstd")))
+                       (list "lz4" "xxh64" "zstd")))
            #t))))
     (build-system python-build-system)
     (arguments
@@ -678,12 +675,12 @@ detection, and lossless compression.")
          (add-after 'unpack 'set-env
            (lambda* (#:key inputs #:allow-other-keys)
              (let ((openssl (assoc-ref inputs "openssl"))
-                   (libb2 (assoc-ref inputs "libb2"))
                    (lz4 (assoc-ref inputs "lz4"))
+                   (xxhash (assoc-ref inputs "xxhash"))
                    (zstd (assoc-ref inputs "zstd")))
                (setenv "BORG_OPENSSL_PREFIX" openssl)
-               (setenv "BORG_LIBB2_PREFIX" libb2)
                (setenv "BORG_LIBLZ4_PREFIX" lz4)
+               (setenv "BORG_LIBXXHASH_PREFIX" xxhash)
                (setenv "BORG_LIBZSTD_PREFIX" zstd)
                (setenv "PYTHON_EGG_CACHE" "/tmp")
                ;; The test 'test_return_codes[python]' fails when
@@ -693,32 +690,37 @@ detection, and lossless compression.")
          ;; The tests need to be run after Borg is installed.
          (delete 'check)
          (add-after 'install 'check
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             ;; Make the installed package available for the test suite.
-             (add-installed-pythonpath inputs outputs)
-             ;; The tests should be run in an empty directory.
-             (mkdir-p "tests")
-             (with-directory-excursion "tests"
-               (invoke "py.test" "-v" "--pyargs" "borg.testsuite" "-k"
-                       (string-append
-                        ;; These tests need to write to '/var'.
-                        "not test_get_cache_dir "
-                        "and not test_get_config_dir "
-                        "and not test_get_keys_dir "
-                        "and not test_get_security_dir "
-                        ;; These tests assume there is a root user in
-                        ;; '/etc/passwd'.
-                        "and not test_access_acl "
-                        "and not test_default_acl "
-                        "and not test_non_ascii_acl "
-                        "and not test_create_stdin "
-                        ;; This test needs the unpackaged pytest-benchmark.
-                        "and not benchmark "
-                        ;; These tests assume the kernel supports FUSE.
-                        "and not test_fuse "
-                        "and not test_fuse_allow_damaged_files "
-                        "and not test_mount_hardlinks "
-                        "and not test_readonly_mount ")))))
+           (lambda* (#:key inputs outputs tests? #:allow-other-keys)
+             (when tests?
+              ;; Make the installed package available for the test suite.
+              (add-installed-pythonpath inputs outputs)
+              ;; The tests should be run in an empty directory.
+              (mkdir-p "tests")
+              (with-directory-excursion "tests"
+                (invoke "py.test" "-v" "--pyargs" "borg.testsuite" "-k"
+                        (string-append
+                         ;; These tests need to write to '/var'.
+                         "not test_get_cache_dir "
+                         "and not test_get_config_dir "
+                         "and not test_get_keys_dir "
+                         "and not test_get_security_dir "
+                         ;; These tests assume there is a root user in '/etc/passwd'.
+                         "and not test_access_acl "
+                         "and not test_default_acl "
+                         "and not test_get_item_uid_gid "
+                         "and not test_non_ascii_acl "
+                         "and not test_create_content_from_command "
+                         "and not test_create_content_from_command_with_failed_command "
+                         "and not test_create_stdin "
+                         ;; We don't need to run benchmarks
+                         "and not benchmark "
+                         ;; These tests assume the kernel supports FUSE.
+                         "and not test_fuse "
+                         "and not test_fuse_allow_damaged_files "
+                         "and not test_mount_hardlinks "
+                         "and not test_readonly_mount "
+                         "and not test_fuse_versions_view "
+                         "and not test_migrate_lock_alive"))))))
          (add-after 'install 'install-doc
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
@@ -726,10 +728,10 @@ detection, and lossless compression.")
                     (misc (string-append out "/share/borg/misc")))
                (for-each (cut install-file <> misc)
                          '("docs/misc/create_chunker-params.txt"
+                           "docs/misc/borg-data-flow.png"
                            "docs/misc/internals-picture.txt"
                            "docs/misc/prune-example.txt"))
-               (copy-recursively "docs/man" man)
-               #t)))
+               (copy-recursively "docs/man" man))))
          (add-after 'install-docs 'install-shell-completions
            (lambda* (#:key outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
@@ -741,48 +743,46 @@ detection, and lossless compression.")
                  (install-file "zsh/_borg"
                                (string-append share "/zsh/site-functions"))
                  (install-file "fish/borg.fish"
-                               (string-append share "/fish/vendor_completions.d")))
-               #t))))))
+                               (string-append share "/fish/vendor_completions.d")))))))))
     (native-inputs
-     `(("python-cython" ,python-cython)
-       ("python-setuptools-scm" ,python-setuptools-scm)
-       ("python-pytest" ,python-pytest)))
+     (list python-cython python-dateutil python-setuptools-scm python-pytest))
     (inputs
-     `(("acl" ,acl)
-       ("libb2" ,libb2)
-       ("lz4" ,lz4)
-       ("openssl" ,openssl)
-       ("python-llfuse" ,python-llfuse)
-       ("zstd" ,zstd "lib")))
+     (list acl
+           lz4
+           openssl
+           ;; This is the latest version of msgpack accepted by 'setup.py'.
+           python-msgpack-1.0.2
+           ;; FUSE 3 isn't working well, so we stick with FUSE 2 for now:
+           ;; <https://issues.guix.gnu.org/53407>
+           python-llfuse
+           `(,zstd "lib")
+           xxhash))
     (synopsis "Deduplicated, encrypted, authenticated and compressed backups")
     (description "Borg is a deduplicating backup program.  Optionally, it
 supports compression and authenticated encryption.  The main goal of Borg is to
 provide an efficient and secure way to backup data.  The data deduplication
 technique used makes Borg suitable for daily backups since only changes are
-stored.  The authenticated encryption technique makes it suitable for backups
-to not fully trusted targets.  Borg is a fork of Attic.")
+stored.  The authenticated encryption technique makes it suitable for storing
+backups on untrusted computers.")
     (home-page "https://www.borgbackup.org/")
     (license license:bsd-3)))
 
 (define-public wimlib
   (package
     (name "wimlib")
-    (version "1.13.4")
+    (version "1.13.5")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://wimlib.net/downloads/"
                                   "wimlib-" version ".tar.gz"))
               (sha256
                (base32
-                "04ny5s5z05gk6davbwkjkraan781k2xzw6kjwp75h6ncv45dv1sb"))))
+                "08z3xxm5hq1n4wmyhgz14p1cv0w2lx610vn8nhfwpds4n7lwkz1j"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("fuse" ,fuse)
-       ("libxml2" ,libxml2)
-       ("ntfs-3g" ,ntfs-3g)
-       ("openssl" ,openssl)))
+     (list fuse libxml2 ntfs-3g openssl))
     (arguments
      `(#:configure-flags
        (list "--disable-static"
@@ -838,12 +838,11 @@ NTFS volumes using @code{ntfs-3g}, preserving NTFS-specific attributes.")
                     (output-dir
                      (assoc-ref outputs "out"))
 
-                    ;; Just a default... not so useful on guixsd though
-                    ;; You probably want to a service with file(s) to point to.
+                    ;; Just a default... not so useful on Guix Systems though.
+                    ;; You probably want a service with file(s) to point to.
                     (confdir "/etc/dirvish")
 
-                    (perl (string-append (assoc-ref %build-inputs "perl")
-                                         "/bin/perl"))
+                    (perl (search-input-file inputs "/bin/perl"))
                     (loadconfig.pl (call-with-input-file "loadconfig.pl"
                                      read-string)))
 
@@ -894,16 +893,13 @@ NTFS volumes using @code{ntfs-3g}, preserving NTFS-specific attributes.")
                (for-each write-man man-pages)
                #t))))))
     (inputs
-     `(("perl" ,perl)
-       ("rsync" ,rsync)
-       ("perl-libtime-period" ,perl-libtime-period)
-       ("perl-libtime-parsedate" ,perl-libtime-parsedate)))
+     (list perl rsync perl-libtime-period perl-libtime-parsedate))
     (home-page "http://dirvish.org/")
     (synopsis "Fast, disk based, rotating network backup system")
     (description
      "With dirvish you can maintain a set of complete images of your
 file systems with unattended creation and expiration.  A dirvish backup vault
-is like a time machine for your data. ")
+is like a time machine for your data.")
     (license (license:fsf-free "file://COPYING"
                                "Open Software License 2.0"))))
 
@@ -1043,11 +1039,7 @@ precious backup space.
     (arguments
      `(#:tests? #f))                    ;no test
     (inputs
-     `(("lzo" ,lzo)
-       ("libressl" ,libressl)
-       ("protobuf" ,protobuf)
-       ("xz" ,xz)
-       ("zlib" ,zlib)))
+     (list lzo libressl protobuf xz zlib))
     (home-page "http://zbackup.org")
     (synopsis "Versatile deduplicating backup tool")
     (description
@@ -1081,12 +1073,10 @@ is format-agnostic, so you can feed virtually any files to it.")
          "--disable-readline"
          "--disable-rmt")))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("openssl" ,openssl)
-       ("zlib" ,zlib)
-       ("util-linux" ,util-linux "lib")
-       ("e2fsprogs" ,e2fsprogs)))
+     (list openssl zlib
+           `(,util-linux "lib") e2fsprogs))
     (home-page "https://dump.sourceforge.io/")
     (synopsis "Ext2/3/4 file system dump/restore utilities")
     (description "Dump examines files in a file system, determines which ones
@@ -1097,6 +1087,89 @@ dump; it can restore a full backup of a file system.  Single files and
 directory subtrees may also be restored from full or partial backups in
 interactive mode.")
     (license license:bsd-3)))
+
+(define-public btrbk
+  (package
+    (name "btrbk")
+    (version "0.32.2")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "https://digint.ch/download/btrbk/releases/"
+                                  "btrbk-" version ".tar.xz"))
+              (sha256
+               (base32
+                "0gi0j09fm4pgw3dq0z27lkpyvrs3ssyqg9b46v5ba794z63w753z"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:make-flags #~(list (string-append "PREFIX=" #$output))
+      #:phases #~(modify-phases %standard-phases
+                   (replace 'configure
+                     (lambda _
+                       (substitute* "Makefile"
+                         (("= /etc")
+                          (string-append "= " #$output "/etc")))))
+                   (delete 'check)
+                   (add-after 'install 'wrap-scripts
+                     (lambda* (#:key inputs outputs #:allow-other-keys)
+                       (define btrbk (search-input-file outputs "bin/btrbk"))
+                       ;; From a comment in btrbk, "Calling btrbk via 'lsbtr'
+                       ;; symlink acts as an alias for 'btrbk ls', while also
+                       ;; changing the semantics of the command line options."
+                       (substitute* btrbk
+                         (("program_name = \\$0")
+                          (string-append "program_name = "
+                                         "$ENV{'BTRBK_PROGRAM_NAME'}")))
+                       ;; Wrap the script, so that it works with SSH URI and
+                       ;; finds mbuffer and other tools out of the box.
+                       (wrap-program btrbk
+                         #:sh (search-input-file inputs "bin/bash")
+                         '("BTRBK_PROGRAM_NAME" = ("$0"))
+                         `("PATH" prefix
+                           ,(map (lambda (command)
+                                   (dirname (search-input-file inputs command)))
+                                 (list "bin/btrfs"
+                                       "bin/cat"
+                                       "bin/find"
+                                       "bin/mbuffer"
+                                       "bin/ssh")))))))))
+    (native-inputs (list ruby-asciidoctor))
+    (inputs (list bash-minimal
+                  btrfs-progs
+                  coreutils
+                  findutils
+                  mbuffer
+                  openssh
+                  perl))
+    (home-page "https://digint.ch/btrbk/")
+    (synopsis "Backup tool for Btrfs subvolumes")
+    (description "Btrbk is a backup tool for Btrfs subvolumes, taking
+advantage of Btrfs specific capabilities to create atomic snapshots and
+transfer them incrementally to your backup locations.  The source and target
+locations are specified in a config file, which allows easily configuring
+simple scenarios like e.g. a @i{laptop with locally attached backup disks}, as
+well as more complex ones, e.g. a @i{server receiving backups from several
+hosts via SSH, with different retention policy}.  It has features such as:
+@itemize
+@item atomic snapshots
+@item incremental backups
+@item flexible retention policy
+@item backups to multiple destinations
+@item transfer via SSH
+@item resume backups (for removable and mobile devices)
+@item archive to offline storage
+@item encrypted backups to non-btrfs storage
+@item wildcard subvolumes (useful for Docker and LXC containers)
+@item transaction log
+@item comprehensive list and statistics output
+@item resolve and trace Btrfs parent-child and received-from relationships
+@item list file changes between backups
+@item calculate accurate disk space usage based on block regions.
+@end itemize
+Btrbk is designed to run as a cron job for triggering periodic snapshots and
+backups, as well as from the command line (e.g. for instantly creating
+additional snapshots).")
+    (license license:gpl3+)))
 
 (define-public burp
   (package
@@ -1123,17 +1196,14 @@ interactive mode.")
                 (string-append prefix " 3600" suffix "\n")))
              #t)))))
     (inputs
-     `(("acl" ,acl)
-       ("librsync" ,librsync)
-       ("ncurses" ,ncurses)             ; for the live status monitor
-       ("openssl" ,openssl)
-       ("uthash" ,uthash)
-       ("zlib" ,zlib)))
+     (list acl
+           librsync
+           ncurses ; for the live status monitor
+           openssl
+           uthash
+           zlib))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("check" ,check-0.14)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake check pkg-config))
     (home-page "https://burp.grke.org")
     (synopsis "Differential backup and restore")
     (description "Burp is a network backup and restore program.  It attempts
@@ -1144,27 +1214,27 @@ backup.")
 (define-public disarchive
   (package
     (name "disarchive")
-    (version "0.3.0")
+    (version "0.4.0")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://files.ngyro.com/disarchive/"
                                   "disarchive-" version ".tar.gz"))
               (sha256
                (base32
-                "0jgc53rrbas8i4z13l2ii99cpav1ma73spsjg70ygihf0635r3dh"))))
+                "1pql8cspsxyx8cpw3xyhirnisv6rb4vj5mxr1d7w9la72q740n8s"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("pkg-config" ,pkg-config)
-       ("guile" ,guile-3.0)             ;for cross-compilation
-       ("guile-gcrypt" ,guile-gcrypt)
-       ("guile-quickcheck" ,guile-quickcheck)))
+     (list autoconf
+           automake
+           pkg-config
+           guile-3.0 ;for cross-compilation
+           guile-gcrypt
+           guile-lzma
+           guile-quickcheck))
     (inputs
-     `(("guile" ,guile-3.0)
-       ("zlib" ,zlib)))
+     (list guile-3.0 zlib))
     (propagated-inputs
-     `(("guile-gcrypt" ,guile-gcrypt)))
+     (list guile-gcrypt guile-lzma))
     (home-page "https://ngyro.com/software/disarchive.html")
     (synopsis "Software archive disassembler")
     (description "Disarchive can disassemble software archives into data
@@ -1174,3 +1244,130 @@ original files.  For example, a software archive made using tar and
 Gzip will need to describe the order of files in the tarball and the
 compression parameters used by Gzip.")
     (license license:gpl3+)))
+
+(define-public borgmatic
+  (package
+    (name "borgmatic")
+    (version "1.5.22")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "borgmatic" version))
+       (sha256
+        (base32 "0pvqlj17vp81i7saxqh5hsaxqz29ldrjd7bcssh4g1h0ikmnaf2r"))))
+    (build-system python-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'configure
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   ;; Set absolute store path to borg.
+                   (substitute* "borgmatic/commands/borgmatic.py"
+                     (("location\\.get\\('local_path', 'borg'\\)")
+                      (string-append "location.get('local_path', '"
+                                     (search-input-file inputs "bin/borg")
+                                     "')")))))
+               (replace 'check
+                 (lambda* (#:key tests? #:allow-other-keys)
+                   (when tests?
+                     ;; Tests require the installed executable.
+                     (setenv "PATH" (string-append #$output "/bin"
+                                                   ":" (getenv "PATH")))
+                     (invoke "pytest")))))))
+    (inputs
+     (list borg python-colorama python-jsonschema python-requests
+           python-ruamel.yaml))
+    (native-inputs
+     (list python-flexmock python-pytest python-pytest-cov))
+    (home-page "https://torsion.org/borgmatic/")
+    (synopsis "Simple, configuration-driven backup software")
+    (description
+     "borgmatic is simple, configuration-driven backup software for servers
+and workstations.  Protect your files with client-side encryption.  Backup
+your databases too.  Monitor it all with integrated third-party services.
+borgmatic is powered by borg.")
+    (license license:gpl3+)))
+
+(define-public vorta
+  (package
+    (name "vorta")
+    (version "0.8.7")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "vorta" version))
+              (sha256
+               (base32
+                "0yv2z2djbl7aq3fa9m3ihzv9i99a5ahsxz7dlzwvvf4a7pmhc6b2"))))
+    (build-system python-build-system)
+    (arguments
+     (list
+      #:imported-modules `((guix build qt-utils)
+                           (guix build cmake-build-system)
+                           (guix build qt-build-system)
+                           ,@%python-build-system-modules)
+      #:modules '((guix build utils)
+                  (guix build python-build-system)
+                  ((guix build qt-build-system) #:prefix qt:))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'patch-borg-path
+            (lambda* (#:key inputs #:allow-other-keys)
+              (substitute* "src/vorta/borg/borg_job.py"
+                (("which\\('borg'\\)")
+                 (string-append "which('" #$(this-package-input "borg")
+                                "/bin/borg')")))))
+          ;; XXX This phase tries to write to $HOME
+          (add-before 'sanity-check 'set-HOME
+            (lambda _
+              (setenv "HOME" "/tmp")))
+          ;; Otherwise, the user interface's icons will be missing.
+          (add-after 'wrap 'qt-wrap
+            (assoc-ref qt:%standard-phases 'qt-wrap)))))
+    (native-inputs
+     (list python-pytest-mock
+           python-pytest-qt
+           python-pytest-runner
+           python-setuptools-git))
+    (inputs
+     (list borg
+           python-appdirs
+           python-dateutil
+           python-keyring
+           python-paramiko
+           python-peewee
+           python-psutil
+           python-pyqt-without-qtwebkit
+           python-secretstorage
+           ;; This is included so that the qt-wrap phase picks it up.
+           qtsvg-5))
+    (home-page "https://github.com/borgbase/vorta")
+    (synopsis "Graphical backup client based on BorgBackup")
+    (description "Vorta is a graphical backup client based on the Borg backup
+tool.  It supports the use of remote backup repositories.  It can perform
+scheduled backups, and has a graphical tool for browsing and extracting the Borg
+archives.")
+    (license license:gpl3+)))
+
+(define-public grsync
+  (package
+    (name "grsync")
+    (version "1.3.0")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "http://www.opbyte.it/release/"
+                                  "grsync-" version ".tar.gz"))
+              (sha256
+               (base32
+                "1z1m782b50x348kgynzf753apy8yszkl31y32y1jsc055skcdixp"))))
+    (build-system gnu-build-system)
+    (native-inputs (list intltool pkg-config))
+    (inputs (list gtk+))
+    (propagated-inputs (list rsync))
+    (home-page "http://www.opbyte.it/grsync/")
+    (synopsis "GTK frontend for rsync")
+    (description
+     "Grsync is a simple graphical interface using GTK for the @command{rsync}
+command line program.  It currently supports only a limited set of the most
+important rsync features, but can be used effectively for local directory
+synchronization.")
+    (license license:gpl2)))

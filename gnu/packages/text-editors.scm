@@ -8,8 +8,8 @@
 ;;; Copyright © 2017–2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2019 Andreas Enge <andreas@enge.fr>
-;;; Copyright © 2019, 2020, 2021 Nicolas Goaziou <mail@nicolasgoaziou.fr>
-;;; Copyright © 2020 Marius Bakke <mbakke@fastmail.com>
+;;; Copyright © 2019, 2020, 2021, 2022 Nicolas Goaziou <mail@nicolasgoaziou.fr>
+;;; Copyright © 2020-2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2020 Tom Zander <tomz@freedommail.ch>
 ;;; Copyright © 2020 Mark Meyer <mark@ofosos.org>
 ;;; Copyright © 2020 Maxime Devos <maximedevos@telenet.be>
@@ -17,6 +17,8 @@
 ;;; Copyright © 2021 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2021 Pierre Langlois <pierre.langlois@gmx.com>
 ;;; Copyright © 2021 Calum Irwin <calumirwin1@gmail.com>
+;;; Copyright © 2022 Luis Henrique Gomes Higino <luishenriquegh2701@gmail.com>
+;;; Copyright © 2022 Foo Chuan Wei <chuanwei.foo@hotmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -36,6 +38,7 @@
 (define-module (gnu packages text-editors)
   #:use-module (guix packages)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix utils)
   #:use-module (guix build-system cargo)
@@ -51,16 +54,19 @@
   #:use-module (gnu packages base)
   #:use-module (gnu packages boost)
   #:use-module (gnu packages code)
+  #:use-module (gnu packages cpp)
   #:use-module (gnu packages crates-io)
+  #:use-module (gnu packages datastructures)
   #:use-module (gnu packages documentation)
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages freedesktop)
-  #:use-module (gnu packages gcc)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages guile)
   #:use-module (gnu packages haskell-xyz)
+  #:use-module (gnu packages icu4c)
+  #:use-module (gnu packages image)
   #:use-module (gnu packages libbsd)
   #:use-module (gnu packages libreoffice)
   #:use-module (gnu packages llvm)
@@ -75,6 +81,7 @@
   #:use-module (gnu packages qt)
   #:use-module (gnu packages regex)
   #:use-module (gnu packages ruby)
+  #:use-module (gnu packages sqlite)
   #:use-module (gnu packages terminals)
   #:use-module (gnu packages texinfo)
   #:use-module (gnu packages version-control)
@@ -145,11 +152,7 @@
            (sha256
             (base32 "1jsvg2lg3xqfgi79x08kx94mc34mh62ivca10vsci6fqsk68jbd0"))
            (file-name (git-file-name "vis-test" version))))))
-    (inputs `(("lua" ,lua)
-              ("ncurses" ,ncurses)
-              ("libtermkey" ,libtermkey)
-              ("lua-lpeg" ,lua-lpeg)
-              ("tre" ,tre)))
+    (inputs (list lua ncurses libtermkey lua-lpeg tre))
     (synopsis "Vim-like text editor")
     (description
      "Vis aims to be a modern, legacy free, simple yet efficient vim-like text
@@ -164,7 +167,7 @@ based command language.")
 (define-public kakoune
   (package
     (name "kakoune")
-    (version "2021.08.28")
+    (version "2021.11.08")
     (source
      (origin
        (method url-fetch)
@@ -172,7 +175,7 @@ based command language.")
                            "releases/download/v" version "/"
                            "kakoune-" version ".tar.bz2"))
        (sha256
-        (base32 "1jvn4b9rma5jjvg3xz8nf224pbq3ry570j6qvc834wn5v3gxfvkg"))))
+        (base32 "1x5mvmpf0rgmr2xdw5wjn4hr6qd8yvj0zx588fi324x1knfqhc5a"))))
     (build-system gnu-build-system)
     (arguments
      `(#:make-flags
@@ -188,17 +191,9 @@ based command language.")
              (substitute* "src/shell_manager.cc"
                (("if \\(m_shell.empty\\(\\)\\)" line)
                 (string-append "m_shell = \"" (which "sh")
-                               "\";\n        " line)))
-             #t))
-         (delete 'configure)            ; no configure script
-         ;; kakoune requires us to be in the src/ directory to build.
-         (add-before 'build 'chdir
-           (lambda _ (chdir "src") #t)))))
-    (native-inputs
-     `(("gcc", gcc-10) ; See https://github.com/mawww/kakoune/issues/4318
-       ("asciidoc" ,asciidoc)
-       ("pkg-config" ,pkg-config)
-       ("ruby" ,ruby)))
+                               "\";\n        " line)))))
+         (delete 'configure))))            ; no configure script
+    (native-inputs (list pkg-config))
     (synopsis "Vim-inspired code editor")
     (description
      "Kakoune is a code editor heavily inspired by Vim, as such most of its
@@ -278,7 +273,7 @@ Rust.")
         ("rust-unicode-segmentation" ,rust-unicode-segmentation-1)
         ("rust-unicode-width" ,rust-unicode-width-0.1))))
     (inputs
-     `(("clang" ,clang)))
+     (list clang))
     (home-page "https://github.com/justinbarclay/parinfer-rust")
     (synopsis "Infer parentheses for Clojure, Lisp and Scheme")
     (description
@@ -301,7 +296,7 @@ can load dynamic libraries.")
         (base32
          "1pmr598xxxm9j9dl93kq4dv36zyw0q2dh6d7x07hf134y9hhlnj9"))))
     (build-system gnu-build-system)
-    (inputs `(("ncurses" ,ncurses)))
+    (inputs (list ncurses))
     (home-page "http://joe-editor.sourceforge.net/")
     (synopsis "Console screen editor")
     (description
@@ -313,7 +308,7 @@ bindings and many of the powerful features of GNU Emacs.")
 (define-public jucipp
   (package
     (name "jucipp")
-    (version "1.6.3")
+    (version "1.7.1")
     (home-page "https://gitlab.com/cppit/jucipp")
     (source (origin
               (method git-fetch)
@@ -325,78 +320,75 @@ bindings and many of the powerful features of GNU Emacs.")
                                   (recursive? #t)))
               (file-name (git-file-name name version))
               (sha256
-               (base32 "1gy2xb5rm7q4zx9rl23h96b1i46fz27v25nklj50fvqp8ax2gxqy"))))
+               (base32 "0xyf1fa7jvxzvg1dxh5vc50fbwjjsar4fmlvbfhicdd1f8bhz1ii"))
+              (modules '((guix build utils)))
+              (snippet
+               '(begin
+                  ;; Delete bundled copy of nlohmann/json.
+                  (delete-file-recursively "lib/json")))))
     (build-system cmake-build-system)
     (arguments
-     `(#:configure-flags '("-DBUILD_TESTING=ON"
+     (list #:configure-flags #~(list "-DBUILD_TESTING=ON")
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'patch-tiny-process-library
+                 (lambda* (#:key native-inputs inputs #:allow-other-keys)
+                   (with-directory-excursion "lib/tiny-process-library"
+                     (substitute* '("process_unix.cpp"
+                                    "tests/io_test.cpp")
+                       (("/bin/sh") (search-input-file (or native-inputs inputs)
+                                                       "bin/sh"))))))
+               (add-after 'unpack 'disable-some-tests
+                 (lambda _
+                   (substitute* "tests/CMakeLists.txt"
+                     ;; Disable the CMake build test, as it does not test
+                     ;; functionality of the package, and requires doing
+                     ;; an "in-source" build.
+                     (("add_test\\(cmake_build_test.*\\)")
+                      "")
+                     ;; Disable the git test, as it requires the full checkout.
+                     (("add_test\\(git_test.*\\)")
+                      ""))))
+               (add-before 'check 'pre-check
+                 (lambda* (#:key native-inputs inputs #:allow-other-keys)
+                   ;; Tests do not expect HOME to be empty.
+                   (setenv "HOME" "/etc")
 
-                           ;; These arguments are here to facilitate an "in-source"
-                           ;; build using "./build" instead of the default "../build".
-                           ;; The test suite expects that to be the case.
-                           "..")
-       #:out-of-source? #f
-       #:phases (modify-phases %standard-phases
-                  (add-before 'configure 'enter-build-directory
-                    (lambda _
-                      (mkdir "build")
-                      (chdir "build")
-                      #t))
-
-                  (add-after 'unpack 'patch-tiny-process-library
-                    (lambda _
-                      (with-directory-excursion "lib/tiny-process-library"
-                        (substitute* '("process_unix.cpp"
-                                       "tests/io_test.cpp")
-                          (("/bin/sh") (which "sh"))))
-                      #t))
-                  (add-after 'unpack 'disable-git-test
-                    (lambda _
-                      (substitute* "tests/CMakeLists.txt"
-                        ;; Disable the git test, as it requires the full checkout.
-                        (("add_test\\(git_test.*\\)") ""))
-                      #t))
-                  (add-before 'check 'pre-check
-                    (lambda* (#:key inputs #:allow-other-keys)
-                      ;; Tests do not expect HOME to be empty.
-                      (setenv "HOME" "/etc")
-
-                      ;; Most tests require an X server.
-                      (let ((xorg-server (assoc-ref inputs "xorg-server"))
-                            (display ":1"))
-                        (setenv "DISPLAY" display)
-                        (system (string-append xorg-server "/bin/Xvfb "
-                                               display " &")))
-                      #t))
-                  (add-after 'install 'wrap
-                    (lambda* (#:key inputs outputs #:allow-other-keys)
-                      ;; The package needs GTK+ and GtkSourceView on XDG_DATA_DIRS
-                      ;; for syntax highlighting to work.  shared-mime-info is
-                      ;; necessary for MIME handling.
-                      ;; XXX: Ideally we'd reuse glib-or-gtk-wrap here, but it
-                      ;; does not pick up $gtksourceview/share/gtksourceview-3.0.
-                      (let ((out (assoc-ref outputs "out"))
-                            (gtk+ (assoc-ref inputs "gtk+"))
-                            (gtksourceview (assoc-ref inputs "gtksourceview"))
-                            (shared-mime-info (assoc-ref inputs "shared-mime-info")))
-                        (wrap-program (string-append out "/bin/juci")
-                          `("XDG_DATA_DIRS" ":" prefix
-                            (,(string-join
-                               (map (lambda (pkg)
-                                      (string-append pkg "/share"))
-                                    (list out gtk+ gtksourceview shared-mime-info))
-                               ":"))))
-                        #t))))))
+                   ;; Most tests require an X server.
+                   (let ((xvfb (search-input-file (or native-inputs inputs)
+                                                  "bin/Xvfb"))
+                         (display ":1"))
+                     (setenv "DISPLAY" display)
+                     (system (string-append xvfb " " display " &")))))
+               (add-after 'install 'wrap
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   ;; The package needs GTK+ and GtkSourceView on XDG_DATA_DIRS
+                   ;; for syntax highlighting to work.  shared-mime-info is
+                   ;; necessary for MIME handling.
+                   ;; XXX: Ideally we'd reuse glib-or-gtk-wrap here, but it
+                   ;; does not pick up "share/gtksourceview-3.0".
+                   (wrap-program (string-append #$output "/bin/juci")
+                     `("XDG_DATA_DIRS" ":" prefix
+                       (,(string-join
+                          (cons (string-append #$output "/share")
+                                (map (lambda (directory)
+                                       (dirname (search-input-directory
+                                                 inputs
+                                                 (string-append "share/"
+                                                                directory))))
+                                     '("gtk-3.0" "gtksourceview-3.0" "mime")))
+                          ":")))))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("xorg-server" ,xorg-server-for-tests)))
+     (list pkg-config xorg-server-for-tests))
     (inputs
-     `(("aspell" ,aspell)
-       ("boost" ,boost)
-       ("ctags" ,universal-ctags)
-       ("gtkmm" ,gtkmm)
-       ("gtksourceviewmm" ,gtksourceviewmm)
-       ("libclang" ,clang-11)     ;XXX: must be the same version as Mesas LLVM
-       ("libgit2" ,libgit2)))
+     (list aspell
+           boost
+           clang-11               ;XXX: must be the same version as Mesas LLVM
+           gtkmm-3
+           gtksourceviewmm
+           json-modern-cxx
+           libgit2
+           universal-ctags))
     (synopsis "Lightweight C++ IDE")
     (description
      "juCi++ is a small @acronym{IDE, Integrated Development Environment}
@@ -421,16 +413,15 @@ systems.")
                 "0b0az2wvqgvam7w0ns1j8xp2llslm1rx6h7zcsy06a7j0yp257cm"))))
     (build-system glib-or-gtk-build-system)
     (native-inputs
-     `(("intltool" ,intltool)
-       ("pkg-config" ,pkg-config)))
+     (list intltool pkg-config))
     (inputs
-     `(("gtk+" ,gtk+-2)))
+     (list gtk+-2))
     (home-page "http://tarot.freeshell.org/leafpad/")
     (synopsis "GTK+ based text editor")
     (description "Leafpad is a GTK+ text editor that emphasizes simplicity.  As
 development focuses on keeping weight down to a minimum, only the most essential
 features are implemented in the editor.  Leafpad is simple to use, is easily
-compiled, requires few libraries, and starts up quickly. ")
+compiled, requires few libraries, and starts up quickly.")
     (license license:gpl2+)))
 
 (define-public l3afpad
@@ -450,12 +441,9 @@ compiled, requires few libraries, and starts up quickly. ")
                   "1alyghm2wpakzdfag0g4g8gb1h9l4wdg7mnhq8bk0iq5ryqia16a"))))
       (build-system glib-or-gtk-build-system)
       (native-inputs
-       `(("intltool" ,intltool)
-         ("autoconf" ,autoconf)
-         ("automake" ,automake)
-         ("pkg-config" ,pkg-config)))
+       (list intltool autoconf automake pkg-config))
       (inputs
-       `(("gtk+" ,gtk+)))
+       (list gtk+))
       (home-page "http://tarot.freeshell.org/leafpad/")
       (synopsis "GTK+ 3 based text editor")
       (description "L3afpad is a GTK+ 3 text editor that emphasizes simplicity.  As
@@ -490,7 +478,7 @@ compiled, requires few libraries, and starts up quickly. ")
        #:phases (modify-phases %standard-phases
                   (delete 'configure))))
     (native-inputs
-     `(("nasm" ,nasm)))
+     (list nasm))
     (home-page "https://sites.google.com/site/e3editor/")
     (synopsis "Tiny text editor written in assembly")
     (description
@@ -521,35 +509,31 @@ Wordstar-, EMACS-, Pico, Nedit or vi-like key bindings.  e3 can be used on
                           (substitute* "GNUmakefile"
                             (("/usr/bin/") ""))))))
     (build-system gnu-build-system)
-    (native-inputs
-     `(("pkg-config" ,pkg-config)))
-    (inputs
-     `(("diffutils" ,diffutils)
-       ("libbsd" ,libbsd)
-       ("ncurses" ,ncurses)))
+    (native-inputs (list pkg-config))
+    (inputs (list diffutils libbsd ncurses))
     (arguments
      ;; No test suite available.
-     `(#:tests? #f
-       #:make-flags (list (string-append "prefix=" %output)
-                          (string-append "CC=" ,(cc-for-target))
-                          (string-append "PKG_CONFIG=" ,(pkg-config-for-target)))
-       #:phases (modify-phases %standard-phases
-                  (delete 'configure)   ; no configure script
-                  (add-before 'build 'correct-location-of-diff
-                    (lambda* (#:key inputs #:allow-other-keys)
-                      (substitute* "buffer.c"
-                        (("/usr/bin/diff")
-                         (string-append (assoc-ref inputs "diffutils")
-                                        "/bin/diff")))))
-                  (add-before 'install 'patch-tutorial-location
-                    (lambda* (#:key outputs #:allow-other-keys)
-                      (substitute* "mg.1"
-                        (("/usr") (assoc-ref outputs "out")))))
-                  (add-after 'install 'install-tutorial
-                    (lambda* (#:key outputs #:allow-other-keys)
-                      (let* ((out (assoc-ref outputs "out"))
-                             (doc (string-append out "/share/doc/mg")))
-                        (install-file "tutorial" doc)))))))
+     (list #:tests? #f
+           #:make-flags
+           #~(list (string-append "prefix=" #$output)
+                   (string-append "CC=" #$(cc-for-target))
+                   (string-append "PKG_CONFIG=" #$(pkg-config-for-target)))
+           #:phases
+           #~(modify-phases %standard-phases
+               (delete 'configure)      ;no configure script
+               (add-before 'build 'correct-location-of-diff
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (substitute* "buffer.c"
+                     (("/usr/bin/diff")
+                      (search-input-file inputs "/bin/diff")))))
+               (add-before 'install 'patch-tutorial-location
+                 (lambda _
+                   (substitute* "mg.1"
+                     (("/usr") #$output))))
+               (add-after 'install 'install-tutorial
+                 (lambda _
+                   (let ((doc (string-append #$output "/share/doc/mg")))
+                     (install-file "tutorial" doc)))))))
     (home-page "https://homepage.boetes.org/software/mg/")
     (synopsis "Microscopic GNU Emacs clone")
     (description
@@ -611,11 +595,9 @@ OpenBSD team.")
                (install-file "config.eg" doc)
                #t))))))
     (native-inputs
-     `(("texinfo" ,texinfo)))
+     (list texinfo))
     (inputs
-     `(("libx11" ,libx11)
-       ("libxext" ,libxext)
-       ("libxv" ,libxv)))
+     (list libx11 libxext libxv))
     (home-page "https://bellard.org/qemacs/")
     (synopsis "Small but powerful text editor")
     (description "QEmacs (for Quick Emacs) is a very small but
@@ -681,18 +663,17 @@ scripts/input/X11/C/Shell/HTML/Dired): 49KB.
                 "19cf55b86yj2b5hdazbyw4iyp6xq155243aiyg4m0vhwh0h79nwh"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("qttools" ,qttools)))           ; for lrelease
+     (list pkg-config qttools-5))       ; for lrelease
     (inputs
-     `(("hunspell" ,hunspell)
-       ("qtbase" ,qtbase-5)
-       ("qtdeclarative" ,qtdeclarative)
-       ("qtmultimedia" ,qtmultimedia)
-       ("qtquickcontrols" ,qtquickcontrols)
-       ("qtsvg" ,qtsvg)
-       ("qtwebchannel" ,qtwebchannel)))
+     (list hunspell
+           qtbase-5
+           qtdeclarative-5
+           qtmultimedia-5
+           qtquickcontrols-5
+           qtsvg-5
+           qtwebchannel-5))
     (propagated-inputs                  ; To get native-search-path
-     `(("qtwebengine" ,qtwebengine)))
+     (list qtwebengine-5))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -714,7 +695,7 @@ scripts/input/X11/C/Shell/HTML/Dired): 49KB.
                    ,(map (lambda (label)
                            (string-append (assoc-ref inputs label)
                                           "/lib/qt5/plugins/"))
-                         '("qtsvg" "qtmultimedia"))))))))))
+                         '("qtsvg-5" "qtmultimedia-5"))))))))))
     (home-page "https://wereturtle.github.io/ghostwriter/")
     (synopsis "Write without distractions")
     (description
@@ -725,7 +706,7 @@ environment with Markdown markup.")
 (define-public manuskript
   (package
     (name "manuskript")
-    (version "0.12.0")
+    (version "0.14.0")
     (source
      (origin
        (method git-fetch)
@@ -734,65 +715,62 @@ environment with Markdown markup.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0gfwwnpjslb0g8y3v9ha4sd8in6bpy6bhi4rn4hmfd2vmq2flpbd"))))
+        (base32 "0qhr9bkq4yl2qjainpsv7blzcji2q9ic9zcynawmhfqy3rmf8qlr"))))
     (build-system python-build-system)
     (arguments
-     `(#:tests? #f                      ;no test
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)
-         (delete 'build)
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (share (string-append out "/share/manuskript")))
-               ;; Install data.
-               (mkdir-p share)
-               (for-each
-                (lambda (d)
-                  (let ((destination  (string-append share "/" d)))
-                    (mkdir-p destination)
-                    (copy-recursively d destination)))
-                '("bin" "i18n" "icons" "libs" "manuskript" "resources"))
-               ;; Install documentation.
-               (let ((doc (string-append out
-                                         "/doc/manuskript-" ,version
-                                         "/sample-projects")))
-                 (mkdir-p doc)
-                 (copy-recursively "sample-projects" doc))
-               ;; Wrap executable in "$out/share/manuskript/bin" and
-               ;; link to it from "$out/bin".
-               (let ((bin (string-append out "/bin"))
-                     (executable (string-append share "/bin/manuskript")))
-                 (wrap-program executable
-                   (list "PYTHONPATH" 'prefix (list (getenv "PYTHONPATH"))))
-                 (mkdir-p bin)
-                 (with-directory-excursion bin
-                   (symlink (string-append share "/bin/manuskript")
-                            "manuskript")))
-               ;; Install icons and create .desktop file.
-               (let ((apps (string-append out "/share/applications"))
-                     (icons-dir (string-append out "/share/pixmaps")))
-                 (install-file "icons/Manuskript/manuskript.svg" icons-dir)
-                 (mkdir-p apps)
-                 (make-desktop-entry-file (string-append apps "/manuskript.desktop")
+     (list
+      #:tests? #f                       ;no test
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)
+          (delete 'build)
+          (replace 'install
+            (lambda _
+              (let ((share (string-append #$output "/share/manuskript")))
+                ;; Install data.
+                (mkdir-p share)
+                (for-each
+                 (lambda (d)
+                   (let ((destination  (string-append share "/" d)))
+                     (mkdir-p destination)
+                     (copy-recursively d destination)))
+                 '("bin" "i18n" "icons" "libs" "manuskript" "resources"))
+                ;; Install documentation.
+                (let ((doc (string-append #$output
+                                          "/doc/manuskript-" #$version
+                                          "/sample-projects")))
+                  (mkdir-p doc)
+                  (copy-recursively "sample-projects" doc))
+                ;; Wrap executable in "$out/share/manuskript/bin" and
+                ;; link to it from "$out/bin".
+                (let ((bin (string-append #$output "/bin"))
+                      (executable (string-append share "/bin/manuskript")))
+                  (wrap-program executable
+                    (list "GUIX_PYTHONPATH" 'prefix
+                          (list (getenv "GUIX_PYTHONPATH"))))
+                  (mkdir-p bin)
+                  (with-directory-excursion bin
+                    (symlink (string-append share "/bin/manuskript")
+                             "manuskript")))
+                ;; Install icons and create .desktop file.
+                (let ((apps (string-append #$output "/share/applications"))
+                      (icons-dir (string-append #$output "/share/pixmaps")))
+                  (install-file "icons/Manuskript/manuskript.svg" icons-dir)
+                  (mkdir-p apps)
+                  (make-desktop-entry-file
+                   (string-append apps "/manuskript.desktop")
                    #:name "Manuskript"
                    #:mime-type "application/x-manuskript-book;"
-                   #:exec (string-append out "/bin/manuskript %f")
+                   #:exec (string-append #$output "/bin/manuskript %f")
                    #:comment '((#f "Tool for writers")
                                ("es" "Herramienta para escritores/as"))
                    #:keywords "manuskript;office;write;edit;novel;text;msk"
                    #:terminal #f
                    #:type "Application"
                    #:icon "manuskript"
-                   #:categories "Office;WordProcessor;"))
-               #t))))))
+                   #:categories "Office;WordProcessor;"))))))))
     (inputs
-     `(("pandoc" ,pandoc)
-       ("python-lxml" ,python-lxml)
-       ("python-markdown" ,python-markdown)
-       ("python-pyqt" ,python-pyqt)
-       ("qtsvg" ,qtsvg)))
+     (list pandoc python-lxml python-markdown python-pyqt qtsvg-5))
     (home-page "http://www.theologeek.ch/manuskript/")
     (synopsis "Tool for writers")
     (description "Manuskript provides a rich environment to help
@@ -861,7 +839,7 @@ in plain text file format.")
            (sha256
             (base32 "1s29p4brmcsc3xsww3gk85dg45f1kk3iykh1air3ij0hymf5dyqy"))))))
     (inputs
-     `(("pcre2" ,pcre2)))
+     (list pcre2))
     (home-page "https://editorconfig.org/")
     (synopsis "EditorConfig core library written in C")
     (description "EditorConfig makes it easy to maintain the correct coding
@@ -874,25 +852,26 @@ editors.")
 (define-public texmacs
   (package
     (name "texmacs")
-    (version "2.1")
+    (version "2.1.1")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://www.texmacs.org/Download/ftp/tmftp/"
                            "source/TeXmacs-" version "-src.tar.gz"))
        (sha256
-        (base32 "1gl6k1bwrk1y7hjyl4xvlqvmk5crl4jvsk8wrfp7ynbdin6n2i48"))))
-    (build-system gnu-build-system)
+        (base32 "0c780vcwppzhb70d3d96md3hra7338d4fv3aj0sm7jx0mj2a334i"))))
+    (build-system cmake-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("xdg-utils" ,xdg-utils)))       ;for xdg-icon-resource
+     (list pkg-config xdg-utils))       ;for xdg-icon-resource
     (inputs
-     `(("freetype" ,freetype)
-       ("guile" ,guile-1.8)
-       ("perl" ,perl)
-       ("python" ,python-wrapper)
-       ("qt" ,qtbase-5)
-       ("qtsvg" ,qtsvg)))
+     (list freetype
+           guile-1.8
+           libjpeg-turbo
+           perl
+           python-wrapper
+           qtbase-5
+           qtsvg-5
+           sqlite))
     (arguments
      `(#:tests? #f                      ; no check target
        #:phases
@@ -903,13 +882,6 @@ editors.")
                (substitute* "packages/linux/icons.sh"
                  (("/usr/share")
                   (string-append out "/share"))))))
-         (add-after 'install 'install-desktop-file
-           (lambda* (#:key outputs #:allow-other-keys)
-             ;; Install desktop file.
-             (let* ((out (assoc-ref outputs "out"))
-                    (apps (string-append out "/share/applications"))
-                    (source "TeXmacs/misc/mime/texmacs.desktop"))
-               (install-file source apps))))
          (add-before 'configure 'gzip-flags
            (lambda _
              (substitute* "Makefile.in"
@@ -927,37 +899,38 @@ Octave.  TeXmacs is completely extensible via Guile.")
 (define-public scintilla
   (package
     (name "scintilla")
-    (version "5.1.1")
+    (version "5.2.4")
     (source
      (origin
        (method url-fetch)
        (uri (let ((v (apply string-append (string-split version #\.))))
               (string-append "https://www.scintilla.org/scintilla" v ".tgz")))
        (sha256
-        (base32 "1d0yjx2wlx4fj5bccxdgfmrr7nzazkw4m08i6h4c0a54sb484yif"))))
+        (base32 "0rncbac9r9ahkxgmv7faj4dms4wy0ik2axmb0lp1ffx4r6419vsa"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:make-flags (list "GTK3=1" "CC=gcc" "-Cgtk")
-       #:tests? #f                      ;require un-packaged Pyside
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)            ;no configure script
-         (replace 'install
-           ;; Upstream provides no install script.
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (lib (string-append out "/lib"))
-                    (include (string-append out "/include")))
-               (for-each (lambda (f) (install-file f lib))
-                         (find-files "bin/" "\\.so$"))
-               (for-each (lambda (f) (install-file f include))
-                         (find-files "include/" "."))))))))
+     (list
+      #:make-flags
+      #~(list "GTK3=1"
+              (string-append "CC=" #$(cc-for-target))
+              "-Cgtk")
+      #:tests? #f                       ;require un-packaged Pyside
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)           ;no configure script
+          (replace 'install
+            ;; Upstream provides no install script.
+            (lambda _
+              (let ((lib (string-append #$output "/lib"))
+                    (inc (string-append #$output "/include")))
+                (for-each (lambda (f) (install-file f lib))
+                          (find-files "bin/" "\\.so$"))
+                (for-each (lambda (f) (install-file f inc))
+                          (find-files "include/" "."))))))))
     (native-inputs
-     `(("gcc" ,gcc-9)                   ;Code has C++17 requirements
-       ("pkg-config" ,pkg-config)
-       ("python" ,python-wrapper)))
+     (list pkg-config python-wrapper))
     (inputs
-     `(("gtk+" ,gtk+)))
+     (list gtk+))
     (home-page "https://www.scintilla.org/")
     (synopsis "Code editor for GTK+")
     (description "Scintilla is a source code editing component for
@@ -983,20 +956,20 @@ and multiple fonts.")
         (base32 "0inmmb9wra2w99pfv6p64d66s2zrhafc8drhwmga7gj89mp1gzxb"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("doxygen" ,doxygen)
-       ("glib" ,glib "bin")
-       ("intltool" ,intltool)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)
-       ("python-docutils" ,python-docutils))) ;for rst2html
+     (list autoconf
+           automake
+           doxygen
+           `(,glib "bin")
+           intltool
+           libtool
+           pkg-config
+           python-docutils)) ;for rst2html
     (inputs
-     `(("gtk+" ,gtk+)
-       ;; FIXME: Geany bundles a 3.X release of Scintilla.  It is not
-       ;; currently possible to replace it with our Scintilla package.
-       ;; ("scintilla" ,scintilla)
-       ))
+     (list gtk+
+           ;; FIXME: Geany bundles a 3.X release of Scintilla.  It is not
+           ;; currently possible to replace it with our Scintilla package.
+           ;; ("scintilla" ,scintilla)
+           ))
     (arguments
      `(#:imported-modules ((guix build glib-or-gtk-build-system)
                            ,@%gnu-build-system-modules)
@@ -1059,7 +1032,7 @@ The basic features of Geany are:
     (native-inputs
      `(("gettext" ,gettext-minimal)))
     (inputs
-     `(("ncurses" ,ncurses)))
+     (list ncurses))
     (home-page "http://www.moria.de/~michael/fe/")
     (synopsis "Small folding editor")
     (description "Fe is a small folding editor.  It folds
@@ -1095,10 +1068,9 @@ card.  It offers:
                 "0sg2f6lxq6cjkpd3dvlxxns82hvq826rjnams5in97pssmknr77g"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("perl" ,perl)
-       ("texinfo" ,texinfo)))
+     (list perl texinfo))
     (inputs
-     `(("ncurses" ,ncurses)))
+     (list ncurses))
     (arguments
      `(#:tests? #f
        #:make-flags
@@ -1149,7 +1121,7 @@ files.  It was originally developed on the Amiga 3000T.")
        (modify-phases %standard-phases
          (delete 'configure))))         ;no configure script
     (inputs
-     `(("ncurses" ,ncurses)))
+     (list ncurses))
     (home-page "https://devel.ringlet.net/editors/hexer/")
     (synopsis "Multi buffer editor for binary files with vi-like interface")
     (description "Hexer is a multi-buffer editor for binary files for Unix-like
@@ -1157,41 +1129,135 @@ systems that displays its buffer(s) as a hex dump.  The user interface is kept
 similar to vi/ex.")
     (license license:bsd-3)))
 
-(define-public virtaal
+(define-public edlin
   (package
-    (name "virtaal")
-    (version "0.7.1")
+    (name "edlin")
+    (version "2.20")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "mirror://sourceforge/freedos-edlin/freedos-edlin/"
+                           version "/edlin-" version ".tar.bz2"))
+       (sha256
+        (base32 "0cdv42ffminncwj5ph9lw0j7zpbv8l35acppy90wj7x1qm4qk6x8"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'make-read-only
+           (lambda _
+             ;; Remove executable bits.
+             (chmod "COPYING" #o444)
+             (chmod "edlin.htm" #o444)))
+         (add-after 'install 'install-doc
+           (lambda* (#:key outputs #:allow-other-keys)
+             (let ((doc-dir (string-append (assoc-ref outputs "out")
+                                           "/share/doc/edlin-" ,version)))
+               (mkdir-p doc-dir)
+               (install-file "edlin.htm" doc-dir)))))))
+    (home-page "https://sourceforge.net/projects/freedos-edlin/")
+    (synopsis "The line editor of the FreeDOS operating system")
+    (description "The @code{edlin} program is a small line editor, written for
+FreeDOS as a functional clone of the old MS-DOS program edlin.")
+    (license license:gpl2+)))
+
+(define-public tree-sitter
+  (package
+    (name "tree-sitter")
+    (version "0.20.6")
     (source (origin
-              (method url-fetch)
-              (uri (string-append "mirror://sourceforge/translate/Virtaal/"
-                                  version "/virtaal-" version ".tar.bz2"))
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/tree-sitter/tree-sitter")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
               (sha256
                (base32
-                "0cyimjp3191qlmw6n0ipqdr9xr0cq4f6dqvz4rl9q31h6l3kywf9"))))
-    (build-system python-build-system)
+                "1z20518snyg0zp75qgs5bxmzjqws4dd19vnp6sya494za3qp5b6d"))
+              (modules '((guix build utils)))
+              (snippet '(begin
+                          ;; Remove bundled ICU parts
+                          (delete-file-recursively "lib/src/unicode")
+                          #t))))
+    (build-system gnu-build-system)
+    (inputs (list icu4c))
     (arguments
-     `(#:python ,python-2
-       #:use-setuptools? #f
-       #:tests? #f ;; Failing tests
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'configure
-           (lambda* (#:key outputs #:allow-other-keys)
-             ;; Set data file path to absolute store path.
-             (substitute* "virtaal/common/pan_app.py"
-               (("file_discovery\\.get_abs_data_filename.*")
-                (string-append "os.path.join('"
-                               (assoc-ref outputs "out")
-                               "/share', *path_parts)"))))))))
-    (inputs
-     `(("python2-lxml" ,python2-lxml)
-       ("python2-pygtk" ,python2-pygtk)
-       ("python2-simplejson" ,python2-simplejson)
-       ("python2-translate-toolkit" ,python2-translate-toolkit)
-       ("python2-pycurl" ,python2-pycurl)))
-    (synopsis "Graphical translation tool")
-    (description "Virtaal is a powerful yet simple translation tool with an
-uncluttered user interface.  It supports a multitude of translation formats
-provided by the Translate Toolkit, including XLIFF and PO.")
-    (home-page "https://virtaal.translatehouse.org/")
-    (license license:gpl2+)))
+     (list #:phases
+           '(modify-phases %standard-phases
+              (delete 'configure))
+           #:tests? #f ; there are no tests for the runtime library
+           #:make-flags
+           #~(list (string-append "PREFIX="
+                                  #$output)
+                   (string-append "CC="
+                                  #$(cc-for-target)))))
+    (home-page "https://tree-sitter.github.io/tree-sitter/")
+    (synopsis "Incremental parsing system for programming tools")
+    (description
+     "Tree-sitter is a parser generator tool and an incremental parsing
+library.  It can build a concrete syntax tree for a source file and efficiently
+update the syntax tree as the source file is edited.
+
+Tree-sitter aims to be:
+
+@itemize
+@item General enough to parse any programming language
+@item Fast enough to parse on every keystroke in a text editor
+@item Robust enough to provide useful results even in the presence of syntax errors
+@item Dependency-free so that the runtime library (which is written in pure C)
+can be embedded in any application
+@end itemize
+
+This package includes the @code{libtree-sitter} runtime library.
+")
+    (license license:expat)))
+
+(define-public mle
+  (package
+    (name "mle")
+    (version "1.5.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/adsr/mle")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1nhd00lsx9v12zdmps92magz76c2d8zzln3lxvzl4ng73gbvq3n0"))))
+    (build-system gnu-build-system)
+    (inputs (list lua pcre uthash))
+    (arguments
+     `(#:test-target "test"
+       #:phases (modify-phases %standard-phases
+                  (add-after 'unpack 'fix-lua
+                    (lambda* (#:key inputs #:allow-other-keys)
+                      (substitute* "mle.h"
+                        (("<lua5.4/") "<"))
+                      (substitute* "Makefile"
+                        (("-llua5.4") "-llua")
+                        (("/bin/sh") (which "sh")))))
+                  (add-after 'unpack 'patch-test-shebangs
+                    (lambda _
+                      (substitute* (find-files "tests/func" "\\.sh$")
+                        (("/usr/bin/env bash") (which "bash")))))
+                  (delete 'configure) ;no configure script
+                  (add-after 'install 'install-man-pages
+                    (lambda* (#:key outputs #:allow-other-keys)
+                      (let* ((out (assoc-ref outputs "out"))
+                             (man (string-append out
+                                                 "/share/man/man1")))
+                        (install-file "mle.1"
+                                      (string-append man))))))
+       #:make-flags (list (string-append "CC="
+                                         ,(cc-for-target))
+                          (string-append "prefix=" %output))))
+    (home-page "https://github.com/adsr/mle")
+    (synopsis "Small, flexible, terminal-based text editor")
+    (description
+     "mle is a small, flexible, terminal-based text editor written in C.
+Notable features include: full Unicode support, syntax highlighting,
+scriptable rc file, macros, search and replace (PCRE), window
+splitting, multiple cursors, and integration with various shell
+commands.")
+    (license license:asl2.0)))

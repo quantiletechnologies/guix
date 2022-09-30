@@ -71,7 +71,7 @@
 (define-public nextcloud-client
   (package
     (name "nextcloud-client")
-    (version "3.1.3")
+    (version "3.2.0")
     (source
      (origin
        (method git-fetch)
@@ -82,7 +82,7 @@
        (file-name
         (git-file-name name version))
        (sha256
-        (base32 "15ymk3gvfmgwzmqbhlw7jjy9y65ib3391h1dlmpll65iaj2miajk"))
+        (base32 "137h65sn4ixspbblvn0r2ngg8234yk582bppkkr87c3krfp21gx4"))
        (modules '((guix build utils)
                   (ice-9 ftw)
                   (srfi srfi-1)))
@@ -132,9 +132,7 @@
     (arguments
      `(#:configure-flags
        (list
-        "-DUNIT_TESTING=ON"
-        ;; Upstream Bug: https://github.com/nextcloud/desktop/issues/2885
-        "-DNO_SHIBBOLETH=ON")
+        "-DUNIT_TESTING=ON")
        #:imported-modules
        ((guix build glib-or-gtk-build-system)
         ,@%qt-build-system-modules)
@@ -156,9 +154,8 @@
                (("ON CACHE") "OFF CACHE"))
              (substitute* "src/gui/CMakeLists.txt"
                (("@kwidgetsaddons@")
-                (string-append (assoc-ref inputs "kwidgetsaddons")
-                               "/include/KF5/KWidgetsAddons/")))
-             #t))
+                (search-input-directory inputs
+                                        "/include/KF5/KWidgetsAddons/")))))
          (add-before 'check 'pre-check
            (lambda _
              ;; Tests write to $HOME.
@@ -177,36 +174,34 @@
        ("perl" ,perl)
        ("pkg-config" ,pkg-config)
        ("python" ,python-wrapper)
-       ("qttools" ,qttools)
+       ("qttools-5" ,qttools-5)
        ("ruby" ,ruby)))
     (inputs
-     `(("appstream" ,appstream)
-       ("desktop-file-utils" ,desktop-file-utils)
-       ("glib" ,glib)
-       ("kconfig" ,kconfig)
-       ("kcoreaddons" ,kcoreaddons)
-       ("kio" ,kio)
-       ("kjs" ,kjs)
-       ("kwidgetsaddons" ,kwidgetsaddons)
-       ("libcloudproviders" ,libcloudproviders)
-       ("libzip" ,libzip)
-       ("openssl" ,openssl)
-       ("python-nautilus" ,python-nautilus)
-       ("qtbase" ,qtbase-5)
-       ("qtdeclarative" ,qtdeclarative)
-       ("qtgraphicaleffects" ,qtgraphicaleffects)
-       ("qtkeychain" ,qtkeychain)
-       ("qtquickcontrols2" ,qtquickcontrols2)
-       ("qtsolutions" ,qtsolutions)
-       ("qtsvg" ,qtsvg)
-       ("qtwebchannel" ,qtwebchannel)
-       ("qtwebsockets" ,qtwebsockets)
-       ("qtwebkit" ,qtwebkit)
-       ("sqlite" ,sqlite)
-       ("xdg-utils" ,xdg-utils)
-       ("zlib" ,zlib)))
+     (list appstream
+           desktop-file-utils
+           glib
+           kconfig
+           kcoreaddons
+           kio
+           kjs
+           kwidgetsaddons
+           libcloudproviders
+           libzip
+           openssl
+           qtbase-5
+           qtdeclarative-5
+           qtgraphicaleffects
+           qtkeychain
+           qtquickcontrols2-5
+           qtsolutions
+           qtsvg-5
+           qtwebchannel-5
+           qtwebsockets-5
+           sqlite
+           xdg-utils
+           zlib))
     (propagated-inputs
-     `(("qtwebengine" ,qtwebengine)))
+     (list qtwebengine-5))
     (synopsis "Desktop sync client for Nextcloud")
     (description "Nextcloud-Desktop is a tool to synchronize files from
 Nextcloud Server with your computer.")
@@ -237,9 +232,7 @@ Nextcloud Server with your computer.")
      `(#:tests? #f
        #:configure-flags '("--with-pcre")))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (inputs
      `(("c-ares" ,c-ares)
        ("crypto++" ,crypto++)
@@ -287,13 +280,11 @@ distributions.")
                                           "/etc/bash_completion.d"))
              #t)))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ;; For documentation
-       ("asciidoc" ,asciidoc)))
+     (list pkg-config
+           ;; For documentation
+           asciidoc))
     (inputs
-     `(("curl" ,curl)
-       ("glib" ,glib)
-       ("openssl" ,openssl)))
+     (list curl glib openssl))
     (home-page "https://megatools.megous.com/")
     (synopsis "Command line client application for mega.nz")
     (description "Megatools is a collection of programs for accessing the mega.nz service
@@ -356,12 +347,9 @@ See also: megacmd, the official tool set by MEGA.")
        ("extra-cmake-modules" ,extra-cmake-modules)
        ("perl" ,perl)
        ("pkg-config" ,pkg-config)
-       ("qtlinguist" ,qttools)))
+       ("qtlinguist" ,qttools-5)))
     (inputs
-     `(("qtbase" ,qtbase-5)
-       ("qtkeychain" ,qtkeychain)
-       ("sqlite" ,sqlite)
-       ("zlib" ,zlib)))
+     (list qtbase-5 qtkeychain sqlite zlib))
     (home-page "https://owncloud.org")
     (synopsis "Folder synchronization with an ownCloud server")
     (description "The ownCloudSync system lets you always have your latest
@@ -370,59 +358,6 @@ to and a server to synchronize to.  You can configure more computers to
 synchronize to the same server and any change to the files on one computer will
 silently and reliably flow across to every other.")
     (license license:gpl2+)))
-
-(define-public qsyncthingtray
-  (package
-    (name "qsyncthingtray")
-    (version "0.5.8")
-    (source
-      (origin
-        (method git-fetch)
-        (uri (git-reference
-               (url "https://github.com/sieren/QSyncthingTray")
-               (commit version)))
-        (file-name (git-file-name name version))
-        (sha256
-         (base32
-          "1n9g4j7qznvg9zl6x163pi9f7wsc3x6q76i33psnm7x2v1i22x5w"))))
-    (build-system cmake-build-system)
-    (arguments
-     `(#:configure-flags '("-DQST_BUILD_WEBKIT=1")
-       #:phases
-       (modify-phases %standard-phases
-         ;; The program is meant to be run from the git repo or source tarball.
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (bin (string-append out "/bin")))
-               (install-file "QSyncthingTray" bin)
-               (mkdir-p (string-append out "/share/pixmaps"))
-               (copy-file "../source/resources/images/Icon1024.png"
-                          (string-append
-                            out "/share/pixmaps/QSyncthingTray.png"))
-               #t))))
-       #:tests? #f)) ; no test target
-    (inputs
-     `(("qtbase" ,qtbase-5)
-       ("qtwebkit" ,qtwebkit)))
-    (home-page "https://github.com/sieren/QSyncthingTray")
-    (synopsis "Traybar Application for Syncthing")
-    (description
-     "A traybar application for syncthing.
-@enumerate
-@item Shows number of connections at a glance.
-@item Traffic statistics about incoming, outgoing and total throughput.
-@item Launches Syncthing and Syncthing-iNotifier if specified.
-@item Quickly pause Syncthing with one click.
-@item Last Synced Files - Quickly see the recently synchronised files and open
-their folder.
-@item Quick Access to all shared folders.
-@item Presents Syncthing UI in a separate view instead of using the browser.
-@item Supports authenticated HTTPS connections.
-@item Uses System Notifications about current connection status.
-@item Toggle for monochrome icon.
-@end enumerate\n")
-    (license license:lgpl3+)))
 
 (define-public lsyncd
   (package
@@ -467,7 +402,7 @@ their folder.
                (install-file "../source/doc/manpage/lsyncd.1" man)
                #t))))))
     (native-inputs
-     `(("lua" ,lua-5.2)))
+     (list lua-5.2))
     (home-page "https://github.com/axkibe/lsyncd")
     (synopsis "Synchronize local directories with remote targets")
     (description "Lsyncd watches a local directory trees event monitor
@@ -496,10 +431,9 @@ and does not hamper local file system performance.")
           (base32 "16i1q8f0jmfd43rb8d70l2b383vr5ib4kh7iq3yd345q7xjz9c2j"))))
       (build-system copy-build-system)
       (inputs
-       `(("scsh" ,scsh)))
+       (list scsh))
       (propagated-inputs
-       `(("rsync" ,rsync)
-         ("unison" ,unison)))
+       (list rsync unison))
       (arguments
        `(#:install-plan '(("usync" "bin/usync"))
          #:phases (modify-phases %standard-phases
@@ -517,37 +451,42 @@ written in @command{scsh}.  It makes use of @command{unison} and
       (license license:expat))))
 
 (define-public casync
-  (package
-    (name "casync")
-    (version "2")
-    (home-page "https://github.com/systemd/casync/")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url home-page)
-                    (commit (string-append "v" version))))
-              (sha256
-               (base32
-                "0znkp3fcksrykcsv06y2mjvf2lbwmin25snmvfa8i5qfm3f4rm88"))
-              (file-name (string-append name "-" version "-checkout"))
-              (patches (search-patches "casync-renameat2-declaration.patch"))))
-    (build-system meson-build-system)
-    (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("python-sphinx" ,python-sphinx)
-       ("rsync" ,rsync)))                         ;for tests
-    (inputs
-     `(("xz" ,xz)                                 ;for liblzma
-       ("zstd" ,zstd "lib")
-       ("curl" ,curl)
-       ("acl" ,acl)
-       ("libselinux" ,libselinux)
-       ("fuse" ,fuse)
-       ("openssl" ,openssl)
-       ("zlib" ,zlib)))
-    (synopsis "File synchronization and backup system")
-    (description
-     "casync is a @dfn{content-addressable data synchronizer} that can be used
+  (let ((commit "99559cd1d8cea69b30022261b5ed0b8021415654")
+        (revision "0"))
+    (package
+      (name "casync")
+      (version (git-version "2" revision commit))
+      (home-page "https://github.com/systemd/casync/")
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url home-page)
+                      (commit commit)))
+                (sha256
+                 (base32
+                  "139g82rkwv1kzss6crfmw3p01xnyjzz66b1ckprpbfncxb24047w"))
+                (file-name (string-append name "-" version "-checkout"))))
+      (build-system meson-build-system)
+      (arguments
+       `(#:configure-flags
+         (let ((out (assoc-ref %outputs "out")))
+           (list (string-append "-Dudevrulesdir="
+                                out "/lib/udev/rules.d")))))
+      (native-inputs
+       (list pkg-config python python-sphinx rsync))                  ;for tests
+      (inputs
+       (list xz ;for liblzma
+             `(,zstd "lib")
+             curl
+             acl
+             libselinux
+             eudev
+             fuse
+             openssl
+             zlib))
+      (synopsis "File synchronization and backup system")
+      (description
+       "casync is a @dfn{content-addressable data synchronizer} that can be used
 as the basis of a backup system.  It is:
 
 @itemize
@@ -558,7 +497,7 @@ large file systems or directory trees;
 over the Internet in an HTTP and CDN friendly way;
 @item An efficient backup system.
 @end itemize\n")
-    (license license:lgpl2.1+)))
+      (license license:lgpl2.1+))))
 
 (define-public rclone
   (package

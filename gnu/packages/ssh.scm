@@ -1,8 +1,8 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013, 2014 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2014, 2015, 2016 Mark H Weaver <mhw@netris.org>
-;;; Copyright © 2015, 2016, 2018, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2015, 2016, 2018, 2019, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016, 2019 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2016, 2021 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2016 Christine Lemmer-Webber <cwebber@dustycloud.org>
@@ -15,7 +15,7 @@
 ;;; Copyright © 2019, 2020 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2020 Oleg Pykhalov <go.wigust@gmail.com>
-;;; Copyright © 2020 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2020, 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -35,9 +35,11 @@
 
 (define-module (gnu packages ssh)
   #:use-module (gnu packages)
+  #:use-module (gnu packages admin)
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages base)
   #:use-module (gnu packages boost)
+  #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages crypto)
   #:use-module (gnu packages elf)
@@ -63,6 +65,7 @@
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages readline)
+  #:use-module (gnu packages security-token)
   #:use-module (gnu packages texinfo)
   #:use-module (gnu packages tls)
   #:use-module (gnu packages xorg)
@@ -71,6 +74,7 @@
   #:use-module (guix build-system python)
   #:use-module (guix download)
   #:use-module (guix git-download)
+  #:use-module (guix gexp)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
   #:use-module (guix utils)
@@ -79,32 +83,31 @@
 (define-public hss
   (package
     (name "hss")
-    (version "1.8")
+    (version "1.9")
     (source (origin
               (method git-fetch)
               (uri (git-reference
                     (url "https://github.com/six-ddc/hss")
-                    (commit (string-append "v" version))))
+                    (commit version)))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1rpysj65j9ls30bf2c5k5hykzzjfknrihs58imp178bx1wqzw4jl"))))
+                "12578xhvkg70ma411yh8nbpcpnys420bnm9g0dzypb0vn3jxpz8q"))))
     (inputs
-     `(("readline" ,readline)))
+     (list readline))
     (arguments
-     `(#:make-flags
-       (list ,(string-append "CC=" (cc-for-target))
-             (string-append "INSTALL_BIN=" (assoc-ref %outputs "out") "/bin"))
-       #:tests? #f                      ; no tests
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'patch-file-names
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (substitute* "Makefile"
-               (("/usr/local/opt/readline")
-                (assoc-ref inputs "readline")))
-             #t))
-         (delete 'configure))))         ; no configure script
+     (list #:make-flags
+           #~(list (string-append "CC=" #$(cc-for-target))
+                   (string-append "INSTALL_BIN=" #$output "/bin"))
+           #:tests? #f                  ; no tests
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'patch-file-names
+                 (lambda _
+                   (substitute* "Makefile"
+                     (("/usr/local/opt/readline")
+                      #$(this-package-input "readline")))))
+               (delete 'configure))))         ; no configure script
     (build-system gnu-build-system)
     (home-page "https://github.com/six-ddc/hss/")
     (synopsis "Interactive SSH client for multiple servers")
@@ -143,9 +146,7 @@ file names.
 
        ;; TODO: Add 'CMockery' and '-DWITH_TESTING=ON' for the test suite.
        #:tests? #f))
-    (inputs `(("zlib" ,zlib)
-              ("libgcrypt" ,libgcrypt)
-              ("mit-krb5" ,mit-krb5)))
+    (inputs (list zlib libgcrypt mit-krb5))
     (synopsis "SSH client library")
     (description
      "libssh is a C library implementing the SSHv2 and SSHv1 protocol for client
@@ -171,8 +172,7 @@ applications.")
    (build-system gnu-build-system)
    ;; The installed libssh2.pc file does not include paths to libgcrypt and
    ;; zlib libraries, so we need to propagate the inputs.
-   (propagated-inputs `(("libgcrypt" ,libgcrypt)
-                        ("zlib" ,zlib)))
+   (propagated-inputs (list libgcrypt zlib))
    (arguments `(#:configure-flags `("--with-libgcrypt")))
    (synopsis "Client-side C library implementing the SSH2 protocol")
    (description
@@ -186,23 +186,24 @@ a server that supports the SSH-2 protocol.")
 (define-public openssh
   (package
    (name "openssh")
-   (version "8.8p1")
+   (version "8.9p1")
    (source (origin
              (method url-fetch)
              (uri (string-append "mirror://openbsd/OpenSSH/portable/"
                                  "openssh-" version ".tar.gz"))
-             (patches (search-patches "openssh-hurd.patch"))
+             (patches (search-patches "openssh-hurd.patch"
+                                      "openssh-trust-guix-store-directory.patch"))
              (sha256
               (base32
-               "1s8z6f7mi1pwsl79cqai8cr350m5lf2ifcxff57wx6mvm478k425"))))
+               "1ry5prcax0134v6srkgznpl9ch5snkgq7yvjqvd8c5mbnxa7cjgx"))))
    (build-system gnu-build-system)
-   (native-inputs `(("groff" ,groff)
-                    ("pkg-config" ,pkg-config)))
+   (native-inputs (list groff pkg-config))
    (inputs `(("libedit" ,libedit)
              ("openssl" ,openssl)
              ,@(if (hurd-target?)
-                 '()
-                 `(("pam" ,linux-pam)))
+                   '()
+                   `(("pam" ,linux-pam)
+                     ("libfido2" ,libfido2)))     ;fails to build on GNU/Hurd
              ("mit-krb5" ,mit-krb5)
              ("zlib" ,zlib)
              ("xauth" ,xauth)))        ; for 'ssh -X' and 'ssh -Y'
@@ -227,7 +228,13 @@ a server that supports the SSH-2 protocol.")
                           ;; Enable PAM support in sshd.
                           ,,@(if (hurd-target?)
                                '()
-                               '("--with-pam"))
+                               '("--with-pam"
+
+                                 ;; Support creation and use of ecdsa-sk,
+                                 ;; ed25519-sk keys.
+                                 "--with-security-key-builtin"))
+
+
 
                           ;; "make install" runs "install -s" by default,
                           ;; which doesn't work for cross-compiled binaries
@@ -245,6 +252,11 @@ a server that supports the SSH-2 protocol.")
              (substitute* "Makefile"
                (("PRIVSEP_PATH=/var/empty")
                 (string-append "PRIVSEP_PATH=" out "/var/empty"))))))
+        (add-after 'configure 'set-store-location
+          (lambda* _
+            (substitute* "misc.c"
+              (("@STORE_DIRECTORY@")
+               (string-append "\"" (%store-directory) "\"")))))
         (add-before 'check 'patch-tests
          (lambda _
            (substitute* "regress/test-exec.sh"
@@ -290,6 +302,8 @@ TCP-forwarding.  It provides a flow control service for these channels.
 Additionally, various channel-specific options can be negotiated.")
    (license (license:non-copyleft "file://LICENSE"
                                "See LICENSE in the distribution."))
+   (properties
+    '((release-monitoring-url . "https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/")))
    (home-page "https://www.openssh.com/")))
 
 ;; OpenSSH without X support. This allows to use OpenSSH without dragging X
@@ -304,18 +318,17 @@ Additionally, various channel-specific options can be negotiated.")
 (define-public guile-ssh
   (package
     (name "guile-ssh")
-    (version "0.13.1")
+    (version "0.15.1")
     (home-page "https://github.com/artyom-poptsov/guile-ssh")
     (source (origin
               (method git-fetch)
               (uri (git-reference
                     (url home-page)
                     (commit (string-append "v" version))))
-              (file-name (string-append name "-" version ".tar.gz"))
+              (file-name (git-file-name name version))
               (sha256
                (base32
-                "1xpxkvgj7wgcl450djkcrmrf957mcy2f36hfs5g6kpla1gax2d1g"))
-              (modules '((guix build utils)))))
+                "0zzn5hsf97b35gixyg4z14sspl15qwnp52y4h89wra4y31l7467q"))))
     (build-system gnu-build-system)
     (outputs '("out" "debug"))
     (arguments
@@ -323,6 +336,13 @@ Additionally, various channel-specific options can be negotiated.")
        #:configure-flags '("--disable-static")
 
        #:phases (modify-phases %standard-phases
+                  (add-before 'bootstrap 'support-cross-compilation
+                    (lambda _
+                      ;; Support cross-compilation:
+                      ;; <https://github.com/artyom-poptsov/guile-ssh/issues/30>.
+                      (substitute* "libguile-ssh/Makefile.am"
+                        (("\\$\\(guile_snarf\\)")
+                         "CPP=\"$(CPP)\" $(guile_snarf)"))))
                   (add-before 'build 'fix-libguile-ssh-file-name
                     (lambda* (#:key outputs #:allow-other-keys)
                       ;; Build and install libguile-ssh.so so that we can use
@@ -360,16 +380,14 @@ Additionally, various channel-specific options can be negotiated.")
                                      (string-append examples "/sssh.scm"))
                         (delete-file-recursively bin)
                         #t))))))
-    (native-inputs `(("autoconf" ,autoconf)
-                     ("automake" ,automake)
-                     ("libtool" ,libtool)
-                     ("texinfo" ,texinfo)
-                     ("pkg-config" ,pkg-config)
-                     ("which" ,which)
-                     ("guile" ,guile-3.0))) ;needed when cross-compiling.
-    (inputs `(("guile" ,guile-3.0)
-              ("libssh" ,libssh)
-              ("libgcrypt" ,libgcrypt)))
+    (native-inputs (list autoconf
+                         automake
+                         libtool
+                         texinfo
+                         pkg-config
+                         which
+                         guile-3.0)) ;needed when cross-compiling.
+    (inputs (list guile-3.0 libssh libgcrypt))
     (synopsis "Guile bindings to libssh")
     (description
      "Guile-SSH is a library that provides access to the SSH protocol for
@@ -377,28 +395,17 @@ programs written in GNU Guile interpreter.  It is a wrapper to the underlying
 libssh library.")
     (license license:gpl3+)))
 
-(define-public guile2.0-ssh
-  (package
-    (inherit guile-ssh)
-    (name "guile2.0-ssh")
-    (native-inputs
-     `(("guile" ,guile-2.0) ;needed when cross-compiling.
-       ,@(alist-delete "guile" (package-native-inputs guile-ssh))))
-    (inputs `(("guile" ,guile-2.0)
-              ,@(alist-delete "guile" (package-inputs guile-ssh))))))
-
 (define-public guile2.2-ssh
   (package
     (inherit guile-ssh)
     (name "guile2.2-ssh")
     (native-inputs
-     `(("guile" ,guile-2.2) ;needed when cross-compiling.
-       ,@(alist-delete "guile" (package-native-inputs guile-ssh))))
-    (inputs `(("guile" ,guile-2.2)
-              ,@(alist-delete "guile" (package-inputs guile-ssh))))))
-
-(define-public guile3.0-ssh
-  (deprecated-package "guile3.0-ssh" guile-ssh))
+     (modify-inputs (package-native-inputs guile-ssh)
+       (delete "guile")
+       (prepend guile-2.2 ;needed when cross-compiling.
+                )))
+    (inputs (modify-inputs (package-inputs guile-ssh)
+              (replace "guile" guile-2.2)))))
 
 (define-public corkscrew
   ;; The last 2.0 release hails from 2009.  Use a fork (submitted upstream as
@@ -440,11 +447,9 @@ libssh library.")
                  (install-file "README.md" doc)
                  #t))))))
       (native-inputs
-       `(("autoconf" ,autoconf)
-         ("automake" ,automake)
-         ("pkg-config" ,pkg-config)))
+       (list autoconf automake pkg-config))
       (inputs
-       `(("openssl" ,openssl)))
+       (list openssl))
       (home-page "https://github.com/patpadgett/corkscrew")
       (synopsis "SSH tunneling through HTTP(S) proxies")
       (description
@@ -482,7 +487,7 @@ with optional @acronym{TLS, Transport-Level Security} to protect credentials.")
                (wrap-program (string-append bin "/mosh")
                              `("PATH" ":" prefix (,bin)))))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
      `(("openssl" ,openssl)
        ("perl" ,perl)
@@ -503,7 +508,7 @@ responsive, especially over Wi-Fi, cellular, and long-distance links.")
 (define-public dropbear
   (package
     (name "dropbear")
-    (version "2020.81")
+    (version "2022.82")
     (source
      (origin
        (method url-fetch)
@@ -511,23 +516,34 @@ responsive, especially over Wi-Fi, cellular, and long-distance links.")
              "https://matt.ucc.asn.au/dropbear/releases/"
              "dropbear-" version ".tar.bz2"))
        (sha256
-        (base32 "0fy5ma4cfc2pk25mcccc67b2mf1rnb2c06ilb7ddnxbpnc85s8s8"))
+        (base32 "1lbmmmm8f56p24c6jq74rg2kw6kl3w4i5h10vnxjigq2phmqs0rs"))
        (modules '((guix build utils)))
        (snippet
         '(begin
            (delete-file-recursively "libtommath")
            (delete-file-recursively "libtomcrypt")
            (substitute* "configure"
-             (("-ltomcrypt") "-ltomcrypt -ltommath"))
-           #t))))
+             (("-ltomcrypt") "-ltomcrypt -ltommath"))))))
     (build-system gnu-build-system)
     (arguments
-     `(#:configure-flags '("--disable-bundled-libtom")
-       #:tests? #f))    ; there is no "make check" or anything similar
-    (inputs
-     `(("libtomcrypt" ,libtomcrypt)
-       ("libtommath" ,libtommath)
-       ("zlib" ,zlib)))
+     (list
+      #:configure-flags #~(list "--disable-bundled-libtom")
+      ;; The test suite runs an instance of dropbear, which requires a
+      ;; resolver ("Error resolving: Servname not supported for ai_socktype").
+      #:tests? #f
+      #:phases #~(modify-phases %standard-phases
+                   (add-after 'unpack 'enable-x11-forwarding
+                     (lambda _
+                       ;; The following patch was retrieved from:
+                       ;; https://github.com/mkj/dropbear/commit/
+                       ;; 0292aacdf0aa57d03f2a3ab7e53cf650e6f29389.
+                       (substitute* "svr-x11fwd.c"
+                         (("DROPBEAR_CHANNEL_PRIO_INTERACTIVE")
+                          "DROPBEAR_PRIO_LOWDELAY"))
+                       (substitute* "default_options.h"
+                         (("#define DROPBEAR_X11FWD 0")
+                          "#define DROPBEAR_X11FWD 1")))))))
+    (inputs (list libtomcrypt libtommath zlib))
     (synopsis "Small SSH server and client")
     (description "Dropbear is a relatively small SSH server and
 client.  It runs on a variety of POSIX-based platforms.  Dropbear is
@@ -586,33 +602,29 @@ basis for almost any application.")
                     (("localhost") "127.0.0.1"))
 
                   (substitute* "src/testsuite/login-auth-test"
-                    (("/bin/cat") "cat"))
-                  #t))
+                    (("/bin/cat") "cat"))))
               (patches (search-patches "lsh-fix-x11-forwarding.patch"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("m4" ,m4)
-       ("guile" ,guile-2.0)
-       ("gperf" ,gperf)
-       ("psmisc" ,psmisc)))                       ; for `killall'
+     (list autoconf
+           automake
+           m4
+           guile-2.0
+           gperf
+           psmisc))                       ; for `killall'
     (inputs
-     `(("nettle" ,nettle-2)
-       ("linux-pam" ,linux-pam)
-
-       ;; 'rl.c' uses the 'CPPFunction' type, which is no longer in
-       ;; Readline 6.3.
-       ("readline" ,readline-6.2)
-
-       ("liboop" ,liboop)
-       ("zlib" ,zlib)
-       ("gmp" ,gmp)
-
-       ;; The server (lshd) invokes xauth when X11 forwarding is requested.
-       ;; This adds 24 MiB (or 27%) to the closure of lsh.
-       ("xauth" ,xauth)
-       ("libxau" ,libxau)))             ;also required for x11-forwarding
+     (list nettle-2
+           linux-pam
+           ;; 'rl.c' uses the 'CPPFunction' type, which is no longer in
+           ;; Readline 6.3.
+           readline-6.2
+           liboop
+           zlib
+           gmp
+           ;; The server (lshd) invokes xauth when X11 forwarding is requested.
+           ;; This adds 24 MiB (or 27%) to the closure of lsh.
+           xauth
+           libxau))             ;also required for x11-forwarding
     (arguments
      '(;; Skip the `configure' test that checks whether /dev/ptmx &
        ;; co. work as expected, because it relies on impurities (for
@@ -624,7 +636,10 @@ basis for almost any application.")
 
                            ;; 'lsh_argp.h' checks HAVE_ARGP_PARSE but nothing
                            ;; defines it.
-                           "CPPFLAGS=-DHAVE_ARGP_PARSE")
+                           "CPPFLAGS=-DHAVE_ARGP_PARSE"
+
+                           ;; Fix the build of lsh@2.1 with GCC 10.
+                           "CFLAGS=-O2 -g -fcommon")
        #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'disable-failing-tests
@@ -637,8 +652,7 @@ basis for almost any application.")
                (("seed-test \\\\")        ;prevent trailing slash
                 "seed-test")
                (("^\t(lsh|daemon|tcpip|socks|lshg|lcp|rapid7|lshd).*test.*")
-                ""))
-             #t))
+                ""))))
          (add-before 'configure 'pre-configure
            (lambda* (#:key inputs #:allow-other-keys)
              (let* ((nettle    (assoc-ref inputs "nettle"))
@@ -717,7 +731,7 @@ authentication}.")
         (base32 "0xqjw8df68f4kzkns5gcah61s5wk0m44qdk2z1d6388w6viwxhsz"))))
     (build-system gnu-build-system)
     (arguments `(#:tests? #f)) ; There is no "make check" or anything similar
-    (inputs `(("openssh" ,openssh)))
+    (inputs (list openssh))
     (synopsis "Automatically restart SSH sessions and tunnels")
     (description "autossh is a program to start a copy of @command{ssh} and
 monitor it, restarting it as necessary should it die or stop passing traffic.")
@@ -772,11 +786,9 @@ monitor it, restarting it as necessary should it die or stop passing traffic.")
                (("which") (which "which")))
              #t)))))
     (inputs
-     `(("openssh" ,openssh)
-       ("mit-krb5" ,mit-krb5)
-       ("perl" ,perl)))
+     (list openssh mit-krb5 perl))
     (native-inputs
-     `(("which" ,which)))
+     (list which))
     (home-page "https://github.com/chaos/pdsh")
     (synopsis "Parallel distributed shell")
     (description "Pdsh is a an efficient, multithreaded remote shell client
@@ -788,34 +800,38 @@ shell services and remote host selection.")
 (define-public python-asyncssh
   (package
     (name "python-asyncssh")
-    (version "2.7.1")
+    (version "2.11.0")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "asyncssh" version))
        (sha256
         (base32
-         "0lnhh2h1mj79j66ni883s9f3xldnbjb10vh80g24b7m003mm524c"))))
+         "0mkvyv2fmbdfnfdh7g2im0gxnp8hwxv5g1xdazfsipd9ggknrhsr"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-cryptography" ,python-cryptography)
-       ("python-pyopenssl" ,python-pyopenssl)
-       ("python-gssapi" ,python-gssapi)
-       ("python-bcrypt" ,python-bcrypt)))
+     (list python-cryptography python-pyopenssl python-gssapi
+           python-bcrypt python-typing-extensions))
     (native-inputs
-     `(("openssh" ,openssh)
-       ("openssl" ,openssl)))
+     (list openssh openssl python-fido2 python-aiofiles netcat
+           python-pytest))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'disable-tests
            (lambda* _
+             (substitute* "tests/test_connection.py"
+               ;; nc is always available.
+               (("which nc") "true"))
              (substitute* "tests/test_agent.py"
                ;; TODO Test fails for unknown reason
                (("(.+)async def test_confirm" all indent)
                 (string-append indent "@unittest.skip('disabled by guix')\n"
-                               indent "async def test_confirm")))
-             #t)))))
+                               indent "async def test_confirm")))))
+         (replace 'check
+           (lambda* (#:key tests? inputs outputs #:allow-other-keys)
+             (when tests?
+               (invoke "pytest" "-vv")))))))
     (home-page "https://asyncssh.readthedocs.io/")
     (synopsis "Asynchronous SSHv2 client and server library for Python")
     (description
@@ -827,18 +843,19 @@ framework.")
 (define-public clustershell
   (package
     (name "clustershell")
-    (version "1.8.3")
+    (version "1.8.4")
     (source
      (origin
-       (method url-fetch)
-       (uri (string-append "https://github.com/cea-hpc/clustershell/releases"
-                           "/download/v" version
-                           "/ClusterShell-" version ".tar.gz"))
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/cea-hpc/clustershell")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
        (sha256
-        (base32 "1qdcgh733szwj9r1gambrgfkizvbjci0bnnkds9a8mnyb3sasnan"))))
+        (base32 "11b87vyamcw4rvgxz74jxwkr9ly0h9ldp2wqsi5wc19p0r06la5j"))))
     (build-system python-build-system)
-    (inputs `(("openssh" ,openssh)))
-    (propagated-inputs `(("python-pyyaml" ,python-pyyaml)))
+    (inputs (list openssh))
+    (propagated-inputs (list python-pyyaml))
     (arguments
      `(#:phases (modify-phases %standard-phases
                   (add-before 'build 'record-openssh-file-name
@@ -847,8 +864,7 @@ framework.")
                         (substitute* "lib/ClusterShell/Worker/Ssh.py"
                           (("info\\(\"ssh_path\"\\) or \"ssh\"")
                            (string-append "info(\"ssh_path\") or \""
-                                          ssh "/bin/ssh\"")))
-                        #t))))))
+                                          ssh "/bin/ssh\"")))))))))
     (home-page "https://cea-hpc.github.io/clustershell/")
     (synopsis "Scalable event-driven Python framework for cluster administration")
     (description
@@ -911,8 +927,7 @@ clients at a time.")
                 "1bcy9flrzbvams5p77swwiygv54ac58ia7hpic1bvg30b3wpvv7b"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-paramiko" ,python-paramiko)
-       ("python-tornado" ,python-tornado)))
+     (list python-paramiko python-tornado))
     (home-page "https://webssh.huashengdun.org/")
     (synopsis "Web application to be used as an SSH client")
     (description "This package provides a web application to be used as an SSH

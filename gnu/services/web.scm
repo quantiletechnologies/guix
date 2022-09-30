@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2015 David Thompson <davet@gnu.org>
-;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2016 Nikita <nikita@n0.is>
 ;;; Copyright © 2016, 2017, 2018 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2017, 2018, 2019 Christopher Baines <mail@cbaines.net>
@@ -9,7 +9,7 @@
 ;;; Copyright © 2018 Pierre-Antoine Rouby <pierre-antoine.rouby@inria.fr>
 ;;; Copyright © 2018 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2019, 2020 Florian Pelz <pelzflorian@pelzflorian.de>
-;;; Copyright © 2020 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2020, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2020 Arun Isaac <arunisaac@systemreboot.net>
 ;;; Copyright © 2020 Oleg Pykhalov <go.wigust@gmail.com>
@@ -120,6 +120,7 @@
             nginx-upstream-configuration?
             nginx-upstream-configuration-name
             nginx-upstream-configuration-servers
+            nginx-upstream-configuration-extra-content
 
             nginx-location-configuration
             nginx-location-configuration?
@@ -203,6 +204,21 @@
             tailon-configuration-package
 
             tailon-service-type
+
+            anonip-configuration
+            anonip-configuration?
+            anonip-configuration-anonip
+            anonip-configuration-input
+            anonip-configuration-output
+            anonip-configuration-skip-private?
+            anonip-configuration-column
+            anonip-configuration-replacement
+            anonip-configuration-ipv4mask
+            anonip-configuration-ipv6mask
+            anonip-configuration-increment
+            anonip-configuration-delimiter
+            anonip-configuration-regex
+            anonip-service-type
 
             varnish-configuration
             varnish-configuration?
@@ -486,7 +502,8 @@
                 (compose concatenate)
                 (extend httpd-process-extensions)
                 (default-value
-                  (httpd-configuration))))
+                  (httpd-configuration))
+                (description "Run the Apache httpd Web server.")))
 
 (define-record-type* <nginx-server-configuration>
   nginx-server-configuration make-nginx-server-configuration
@@ -516,7 +533,9 @@
   nginx-upstream-configuration make-nginx-upstream-configuration
   nginx-upstream-configuration?
   (name                nginx-upstream-configuration-name)
-  (servers             nginx-upstream-configuration-servers))
+  (servers             nginx-upstream-configuration-servers)
+  (extra-content       nginx-upstream-configuration-extra-content
+                       (default '())))
 
 (define-record-type* <nginx-location-configuration>
   nginx-location-configuration make-nginx-location-configuration
@@ -535,7 +554,7 @@
 (define-record-type* <nginx-configuration>
   nginx-configuration make-nginx-configuration
   nginx-configuration?
-  (nginx         nginx-configuration-nginx          ;<package>
+  (nginx         nginx-configuration-nginx          ;file-like
                  (default nginx))
   (log-directory nginx-configuration-log-directory  ;string
                  (default "/var/log/nginx"))
@@ -552,9 +571,9 @@
   (modules nginx-configuration-modules (default '()))
   (global-directives nginx-configuration-global-directives
                      (default '((events . ()))))
-  (lua-package-path nginx-lua-package-path ;list of <package>
+  (lua-package-path nginx-lua-package-path ;list of file-like
                     (default #f))
-  (lua-package-cpath nginx-lua-package-cpath ;list of <package>
+  (lua-package-cpath nginx-lua-package-cpath ;list of file-like
                      (default #f))
   (extra-content nginx-configuration-extra-content
                  (default ""))
@@ -642,6 +661,15 @@ of index files."
    (map (lambda (server)
           (simple-format #f "      server ~A;\n" server))
         (nginx-upstream-configuration-servers upstream))
+   (let ((extra-content
+          (nginx-upstream-configuration-extra-content upstream)))
+     (if (and extra-content (not (null? extra-content)))
+         (cons
+          "\n"
+          (map (lambda (line)
+                 (simple-format #f "      ~A\n" line))
+               (flatten extra-content)))
+         '()))
    "    }\n"))
 
 (define (flatten . lst)
@@ -803,7 +831,7 @@ of index files."
 (define-record-type* <fcgiwrap-configuration> fcgiwrap-configuration
   make-fcgiwrap-configuration
   fcgiwrap-configuration?
-  (package       fcgiwrap-configuration-package ;<package>
+  (package       fcgiwrap-configuration-package ;file-like
                  (default fcgiwrap))
   (socket        fcgiwrap-configuration-socket
                  (default "tcp:127.0.0.1:9000"))
@@ -867,12 +895,14 @@ of index files."
                                           fcgiwrap-accounts)
                        (service-extension activation-service-type
                                           fcgiwrap-activation)))
-                (default-value (fcgiwrap-configuration))))
+                (default-value (fcgiwrap-configuration))
+                (description "Run FastCGI, an interface between the front-end
+and the back-end of a Web service.")))
 
 (define-record-type* <php-fpm-configuration> php-fpm-configuration
   make-php-fpm-configuration
   php-fpm-configuration?
-  (php              php-fpm-configuration-php ;<package>
+  (php              php-fpm-configuration-php ;file-like
                     (default php))
   (socket           php-fpm-configuration-socket
                     (default (string-append "/var/run/php"
@@ -1107,10 +1137,12 @@ a webserver.")
   hpcguix-web-configuration make-hpcguix-web-configuration
   hpcguix-web-configuration?
 
-  (package  hpcguix-web-package (default hpcguix-web)) ;<package>
+  (package  hpcguix-web-package (default hpcguix-web)) ;file-like
 
   ;; Specs is gexp of hpcguix-web configuration file
-  (specs    hpcguix-web-configuration-specs))
+  (specs    hpcguix-web-configuration-specs)
+  (address  hpcguix-web-configuration-address (default "127.0.0.1"))
+  (port     hpcguix-web-configuration-port (default 5000)))
 
 (define %hpcguix-web-accounts
   (list (user-group
@@ -1163,6 +1195,12 @@ a webserver.")
        (requirement   '(networking))
        (start #~(make-forkexec-constructor
                  (list #$(file-append hpcguix-web "/bin/hpcguix-web")
+                       (string-append "--listen="
+                                      #$(hpcguix-web-configuration-address
+                                         config))
+                       "-p"
+                       #$(number->string
+                          (hpcguix-web-configuration-port config))
                        (string-append "--config="
                                       #$(scheme-file "hpcguix-web.scm" specs)))
                  #:user "hpcguix-web"
@@ -1332,6 +1370,99 @@ files.")
                                  files))))))))
    (default-value (tailon-configuration))))
 
+
+
+;;;
+;;; Log anonymization
+;;;
+
+(define-record-type* <anonip-configuration>
+  anonip-configuration make-anonip-configuration
+  anonip-configuration?
+  (anonip            anonip-configuration-anonip       ;file-like
+                     (default anonip))
+  (input             anonip-configuration-input)       ;string
+  (output            anonip-configuration-output)      ;string
+  (skip-private?     anonip-configuration-skip-private? ;boolean
+                     (default #f))
+  (column            anonip-configuration-column       ;number
+                     (default #f))
+  (replacement       anonip-configuration-replacement  ;string
+                     (default #f))
+  (ipv4mask          anonip-configuration-ipv4mask     ;number
+                     (default #f)) 
+  (ipv6mask          anonip-configuration-ipv6mask     ;number
+                     (default #f))
+  (increment         anonip-configuration-increment    ;number
+                     (default #f))
+  (delimiter         anonip-configuration-delimiter    ;string
+                     (default #f))
+  (regex             anonip-configuration-regex        ;string
+                     (default #f)))
+
+(define (anonip-activation config)
+  (with-imported-modules '((guix build utils))
+    #~(begin
+        (use-modules (guix build utils))
+        (for-each
+         (lambda (directory)
+           (mkdir-p directory)
+           (chmod directory #o755))
+         (list (dirname #$(anonip-configuration-input config))
+               (dirname #$(anonip-configuration-output config)))))))
+
+(define (anonip-shepherd-service config)
+  (let ((input (anonip-configuration-input config))
+        (output (anonip-configuration-output config))
+        (optional
+         (lambda (accessor option)
+           (or (and=> (accessor config)
+                      (lambda (value)
+                        (list
+                         (format #false "~a=~a"
+                                 option value))))
+               (list)))))
+    (list (shepherd-service
+           (provision (list (symbol-append 'anonip- (string->symbol output))))
+           (requirement '(user-processes))
+           (documentation "Anonimyze the given log file location with anonip.")
+           (start #~(lambda _
+                      (unless (file-exists? #$input)
+                          (mknod #$input 'fifo #o600 0))
+                      (let ((pid (fork+exec-command
+                                  (append
+                                      (list #$(file-append (anonip-configuration-anonip config)
+                                                           "/bin/anonip")
+                                            (string-append "--input=" #$input)
+                                            (string-append "--output=" #$output))
+                                      (if #$(anonip-configuration-skip-private? config)
+                                          '("--skip-private") (list))
+                                    '#$(optional anonip-configuration-column "--column")
+                                    '#$(optional anonip-configuration-ipv4mask "--ipv4mask")
+                                    '#$(optional anonip-configuration-ipv6mask "--ipv6mask")
+                                    '#$(optional anonip-configuration-increment "--increment")
+                                    '#$(optional anonip-configuration-replacement "--replacement")
+                                    '#$(optional anonip-configuration-delimiter "--delimiter")
+                                    '#$(optional anonip-configuration-regex "--regex"))
+                                  ;; Run in a UTF-8 locale
+                                  #:environment-variables
+                                  (list (string-append "GUIX_LOCPATH=" #$glibc-utf8-locales
+                                                       "/lib/locale")
+                                        "LC_ALL=en_US.utf8"))))
+                        pid)))
+           (stop #~(make-kill-destructor))))))
+
+(define anonip-service-type
+  (service-type
+   (name 'anonip)
+   (extensions
+    (list (service-extension shepherd-root-service-type
+                             anonip-shepherd-service)
+          (service-extension activation-service-type
+                             anonip-activation)))
+   (description
+    "Provide web server log anonymization with @command{anonip}.")))
+
 
 ;;;
 ;;; Varnish
@@ -1340,7 +1471,7 @@ files.")
 (define-record-type* <varnish-configuration>
   varnish-configuration make-varnish-configuration
   varnish-configuration?
-  (package             varnish-configuration-package          ;<package>
+  (package             varnish-configuration-package          ;file-like
                        (default varnish))
   (name                varnish-configuration-name             ;string
                        (default "default"))
@@ -1510,6 +1641,8 @@ ALLOWED_HOSTS = [
             (string-append "  '" allowed-host "'\n"))
           allowed-hosts))
 "]
+
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 
 DEFAULT_FROM_EMAIL = '" #$default-from-email "'
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
@@ -1772,6 +1905,12 @@ WSGIPassAuthorization On
          (home-directory "/var/empty")
          (shell (file-append shadow "/sbin/nologin")))))
 
+(define %mumi-log "/var/log/mumi.log")
+
+(define %mumi-mailer-log "/var/log/mumi.mailer.log")
+
+(define %mumi-worker-log "/var/log/mumi.worker.log")
+
 (define (mumi-shepherd-services config)
   (define environment
     #~(list "LC_ALL=en_US.utf8"
@@ -1789,7 +1928,7 @@ WSGIPassAuthorization On
                         ,@(if #$mailer? '() '("--disable-mailer")))
                       #:environment-variables #$environment
                       #:user "mumi" #:group "mumi"
-                      #:log-file "/var/log/mumi.log"))
+                      #:log-file #$%mumi-log))
             (stop #~(make-kill-destructor)))
            (shepherd-service
             (provision '(mumi-worker))
@@ -1799,7 +1938,7 @@ WSGIPassAuthorization On
                       '(#$(file-append mumi "/bin/mumi") "worker")
                       #:environment-variables #$environment
                       #:user "mumi" #:group "mumi"
-                      #:log-file "/var/log/mumi.worker.log"))
+                      #:log-file #$%mumi-worker-log))
             (stop #~(make-kill-destructor)))
            (shepherd-service
             (provision '(mumi-mailer))
@@ -1815,8 +1954,14 @@ WSGIPassAuthorization On
                               '()))
                       #:environment-variables #$environment
                       #:user "mumi" #:group "mumi"
-                      #:log-file "/var/log/mumi.mailer.log"))
+                      #:log-file #$%mumi-mailer-log))
             (stop #~(make-kill-destructor)))))))
+
+(define %mumi-log-rotations
+  (list (log-rotation
+         (files (list %mumi-log
+                      %mumi-mailer-log
+                      %mumi-worker-log)))))
 
 (define mumi-service-type
   (service-type
@@ -1827,7 +1972,9 @@ WSGIPassAuthorization On
           (service-extension account-service-type
                              (const %mumi-accounts))
           (service-extension shepherd-root-service-type
-                             mumi-shepherd-services)))
+                             mumi-shepherd-services)
+          (service-extension rottlog-service-type
+                             (const %mumi-log-rotations))))
    (description
     "Run Mumi, a Web interface to the Debbugs bug-tracking server.")
    (default-value
@@ -1986,10 +2133,12 @@ root=/srv/gemini
 
 (define agate-service-type
   (service-type
-   (name 'guix)
+   (name 'agate)
    (extensions
     (list (service-extension account-service-type
                              agate-accounts)
           (service-extension shepherd-root-service-type
                              agate-shepherd-service)))
-   (default-value (agate-configuration))))
+   (default-value (agate-configuration))
+   (description "Run Agate, a simple Gemini protocol server written in
+Rust.")))

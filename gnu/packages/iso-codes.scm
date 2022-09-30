@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Cyril Roelandt <tipecaml@gmail.com>
 ;;; Copyright © 2016, 2019 Efraim Flashner <efraim@flashner.co.il>
-;;; Copyright © 2018 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2018, 2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -29,7 +29,9 @@
   #:use-module (gnu packages perl)
   #:use-module (gnu packages python))
 
-(define-public iso-codes
+(define-public iso-codes/official
+  ;; This package variant is intended for ‘external’ use, such as users running
+  ;; ‘guix install’, where any deviation from ISO gospel might be harmful.
   (package
     (name "iso-codes")
     (version "4.5.0")
@@ -44,10 +46,19 @@
               (base32
                "1q6x9c5x4x0x4q11iygldsmxdyzhz1mb4n8im76glwsgqsqyjs80"))))
     (build-system gnu-build-system)
+    ;; TODO(staging): Unconditionally move inputs to native-inputs.
+    (native-inputs
+     (if (%current-target-system)
+         `(("python" ,python-wrapper)
+           ("perl" ,perl)
+           ("gettext" ,gettext-minimal))
+         '()))
     (inputs
-     `(("gettext" ,gettext-minimal)
-       ("perl" ,perl)
-       ("python" ,python-wrapper)))
+     `(,@(if (%current-target-system)
+             '()
+             `(("gettext" ,gettext-minimal)
+               ("perl" ,perl)
+               ("python" ,python-wrapper)))))
     (synopsis "Various ISO standards")
     (description
      "This package provides lists of various ISO standards (e.g. country,
@@ -68,6 +79,25 @@ changes in the ISO standard and will not work with outdated
 information.")
     (license license:gpl2+)))           ; some bits use the lgpl2
 
+(define-public iso-codes
+  ;; This package should be used universally within Guix, e.g., as an input to
+  ;; other Guix packages or in the Guix System installer's country selector.
+  (hidden-package
+   (package
+     (inherit iso-codes/official)
+     (source
+      (origin
+        (inherit (package-source iso-codes/official))
+        (modules '((guix build utils)))
+        (snippet
+         '(begin
+            (substitute* (find-files "." "\\.po$")
+              (("#.*Name for TWN,.*") "")
+              (("^msgid \"Taiwan, .*") "# Guix doesn't use "))
+            (substitute* "data/iso_3166-1.json"
+              (("(Taiwan), [^\"]*" _ name) name))))))
+     (synopsis "Various ISO standards as used by GNU@tie{}Guix"))))
+
 (define-public python-iso639
   (package
     (name "python-iso639")
@@ -87,9 +117,6 @@ that is concerned with representation of names for languages and language
 groups.")
     (license license:agpl3+)))
 
-(define-public python2-iso639
-  (package-with-python2 python-iso639))
-
 (define-public python-iso3166
   (package
     (name "python-iso3166")
@@ -106,6 +133,3 @@ groups.")
     (synopsis "Self-contained ISO 3166-1 country definitions")
     (description "This package provides the ISO 3166-1 country definitions.")
     (license license:expat)))
-
-(define-public python2-iso3166
-  (package-with-python2 python-iso3166))

@@ -5,7 +5,7 @@
 ;;
 
 (use-modules (gnu) (guix) (srfi srfi-1))
-(use-service-modules desktop mcron networking spice ssh xorg)
+(use-service-modules desktop mcron networking spice ssh xorg sddm)
 (use-package-modules bootloaders certs fonts nvi
                      package-management wget xorg)
 
@@ -43,7 +43,9 @@ accounts.\x1b[0m
   (keyboard-layout (keyboard-layout "us" "altgr-intl"))
 
   ;; Label for the GRUB boot menu.
-  (label (string-append "GNU Guix " (package-version guix)))
+  (label (string-append "GNU Guix "
+                        (or (getenv "GUIX_DISPLAYED_VERSION")
+                            (package-version guix))))
 
   (firmware '())
 
@@ -107,12 +109,12 @@ root ALL=(ALL) ALL
                  ;; Use the DHCP client service rather than NetworkManager.
                  (service dhcp-client-service-type))
 
-           ;; Remove GDM, ModemManager, NetworkManager, and wpa-supplicant,
-           ;; which don't make sense in a VM.
+           ;; Remove some services that don't make sense in a VM.
            (remove (lambda (service)
                      (let ((type (service-kind service)))
                        (or (memq type
                                  (list gdm-service-type
+                                       sddm-service-type
                                        wpa-supplicant-service-type
                                        cups-pk-helper-service-type
                                        network-manager-service-type
@@ -123,7 +125,14 @@ root ALL=(ALL) ALL
                      (login-service-type config =>
                                          (login-configuration
                                           (inherit config)
-                                          (motd vm-image-motd)))))))
+                                          (motd vm-image-motd)))
+
+                     ;; Install and run the current Guix rather than an older
+                     ;; snapshot.
+                     (guix-service-type config =>
+                                        (guix-configuration
+                                         (inherit config)
+                                         (guix (current-guix))))))))
 
   ;; Allow resolution of '.local' host names with mDNS.
   (name-service-switch %mdns-host-lookup-nss))

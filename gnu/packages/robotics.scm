@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2018 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2018, 2022 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -23,6 +23,7 @@
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix build-system cmake)
   #:use-module (gnu packages avahi)
+  #:use-module (gnu packages base)
   #:use-module (gnu packages cpp)
   #:use-module (gnu packages gl)
   #:use-module (gnu packages linux)
@@ -51,14 +52,14 @@
       (build-system cmake-build-system)
       (arguments
        '(#:configure-flags '("-DBUILD_SHARED_LIBS=ON")))
-      (native-inputs `(("pkg-config" ,pkg-config)))
+      (native-inputs (list pkg-config))
       (inputs
        ;; Optionally, add Python + Boost for Python bindings.
-       `(("sdl2" ,sdl2)))
+       (list sdl2))
       (propagated-inputs
        ;; 'Viewer.h' includes 'QGLWidget'.
-       `(("qtbase" ,qtbase-5)                ;the viewer module needs Qt5 + MESA
-         ("mesa" ,mesa)))
+       (list qtbase-5 ;the viewer module needs Qt5 + MESA
+             mesa))
       (synopsis "Robot simulator")
       (description
        "Enki is a robot simulator written in C++.  It provides collision and
@@ -91,31 +92,40 @@ hundred times faster than real-time.")
                 (modules '((guix build utils)))
                 (snippet
                  ;; Add missing Qt5::Network.
-                 '(begin
-                    (substitute* "targets/playground/CMakeLists.txt"
-                      (("target_link_libraries(.*)\\$\\{EXTRA_LIBS\\}" _ middle)
-                       (string-append "target_link_libraries" middle
-                                      " Qt5::Network ${EXTRA_LIBS}")))
-                    #t))))
+                 '(substitute* "targets/playground/CMakeLists.txt"
+                    (("target_link_libraries(.*)\\$\\{EXTRA_LIBS\\}" _ middle)
+                     (string-append "target_link_libraries" middle
+                                    " Qt5::Network ${EXTRA_LIBS}"))))))
       (build-system cmake-build-system)
       (arguments
-       '(#:configure-flags '("-DBUILD_SHARED_LIBS=ON")))
+       '(#:configure-flags '("-DBUILD_SHARED_LIBS=ON")
+         #:parallel-build? #f                    ;occasionally fails with '-j'
+         #:phases (modify-phases %standard-phases
+                    (add-after 'unpack 'help-valgrind
+                      (lambda* (#:key inputs #:allow-other-keys)
+                        (let ((debug (search-input-directory inputs
+                                                             "/lib/debug")))
+                          (substitute* "tests/common/CMakeLists.txt"
+                            (("--error-exitcode=1" flag)
+                             (string-append "--extra-debuginfo-path="
+                                            debug " " flag)))))))))
       (native-inputs
-       `(("pkg-config" ,pkg-config)
-         ("valgrind" ,valgrind)))                 ;for tests
+       (list pkg-config
+             valgrind                             ;for tests
+             `(,(canonical-package glibc) "debug")))
       (inputs
-       `(("dashel" ,dashel)
-         ("enki" ,enki)
-         ("protobuf" ,protobuf-3.5)               ;for logging
-         ("qtbase" ,qtbase-5)
-         ("qtsvg" ,qtsvg)
-         ("qttools" ,qttools)              ;for libQt5Help, needed by "studio"
-         ("qtwebkit" ,qtwebkit)
-         ("qtx11extras" ,qtx11extras)
-         ("eudev" ,eudev)
-         ("libxml2" ,libxml2)
-         ("sdl2" ,sdl2)
-         ("avahi" ,avahi)))            ;XXX: we need the libdnssd compat layer
+       (list dashel
+             enki
+             protobuf-3.5 ;for logging
+             qtbase-5
+             qtsvg-5
+             qttools-5 ;for libQt5Help, needed by "studio"
+             qtwebkit
+             qtx11extras
+             eudev
+             libxml2
+             sdl2
+             avahi))            ;XXX: we need the libdnssd compat layer
       (synopsis "Event-based robot programming tools")
       (description
        "Aseba means @dfn{actuator and sensor event-based architecture}.

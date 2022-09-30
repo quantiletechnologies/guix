@@ -2,7 +2,8 @@
 ;;; Copyright © 2015 Paul van der Walt <paul@denknerd.org>
 ;;; Copyright © 2020 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
-;;; Copyright © 2020 Guillaume Le Vaillant <glv@posteo.net>
+;;; Copyright © 2020, 2021 Guillaume Le Vaillant <glv@posteo.net>
+;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -24,6 +25,7 @@
   #:use-module (guix utils)
   #:use-module (guix packages)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system python)
@@ -71,13 +73,9 @@
     (build-system gnu-build-system)
     (native-inputs
      ;; The 3.5.28 release tarball isn't bootstrapped.
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (inputs
-     `(("libjpeg-turbo" ,libjpeg-turbo)
-       ("libtiff" ,libtiff)
-       ("zlib" ,zlib)))
+     (list libjpeg-turbo libtiff zlib))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -109,17 +107,9 @@ utilities.")
        (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)
-       ("qttools" ,qttools)))
+     (list autoconf automake libtool pkg-config qttools-5))
     (inputs
-     `(("djvulibre" ,djvulibre)
-       ("glib" ,glib)
-       ("libxt" ,libxt)
-       ("libtiff" ,libtiff)
-       ("qtbase" ,qtbase-5)))
+     (list djvulibre glib libxt libtiff qtbase-5))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -151,7 +141,7 @@ a continuous layout.")
 (define-public pdf2djvu
   (package
     (name "pdf2djvu")
-    (version "0.9.17.1")
+    (version "0.9.18.1")
     (source
      (origin
        (method url-fetch)
@@ -159,22 +149,17 @@ a continuous layout.")
              "https://github.com/jwilk/pdf2djvu/releases/download/" version
              "/pdf2djvu-" version ".tar.xz"))
        (sha256
-        (base32 "18r648kna6ccw0m0nfxxnsmz541k69d0w9zzqvm1x2l5qyyvgfsv"))))
+        (base32 "0c595yziz81c9izf9s5sskd00qmgz2n1hp2vdcgg0dx81g3xfidb"))))
     (build-system gnu-build-system)
-    (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("pkg-config" ,pkg-config)
-       ("python2" ,python-2)
-       ("python2-nose" ,python2-nose)))
+    (arguments (list #:tests? #f))      ;requires Python 2
+    (native-inputs (list gettext-minimal pkg-config))
     (inputs
-     `(("djvulibre" ,djvulibre)
-       ("exiv2" ,exiv2)
-       ("graphicsmagick" ,graphicsmagick)
-       ("poppler" ,poppler)
-       ("poppler-data" ,poppler-data)
-       ("util-linux-lib" ,util-linux "lib"))) ; for libuuid
-    (arguments
-     `(#:test-target "test"))
+     (list djvulibre
+           exiv2
+           graphicsmagick
+           poppler
+           poppler-data
+           `(,util-linux "lib")))       ;for libuuid
     (synopsis "PDF to DjVu converter")
     (description
      "@code{pdf2djvu} creates DjVu files from PDF files.
@@ -202,12 +187,12 @@ It is able to extract:
         (base32 "0v2ax30m7j1yi4m02nzn9rc4sn4vzqh5vywdh96r64j4pwvn5s5g"))))
     (build-system gnu-build-system)
     (inputs
-     `(("djvulibre" ,djvulibre)
-       ("gawk" ,gawk)
-       ("ghostscript" ,ghostscript)
-       ("grep" ,grep)
-       ("ncurses" ,ncurses)
-       ("which" ,which)))
+     (list djvulibre
+           gawk
+           ghostscript
+           grep
+           ncurses
+           which))
     (arguments
      `(#:tests? #f ; No test suite
        #:phases
@@ -266,9 +251,7 @@ It is able to extract:
     (native-inputs
      `(("gettext" ,gettext-minimal)))
     (inputs
-     `(("libjpeg-turbo" ,libjpeg-turbo)
-       ("libtiff" ,libtiff)
-       ("zlib" ,zlib)))
+     (list libjpeg-turbo libtiff zlib))
     (arguments
      '(#:configure-flags '("--disable-static")
        #:parallel-build? #f
@@ -293,197 +276,158 @@ and white.")
     (home-page "https://sourceforge.net/projects/minidjvu/")
     (license license:gpl2)))
 
-(define-public djvusmooth
-  (package
-    (name "djvusmooth")
-    (version "0.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append
-             "https://github.com/jwilk/djvusmooth/releases/download/" version
-             "/djvusmooth-" version ".tar.gz"))
-       (sha256
-        (base32 "0z403cklvxzz0qaczgv83ax0nknrd9h8micp04j9kjfdxk2sgval"))))
-    (build-system python-build-system)
-    (inputs
-     `(("djvulibre" ,djvulibre)
-       ("python2-djvulibre" ,python2-djvulibre)
-       ("python2-subprocess32" ,python2-subprocess32)
-       ("python2-wxpython" ,python2-wxpython)))
-    (arguments
-     `(#:python ,python-2
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'fix-paths
-           (lambda* (#:key inputs #:allow-other-keys)
-             (substitute* "lib/djvused.py"
-               (("djvused_path = 'djvused'")
-                (string-append "djvused_path = '"
-                               (assoc-ref inputs "djvulibre")
-                               "/bin/djvused'"))))))))
-    (synopsis "Graphical editor for DjVu documents")
-    (description
-     "@code{djvusmooth} is a graphical editor for DjVu_ documents.
-It is able to:
-@itemize
-@item edit document metadata,
-@item edit document outline (bookmarks),
-@item add, remove or edit hyperlinks,
-@item correct occasional errors in the hidden text layer.
-@end itemize\n")
-    (home-page "https://jwilk.net/software/djvusmooth")
-    (license license:gpl2)))
-
 (define-public didjvu
-  (package
-    (name "didjvu")
-    (version "0.9")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append
-             "https://github.com/jwilk/didjvu/releases/download/" version
-             "/didjvu-" version ".tar.gz"))
-       (sha256
-        (base32 "0xyrnk8d2khi7q1zr28gjkjq6frz4mkb5jdl8821yzf12k7c8pbv"))))
-    (build-system gnu-build-system)
-    (native-inputs
-     `(("python2-nose" ,python2-nose)))
-    (inputs
-     `(("djvulibre" ,djvulibre)
-       ("minidjvu" ,minidjvu)
-       ("python" ,python-2)
-       ("python2-gamera" ,python2-gamera)
-       ("python2-pillow" ,python2-pillow)))
-    (arguments
-     `(#:modules ((guix build gnu-build-system)
-                  ((guix build python-build-system) #:prefix python:)
-                  (guix build utils))
-       #:imported-modules (,@%gnu-build-system-modules
-                           (guix build python-build-system))
-       #:test-target "test"
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)
-         (add-before 'check 'disable-failing-test
-           (lambda _
-             (substitute* "tests/test_ipc.py"
-               ;; test_wait_signal gets stuck forever
-               (("yield self\\._test_signal, name")
-                "return True")
-               ;; test_path fails to find a file it should have created
-               (("path = os\\.getenv\\('PATH'\\)\\.split\\(':'\\)")
-                "return True"))
-             (substitute* "tests/test_timestamp.py"
-               ;; test_timezones fails with:
-               ;;   '2009-12-18T21:25:14Z' != '2009-12-18T22:25:14+01:00'
-               (("@fork_isolation")
-                "return True"))))
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (invoke "make"
-                       "DESTDIR="
-                       (string-append "PREFIX=" out)
-                       "install"))))
-         (add-after 'install 'wrap-python
-           (assoc-ref python:%standard-phases 'wrap))
-         (add-after 'wrap-python 'wrap-path
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out"))
-                   (djvulibre (assoc-ref inputs "djvulibre")))
-               (wrap-program (string-append out "/bin/didjvu")
-                 `("PATH" ":" prefix (,(string-append djvulibre "/bin"))))))))))
-    (synopsis "DjVu encoder with foreground/background separation")
-    (description
-     "@code{didjvu} uses the @code{Gamera} framework to separate the foreground
+  (let ((revision "0")
+        (commit "c792d61e85fbe5b6e678bc7d686b0208717c587b"))
+    (package
+      (name "didjvu")
+      (version (git-version "0.9" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/FriedrichFroebel/didjvu")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "09lwfwirmfl93062i2rvdcrgwp9fj95ny07059bxq7dl6z0z35qj"))))
+      (build-system gnu-build-system)
+      (arguments
+       `(#:modules ((guix build gnu-build-system)
+                    ((guix build python-build-system) #:prefix python:)
+                    (guix build utils))
+         #:imported-modules (,@%gnu-build-system-modules
+                             (guix build python-build-system))
+         #:test-target "test"
+         #:phases
+         (modify-phases %standard-phases
+           (delete 'configure)
+           (add-before 'check 'disable-failing-test
+             (lambda _
+               (substitute* "tests/test_ipc.py"
+                 ;; test_wait_signal gets stuck forever
+                 (("yield self\\._test_signal, name")
+                  "return True")
+                 ;; test_path fails to find a file it should have created
+                 (("path = os\\.getenv\\('PATH'\\)\\.split\\(':'\\)")
+                  "return True"))
+               (substitute* "tests/test_timestamp.py"
+                 ;; test_timezones fails with:
+                 ;;   '2009-12-18T21:25:14Z' != '2009-12-18T22:25:14+01:00'
+                 (("@fork_isolation")
+                  "return True"))))
+           (replace 'install
+             (lambda* (#:key outputs #:allow-other-keys)
+               (let ((out (assoc-ref outputs "out")))
+                 (invoke "make"
+                         "DESTDIR="
+                         (string-append "PREFIX=" out)
+                         "install"))))
+           (add-after 'install 'wrap-python
+             (assoc-ref python:%standard-phases 'wrap))
+           (add-after 'wrap-python 'wrap-path
+             (lambda* (#:key inputs outputs #:allow-other-keys)
+               (let ((out (assoc-ref outputs "out"))
+                     (djvulibre (assoc-ref inputs "djvulibre")))
+                 (wrap-program (string-append out "/bin/didjvu")
+                   `("PATH" ":" prefix (,(string-append djvulibre "/bin"))))))))))
+      (native-inputs (list python-nose))
+      (inputs
+       (list djvulibre
+             minidjvu
+             python-gamera
+             python-pillow
+             python-wrapper))
+      (synopsis "DjVu encoder with foreground/background separation")
+      (description
+       "@code{didjvu} uses the @code{Gamera} framework to separate the foreground
 and background layers of images, which can then be encoded into a DjVu file.")
-    (home-page "https://jwilk.net/software/didjvu")
-    (license license:gpl2)))
+      (home-page "https://jwilk.net/software/didjvu")
+      (license license:gpl2))))
 
 (define-public ocrodjvu
-  (package
-    (name "ocrodjvu")
-    (version "0.12")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append
-             "https://github.com/jwilk/ocrodjvu/releases/download/" version
-             "/ocrodjvu-" version ".tar.xz"))
-       (sha256
-        (base32 "09w9rqr7z2jd5kwp178zz2yrsc82mxs7gksipg92znxzgzhmw2ng"))))
-    (build-system gnu-build-system)
-    (native-inputs
-     `(("libxml2" ,libxml2)
-       ("python2-nose" ,python2-nose)
-       ("python2-pillow" ,python2-pillow)))
-    (inputs
-     `(("djvulibre" ,djvulibre)
-       ("ocrad" ,ocrad)
-       ("python" ,python-2)
-       ("python2-djvulibre" ,python2-djvulibre)
-       ("python2-html5lib" ,python2-html5lib)
-       ("python2-lxml" ,python2-lxml)
-       ("python2-pyicu" ,python2-pyicu)
-       ("python2-subprocess32" ,python2-subprocess32)
-       ("tesseract-ocr" ,tesseract-ocr)))
-    (arguments
-     `(#:modules ((guix build gnu-build-system)
-                  ((guix build python-build-system) #:prefix python:)
-                  (guix build utils))
-       #:imported-modules (,@%gnu-build-system-modules
-                           (guix build python-build-system))
-       #:test-target "test"
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)
-         (add-before 'check 'disable-failing-test
-           (lambda _
-             (substitute* "tests/test_ipc.py"
-               ;; test_wait_signal gets stuck forever
-               (("yield self\\._test_signal, name")
-                "return True")
-               ;; test_path fails to find a file it should have created
-               (("path = os\\.getenv\\('PATH'\\)\\.split\\(':'\\)")
-                "return True"))
-             ;; Disable tests with tesseract. They can't work without
-             ;; the language files that must downloaded by the final user
-             ;; as they are not packaged in Guix.
-             (substitute* "tests/ocrodjvu/test.py"
-               (("engines = stdout\\.getvalue\\(\\)\\.splitlines\\(\\)")
-                "engines = ['ocrad']"))
-             (substitute* "tests/ocrodjvu/test_integration.py"
-               (("engines = 'tesseract', 'cuneiform', 'gocr', 'ocrad'")
-                "engines = 'ocrad'"))))
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (invoke "make"
-                       "DESTDIR="
-                       (string-append "PREFIX=" out)
-                       "install"))))
-         (add-after 'install 'wrap-python
-           (assoc-ref python:%standard-phases 'wrap))
-         (add-after 'wrap-python 'wrap-path
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out"))
-                   (djvulibre (assoc-ref inputs "djvulibre"))
-                   (ocrad (assoc-ref inputs "ocrad"))
-                   (tesseract (assoc-ref inputs "tesseract-ocr")))
-               (for-each (lambda (file)
-                           (wrap-program (string-append out "/bin/" file)
-                             `("PATH" ":" prefix
-                               (,(string-append djvulibre "/bin:"
-                                                ocrad "/bin:"
-                                                tesseract "/bin")))))
-                         '("djvu2hocr"
-                           "hocr2djvused"
-                           "ocrodjvu"))))))))
-    (synopsis "Program to perform OCR on DjVu files")
-    (description
-     "@code{ocrodjvu} is a wrapper for OCR systems, that allows you to perform
+  (let ((revision "0")
+        (commit "0dd3364462fc77d5674b4457fcc8230835323c30"))
+    (package
+      (name "ocrodjvu")
+      (version (git-version "0.12" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      ;; Use the following fork repository, as upstream
+                      ;; doesn't seem too concerned with Python 3
+                      ;; compatibility.
+                      (url "https://github.com/rmast/ocrodjvu")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0x64hg9ysrk8sismxb4jgk0sq7r9j90v2i9765xhmxpiy6f0lpni"))))
+      (build-system gnu-build-system)
+      (native-inputs
+       (list libxml2 python-nose python-pillow))
+      (inputs
+       (list djvulibre
+             ocrad
+             python-djvulibre
+             python-future
+             python-html5lib
+             python-lxml
+             python-pyicu
+             python-regex
+             python-wrapper
+             tesseract-ocr))
+      (arguments
+       (list
+        #:modules '((guix build gnu-build-system)
+                    ((guix build python-build-system) #:prefix python:)
+                    (guix build utils))
+        #:imported-modules `(,@%gnu-build-system-modules
+                             (guix build python-build-system))
+        #:test-target "test"
+        #:phases
+        #~(modify-phases %standard-phases
+            (delete 'configure)
+            (add-before 'check 'disable-failing-test
+              (lambda _
+                (substitute* "tests/test_ipc.py"
+                  ;; test_wait_signal gets stuck forever
+                  (("yield self\\._test_signal, name")
+                   "return True")
+                  ;; test_path fails to find a file it should have created
+                  (("path = os\\.getenv\\('PATH'\\)\\.split\\(':'\\)")
+                   "return True"))
+                ;; Disable tests with tesseract. They can't work without
+                ;; the language files that must downloaded by the final user
+                ;; as they are not packaged in Guix.
+                (substitute* "tests/ocrodjvu/test.py"
+                  (("engines = stdout\\.getvalue\\(\\)\\.splitlines\\(\\)")
+                   "engines = ['ocrad']"))
+                (substitute* "tests/ocrodjvu/test_integration.py"
+                  (("engines = 'tesseract', 'cuneiform', 'gocr', 'ocrad'")
+                   "engines = 'ocrad'"))))
+            (replace 'install
+              (lambda _
+                (invoke "make" "install"
+                        "DESTDIR=" (string-append "PREFIX=" #$output))))
+            (add-after 'install 'wrap-python
+              (assoc-ref python:%standard-phases 'wrap))
+            (add-after 'wrap-python 'wrap-path
+              (lambda* (#:key outputs #:allow-other-keys)
+                (for-each (lambda (file)
+                            (wrap-program (search-input-file outputs file)
+                              `("PATH" ":" prefix
+                                (,(string-append
+                                   #$(this-package-input "djvulibre") "/bin:"
+                                   #$(this-package-input "ocrad") "/bin:"
+                                   #$(this-package-input "tesseract-ocr")
+                                   "/bin")))))
+                          '("bin/djvu2hocr"
+                            "bin/hocr2djvused"
+                            "bin/ocrodjvu")))))))
+      (synopsis "Program to perform OCR on DjVu files")
+      (description
+       "@code{ocrodjvu} is a wrapper for OCR systems, that allows you to perform
 OCR on DjVu files.")
-    (home-page "https://jwilk.net/software/ocrodjvu")
-    (license license:gpl2)))
+      (home-page "https://jwilk.net/software/ocrodjvu")
+      (license license:gpl2))))

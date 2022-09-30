@@ -1,18 +1,18 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2022 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2013, 2015, 2017, 2018, 2021 Ludovic Courtès <ludo@gnu.org>
-;;; Copyright © 2016, 2017, 2018, 2019, 2020, 2021 Nicolas Goaziou <mail@nicolasgoaziou.fr>
+;;; Copyright © 2016-2022 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2014, 2018 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2016, 2018, 2019, 2021 Ricardo Wurmus <rekado@elephly.net>
-;;; Copyright © 2017, 2020 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2017, 2020-2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2017–2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2017 Marius Bakke <mbakke@fastmail.com>
-;;; Copyright © 2017, 2019, 2021 Eric Bavier <bavier@posteo.net>
+;;; Copyright © 2017, 2019, 2021, 2022 Eric Bavier <bavier@posteo.net>
 ;;; Copyright © 2019 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2020 Björn Höfling <bjoern.hoefling@bjoernhoefling.de>
 ;;; Copyright © 2020 Jakub Kądziołka <kuba@kadziolka.net>
 ;;; Copyright © 2020 Vincent Legoll <vincent.legoll@gmail.com>
-;;; Copyright © 2020 Vinicius Monego <monego@posteo.net>
+;;; Copyright © 2020, 2021 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2021 Lars-Dominik Braun <ldb@leibniz-psychology.org>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -42,6 +42,7 @@
   #:use-module (gnu packages ed)
   #:use-module (gnu packages flex)
   #:use-module (gnu packages fltk)
+  #:use-module (gnu packages gcc)
   #:use-module (gnu packages gl)
   #:use-module (gnu packages graphviz)
   #:use-module (gnu packages image)
@@ -68,6 +69,7 @@
   #:use-module (guix build-system python)
   #:use-module (guix build-system r)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix hg-download)
   #:use-module ((guix licenses) #:prefix license:)
@@ -89,9 +91,7 @@
               "1545vgizpypqi2rrriad0ybqv0qwbn9zr0ibxpk00gha9ihv7acx"))))
    (build-system gnu-build-system)
    (propagated-inputs
-     `(("gmp" ,gmp)
-       ("mpfr" ,mpfr)
-       ("mpc"  ,mpc))) ; Header files are included by mpfrcx.h.
+     (list gmp mpfr mpc)) ; Header files are included by mpfrcx.h.
    (synopsis "Arithmetic of polynomials over arbitrary precision numbers")
    (description
     "Mpfrcx is a library for the arithmetic of univariate polynomials over
@@ -127,7 +127,7 @@ greatest common divisor operations.")
 (define-public cm
   (package
    (name "cm")
-   (version "0.3.1")
+   (version "0.4.0")
    (source (origin
             (method url-fetch)
             (uri (string-append
@@ -135,13 +135,12 @@ greatest common divisor operations.")
                   version ".tar.gz"))
             (sha256
              (base32
-              "0qq6b1kwb1byj8ws33ya5awq0ilkpm32037pi1l4cf2737fg9m42"))))
+              "04l3inafql40n0r5rq8rmp21zplgdrzblil2kgkpx5s0jbs9i8rr"))))
    (build-system gnu-build-system)
    (propagated-inputs
-     `(("mpfrcx" ,mpfrcx)
-       ("zlib" ,zlib))) ; Header files included from cm_common.h.
+     (list mpfrcx zlib)) ; Header files included from cm_common.h.
    (inputs
-     `(("pari-gp"  ,pari-gp)))
+     (list pari-gp))
    (synopsis "CM constructions for elliptic curves")
    (description
     "The CM software implements the construction of ring class fields of
@@ -155,7 +154,7 @@ line applications.")
 (define-public fplll
   (package
     (name "fplll")
-    (version "5.3.3")
+    (version "5.4.2")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -164,17 +163,12 @@ line applications.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "06nyfidagp8pc2kfcw88ldgb2b1xm0a8z31n0sln7j72ihlmd8zj"))
-              (patches (search-patches "fplll-std-fenv.patch"))))
+                "0044nyfnwzgyfrsikbcbh00f54dd61hwn3fb6711rrskkfnw977a"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (propagated-inputs ; header files pulled in by fplll/defs.h
-     `(("gmp" ,gmp)
-       ("mpfr" ,mpfr)))
+     (list gmp mpfr))
     (home-page "https://github.com/fplll/fplll")
     (synopsis "Library for LLL-reduction of euclidean lattices")
     (description
@@ -204,31 +198,20 @@ the real span of the lattice.")
 (define-public python-fpylll
   (package
     (name "python-fpylll")
-    (version "0.5.2")
+    (version "0.5.7")
     (source
      (origin
-       ;; Pypi contains and older release, so we use a tagged release from
-       ;; Github instead.
-       (method git-fetch)
-       (uri (git-reference
-             (url "https://github.com/fplll/fpylll")
-             (commit (string-append version "dev"))))
-       (file-name (git-file-name name version))
+       (method url-fetch)
+       (uri (pypi-uri "fpylll" version))
        (sha256
         (base32
-         "1a25iibihph626jl4wbs4b77xc4a2c4nfc2ypscf9wpani3dnhjf"))))
+         "1xjqcwq90blgzvnbkbzdys8mdhi2b4li6faywm6yi8shxvz8iz0s"))))
     (build-system python-build-system)
     (inputs
-     `(("fplll" ,fplll)
-       ("gmp" ,gmp)
-       ("mpfr" ,mpfr)
-       ("pari-gp" ,pari-gp)))
+     (list fplll gmp mpfr pari-gp))
     (propagated-inputs
-     `(("cysignals" ,python-cysignals)
-       ("cython" ,python-cython)
-       ("flake8" ,python-flake8)
-       ("numpy" ,python-numpy)
-       ("pytest" ,python-pytest)))
+     (list python-cysignals python-cython python-flake8 python-numpy
+           python-pytest))
     (home-page "https://github.com/fplll/fpylll")
     (synopsis "Python interface for fplll")
     (description "fpylll is a Python wrapper for fplll.")
@@ -237,7 +220,7 @@ the real span of the lattice.")
 (define-public pari-gp
   (package
     (name "pari-gp")
-    (version "2.13.2")
+    (version "2.13.4")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -245,15 +228,12 @@ the real span of the lattice.")
                     version ".tar.gz"))
               (sha256
                (base32
-                "095s7vdlsxmxa0n0l1a082m6gjaypqfqkaj99z8j7dx0ji89hy8n"))))
+                "11g1pkrj12dmggj1n6r00ijpnmk3f3dpqsf1h51q34hmmv79xpmw"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("texlive" ,(texlive-union
-                    (list texlive-amsfonts/patched)))))
-    (inputs `(("gmp" ,gmp)
-              ("libx11" ,libx11)
-              ("perl" ,perl)
-              ("readline" ,readline)))
+     `(("texlive" ,(texlive-updmap.cfg
+                    (list texlive-amsfonts)))))
+    (inputs (list gmp libx11 perl readline))
     (arguments
      '(#:make-flags '("all")
        #:test-target "dobench"
@@ -262,6 +242,7 @@ the real span of the lattice.")
          (replace 'configure
            (lambda* (#:key outputs #:allow-other-keys)
              (invoke "./Configure"
+                     "--mt=pthread"
                      (string-append "--prefix="
                                     (assoc-ref outputs "out"))))))))
     (synopsis "PARI/GP, a computer algebra system for number theory")
@@ -289,8 +270,8 @@ PARI is also available as a C library to allow for faster computations.")
               (base32
                 "039ip7qkwwv46wrcdrz7y12m30kazzkjr44kqbc0h137g4wzd7zf"))))
    (build-system gnu-build-system)
-   (native-inputs `(("perl" ,perl)))
-   (inputs `(("pari-gp" ,pari-gp)))
+   (native-inputs (list perl))
+   (inputs (list pari-gp))
    (arguments
     '(#:configure-flags
       (list (string-append "--with-paricfg="
@@ -321,15 +302,16 @@ GP2C, the GP to C compiler, translates GP scripts to PARI programs.")
                                 version ".tar.gz"))
             (sha256
              (base32
-              "1ws2yhzxmm2l5xqqqcjcimmg40f9qq5l9i6d4i5434an9v9s8531"))))
+              "1ws2yhzxmm2l5xqqqcjcimmg40f9qq5l9i6d4i5434an9v9s8531"))
+             (patches (search-patches "cmh-support-fplll.patch"))))
    (build-system gnu-build-system)
    (inputs
-     `(("gmp" ,gmp)
-       ("mpfr" ,mpfr)
-       ("mpc" ,mpc)
-       ("mpfrcx" ,mpfrcx)
-       ("fplll" ,fplll)
-       ("pari-gp"  ,pari-gp)))
+     (list gmp
+           mpfr
+           mpc
+           mpfrcx
+           fplll
+           pari-gp))
    (synopsis "Igusa class polynomial computations")
    (description
     "The CMH software computes Igusa (genus 2) class polynomials, which
@@ -343,7 +325,7 @@ precision.")
 (define-public giac
   (package
     (name "giac")
-    (version "1.7.0-39")
+    (version "1.9.0-19")
     (source
      (origin
        (method url-fetch)
@@ -355,71 +337,71 @@ precision.")
                            "~parisse/debian/dists/stable/main/source/"
                            "giac_" version ".tar.gz"))
        (sha256
-        (base32 "0mmdzhnahiz6hr7a4brnjdmmm4mcaqkigrh1b6n9z5l46bilaii3"))))
+        (base32 "1zl3wpw4mwsc2zm2mnxnajxql0df68mlfyivbkk4i300wjfqkdvb"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:modules ((ice-9 ftw)
+     (list
+      #:modules '((ice-9 ftw)
                   (guix build utils)
                   (guix build gnu-build-system))
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'patch-bin-cp
-           ;; Some Makefiles contain hard-coded "/bin/cp".
-           (lambda _
-             (substitute* (cons "micropython-1.12/xcas/Makefile"
-                                (find-files "doc" "^Makefile"))
-               (("/bin/cp") (which "cp")))))
-         (add-after 'unpack 'disable-failing-test
-           ;; FIXME: Test failing.  Not sure why.
-           (lambda _
-             (substitute* "check/Makefile.in"
-               (("chk_fhan11") ""))))
-         (add-after 'install 'fix-doc
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               ;; Most French documentation has a non-commercial
-               ;; license, so we need to remove it.
-               (with-directory-excursion (string-append out "/share/giac/doc/fr")
-                 (for-each delete-file-recursively
-                           '("cascas" "casexo" "casgeo" "casrouge" "cassim"
-                             "castor")))
-               ;; Remove duplicate documentation in
-               ;; "%out/share/doc/giac/", where Xcas does not expect
-               ;; to find it.
-               (delete-file-recursively (string-append out "/share/doc/giac")))))
-         (add-after 'install 'remove-unnecessary-executable
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (delete-file (string-append out "/bin/xcasnew"))))))))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'patch-bin-cp
+            ;; Some Makefiles contain hard-coded "/bin/cp".
+            (lambda _
+              (substitute* (cons "micropython-1.12/xcas/Makefile"
+                                 (find-files "doc" "^Makefile"))
+                (("/bin/cp") (which "cp")))))
+          (add-after 'unpack 'disable-failing-test
+            ;; FIXME: Test failing.  Not sure why.
+            (lambda _
+              (substitute* "check/Makefile.in"
+                (("chk_fhan11") ""))))
+          (add-after 'install 'fix-doc
+            (lambda _
+              ;; Most French documentation has a non-commercial license, so we
+              ;; need to remove it.
+              (with-directory-excursion
+                  (string-append #$output "/share/giac/doc/fr")
+                (for-each delete-file-recursively
+                          '("cascas" "casexo" "casgeo" "casrouge" "cassim"
+                            "castor")))
+              ;; Remove duplicate documentation in "%out/share/doc/giac/",
+              ;; where Xcas does not expect to find it.
+              (delete-file-recursively
+               (string-append #$output "/share/doc/giac"))))
+          (add-after 'install 'remove-unnecessary-executable
+            (lambda _
+              (delete-file (string-append #$output "/bin/xcasnew")))))))
     (inputs
      ;; TODO: Add libnauty, unbundle "libmicropython.a".
-     `(("fltk" ,fltk)
-       ("glpk" ,glpk-4)
-       ("gmp" ,gmp)
-       ("gsl" ,gsl)
-       ("lapack" ,lapack)
-       ("libao" ,ao)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libsamplerate" ,libsamplerate)
-       ("libx11" ,libx11)
-       ("libxinerama" ,libxinerama)
-       ("libxft" ,libxft)
-       ("libxt" ,libxt)
-       ("mesa" ,mesa)
-       ("mpfi" ,mpfi)
-       ("mpfr" ,mpfr)
-       ("ntl" ,ntl)
-       ("perl" ,perl)
-       ("pari-gp" ,pari-gp)
-       ("tcsh" ,tcsh)))
+     (list ao
+           fltk
+           glpk-4
+           gmp
+           gsl
+           lapack
+           libjpeg-turbo
+           libpng
+           libsamplerate
+           libx11
+           libxft
+           libxinerama
+           libxt
+           mesa
+           mpfi
+           mpfr
+           ntl
+           pari-gp
+           perl
+           tcsh))
     (native-inputs
-     `(("bison" ,bison)
-       ("flex" ,flex)
-       ("hevea" ,hevea)
-       ("python" ,python-wrapper)
-       ("readline" ,readline)
-       ("texlive" ,texlive-tiny)))
+     (list bison
+           flex
+           hevea
+           python-wrapper
+           readline
+           texlive-tiny))
     (home-page "https://www-fourier.ujf-grenoble.fr/~parisse/giac.html")
     (synopsis "Computer algebra system")
     (description
@@ -431,19 +413,18 @@ or text interfaces) or as a C++ library.")
 (define-public flint
   (package
    (name "flint")
-   (version "2.8.1")
+   (version "2.9.0")
    (source
     (origin
       (method url-fetch)
       (uri (string-append "http://flintlib.org/flint-" version ".tar.gz"))
       (sha256
-       (base32 "0zj2zgn3cbb08pxhfq38i62pgjfbb6938l70am7dnixqgixdmzgd"))))
+       (base32 "0sp79ixaawjzna79afrlwlx9hg55jxil03f1wq435j9k23ar1h1g"))))
    (build-system gnu-build-system)
    (inputs
-    `(("ntl" ,ntl)))
+    (list ntl))
    (propagated-inputs
-    `(("gmp" ,gmp)
-      ("mpfr" ,mpfr))) ; header files from both are included by flint/arith.h
+    (list gmp mpfr)) ; header files from both are included by flint/arith.h
    (arguments
     `(#:parallel-tests? #f              ; seems to be necessary on arm
       #:phases
@@ -485,7 +466,7 @@ fast arithmetic.")
 (define-public arb
   (package
     (name "arb")
-    (version "2.21.0")
+    (version "2.23.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -494,13 +475,12 @@ fast arithmetic.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0c7q8bbm2izh0j0342v0dkgg1lgd6f0fn3i9x9x80brjjhg65q7b"))))
+                "1m9vskyf857gbm0cbh3z8c8m6cqkqa765wb9hqmsv7yzfmklzpvn"))))
     (build-system gnu-build-system)
     (propagated-inputs
-     `(("flint" ,flint)))               ; flint.h is included by arf.h
+     (list flint))               ; flint.h is included by arf.h
     (inputs
-     `(("gmp" ,gmp)
-       ("mpfr" ,mpfr)))
+     (list gmp mpfr))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -542,12 +522,11 @@ real and complex numbers, with automatic, rigorous error control.")
               (patches (search-patches "python-flint-includes.patch"))))
     (build-system python-build-system)
     (native-inputs
-     `(("python-cython" ,python-cython)))
+     (list python-cython))
     (propagated-inputs
-     `(("python-numpy" ,python-numpy)))
+     (list python-numpy))
     (inputs
-     `(("arb" ,arb)
-       ("flint" ,flint)))
+     (list arb flint))
     (synopsis "Python module wrapping ARB and FLINT")
     (description
      "Python-flint is a Python extension module wrapping FLINT
@@ -561,14 +540,14 @@ these types and other mathematical functions.")
 (define-public ntl
   (package
    (name "ntl")
-   (version "11.4.4")
+   (version "11.5.1")
    (source (origin
             (method url-fetch)
             (uri (string-append "https://shoup.net/ntl/ntl-"
                                 version ".tar.gz"))
             (sha256
              (base32
-              "1nr1h27j2gdz6badzz9lk2pknxhdijqdxqhd3haryh0sw616wzwx"))
+              "12ka3hym4skg63mp8vgkin79svbpdk2m6i41yvmcdjq62g1hc391"))
             (modules '((guix build utils)))
             (snippet
              '(begin
@@ -576,11 +555,9 @@ these types and other mathematical functions.")
                 #t))))
    (build-system gnu-build-system)
    (native-inputs
-    `(("libtool" ,libtool)
-      ("perl" ,perl))) ; for configuration
+    (list libtool perl)) ; for configuration
    (inputs
-    `(("gmp" ,gmp)
-      ("gf2x" ,gf2x)))
+    (list gmp gf2x))
    (arguments
     `(#:phases
       (modify-phases %standard-phases
@@ -627,9 +604,7 @@ matrices, and polynomials over the integers and over finite fields.")
                       "13gy1gdng8zijwlr1fn5sixw53z0zf9czzlg0vh1dcc59zw6v998"))))
    (build-system gnu-build-system)
    (native-inputs
-    `(("doxygen" ,doxygen)
-      ("graphviz" ,graphviz)
-      ("perl" ,perl)))
+    (list doxygen graphviz perl))
    (inputs
     `(("cddlib" ,cddlib)
       ("gmp" ,gmp)
@@ -668,7 +643,7 @@ geometry and singularity theory.")
                       "0hxs24c2m3mh0nq1zz63z3sb7dhy1rilg2s1igwwcb26x3pb7xqc"))))
    (build-system gnu-build-system)
    (inputs
-    `(("gmp" ,gmp)))
+    (list gmp))
    (arguments
     `(#:configure-flags '("--enable-shared"
                           ;; Disable specific assembly routines, which depend
@@ -698,17 +673,15 @@ binary.")
              (patches (search-patches "bc-fix-cross-compilation.patch"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("automake" ,automake)
-       ("autoconf" ,autoconf)
-       ("ed" ,ed)
-       ("flex" ,flex)
-       ("texinfo" ,texinfo)))
+     (list automake autoconf ed flex texinfo))
+    (inputs
+     (list readline))
     (arguments
      '(#:configure-flags
        (list "--with-readline")
        #:phases
        (modify-phases %standard-phases
-         (add-after 'unpack 'autogen
+         (replace 'bootstrap
            (lambda _
              (invoke "autoreconf" "-vif"))))))
     (home-page "https://www.gnu.org/software/bc/")
@@ -782,7 +755,7 @@ a C program.")
          ;; available on the user's machine when that package is built on a
          ;; different machine.
          "ax_cv_c_flags__mtune_native=no")))
-    (native-inputs `(("perl" ,perl)))
+    (native-inputs (list perl))
     (home-page "http://fftw.org")
     (synopsis "Computing the discrete Fourier transform")
     (description
@@ -853,8 +826,7 @@ cosine/ sine transforms or DCT/DST).")
                             "**/SparseVectorTest.java"
                             "**/DenseVectorTest.java")))
     (native-inputs
-     `(("java-junit" ,java-junit)
-       ("java-hamcrest-core" ,java-hamcrest-core)))
+     (list java-junit java-hamcrest-core))
     (home-page "http://la4j.org/")
     (synopsis "Java library that provides Linear Algebra primitives and algorithms")
     (description "The la4j library is a Java library that provides Linear
@@ -891,7 +863,7 @@ the la4j library are:
        #:tests? #f ; tests are not included in the release archive
        #:jdk ,icedtea-8))
     (propagated-inputs
-     `(("java-commons-math3" ,java-commons-math3)))
+     (list java-commons-math3))
     (home-page "https://gitlab.com/ICM-VisLab/JLargeArrays")
     (synopsis "Library of one-dimensional arrays that can store up to 263 elements")
     (description "JLargeArrays is a Java library of one-dimensional arrays
@@ -916,8 +888,7 @@ that can store up to 263 elements.")
        #:tests? #f ; tests are not included in the release archive
        #:jdk ,icedtea-8))
     (propagated-inputs
-     `(("java-commons-math3" ,java-commons-math3)
-       ("java-jlargearrays" ,java-jlargearrays)))
+     (list java-commons-math3 java-jlargearrays))
     (home-page "https://github.com/wendykierp/JTransforms")
     (synopsis "Multithreaded FFT library written in pure Java")
     (description "JTransforms is a multithreaded FFT library written in pure
@@ -941,7 +912,7 @@ Sine Transform} (DST) and @dfn{Discrete Hartley Transform} (DHT).")
                 "00bch77a6qgnw6vzsjn2a42n8n683ih3xm0wpr454jxa15hw78vf"))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("perl" ,perl)))                   ; for pod2man
+     (list perl))                   ; for pod2man
     (home-page "https://jugit.fz-juelich.de/mlz/lmfit")
     (synopsis "Levenberg-Marquardt minimization and least-squares fitting")
     (description "lmfit is a C library for Levenberg-Marquardt least-squares
@@ -952,7 +923,7 @@ algorithms from the FORTRAN library MINPACK.")
 (define-public symengine
   (package
     (name "symengine")
-    (version "0.6.0")
+    (version "0.9.0")
     (source
      (origin
        (method git-fetch)
@@ -961,7 +932,7 @@ algorithms from the FORTRAN library MINPACK.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "129iv9maabmb42ylfdv0l0g94mcbf3y4q3np175008rcqdr8z6h1"))))
+        (base32 "17b6byrhk0bgvarqmg92nrrqhzll9as6x1smghmyq2h9xc373ap4"))))
     (build-system cmake-build-system)
     (arguments
      '(#:configure-flags
@@ -974,10 +945,7 @@ algorithms from the FORTRAN library MINPACK.")
          "-DWITH_SYMENGINE_THREAD_SAFE=on"
          "-DBUILD_SHARED_LIBS=on")))    ;also build libsymengine
     (inputs
-     `(("flint" ,flint)
-       ("gmp" ,gmp)
-       ("mpc" ,mpc)
-       ("mpfr" ,mpfr)))
+     (list flint gmp mpc mpfr))
     (home-page "https://github.com/symengine/symengine")
     (synopsis "Fast symbolic manipulation library")
     (description
@@ -986,23 +954,49 @@ Optional thin wrappers allow usage of the library from other languages.")
     (license (list license:expat        ;SymEngine
                    license:bsd-3))))    ;3rd party code
 
+(define-public ginac
+  (package
+    (name "ginac")
+    (version "1.8.1")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://www.ginac.de/ginac-"
+                           version ".tar.bz2"))
+       (sha256
+        (base32 "1az1ypfcny4jdz0mic1kywwa9nynr547cl5s7zpn2w0qdfymssgi"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:configure-flags (list "--disable-static")))
+    (native-inputs
+     `(("bison" ,bison)
+       ("flex" ,flex)
+       ("pkg-config" ,pkg-config)
+       ("python" ,python-wrapper))) ; Python is required
+    (inputs
+     (list cln readline))
+    (home-page "https://www.ginac.de/")
+    (synopsis "Library for symbolic computation")
+    (description "GiNaC is a C++ library for symbolic computation.  Contrary
+to other CAS it does not try to provide extensive algebraic capabilities and a
+simple programming language but instead accepts a given language (C++) and
+extends it by a set of algebraic capabilities.")
+    (license license:gpl2+)))
+
 (define-public eigen
   (package
     (name "eigen")
-    (version "3.3.8")
+    (version "3.4.0")
     (source (origin
-              (method url-fetch)
-              (uri (list
-                     (string-append "https://bitbucket.org/eigen/eigen/get/"
-                                    version ".tar.bz2")
-                     (string-append "mirror://debian/pool/main/e/eigen3/eigen3_"
-                                    version ".orig.tar.bz2")))
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitlab.com/libeigen/eigen.git")
+                    (commit version)))
               (sha256
                (base32
-                "1vxrsncfnkyq6gwxpsannpryp12mk7lc8f42ybvz3saf7icwc582"))
-              (file-name (string-append name "-" version ".tar.bz2"))
-              (patches (search-patches "eigen-remove-openmp-error-counting.patch"
-                                       "eigen-stabilise-sparseqr-test.patch"))
+                "0k1c4qnymwwvm68rv6s0cyk08xbw65ixvwqccsh36c2axcqk3znp"))
+              (file-name (git-file-name name version))
+              (patches (search-patches "eigen-fix-strict-aliasing-bug.patch"))
               (modules '((guix build utils)))
               (snippet
                ;; There are 3 test failures in the "unsupported" directory,
@@ -1020,17 +1014,18 @@ Optional thin wrappers allow usage of the library from other languages.")
 
        #:phases (modify-phases %standard-phases
                   (replace 'check
-                    (lambda _
+                    (lambda* (#:key tests? #:allow-other-keys)
                       (let* ((cores  (parallel-job-count))
                              (dash-j (format #f "-j~a" cores)))
-			(setenv "EIGEN_SEED" "1") ;for reproducibility
-                        ;; First build the tests, in parallel.  See
-                        ;; <http://eigen.tuxfamily.org/index.php?title=Tests>.
-                        (invoke "make" "buildtests" dash-j)
+                        (when tests?
+                          (setenv "EIGEN_SEED" "1") ;for reproducibility
+                          ;; First build the tests, in parallel.  See
+                          ;; <http://eigen.tuxfamily.org/index.php?title=Tests>.
+                          (invoke "make" "buildtests" dash-j)
 
-                        ;; Then run 'CTest' with -V so we get more
-                        ;; details upon failure.
-                        (invoke "ctest" "-V" dash-j)))))))
+                          ;; Then run 'CTest' with -V so we get more
+                          ;; details upon failure.
+                          (invoke "ctest" "-V" dash-j))))))))
     (home-page "https://eigen.tuxfamily.org")
     (synopsis "C++ template library for linear algebra")
     (description
@@ -1043,6 +1038,44 @@ features, and more.")
     ;; Most of the code is MPLv2, with a few files under LGPLv2.1+ or BSD-3.
     ;; See 'COPYING.README' for details.
     (license license:mpl2.0)))
+
+(define-public eigen-benchmarks
+  (package
+    (inherit eigen)
+    (name "eigen-benchmarks")
+    (arguments
+     '(#:phases (modify-phases %standard-phases
+                  (delete 'configure)
+                  (replace 'build
+                    (lambda* (#:key outputs #:allow-other-keys)
+                      (let* ((out (assoc-ref outputs "out"))
+                             (bin (string-append out "/bin")))
+                        (define (compile file)
+                          (format #t "compiling '~a'...~%" file)
+                          (let ((target
+                                 (string-append bin "/"
+                                                (basename file ".cpp"))))
+                            (invoke "c++" "-o" target file
+                                    "-I" ".." "-O2" "-g"
+                                    "-lopenblas" "-Wl,--as-needed")))
+
+                        (mkdir-p bin)
+                        (with-directory-excursion "bench"
+                          ;; There are more benchmarks, of varying quality.
+                          ;; Here we pick some that appear to be useful.
+                          (for-each compile
+                                    '("benchBlasGemm.cpp"
+                                      "benchCholesky.cpp"
+                                      ;;"benchEigenSolver.cpp"
+                                      "benchFFT.cpp"
+                                      "benchmark-blocking-sizes.cpp"))))))
+                  (delete 'install))))
+    (inputs (list boost openblas))
+
+    ;; Mark as tunable to take advantage of SIMD code in Eigen.
+    (properties '((tunable? . #t)))
+
+    (synopsis "Micro-benchmarks of the Eigen linear algebra library")))
 
 (define-public eigen-for-tensorflow
   (let ((changeset "fd6845384b86")
@@ -1067,8 +1100,9 @@ features, and more.")
                  '(begin
                     (substitute* "unsupported/CMakeLists.txt"
                       (("add_subdirectory\\(test.*")
-                       "# Do not build the tests for unsupported features.\n"))
-                    #t)))))))
+                       "# Do not build the tests for unsupported features.\n"))))))
+      (native-inputs
+       (list gcc-7)))))
 
 (define-public eigen-for-tensorflow-lite
   ;; This commit was taken from
@@ -1100,7 +1134,7 @@ features, and more.")
 (define-public xtensor
   (package
     (name "xtensor")
-    (version "0.20.10")
+    (version "0.24.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1108,12 +1142,11 @@ features, and more.")
                     (commit version)))
               (sha256
                (base32
-                "1fmv2hpx610xwhxrndfsfvlbqfyk4l3gi5q5d7pa9m82kblxjj9l"))
+                "14fpzwdq26p2fqdrmc78hny9pp09k9c53jnwlh7f8x54ikzm23c2"))
               (file-name (git-file-name name version))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("googletest" ,googletest)
-       ("xtl" ,xtl)))
+     (list doctest googletest xtl))
     (arguments
      `(#:configure-flags
        '("-DBUILD_TESTS=ON")
@@ -1131,20 +1164,59 @@ xtensor provides:
 @end itemize")
     (license license:bsd-3)))
 
+(define-public xtensor-benchmark
+  (package
+    (inherit xtensor)
+    (name "xtensor-benchmark")
+    (arguments
+     `(#:configure-flags (list "-DBUILD_BENCHMARK=ON"
+                               "-DDOWNLOAD_GBENCHMARK=OFF")
+       #:tests? #f
+       #:phases (modify-phases %standard-phases
+                  (add-after 'unpack 'remove-march=native
+                    (lambda _
+                      (substitute* "benchmark/CMakeLists.txt"
+                        (("-march=native\"") "\""))))
+                  (add-after 'unpack 'link-with-googlebenchmark
+                    (lambda _
+                      (substitute* "benchmark/CMakeLists.txt"
+                        (("find_package\\(benchmark.*" all)
+                         (string-append
+                          all "\n"
+                          "set(GBENCHMARK_LIBRARIES benchmark)\n")))))
+                  (replace 'build
+                    (lambda _
+                      (invoke "make" "benchmark_xtensor" "-j"
+                              (number->string (parallel-job-count)))))
+                  (replace 'install
+                    (lambda* (#:key outputs #:allow-other-keys)
+                      ;; Install nothing but the executable.
+                      (let ((out (assoc-ref outputs "out")))
+                        (install-file "benchmark/benchmark_xtensor"
+                                      (string-append out "/bin"))))))))
+    (synopsis "Benchmarks of the xtensor library")
+    (native-inputs '())
+    (inputs
+     (modify-inputs (package-native-inputs xtensor)
+       (prepend googlebenchmark xsimd)))
+
+    ;; Mark as tunable to take advantage of SIMD code in xsimd/xtensor.
+    (properties '((tunable? . #t)))))
+
 (define-public gap
   (package
     (name "gap")
-    (version "4.11.0")
+    (version "4.11.1")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://files.gap-system.org/gap-"
                            (version-major+minor version)
-                           "/tar.bz2/gap-"
+                           "/tar.gz/gap-"
                            version
-                           ".tar.bz2"))
+                           ".tar.gz"))
        (sha256
-        (base32 "00l6hvy4iggnlrib4vp805sxdm3j7n3hzpv5zs9hbiiavh80l1xz"))
+        (base32 "01535s81h254zcs84zi95xqmhvvn6fn9qss8761myxc2gpdcadb6"))
        (modules '((guix build utils) (ice-9 ftw) (srfi srfi-1)))
        (snippet
         '(begin
@@ -1170,33 +1242,45 @@ xtensor provides:
                    "SmallGrp-"   ; artistic2.0
                    "transgrp"    ; artistic2.0 for data,
                                  ; gpl2 or gpl3 for code
-                   ;; Recommended package.
-                   "io-"         ; gpl3+
-                   ;; Optional packages, searched for at start,
-                   ;; and their depedencies.
+                   ;; Optional packages.
                    "alnuth-"
+                   "AutoDoc-"
+                   "automata-"
                    "autpgrp-"
+                   "crime-"
                    "crisp-"      ; bsd-2
-                   "ctbllib"     ; gpl3+, clarified in the next release;
-                                 ; see
-                                 ; http://www.math.rwth-aachen.de/~Thomas.Breuer/ctbllib/README.md
+                   "ctbllib"     ; gpl3+
+                   "datastructures"
                    "FactInt-"
                    "fga"
+                   "format"
+                   "groupoids-"
+                   "guarana"
+                   "idrel-"
+                   "images-"     ; mpl2.0
+                   "IntPic-"
+                   "io-"         ; gpl3+
                    "irredsol-"   ; bsd-2
                    "laguna-"
+                   "liering-"
+                   "MapClass-"
+                   "nilmat-"
+                   "NumericalSgps-"
+                   "OpenMath-"
+                   "orb-"        ; gpl3+
                    "polenta-"
                    "polycyclic-"
                    "radiroot-"
+                   "repsn-"
                    "resclasses-"
+                   "simpcomp"
                    "sophus-"
                    "tomlib-"
-                   "utils-"))))
-           #t))))
+                   "unipot-"
+                   "utils-"))))))))
     (build-system gnu-build-system)
     (inputs
-     `(("gmp" ,gmp)
-       ("readline" ,readline)
-       ("zlib" ,zlib)))
+     (list gmp readline zlib))
     (arguments
      `(#:modules ((ice-9 ftw)
                   (srfi srfi-26)
@@ -1210,14 +1294,12 @@ xtensor provides:
            (lambda _
              (setenv "CONFIG_SHELL" (which "bash"))
              (with-directory-excursion "pkg"
-               (invoke "../bin/BuildPackages.sh")
-             #t)))
+               (invoke "../bin/BuildPackages.sh"))))
          (add-after 'build-packages 'build-doc
            ;; The documentation is bundled, but we create it from source.
            (lambda _
              (with-directory-excursion "doc"
-               (invoke "./make_doc"))
-             #t))
+               (invoke "./make_doc"))))
          (replace 'install
            (lambda* (#:key outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
@@ -1242,6 +1324,8 @@ xtensor provides:
                (chmod prog #o755)
                ;; Install the headers and library, which are needed by Sage.
                (invoke "make" "install-headers")
+               (install-file "gen/config.h"
+                             (string-append out "/include/gap"))
                (invoke "make" "install-libgap")
                ;; Remove information on the build directory from sysinfo.gap.
                (substitute* "sysinfo.gap"
@@ -1251,8 +1335,7 @@ xtensor provides:
                (invoke "make" "install-gaproot")
                ;; Copy the directory of compiled packages; the make target
                ;; install-pkg is currently empty.
-               (copy-recursively "pkg" (string-append share "/pkg")))
-             #t)))))
+               (copy-recursively "pkg" (string-append share "/pkg"))))))))
     (home-page "https://www.gap-system.org/")
     (synopsis
      "System for computational group theory")
@@ -1273,19 +1356,17 @@ objects.")
 (define-public gappa
   (package
    (name "gappa")
-   (version "1.3.5")
+   (version "1.4.0")
    (source (origin
             (method url-fetch)
-            (uri (string-append "https://gforge.inria.fr/frs/download.php/latestfile/"
-                                "2699/gappa-" version ".tar.gz"))
+            (uri (string-append "https://gappa.gitlabpages.inria.fr/releases/"
+                                "gappa-" version ".tar.gz"))
             (sha256
              (base32
-              "0q1wdiwqj6fsbifaayb1zkp20bz8a1my81sqjsail577jmzwi07w"))))
+              "12x42z901pr05ldmparqdi8sq9s7fxbavhzk2dbq3l6hy247dwbb"))))
    (build-system gnu-build-system)
    (inputs
-    `(("boost" ,boost)
-      ("gmp" ,gmp)
-      ("mpfr" ,mpfr)))
+    (list boost gmp mpfr))
    (arguments
     `(#:phases
       (modify-phases %standard-phases
@@ -1309,7 +1390,7 @@ filters for CGAL and it is used to certify elementary functions in CRlibm.
 While Gappa is intended to be used directly, it can also act as a backend
 prover for the Why3 software verification platform or as an automatic tactic
 for the Coq proof assistant.")
-   (license (list license:gpl3+ license:cecill-c)))) ; either/or
+   (license (list license:gpl3+ license:cecill)))) ; either/or
 
 (define-public givaro
   (package
@@ -1326,11 +1407,9 @@ for the Coq proof assistant.")
                 "11wz57q6ijsvfs5r82masxgr319as92syi78lnl9lgdblpc6xigk"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (propagated-inputs
-     `(("gmp" ,gmp))) ; gmp++.h includes gmpxx.h
+     (list gmp)) ; gmp++.h includes gmpxx.h
     (synopsis "Algebraic computations with exact rings and fields")
     (description
      "Givaro is a C++ library implementing the basic arithmetic of various
@@ -1357,14 +1436,11 @@ compound objects, such as vectors, matrices and univariate polynomials.")
                 "1ynbjd72qrwp0b4kpn0p5d7gddpvj8dlb5fwdxajr5pvkvi3if74"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (inputs
-     `(("openblas" ,openblas)))
+     (list openblas))
     (propagated-inputs
-     `(("givaro" ,givaro))) ; required according to the .pc file
+     (list givaro)) ; required according to the .pc file
     (arguments
      `(#:configure-flags
        (list (string-append "--with-blas-libs="
@@ -1400,12 +1476,9 @@ algebra, such as the row echelon form.")
               (patches (search-patches "linbox-fix-pkgconfig.patch"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (propagated-inputs
-     `(("fflas-ffpack" ,fflas-ffpack)))
+     (list fflas-ffpack))
     (synopsis "C++ library for linear algebra over exact rings")
     (description
      "LinBox is a C++ template library for exact linear algebra computation
@@ -1429,12 +1502,9 @@ finite fields.")
                 "0xfg6pffbn8r1s0y7bn9b8i55l00d41dkmhrpf7pwk53qa3achd3"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (inputs
-     `(("libpng" ,libpng)))
+     (list libpng))
     (synopsis "Arithmetic of dense matrices over F_2")
     (description "M4RI is a library for fast arithmetic with dense matrices
 over F2.  The name M4RI comes from the first implemented algorithm: The
@@ -1519,11 +1589,9 @@ polynomials, and the representation theory of Hecke algebras of type A_n.")
                 "0r8lv46qx5mkz5kp3ay2jnsp0mbhlqr5z2z220wdk73wdshcznss"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (inputs
-     `(("m4ri" ,m4ri)))
+     (list m4ri))
     (synopsis "Arithmetic of dense matrices over F_{2^e}")
     (description "M4RI is a library for fast arithmetic with dense matrices
 over finite fields of characteristic 2.  So it extends the functionality
@@ -1534,24 +1602,21 @@ of M4RI from F_2 to F_{2^e}.")
 (define-public eclib
   (package
     (name "eclib")
-    (version "20190909")
+    (version "20220621")
     (source (origin
               (method git-fetch)
               (uri (git-reference
                     (url "https://github.com/JohnCremona/eclib/")
-                    (commit (string-append "v" version))))
+                    (commit version)))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1gw27lqc3f525n8qdcmr2nyn16y9g10z9f6dnmckyyxcdzvhq35n"))))
+                "07wbkzmn6w0hrv2vim7f0il7k59ccc66x5vnn623xkmhfw32b3nz"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (inputs
-     `(("ntl" ,ntl)
-       ("pari-gp" ,pari-gp)))
+     (list ntl pari-gp))
     (synopsis "Ranks of elliptic curves and modular symbols")
     (description "The eclib package includes mwrank (for 2-descent on
 elliptic curves over Q) and modular symbol code; it has been written by
@@ -1563,7 +1628,7 @@ John Cremona to compute his elliptic curve database.")
 (define-public lrcalc
   (package
     (name "lrcalc")
-    (version "1.2")
+    (version "2.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1572,20 +1637,10 @@ John Cremona to compute his elliptic curve database.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1c12d04jdyxkkav4ak8d1aqrv594gzihwhpxvc6p9js0ry1fahss"))
-              (patches (search-patches "lrcalc-includes.patch"))))
+                "0s3amf3z75hnrjyszdndrvk4wp5p630dcgyj341i6l57h43d1p4k"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
-    (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'fix-permission
-           (lambda _
-             (chmod "lrcalc.maple.src" #o644)
-             #t)))))
+     (list autoconf automake libtool))
     (synopsis "Littlewood-Richardson calculator in algebraic combinatorics")
     (description "The Littlewood-Richardson Calculator (lrcalc) is a
 program designed to compute Littlewood-Richardson coefficients.  It computes
@@ -1678,22 +1733,22 @@ no more than about 20 bits long).")
 (define-public sollya
   (package
    (name "sollya")
-   (version "7.0")
+   (version "8.0")
    (source (origin
             (method url-fetch)
             (uri (string-append "https://www.sollya.org/releases/"
                                 "sollya-" version "/sollya-" version ".tar.bz2"))
             (sha256
              (base32
-              "11290ivi9h665cxi8f1shlavhy10vzb8s28m57hrcgnxyxqmhx0m"))))
+              "1sf1cjcr6x035n97l64ppzb9pzq5568h7waz0zfc3120894gcnjz"))))
    (build-system gnu-build-system)
    (inputs
-    `(("fplll" ,fplll)
-      ("gmp" ,gmp)
-      ("gnuplot" ,gnuplot)
-      ("libxml2" ,libxml2)
-      ("mpfi" ,mpfi)
-      ("mpfr" ,mpfr)))
+    (list fplll
+          gmp
+          gnuplot
+          libxml2
+          mpfi
+          mpfr))
    (arguments
     `(#:configure-flags
       (list (string-append "--docdir=${datadir}/doc/sollya-" ,version))

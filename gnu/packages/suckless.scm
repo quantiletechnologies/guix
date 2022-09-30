@@ -10,6 +10,10 @@
 ;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2021 Raghav Gururajan <rg@raghavgururajan.name>
 ;;; Copyright © 2021 Alexandru-Sergiu Marton <brown121407@posteo.ro>
+;;; Copyright © 2021 Nikolay Korotkiy <sikmir@disroot.org>
+;;; Copyright © 2022 Jai Vetrivelan <jaivetrivelan@gmail.com>
+;;; Copyright © 2022 jgart <jgart@dismail.de>
+;;; Copyright © 2022 Antero Mejr <antero@mailbox.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -35,7 +39,9 @@
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages gawk)
   #:use-module (gnu packages gnome)
+  #:use-module (gnu packages gtk)
   #:use-module (gnu packages image)
+  #:use-module (gnu packages imagemagick)
   #:use-module (gnu packages libbsd)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages mpd)
@@ -46,6 +52,7 @@
   #:use-module (guix build-system glib-or-gtk)
   #:use-module (guix build-system gnu)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix utils)
@@ -116,7 +123,7 @@ terminal like @code{st}.")
     (synopsis "Tab interface for application supporting Xembed")
     (description "Tabbed is a generic tabbed frontend to xembed-aware
 applications.  It was originally designed for surf but also usable with many
-other applications, i.e. st, uzbl, urxvt and xterm.")
+other applications, i.e., st, uzbl, urxvt and xterm.")
     (license
      ;; Dual-licensed.
      (list
@@ -214,13 +221,13 @@ a custom raw video format with a simple container.")
 (define-public dwm
   (package
     (name "dwm")
-    (version "6.2")
+    (version "6.3")
     (source (origin
              (method url-fetch)
              (uri (string-append "https://dl.suckless.org/dwm/dwm-"
                                  version ".tar.gz"))
              (sha256
-              (base32 "03hirnj8saxnsfqiszwl2ds7p0avg20izv9vdqyambks00p2x44p"))))
+              (base32 "1387lg370yrg7ssi3045di3904gkchxlza7rswgvl7wva8la1nms"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f
@@ -258,10 +265,7 @@ a custom raw video format with a simple container.")
                     output)))
               #t))))))
     (inputs
-     `(("freetype" ,freetype)
-       ("libx11" ,libx11)
-       ("libxft" ,libxft)
-       ("libxinerama" ,libxinerama)))
+     (list freetype libx11 libxft libxinerama))
     (home-page "https://dwm.suckless.org/")
     (synopsis "Dynamic window manager")
     (description
@@ -273,14 +277,14 @@ optimising the environment for the application in use and the task performed.")
 (define-public dmenu
   (package
     (name "dmenu")
-    (version "5.0")
+    (version "5.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://dl.suckless.org/tools/dmenu-"
                                   version ".tar.gz"))
               (sha256
                (base32
-                "1lvfxzg3chsgcqbc2vr0zic7vimijgmbvnspayx73kyvqi1f267y"))))
+                "1mcg6i5g2c4wsyq9ap739si4zghk1xg6c3msdqrbfzm3pfg70k8z"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f                      ; no tests
@@ -293,10 +297,7 @@ optimising the environment for the application in use and the task performed.")
        #:phases
        (modify-phases %standard-phases (delete 'configure))))
     (inputs
-     `(("freetype" ,freetype)
-       ("libxft" ,libxft)
-       ("libx11" ,libx11)
-       ("libxinerama" ,libxinerama)))
+     (list freetype libxft libx11 libxinerama))
     (home-page "https://tools.suckless.org/dmenu/")
     (synopsis "Dynamic menu")
     (description
@@ -323,10 +324,8 @@ numbers of user-defined menu items efficiently.")
        (list (string-append "CC=" ,(cc-for-target))
              (string-append "PREFIX=" %output))))
     (inputs
-     `(("libx11" ,libx11)
-       ("libxkbfile" ,libxkbfile)
-       ("alsa-lib" ,alsa-lib)           ; tinyalsa (unpackaged) would suffice
-       ("libmpdclient" ,libmpdclient)))
+     (list libx11 libxkbfile alsa-lib ; tinyalsa (unpackaged) would suffice
+           libmpdclient))
     (home-page "https://git.2f30.org/spoon/")
     (synopsis "Set dwm status")
     (description
@@ -352,10 +351,7 @@ numbers of user-defined menu items efficiently.")
              (string-append "PREFIX=" %output))
        #:phases (modify-phases %standard-phases (delete 'configure))))
     (inputs
-     `(("libx11" ,libx11)
-       ("libxext" ,libxext)
-       ("libxinerama" ,libxinerama)
-       ("libxrandr" ,libxrandr)))
+     (list libx11 libxext libxinerama libxrandr))
     (home-page "https://tools.suckless.org/slock/")
     (synopsis "Simple X session lock")
     (description
@@ -365,35 +361,34 @@ numbers of user-defined menu items efficiently.")
 (define-public st
   (package
     (name "st")
-    (version "0.8.4")
+    (version "0.8.5")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://dl.suckless.org/st/st-"
                            version ".tar.gz"))
        (sha256
-        (base32 "19j66fhckihbg30ypngvqc9bcva47mp379ch5vinasjdxgn3qbfl"))))
+        (base32 "0dxb8ksy4rcnhp5k54p7i7wwhm64ksmavf5wh90zfbyh7qh34s7a"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f                      ; no tests
        #:make-flags
        (list (string-append "CC=" ,(cc-for-target))
+             (string-append "TERMINFO="
+                            (assoc-ref %outputs "out")
+                            "/share/terminfo")
              (string-append "PREFIX=" %output))
        #:phases
        (modify-phases %standard-phases
-         (delete 'configure)
-         (add-after 'unpack 'inhibit-terminfo-install
-           (lambda _
-             (substitute* "Makefile"
-               (("\ttic .*") ""))
-             #t)))))
+         (delete 'configure))))
     (inputs
      `(("libx11" ,libx11)
        ("libxft" ,libxft)
        ("fontconfig" ,fontconfig)
        ("freetype" ,freetype)))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list ncurses ;provides tic program
+           pkg-config))
     (home-page "https://st.suckless.org/")
     (synopsis "Simple terminal emulator")
     (description
@@ -402,6 +397,90 @@ implements 256 colors, most VT10X escape sequences, utf8, X11 copy/paste,
 antialiased fonts (using fontconfig), fallback fonts, resizing, and line
 drawing.")
     (license license:x11)))
+
+(define-public xst
+  (package
+    (inherit st)
+    (name "xst")
+    (version "0.8.4.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/gnotclub/xst")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1q64x7czpbcg0v509qchn5v96zdnx7jmvy0zxhjmkk3d10x5rqlw"))))
+    (home-page "https://github.com/gnotclub/xst")
+    (synopsis "Fork of st that uses Xresources")
+    (description
+     "@command{xst} uses Xresources and applies the following patches to
+@command{st}:
+@itemize
+@item @uref{https://st.suckless.org/patches/alpha/, alpha}
+@item @uref{https://st.suckless.org/patches/boxdraw/, boxdraw}
+@item @uref{https://st.suckless.org/patches/clipboard/, clipboard}
+@item @uref{https://st.suckless.org/patches/disable_bold_italic_fonts/, disable_bold_italic_fonts}
+@item @uref{https://st.suckless.org/patches/externalpipe/, externalpipe}
+@item @uref{https://st.suckless.org/patches/scrollback/, scrollback}
+@item @uref{https://st.suckless.org/patches/spoiler/, spoiler}
+@item @uref{https://st.suckless.org/patches/vertcenter/, vertcenter}
+@end itemize")
+    (license license:expat)))
+
+(define-public lukesmithxyz-st
+  (let ((commit "e053bd6036331cc7d14f155614aebc20f5371d3a")
+        (revision "0"))
+    (package
+      (inherit st)
+      (name "lukesmithxyz-st")
+      (version "0.8.4")
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://github.com/LukeSmithxyz/st")
+               (commit commit)))
+         (file-name (git-file-name name version))
+         (sha256
+          (base32 "12avzzapkkj4mvd00zh8b6gynk6jysh84jcwlkliyyd82lvyw22v"))))
+      (arguments
+       (substitute-keyword-arguments (package-arguments st)
+         ((#:phases phases)
+          `(modify-phases ,phases
+             (add-after 'unpack 'remove-calls-to-git
+               (lambda _
+                 (substitute* "Makefile"
+                   (("git submodule init") "")
+                   (("git submodule update") ""))))))))
+      (inputs (modify-inputs (package-inputs st)
+                (prepend libxext harfbuzz)))
+      (home-page "https://github.com/LukeSmithxyz/st")
+      (synopsis "Luke Smith's fork of st")
+      (description
+       "This package is Luke's fork of the suckless simple terminal (st) with
+Vim bindings and Xresource compatibility.")
+      (license license:expat))))
+
+(define-public sxmo-st
+  (package
+    (inherit st)
+    (name "sxmo-st")
+    (version "0.8.4.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri
+        (git-reference
+         (url "https://git.sr.ht/~mil/sxmo-st")
+         (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1nl40q1pxf46hpbibz9m9d0giiy1p3lrhr9agw0fkyba2vzbbafa"))))
+    (home-page "https://git.sr.ht/~mil/sxmo-st")
+    (synopsis "St terminal emulator for the Simple X Mobile PinePhone environment")
+    (license license:expat)))
 
 (define-public surf
   (package
@@ -427,18 +506,18 @@ drawing.")
          (add-before 'build 'set-dmenu-and-xprop-file-name
            (lambda* (#:key inputs #:allow-other-keys)
              (substitute* "config.def.h"
-               (("dmenu") (string-append (assoc-ref inputs "dmenu") "/bin/dmenu"))
-               (("xprop") (string-append (assoc-ref inputs "xprop") "/bin/xprop")))
+               (("dmenu") (search-input-file inputs "/bin/dmenu"))
+               (("xprop") (search-input-file inputs "/bin/xprop")))
              #t)))))
     (inputs
      `(("dmenu" ,dmenu)
        ("gcr" ,gcr)
        ("glib-networking" ,glib-networking)
        ("gsettings-desktop-schemas" ,gsettings-desktop-schemas)
-       ("webkitgtk" ,webkitgtk)
+       ("webkitgtk" ,webkitgtk-with-libsoup2)
        ("xprop" ,xprop)))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (home-page "https://surf.suckless.org/")
     (synopsis "Simple web browser")
     (description
@@ -462,31 +541,33 @@ point surf to another URI by setting its XProperties.")
     (build-system gnu-build-system)
     (arguments
      `(#:phases (modify-phases %standard-phases
-                  (delete 'configure))  ; no configuration
-       #:tests? #f                      ; no test suite
+                  (delete 'configure) ;no configuration
+                  (add-before 'build 'patch-farbfeld
+                    (lambda* (#:key inputs #:allow-other-keys)
+                      (substitute* "config.def.h"
+                        (("2ff") (search-input-file inputs "/bin/2ff"))))))
+       #:tests? #f                                ;no test suite
        #:make-flags
        (let ((pkg-config (lambda (flag)
-                           (string-append
-                            "$(shell pkg-config " flag " "
-                            "xft fontconfig x11 libpng)"))))
-         (list (string-append "CC=" ,(cc-for-target))
+                           (string-append "$(shell pkg-config " flag " "
+                                          "xft fontconfig x11 libpng)"))))
+         (list (string-append "CC="
+                              ,(cc-for-target))
                (string-append "PREFIX=" %output)
-               (string-append "INCS=-I. " (pkg-config "--cflags"))
-               (string-append "LIBS=" (pkg-config "--libs") " -lm")))))
-    (native-inputs
-     `(("pkg-config" ,pkg-config)))
-    (inputs
-     `(("libpng" ,libpng)
-       ("libx11" ,libx11)
-       ("libxft" ,libxft)
-       ("fontconfig" ,fontconfig)))
+               (string-append "INCS=-I. "
+                              (pkg-config "--cflags"))
+               (string-append "LIBS="
+                              (pkg-config "--libs") " -lm")))))
+    (native-inputs (list pkg-config))
+    (inputs (list farbfeld libpng libx11 libxft fontconfig))
     (synopsis "Plain-text presentation tool")
-    (description "Sent uses plain-text files and PNG images to create slideshow
+    (description
+     "Sent uses plain-text files and PNG images to create slideshow
 presentations.  Each paragraph represents a slide in the presentation.
 Especially for presentations using the Takahashi method this is very nice and
 allows you to write down the presentation for a quick lightning talk within a
 few minutes.")
-    (home-page "https://tools.suckless.org/sent")
+    (home-page "https://tools.suckless.org/sent/")
     (license license:x11)))
 
 (define-public wmname
@@ -510,7 +591,7 @@ few minutes.")
        (modify-phases %standard-phases
          (delete 'configure))))         ; no configure script
     (inputs
-     `(("libx11" ,libx11)))
+     (list libx11))
     (home-page "https://tools.suckless.org/x/wmname/")
     (synopsis "Print or set the window manager name")
     (description "@command{wmname} prints/sets the window manager name
@@ -538,7 +619,7 @@ assuming a reparenting window manager for instance.")
        (list (string-append "CC=" ,(cc-for-target))
              (string-append "PREFIX=" %output))))
     (inputs
-     `(("libx11" ,libx11)))
+     (list libx11))
     (home-page "https://git.2f30.org/xbattmon/")
     (synopsis "Simple battery monitor for X")
     (description
@@ -656,8 +737,7 @@ left.")
        (modify-phases %standard-phases
          (delete 'configure))))         ; no configure script
     (inputs
-     `(("cups-minimal" ,cups-minimal)
-       ("zlib" ,zlib)))
+     (list cups-minimal zlib))
     (home-page "https://git.2f30.org/prout/")
     (synopsis "Smaller lp command")
     (description
@@ -693,7 +773,7 @@ cups server to be installed.")
              (substitute* "Makefile"
                (("lcurses") "lncurses")))))))
     (inputs
-     `(("ncurses" ,ncurses)))
+     (list ncurses))
     (home-page "https://git.2f30.org/noice/")
     (synopsis "Small file browser")
     (description
@@ -796,7 +876,7 @@ initially intended to be used on musl-based Linux distributions.
        (modify-phases %standard-phases
          (delete 'configure))))         ; no configure script
     (inputs
-     `(("libpng" ,libpng)))
+     (list libpng))
     (home-page "https://git.2f30.org/colors/")
     (synopsis "Extract colors from pictures")
     (description
@@ -834,7 +914,7 @@ colormap to stdout.")
          (modify-phases %standard-phases
            (delete 'configure))))       ; no configure script
       (inputs
-       `(("gawk" ,gawk)))
+       (list gawk))
       (home-page "https://github.com/cls/libutf")
       (synopsis "Plan 9 compatible UTF-8 library")
       (description
@@ -892,10 +972,7 @@ as -1, to be used instead of U+FFFD.
                  (install-file "lchat.1" man1)
                  #t))))))
       (inputs
-       `(("grep" ,grep)
-         ("ncurses" ,ncurses)
-         ("libutf" ,libutf)
-         ("libbsd" ,libbsd)))
+       (list grep ncurses libutf libbsd))
       (home-page "https://github.com/younix/lchat")
       (synopsis "Line chat is a frontend for the irc client ii from suckless")
       (description
@@ -923,7 +1000,6 @@ chat output in the background.")
      `(#:tests? #f ; There are no tests.
        #:make-flags
        (list (string-append "CC=" ,(cc-for-target))
-             (string-append "DESTDIR=" %output)
              ;; Set prefix path to root of package path in store instead
              ;; of /usr/local.
              (string-append "PREFIX=" %output))
@@ -936,6 +1012,39 @@ chat output in the background.")
 "@command{snooze} is a tool for waiting until a particular time and then
 running a command.")
     (license license:cc0)))
+
+(define-public sbase
+  ;; There are no tagged releases.
+  (let ((commit "2c2a7f54ab55a022a617e510b6e00c3e2736fabd")
+        (revision "0"))
+    (package
+      (name "sbase")
+      (version (git-version "0" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri
+          (git-reference
+           (url "https://git.suckless.org/sbase/")
+           (commit commit)))
+         (file-name (git-file-name name version))
+         (sha256
+          (base32 "119v1lpgsx8bx9h57wg454ddhzz2awqavl3wrn35a704vifg28g0"))))
+      (build-system gnu-build-system)
+      (arguments
+       (list
+        #:tests? #f                     ;no test suite
+        #:make-flags #~(list (string-append "CC=" #$(cc-for-target))
+                             (string-append "PREFIX=" #$output))
+        #:phases
+        #~(modify-phases %standard-phases
+            (delete 'configure))))
+      (home-page "https://core.suckless.org/sbase/")
+      (synopsis "Collection of UNIX tools")
+      (description "@command{sbase} is a collection of UNIX tools similar to those of GNU
+Coreutils, containing utilities commands such as @command{grep}, @command{cp},
+@command{rm}, etc.")
+      (license license:expat))))
 
 (define-public scron
   (package
@@ -964,4 +1073,147 @@ running a command.")
      "Schedule commands to be run at specified dates and times.
 Single daemon and configuration file.  Log to stdout or syslog.  No mail
 support.")
+    (license license:expat)))
+
+(define-public sfm
+  (package
+    (name "sfm")
+    (version "0.4")
+    (source
+     (origin
+       (method git-fetch)
+       (uri
+        (git-reference
+         (url "git://git.afify.dev/sfm.git")
+         (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "0g6k884mggryld0k054sjcj6kpkbca9cvr50w98klszym73yw0sp"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:tests? #f                      ;no check target
+       #:make-flags
+       (list (string-append "CC=" ,(cc-for-target))
+             (string-append "PREFIX=" %output))
+       #:phases
+       (modify-phases %standard-phases
+         (delete 'configure))))         ;no configure script
+    (home-page "https://github.com/afify/sfm")
+    (synopsis "Simple file manager")
+    (description "sfm is a simple file manager.")
+    (license license:isc)))
+
+(define-public sfeed
+  (package
+    (name "sfeed")
+    (version "1.5")
+    (source
+     (origin
+       (method git-fetch)
+       (uri
+        (git-reference
+         (url "git://git.codemadness.org/sfeed")
+         (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1w3xk00nv502q2nr23y1sig7bkqa7f431f4fcaybfcfk7dbv2piq"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:tests? #f                       ;no check target
+      #:make-flags
+      #~(list (string-append "CC=" #$(cc-for-target))
+              (string-append "PREFIX=" #$output))
+      #:phases
+      '(modify-phases %standard-phases
+         (add-after 'unpack 'fix-ncurses
+           (lambda _
+             (substitute* "Makefile"
+               (("-lcurses") "-lncurses"))))
+         (delete 'configure))))         ;no configure script
+    (inputs
+     (list ncurses))
+    (home-page "https://git.codemadness.org/sfeed")
+    (synopsis "RSS and Atom parser")
+    (description
+     "@code{sfeed} converts RSS or Atom feeds from XML to a TAB-separated file.
+There are formatting programs included to convert this TAB-separated format to
+various other formats.  There are also some programs and scripts included to
+import and export OPML and to fetch, filter, merge and order feed items.")
+    (license license:isc)))
+
+(define-public farbfeld
+  (let ((commit "ab5e3dfc9cdb476218538c6687df9f44826d8f11") (revision "0"))
+    (package
+      (name "farbfeld")
+      (version (git-version "4" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "git://git.suckless.org/farbfeld")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0pkmkvv5ggpzqwqdchd19442x8gh152xy5z1z13ipfznhspsf870"))))
+      (build-system gnu-build-system)
+      (inputs (list libpng libjpeg-turbo imagemagick))
+      (arguments
+       (list #:tests?
+             #f ;no check target
+             #:make-flags
+             #~(list (string-append "PREFIX="
+                                    #$output)
+                     (string-append "CC="
+                                    #$(cc-for-target)))
+             #:phases
+             #~(modify-phases %standard-phases
+                 (add-before 'configure 'patch-2ff
+                   (lambda* (#:key inputs outputs #:allow-other-keys)
+                     (substitute* "2ff"
+                       (("png2ff") (string-append #$output "/bin/png2ff"))
+                       (("jpg2ff") (string-append #$output "/bin/jpg2ff"))
+                       (("convert") (search-input-file inputs "/bin/convert")))))
+                 (delete 'configure))))
+      (synopsis "Image format and conversion tools")
+      (description
+       "farbfeld is a lossless image format which is easy to parse,
+pipe and compress.")
+      (home-page "https://git.suckless.org/farbfeld/")
+      (license license:isc))))
+
+(define-public svkbd
+  (package
+    (name "svkbd")
+    (version "0.4.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "https://dl.suckless.org/tools/svkbd-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "0nhgmr38pk1a8zrcrxd1ygh0m843a3bdchkv8phl508x7vy63hpv"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list #:tests? #f
+           #:make-flags
+           #~(list (string-append "CC=" #$(cc-for-target))
+                   (string-append "PREFIX=" #$output))
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'patch
+                 (lambda* (#:key inputs outputs #:allow-other-keys)
+                   (substitute* "config.mk"
+                     (("/usr/local") #$output)
+                     (("/usr/X11R6") #$libx11)
+                     (("/usr/include/freetype2") (string-append #$freetype
+                                                  "/include/freetype2")))))
+               (delete 'configure)))) ;no configure script
+    (native-inputs (list pkg-config))
+    (inputs (list freetype libx11 libxft libxtst libxinerama))
+    (propagated-inputs (list glibc-utf8-locales))
+    (home-page "https://tools.suckless.org/x/svkbd/")
+    (synopsis "Virtual on-screen keyboard")
+    (description "svkbd is a simple virtual keyboard, intended to be used in
+environments, where no keyboard is available.")
     (license license:expat)))

@@ -2,7 +2,8 @@
 ;;; Copyright © 2018 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2020 Martin Becze <mjbecze@riseup.net>
 ;;; Copyright © 2021 Xinglu Chen <public@yoctocell.xyz>
-;;; Copyright © 2021 Alice Brenon <alice.brenon@ens-lyon.fr>
+;;; Copyright © 2021 Sarah Morgensen <iskarian@mgsn.dev>
+;;; Copyright © 2021, 2022 Alice Brenon <alice.brenon@ens-lyon.fr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -41,7 +42,11 @@
   #:use-module ((guix utils) #:select (cache-directory
                                        version>?
                                        call-with-temporary-output-file))
-  #:use-module (guix import utils)
+  #:use-module ((guix import utils) #:select (beautify-description
+                                              guix-hash-url
+                                              recursive-import
+                                              spdx-string->license
+                                              url-fetch))
   #:use-module ((guix licenses) #:prefix license:)
   #:export (opam->guix-package
             opam-recursive-import
@@ -56,8 +61,8 @@
 
 ;; Define a PEG parser for the opam format
 (define-peg-pattern comment none (and "#" (* COMMCHR) "\n"))
-(define-peg-pattern SP none (or " " "\n" comment))
-(define-peg-pattern SP2 body (or " " "\n"))
+(define-peg-pattern SP none (or " " "\n" "\t" comment))
+(define-peg-pattern SP2 body (or " " "\n" "\t"))
 (define-peg-pattern QUOTE none "\"")
 (define-peg-pattern QUOTE2 body "\"")
 (define-peg-pattern COLON none ":")
@@ -230,7 +235,8 @@ path to the repository."
                  (('list-pat . stuff) stuff)
                  (('string-pat stuff) stuff)
                  (('multiline-string stuff) stuff)
-                 (('dict records ...) records))
+                 (('dict records ...) records)
+                 (_ #f))
                acc))))
         #f file))
 
@@ -305,10 +311,8 @@ path to the repository."
           (map dependency->native-input depends)))
 
 (define (dependency-list->inputs lst)
-  (map
-   (lambda (dependency)
-     (list dependency (list 'unquote (string->symbol dependency))))
-   (ocaml-names->guix-names lst)))
+  (map string->symbol
+       (ocaml-names->guix-names lst)))
 
 (define* (opam-fetch name #:optional (repositories-specs '("opam")))
   (or (fold (lambda (repository others)
@@ -318,19 +322,31 @@ path to the repository."
                 (_ others)))
             #f
             (filter-map get-opam-repository repositories-specs))
-      (leave (G_ "package '~a' not found~%") name)))
+      (warning (G_ "opam: package '~a' not found~%") name)))
 
-(define* (opam->guix-package name #:key (repo '()) version)
-  "Import OPAM package NAME from REPOSITORIES (a list of names, URLs or local
-paths, always including OPAM's official repository).  Return a 'package' sexp
+(define (opam->guix-source url-dict)
+  (let ((source-url (and url-dict
+                         (or (metadata-ref url-dict "src")
+                             (metadata-ref url-dict "archive")))))
+    (if source-url
+        (call-with-temporary-output-file
+          (lambda (temp port)
+            (and (url-fetch source-url temp)
+                 `(origin
+                    (method url-fetch)
+                    (uri ,source-url)
+                    (sha256 (base32 ,(guix-hash-url temp)))))))
+        'no-source-information)))
+
+(define* (opam->guix-package name #:key (repo 'opam) version)
+  "Import OPAM package NAME from REPOSITORY (a directory name) or, if
+REPOSITORY is #f, from the official OPAM repository.  Return a 'package' sexp
 or #f on failure."
   (and-let* ((with-opam (if (member "opam" repo) repo (cons "opam" repo)))
              (opam-file (opam-fetch name with-opam))
              (version (assoc-ref opam-file "version"))
              (opam-content (assoc-ref opam-file "metadata"))
-             (url-dict (metadata-ref opam-content "url"))
-             (source-url (or (metadata-ref url-dict "src")
-                             (metadata-ref url-dict "archive")))
+             (source (opam->guix-source (metadata-ref opam-content "url")))
              (requirements (metadata-ref opam-content "depends"))
              (names (dependency-list->names requirements))
              (dependencies (filter-dependencies names))
@@ -344,40 +360,34 @@ or #f on failure."
                                   (not (member name '("dune" "jbuilder"))))
                                 native-dependencies))))
         (let ((use-dune? (member "dune" names)))
-          (call-with-temporary-output-file
-            (lambda (temp port)
-              (and (url-fetch source-url temp)
-                   (values
-                    `(package
-                       (name ,(ocaml-name->guix-name name))
-                       (version ,version)
-                       (source
-                         (origin
-                           (method url-fetch)
-                           (uri ,source-url)
-                           (sha256 (base32 ,(guix-hash-url temp)))))
-                       (build-system ,(if use-dune?
-                                          'dune-build-system
-                                          'ocaml-build-system))
-                       ,@(if (null? inputs)
-                           '()
-                           `((propagated-inputs ,(list 'quasiquote inputs))))
-                       ,@(if (null? native-inputs)
-                           '()
-                           `((native-inputs ,(list 'quasiquote native-inputs))))
-                       ,@(if (equal? name (guix-name->opam-name (ocaml-name->guix-name name)))
-                           '()
-                           `((properties
-                               ,(list 'quasiquote `((upstream-name . ,name))))))
-                       (home-page ,(metadata-ref opam-content "homepage"))
-                       (synopsis ,(metadata-ref opam-content "synopsis"))
-                       (description ,(metadata-ref opam-content "description"))
-                       (license ,(spdx-string->license
-                                  (metadata-ref opam-content "license"))))
-                    (filter
-                      (lambda (name)
-                        (not (member name '("dune" "jbuilder"))))
-                      dependencies))))))))
+          (values
+           `(package
+              (name ,(ocaml-name->guix-name name))
+              (version ,version)
+              (source ,source)
+              (build-system ,(if use-dune?
+                                 'dune-build-system
+                                 'ocaml-build-system))
+              ,@(if (null? inputs)
+                  '()
+                  `((propagated-inputs (list ,@inputs))))
+              ,@(if (null? native-inputs)
+                  '()
+                  `((native-inputs (list ,@native-inputs))))
+              ,@(if (equal? name (guix-name->opam-name (ocaml-name->guix-name name)))
+                  '()
+                  `((properties
+                      ,(list 'quasiquote `((upstream-name . ,name))))))
+              (home-page ,(metadata-ref opam-content "homepage"))
+              (synopsis ,(metadata-ref opam-content "synopsis"))
+              (description ,(beautify-description
+                             (metadata-ref opam-content "description")))
+              (license ,(spdx-string->license
+                         (metadata-ref opam-content "license"))))
+           (filter
+             (lambda (name)
+               (not (member name '("dune" "jbuilder"))))
+             dependencies)))))
 
 (define* (opam-recursive-import package-name #:key repo)
   (recursive-import package-name

@@ -3,7 +3,7 @@
 ;;; Copyright © 2017 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2017 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2018, 2019 Tobias Geerinckx-Rice <me@tobias.gr>
-;;; Copyright © 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2020-2022 Efraim Flashner <efraim@flashner.co.il>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -54,17 +54,15 @@
 (define-public gss
   (package
    (name "gss")
-   (version "1.0.3")
+   (version "1.0.4")
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnu/gss/gss-" version
                                 ".tar.gz"))
             (sha256 (base32
-                     "1syyvh3k659xf1hdv9pilnnhbbhs6vfapayp4xgdcc8mfgf9v4gz"))))
+                     "0www841ax21f5f61pdjk9fjdn9s2xf1wnblb47kzrqyaykgapkpc"))))
    (build-system gnu-build-system)
-   (inputs `(("nettle" ,nettle)
-             ("shishi" ,shishi)
-             ("zlib" ,zlib)))
+   (inputs (list nettle shishi zlib))
    (synopsis "Generic Security Service library")
    (description
     "The GNU Generic Security Service provides a free implementation of the
@@ -79,31 +77,27 @@ the underlying security implementation.")
 (define-public gsasl
   (package
    (name "gsasl")
-   (version "1.10.0")
+   (version "2.0.1")
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnu/gsasl/gsasl-" version
                                 ".tar.gz"))
             (sha256
              (base32
-              "1lv8fp01aq4jjia9g4vkx90zacl8rgmjhfi6f1wdwnh9ws7bvg45"))))
+              "0yhvq3n6smgnc7fp0smmly8d248248xr7q2apbcbqhc80117ab1j"))))
    (build-system gnu-build-system)
    (arguments
     `(#:configure-flags '("--with-gssapi-impl=mit"
                           "--disable-static")))
    (inputs
-    `(("libgcrypt" ,libgcrypt)
-      ("libidn" ,libidn)
-      ("libntlm" ,libntlm)
-      ("mit-krb5" ,mit-krb5)
-      ("zlib" ,zlib)))
+    (list libgcrypt libidn libntlm mit-krb5 zlib))
    (native-inputs
-    `(;; Needed for cross compiling.
-      ("libgcrypt" ,libgcrypt)))
+    (list ;; Needed for cross compiling.
+          libgcrypt))
    (propagated-inputs
     ;; Propagate GnuTLS because libgnutls.la reads `-lnettle', and Nettle is a
     ;; propagated input of GnuTLS.
-    `(("gnutls" ,gnutls)))
+    (list gnutls))
    (synopsis "Simple Authentication and Security Layer library")
    (description
     "GNU SASL is an implementation of the Simple Authentication and

@@ -1,7 +1,8 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2017, 2018, 2020, 2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2017, 2018, 2020–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 Jesse Gibbons <jgibbons2357+guix@gmail.com>
 ;;; Copyright © 2019, 2020, 2021 Timotej Lazar <timotej.lazar@araneo.si>
+;;; Copyright © 2019 Liliana Marie Prikler <liliana.prikler@gmail.com>
 ;;; Copyright © 2020 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2021 Leo Famulari <leo@famulari.name>
 ;;;
@@ -38,6 +39,46 @@
   #:use-module (guix packages)
   #:use-module (guix utils))
 
+(define-public lolcat
+  (let ((commit "35dca3d0a381496d7195cd78f5b24aa7b62f2154")
+        (revision "0"))
+    (package
+      (name "lolcat")
+      (version (git-version "1.0" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://github.com/jaseg/lolcat")
+               (commit commit)))
+         (sha256
+          (base32
+           "0jjbkqcc2ikjxd1xgdyv4rb0vsw218181h89f2ywg29ffs3ypd8g"))
+         (file-name (git-file-name name version))))
+      (build-system gnu-build-system)
+      (arguments
+       `(#:tests? #f                    ; no check target
+         #:make-flags
+         (list ,(string-append "CC=" (cc-for-target)))
+         #:phases
+         (modify-phases %standard-phases
+           (delete 'bootstrap)
+           (delete 'configure)
+           (replace 'install
+             (lambda* (#:key outputs #:allow-other-keys)
+               (let* ((out  (assoc-ref outputs "out"))
+                      (dest (string-append out "/bin")))
+                 (mkdir-p dest)
+                 (install-file "lolcat" dest)
+                 (install-file "censor" dest)
+                 #t))))))
+      (home-page "https://github.com/jaseg/lolcat")
+      (synopsis "Rainbow coloring effect for text console display")
+      (description "@command{lolcat} concatenates files and streams like
+regular @command{cat}, but it also adds terminal escape codes between
+characters and lines resulting in a rainbow effect.")
+      (license license:wtfpl2))))
+
 (define-public oneko
   (package
     (name "oneko")
@@ -57,14 +98,12 @@
            (for-each delete-file-recursively
                      (cons* "bitmaps/bsd" "bitmaps/sakura" "bitmaps/tomoyo"
                             "bitmasks/bsd" "bitmasks/sakura" "bitmasks/tomoyo"
-                            (find-files "cursors" "(bsd|card|petal).*\\.xbm")))
-           #t))))
+                            (find-files "cursors" "(bsd|card|petal).*\\.xbm")))))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("imake" ,imake)))
+     (list imake))
     (inputs
-     `(("libx11" ,libx11)
-       ("libxext" ,libxext)))
+     (list libx11 libxext))
     (arguments
      `(#:tests? #f ; no tests
        #:phases
@@ -74,8 +113,7 @@
              (invoke "xmkmf")
              ;; Fix incorrectly generated compiler flags.
              (substitute* "Makefile"
-               (("(CDEBUGFLAGS = ).*" _ front) (string-append front "-O2\n")))
-             #t))
+               (("(CDEBUGFLAGS = ).*" _ front) (string-append front "-O2\n")))))
          (replace 'install
            (lambda* (#:key outputs make-flags #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
@@ -90,12 +128,14 @@
                (copy-file "oneko.man" (string-append man6 "/oneko.6"))
                (copy-file "oneko.man.jp" (string-append man6-ja "/oneko.6"))
                (for-each (lambda (file) (install-file file doc))
-                         (find-files "." "README.*")))
-             #t)))))
+                         (find-files "." "README.*"))))))))
     (home-page "http://www.daidouji.com/oneko/")
     (synopsis "Cute cat chasing your mouse pointer")
-    (description "Displays a cat or another animated character that chases the
-mouse pointer around the screen while you work.")
+    (description
+     "Oneko displays an animated cat or dog that chases the mouse pointer---now
+an actual mouse or a bone---around the screen while you work.
+
+It was written for the X Window system and does not work well on Wayland.")
     (license license:public-domain))) ; see https://directory.fsf.org/wiki/Oneko
 
 (define-public sl
@@ -113,7 +153,7 @@ mouse pointer around the screen while you work.")
         (base32 "1zrfd71zx2px2xpapg45s8xvi81xii63yl0h60q72j71zh4sif8b"))))
     (build-system gnu-build-system)
     (inputs
-     `(("ncurses" ,ncurses)))
+     (list ncurses))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -178,10 +218,9 @@ typing @command{sl} instead of @command{ls}.")
              #t)))
        #:tests? #f))                    ; no test suite
     (native-inputs
-     `(("bison" ,bison)
-       ("flex" ,flex)))
+     (list bison flex))
     (inputs
-     `(("perl" ,perl)))
+     (list perl))
     (home-page "https://joeyh.name/code/filters/")
     (synopsis "Various amusing text filters")
     (description
@@ -230,15 +269,15 @@ The GNU project hosts a similar collection of filters, the GNU talkfilters.")
 (define-public xsnow
   (package
     (name "xsnow")
-    (version "2.0.22")
+    (version "3.4.2")
     (source
      (origin
        (method url-fetch)
        (uri (string-append
-             "https://www.ratrabbit.nl/ratrabbit/system/files/xsnow/xsnow-"
+             "https://www.ratrabbit.nl/downloads/xsnow/xsnow-"
              version ".tar.gz"))
        (sha256
-        (base32 "1880643fal6l7bskqbm4zfbr2s719698mkx4pchrxkjpb240sj0z"))))
+        (base32 "17pxc955jgkjan8ax0lw3b3sibw7aikc7p9qbxsp0w7g7jkxf666"))))
     (build-system gnu-build-system)
     (arguments
      '(#:phases
@@ -251,14 +290,10 @@ The GNU project hosts a similar collection of filters, the GNU talkfilters.")
                 (string-append prefix "bin")))
              #t)))))
     (inputs
-     `(("gtk+" ,gtk+)
-       ("libx11" ,libx11)
-       ("libxpm" ,libxpm)
-       ("libxt" ,libxt)
-       ("libxxml2" ,libxml2)))
+     (list gtk+ libx11 libxpm libxt libxml2))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
-    (home-page "https://www.ratrabbit.nl/ratrabbit/content/xsnow/introduction")
+     (list pkg-config))
+    (home-page "https://www.ratrabbit.nl/ratrabbit/xsnow/index.html")
     (synopsis "Let it snow on the desktop")
     (description "@code{Xsnow} animates snowfall and Santa with reindeer on
 the desktop background.  Additional customizable effects include wind, stars
@@ -329,10 +364,9 @@ of the Nyan Cat / Poptart Cat animation.")
                                         ,(package-version this-package))))
                (install-file "README.md" doc)))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("scdoc" ,scdoc)))
+     (list pkg-config scdoc))
     (inputs
-     `(("ncurses" ,ncurses)))
+     (list ncurses))
     (home-page "https://gitlab.com/jallbrit/cbonsai")
     (synopsis "Grow bonsai trees in a terminal")
     (description "Cbonsai is a bonsai tree generator using ASCII art.  It

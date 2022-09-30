@@ -4,6 +4,7 @@
 ;;; Copyright © 2018 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
+;;; Copyright © 2022 Brendan Tildesley <mail@brendan.scot>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -21,10 +22,12 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages pciutils)
+  #:use-module (guix gexp)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix utils)
+  #:use-module (guix git-download)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages)
   #:use-module (gnu packages compression)
@@ -32,6 +35,47 @@
   #:use-module (gnu packages hurd)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages base))
+
+(define-public hwdata
+  (package
+    (name "hwdata")
+    (version "0.357")                   ;updated monthly
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/vcrhonek/hwdata")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0kvxpdx14w2myqm3dikjvr2mr4j6767y4v5j8v7kffwvcv0ga9gv"))))
+    (build-system gnu-build-system)
+    (outputs '("out" "iab" "oui" "pci" "pnp" "usb"))
+    (arguments
+     ;; Tests require pciutils, python, podman. Disable to avoid recursive dep.
+     (list
+      #:tests? #f
+      ;; Do not cross-compile, since the package only contains data.
+      #:target #f
+      #:configure-flags #~(list (string-append "--datadir=" #$output "/share"))
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'install
+            (lambda _
+              (install-file "iab.txt" (string-append #$output:iab "/share/hwdata"))
+              (install-file "oui.txt" (string-append #$output:oui "/share/hwdata"))
+              (install-file "pci.ids" (string-append #$output:pci "/share/hwdata"))
+              (install-file "pnp.ids" (string-append #$output:pnp "/share/hwdata"))
+              (install-file "usb.ids" (string-append #$output:usb "/share/hwdata")))))))
+    (home-page "https://github.com/vcrhonek/hwdata")
+    (synopsis "Hardware identification and configuration data")
+    (description "@code{hwdata} contains various hardware identification and
+configuration data, such as the @file{pci.ids} and @file{usb.ids} databases.
+Each database is contained in a specific package output, such as the
+@code{pci} output for @file{pci.ids}, the @code{usb} output for
+@file{usb.ids}, etc.")
+    (license (list license:gpl2+
+                   license:expat)))) ;XFree86 1.0
 
 (define-public pciutils
   (package
@@ -87,8 +131,7 @@
 
                (("^IDSDIR=.*$")
                 ;; Installation directory of 'pci.ids.gz'.
-                "IDSDIR = $(SHAREDIR)/hwdata\n"))
-             #t))
+                "IDSDIR = $(SHAREDIR)/hwdata\n"))))
          (replace 'install
            (lambda* (#:key outputs #:allow-other-keys)
              ;; Install the commands, library, and .pc files.
@@ -109,12 +152,9 @@
        ;; No test suite.
        #:tests? #f))
     (native-inputs
-     `(("which" ,which)
-       ("pkg-config" ,pkg-config)))
+     (list which pkg-config))
     (inputs
-     `(,@(if (member (or (%current-target-system)
-                         (%current-system))
-                     (package-supported-systems kmod))
+     `(,@(if (not (hurd-target?))
              `(("kmod" ,kmod))
              '())
        ,@(if (hurd-target?)

@@ -1,62 +1,165 @@
-From 3cc41c05fad5601c0dd1832f64a6e9efca017727 Mon Sep 17 00:00:00 2001
-From: Maxim Cournoyer <maxim.cournoyer@gmail.com>
-Date: Mon, 1 Apr 2019 11:36:04 -0400
-Subject: [PATCH] robottime: Honor the SOURCE_DATE_EPOCH environment variable.
+Patch submitted upstream: https://github.com/robotframework/robotframework/pull/4286.
 
-Honoring the SOURCE_DATE_EPOCH environment variable allows building
-the documentation using libdoc reproducibly, by setting the generated
-timestamp to a fixed value.
-
-For more background on reproducible builds and the SOURCE_DATE_EPOCH
-environment variable, see:
-https://reproducible-builds.org/specs/source-date-epoch/.
-
-* src/robot/utils/robottime.py: import `os'.
-(TimestampCache._get_epoch): Retrieve date from SOURCE_DATE_EPOCH if
-it is defined, otherwise from time.time().
-* utest/output/test_logger.py (TestLogger.test_write_to_one_logger):
-Check for the existance of a timestamp attribute instead of checking
-for its content as the later is easy to break when using the
-SOURCE_DATE_EPOCH environment variable.
----
- src/robot/utils/robottime.py | 3 +++
- utest/output/test_logger.py  | 2 +-
- 2 files changed, 4 insertions(+), 1 deletion(-)
-
-diff --git a/src/robot/utils/robottime.py b/src/robot/utils/robottime.py
-index 06432a4a6..91526f826 100644
---- a/src/robot/utils/robottime.py
-+++ b/src/robot/utils/robottime.py
-@@ -14,6 +14,7 @@
+diff --git a/BUILD.rst b/BUILD.rst
+index 67902dd09..749c53fde 100644
+--- a/BUILD.rst
++++ b/BUILD.rst
+@@ -204,6 +204,9 @@ Creating distributions
+ 
+ 7. Documentation
+ 
++   - For a reproducible build, set the ``SOURCE_DATE_EPOCH``
++     environment variable to 1.
++
+    - Generate library documentation::
+ 
+        invoke library-docs all
+diff --git a/atest/robot/libdoc/html_output.robot b/atest/robot/libdoc/html_output.robot
+index f42a4b150..af428c967 100644
+--- a/atest/robot/libdoc/html_output.robot
++++ b/atest/robot/libdoc/html_output.robot
+@@ -15,7 +15,7 @@ Version
+ 
+ Generated
+     [Template]    Should Match Regexp
+-    ${MODEL}[generated]     \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}
++    ${MODEL}[generated]     \\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}
+ 
+ Scope
+     ${MODEL}[scope]         GLOBAL
+diff --git a/atest/robot/libdoc/json_output.robot b/atest/robot/libdoc/json_output.robot
+index 78305a458..654603704 100644
+--- a/atest/robot/libdoc/json_output.robot
++++ b/atest/robot/libdoc/json_output.robot
+@@ -15,7 +15,7 @@ Version
+ 
+ Generated
+     [Template]    Should Match Regexp
+-    ${MODEL}[generated]     \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}
++    ${MODEL}[generated]     \\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}
+ 
+ Scope
+     ${MODEL}[scope]         GLOBAL
+diff --git a/atest/robot/libdoc/libdoc_resource.robot b/atest/robot/libdoc/libdoc_resource.robot
+index bd7c10ecd..b7e06aacc 100644
+--- a/atest/robot/libdoc/libdoc_resource.robot
++++ b/atest/robot/libdoc/libdoc_resource.robot
+@@ -92,7 +92,8 @@ Lineno Should Be
+     Element Attribute Should Be    ${LIBDOC}    lineno    ${lineno}
+ 
+ Generated Should Be Defined
+-    Element Attribute Should Match    ${LIBDOC}    generated    ????-??-??T??:??:??Z
++    # For example, '1970-01-01T00:00:01+00:00'.
++    Element Attribute Should Match    ${LIBDOC}    generated    ????-??-??T??:??:?????:??
+ 
+ Spec version should be correct
+     Element Attribute Should Be    ${LIBDOC}    specversion    4
+diff --git a/doc/userguide/ug2html.py b/doc/userguide/ug2html.py
+index 033203552..b278c71c8 100755
+--- a/doc/userguide/ug2html.py
++++ b/doc/userguide/ug2html.py
+@@ -150,8 +150,7 @@ def create_userguide():
+     install_file = _copy_installation_instructions()
+ 
+     description = 'HTML generator for Robot Framework User Guide.'
+-    arguments = ['--time',
+-                 '--stylesheet-path', ['src/userguide.css'],
++    arguments = ['--stylesheet-path', ['src/userguide.css'],
+                  'src/RobotFrameworkUserGuide.rst',
+                  'RobotFrameworkUserGuide.html']
+     os.chdir(CURDIR)
+diff --git a/src/robot/libdocpkg/model.py b/src/robot/libdocpkg/model.py
+index 5f44039ef..c36bf4a49 100644
+--- a/src/robot/libdocpkg/model.py
++++ b/src/robot/libdocpkg/model.py
+@@ -19,7 +19,7 @@ from itertools import chain
+ 
+ from robot.model import Tags
+ from robot.running import ArgumentSpec
+-from robot.utils import getshortdoc, get_timestamp, Sortable, setter
++from robot.utils import get_timestamp_for_doc, getshortdoc, Sortable, setter
+ 
+ from .htmlutils import DocFormatter, DocToHtml, HtmlToText
+ from .writer import LibdocWriter
+@@ -113,7 +113,7 @@ class LibraryDoc:
+             'name': self.name,
+             'doc': self.doc,
+             'version': self.version,
+-            'generated': get_timestamp(daysep='-', millissep=None),
++            'generated': get_timestamp_for_doc(),
+             'type': self.type,
+             'scope': self.scope,
+             'docFormat': self.doc_format,
+diff --git a/src/robot/libdocpkg/xmlwriter.py b/src/robot/libdocpkg/xmlwriter.py
+index a765ebb2b..980debebb 100644
+--- a/src/robot/libdocpkg/xmlwriter.py
++++ b/src/robot/libdocpkg/xmlwriter.py
+@@ -13,9 +13,7 @@
+ #  See the License for the specific language governing permissions and
  #  limitations under the License.
  
- import datetime
+-from datetime import datetime
+-
+-from robot.utils import XmlWriter
++from robot.utils import XmlWriter, get_timestamp_for_doc
+ 
+ 
+ class LibdocXmlWriter:
+@@ -32,12 +30,11 @@ class LibdocXmlWriter:
+         self._write_end(writer)
+ 
+     def _write_start(self, libdoc, writer):
+-        generated = datetime.utcnow().replace(microsecond=0).isoformat() + 'Z'
+         attrs = {'name': libdoc.name,
+                  'type': libdoc.type,
+                  'format': libdoc.doc_format,
+                  'scope': libdoc.scope,
+-                 'generated': generated,
++                 'generated': get_timestamp_for_doc(),
+                  'specversion': '4'}
+         self._add_source_info(attrs, libdoc)
+         writer.start('keywordspec', attrs)
+diff --git a/src/robot/utils/__init__.py b/src/robot/utils/__init__.py
+index 442ffa4f3..80793ec29 100644
+--- a/src/robot/utils/__init__.py
++++ b/src/robot/utils/__init__.py
+@@ -58,9 +58,9 @@ from .robotinspect import is_init
+ from .robotio import binary_file_writer, create_destination_directory, file_writer
+ from .robotpath import abspath, find_file, get_link_path, normpath
+ from .robottime import (elapsed_time_to_string, format_time, get_elapsed_time,
+-                        get_time, get_timestamp, secs_to_timestamp,
+-                        secs_to_timestr, timestamp_to_secs, timestr_to_secs,
+-                        parse_time)
++                        get_time, get_timestamp, get_timestamp_for_doc,
++                        secs_to_timestamp, secs_to_timestr, timestamp_to_secs,
++                        timestr_to_secs, parse_time)
+ from .robottypes import (FALSE_STRINGS, TRUE_STRINGS, is_bytes, is_dict_like, is_falsy,
+                          is_integer, is_list_like, is_number, is_pathlike, is_string,
+                          is_truthy, is_union, type_name, type_repr, typeddict_types)
+diff --git a/src/robot/utils/robottime.py b/src/robot/utils/robottime.py
+index 97a7d1af0..4a0ba2d83 100644
+--- a/src/robot/utils/robottime.py
++++ b/src/robot/utils/robottime.py
+@@ -13,6 +13,8 @@
+ #  See the License for the specific language governing permissions and
+ #  limitations under the License.
+ 
++import datetime
 +import os
- import time
  import re
+ import time
  
-@@ -395,6 +396,8 @@ class TimestampCache(object):
+@@ -316,6 +318,13 @@ def get_timestamp(daysep='', daytimesep=' ', timesep=':', millissep='.'):
+     return TIMESTAMP_CACHE.get_timestamp(daysep, daytimesep, timesep, millissep)
  
-     # Seam for mocking
-     def _get_epoch(self):
-+        if os.getenv('SOURCE_DATE_EPOCH'):
-+            return float(os.getenv('SOURCE_DATE_EPOCH'))
-         return time.time()
  
-     def _use_cache(self, secs, *separators):
-diff --git a/utest/output/test_logger.py b/utest/output/test_logger.py
-index 92fe6d77d..e980227aa 100644
---- a/utest/output/test_logger.py
-+++ b/utest/output/test_logger.py
-@@ -46,7 +46,7 @@ class TestLogger(unittest.TestCase):
-         logger = LoggerMock(('Hello, world!', 'INFO'))
-         self.logger.register_logger(logger)
-         self.logger.write('Hello, world!', 'INFO')
--        assert_true(logger.msg.timestamp.startswith('20'))
-+        assert_true(hasattr(logger.msg, 'timestamp'))
- 
-     def test_write_to_one_logger_with_trace_level(self):
-         logger = LoggerMock(('expected message', 'TRACE'))
--- 
-2.20.1
-
++def get_timestamp_for_doc():
++    """Return a timestamp that honors `SOURCE_DATE_EPOCH`."""
++    ts = float(os.getenv('SOURCE_DATE_EPOCH', time.time()))
++    dt = datetime.datetime.fromtimestamp(round(ts), datetime.timezone.utc)
++    return dt.isoformat()
++
++
+ def timestamp_to_secs(timestamp, seps=None):
+     try:
+         secs = _timestamp_to_millis(timestamp, seps) / 1000.0

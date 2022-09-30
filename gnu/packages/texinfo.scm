@@ -5,9 +5,11 @@
 ;;; Copyright © 2017, 2019 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2019 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2019 Pierre-Moana Levesque <pierre.moana.levesque@gmail.com>
-;;; Copyright © 2019 Mathieu Othacehe <m.othacehe@gmail.com>
+;;; Copyright © 2019, 2020 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2020 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
+;;; Copyright © 2021 Maxime Devos <maximedevos@telenet.be>
+;;; Copyright © 2022 ( <paren@disroot.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,6 +28,7 @@
 
 (define-module (gnu packages texinfo)
   #:use-module (gnu packages autotools)
+  #:use-module (guix gexp)
   #:use-module (guix licenses)
   #:use-module (guix packages)
   #:use-module (guix utils)
@@ -59,26 +62,21 @@
      ;; with the native compiler, the environment is reset. This leads to
      ;; multiple environment variables missing. Do not reset the environment
      ;; to prevent that.
-     (if (%current-target-system)
-         '(#:phases
-           (modify-phases %standard-phases
-             (add-before 'configure 'fix-cross-configure
-               (lambda _
-                 (substitute* "configure"
-                   (("env -i")
-                    "env "))
-                 #t))))
-         '()))
-    (inputs `(("ncurses" ,ncurses)
-              ;; TODO: remove `if' in the next rebuild cycle.
-              ,@(if (%current-target-system)
-                    `(("perl" ,perl))
-                    '())))
+     `(#:phases
+       (if ,(%current-target-system)
+            (modify-phases %standard-phases
+              (add-before 'configure 'fix-cross-configure
+                (lambda _
+                  (substitute* "configure"
+                    (("env -i")
+                     "env "))
+                  #t)))
+            %standard-phases)))
+    (inputs (list ncurses perl))
     ;; When cross-compiling, texinfo will build some of its own binaries with
     ;; the native compiler. This means ncurses is needed both in both inputs
     ;; and native-inputs.
-    (native-inputs `(("perl" ,perl)
-                     ("ncurses" ,ncurses)))
+    (native-inputs (list perl ncurses))
 
     (native-search-paths
      ;; This is the variable used by the standalone Info reader.
@@ -121,11 +119,10 @@ is on expressing the content semantically, avoiding physical markup commands.")
               (sha256
                (base32
                 "1rf9ckpqwixj65bw469i634897xwlgkm5i9g2hv3avl6mv7b0a3d"))))
-    (inputs `(("ncurses" ,ncurses)
-              ("xz" ,xz)))
+    (inputs (list ncurses xz))
     (native-inputs
-      `(("automake" ,automake)
-        ,@(package-native-inputs texinfo)))
+      (modify-inputs (package-native-inputs texinfo)
+        (prepend automake)))
     (arguments
      (substitute-keyword-arguments (package-arguments texinfo)
        ((#:phases phases)
@@ -162,6 +159,17 @@ is on expressing the content semantically, avoiding physical markup commands.")
      `(,@(substitute-keyword-arguments (package-arguments texinfo)
            ((#:phases phases)
             `(modify-phases ,phases
+               ;; Make sure 'info-reader' can read compressed info files
+               ;; in a pure environment.  There are also a few other
+               ;; uncompressors listed in this file (lzip, unxz, bunzip2, ...)
+               ;; but let's not include them because info manuals in Guix
+               ;; are always compressed with 'gzip'.
+               ;; TODO(core-updates): maybe move to the 'texinfo' package.
+               (add-after 'unpack 'absolute-binary-path
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (substitute* "info/filesys.c"
+                     (("gunzip") (search-input-file inputs "/bin/gunzip"))
+                     (("gzip") (search-input-file inputs "/bin/gzip")))))
                (add-after 'install 'keep-only-info-reader
                  (lambda* (#:key outputs #:allow-other-keys)
                    ;; Remove everything but 'bin/info' and associated
@@ -185,7 +193,9 @@ is on expressing the content semantically, avoiding physical markup commands.")
                                            "perl")
        #:modules ((ice-9 ftw) (srfi srfi-1)
                   ,@%gnu-build-system-modules)))
-    (synopsis "Standalone Info documentation reader")))
+    (synopsis "Standalone Info documentation reader")
+    (inputs (modify-inputs (package-inputs texinfo)
+              (prepend gzip)))))
 
 (define-public texi2html
   (package
@@ -210,7 +220,7 @@ is on expressing the content semantically, avoiding physical markup commands.")
                   (utime "texi2html.pl" 0 0 0 0)
                   #t))))
     (build-system gnu-build-system)
-    (inputs `(("perl" ,perl)))
+    (inputs (list perl))
     (arguments
      ;; Tests fail because of warnings on stderr from Perl 5.22.  Adjusting
      ;; texi2html.pl to avoid the warnings seems non-trivial, so we simply
@@ -246,50 +256,42 @@ Texi2HTML.")
         (base32 "1wdli2szkgm3l0vx8rf6lylw0b0m47dlz9iy004n928nqkzix76n"))))))
 
 (define-public pinfo
-  (package
-    (name "pinfo")
-    (version "0.6.13")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url "https://github.com/baszoetekouw/pinfo")
-                    (commit (string-append "v" version))))
-              (file-name (git-file-name name version))
-              (sha256
-               (base32
-                "173d2p22irwiabvr4z6qvr6zpr6ysfkhmadjlyhyiwd7z62larvy"))))
-    (build-system gnu-build-system)
-    (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'remove-Werror
-           (lambda _
-             (substitute* "configure.ac"
-               (("-Werror") ""))
-             #t))
-         (add-after 'unpack 'embed-reference-to-clear
-           (lambda* (#:key inputs #:allow-other-keys)
-             (substitute* '("src/manual.c"
-                            "src/mainfunction.c"
-                            "src/utils.c")
-               (("\"clear\"")
-                (string-append "\"" (which "clear") "\"")))
-             #t)))))
-    (inputs
-     `(("ncurses" ,ncurses)
-       ("readline" ,readline)))
-    (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("gettext" ,gettext-minimal)
-       ("libtool" ,libtool)
-       ("texinfo" ,texinfo)))
-    (home-page "https://github.com/baszoetekouw/pinfo")
-    (synopsis "Lynx-style Info file and man page reader")
-    (description
-     "Pinfo is an Info file viewer.  Pinfo is similar in use to the Lynx web
+  (let ((commit "3d76eecde211e41ccc28b04e229f159b3f924399")
+        (revision "0"))
+    (package
+      (name "pinfo")
+      ;; Latest tag is completely broken and does not build.
+      (version (git-version "0.6.13" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/baszoetekouw/pinfo")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32 "0qym323d9my5l4bhw9vry453hhlxhjjvy8mcdi38sk0bqqid0vd1"))))
+      (build-system gnu-build-system)
+      (arguments
+       (list #:phases
+             #~(modify-phases %standard-phases
+                 (add-after 'unpack 'embed-reference-to-clear
+                   (lambda* (#:key inputs #:allow-other-keys)
+                     (let ((ncurses (assoc-ref inputs "ncurses")))
+                       (substitute* (list "src/manual.c"
+                                          "src/mainfunction.c"
+                                          "src/utils.c")
+                         (("\"clear\"")
+                          (string-append "\"" ncurses "/bin/clear\"")))))))))
+      (inputs
+       (list ncurses readline))
+      (native-inputs
+       (list autoconf automake gettext-minimal libtool texinfo))
+      (home-page "https://github.com/baszoetekouw/pinfo")
+      (synopsis "Lynx-style Info file and man page reader")
+      (description
+       "Pinfo is an Info file viewer.  Pinfo is similar in use to the Lynx web
 browser.  You just move across info nodes, and select links, follow them, etc.
 It supports many colors.  Pinfo also supports viewing of manual pages -- they
 are colorized like in the midnight commander's viewer, and additionally they
 are hypertextualized.")
-    (license gpl2+)))
+      (license gpl2+))))

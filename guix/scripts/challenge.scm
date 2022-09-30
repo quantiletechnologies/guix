@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2015, 2016, 2017, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015-2017, 2019-2022 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -18,6 +18,7 @@
 
 (define-module (guix scripts challenge)
   #:use-module (guix ui)
+  #:use-module (guix colors)
   #:use-module (guix scripts)
   #:use-module (guix store)
   #:use-module (guix utils)
@@ -32,13 +33,14 @@
   #:use-module (rnrs bytevectors)
   #:autoload   (guix http-client) (http-fetch)
   #:use-module ((guix build syscalls) #:select (terminal-columns))
+  #:autoload   (guix build utils) (make-file-writable)
   #:use-module (gcrypt hash)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
-  #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-37)
+  #:use-module (srfi srfi-71)
   #:use-module (ice-9 match)
   #:use-module (ice-9 vlist)
   #:use-module (ice-9 format)
@@ -196,65 +198,68 @@ taken since we do not import the archives."
 
 (define (port-sha256* port size)
   ;; Like 'port-sha256', but limited to SIZE bytes.
-  (let-values (((out get) (open-sha256-port)))
+  (let ((out get (open-sha256-port)))
     (dump-port* port out size)
     (close-port out)
     (get)))
 
 (define (archive-contents port)
-  "Return a list representing the files contained in the nar read from PORT."
-  (fold-archive (lambda (file type contents result)
-                  (match type
-                    ((or 'regular 'executable)
-                     (match contents
-                       ((port . size)
-                        (cons `(,file ,type ,(port-sha256* port size))
-                              result))))
-                    ('directory result)
-                    ('directory-complete result)
-                    ('symlink
-                     (cons `(,file ,type ,contents) result))))
-                '()
-                port
-                ""))
+  "Return a list representing the files contained in the nar read from PORT.
+The list is sorted in canonical order--i.e., the order in which entries appear
+in the nar."
+  (reverse
+   (fold-archive (lambda (file type contents result)
+                   (match type
+                     ((or 'regular 'executable)
+                      (match contents
+                        ((port . size)
+                         (cons `(,file ,type ,(port-sha256* port size))
+                               result))))
+                     ('directory result)
+                     ('directory-complete result)
+                     ('symlink
+                      (cons `(,file ,type ,contents) result))))
+                 '()
+                 port
+                 "")))
 
 (define (store-item-contents item)
   "Return a list of files and contents for ITEM in the same format as
 'archive-contents'."
-  (file-system-fold (const #t)                    ;enter?
-                    (lambda (file stat result)    ;leaf
-                      (define short
-                        (string-drop file (string-length item)))
+  (let loop ((file item))
+    (define stat
+      (lstat file))
 
-                      (match (stat:type stat)
-                        ('regular
-                         (let ((size (stat:size stat))
-                               (type (if (zero? (logand (stat:mode stat)
-                                                        #o100))
-                                         'regular
-                                         'executable)))
-                           (cons `(,short ,type
-                                          ,(call-with-input-file file
-                                             (cut port-sha256* <> size)))
-                                 result)))
-                        ('symlink
-                         (cons `(,short symlink ,(readlink file))
-                               result))))
-                    (lambda (directory stat result) result)  ;down
-                    (lambda (directory stat result) result)  ;up
-                    (lambda (file stat result) result)       ;skip
-                    (lambda (file stat errno result) result) ;error
-                    '()
-                    item
-                    lstat))
+    (define short
+      (string-drop file (string-length item)))
+
+    (match (stat:type stat)
+      ('regular
+       (let ((size (stat:size stat))
+             (type (if (zero? (logand (stat:mode stat)
+                                      #o100))
+                       'regular
+                       'executable)))
+         `((,short ,type
+                   ,(call-with-input-file file
+                      (cut port-sha256* <> size))))))
+      ('symlink
+       `((,short symlink ,(readlink file))))
+      ('directory
+       (append-map (match-lambda
+                     ((or "." "..")
+                      '())
+                     (entry
+                      (loop (string-append file "/" entry))))
+                   ;; Traverse entries in canonical order, the same as the
+                   ;; order of entries in nars.
+                   (scandir file (const #t) string<?))))))
 
 (define (call-with-nar narinfo proc)
   "Call PROC with an input port from which it can read the nar pointed to by
 NARINFO."
-  (let*-values (((uri compression size)
-                 (narinfo-best-uri narinfo))
-                ((port actual-size)
-                 (http-fetch uri)))
+  (let* ((uri compression size (narinfo-best-uri narinfo))
+         (port actual-size     (http-fetch uri)))
     (define reporter
       (progress-reporter/file (narinfo-path narinfo)
                               (and size
@@ -307,6 +312,23 @@ specified in COMPARISON-REPORT."
                     (length files)))
      (format #t     "~{    ~a~%~}" files))))
 
+(define (make-directory-writable directory)
+  "Recurse into DIRECTORY and make each entry writable, similar to
+'chmod -R +w DIRECTORY'."
+  (file-system-fold (const #t)
+                    (lambda (file stat _)         ;leaf
+                      (unless (eq? 'symlink (stat:type stat))
+                        (make-file-writable file)))
+                    (lambda (directory stat _)    ;down
+                      (make-file-writable directory))
+                    (const #t)                    ;up
+                    (const #f)                    ;skip
+                    (lambda (file stat errno _)   ;error
+                      (leave (G_ "failed to delete '~a': ~a~%")
+                             file (strerror errno)))
+                    #t
+                    directory))
+
 (define (call-with-mismatches comparison-report proc)
   "Call PROC with two directories containing the mismatching store items."
   (define local-hash
@@ -314,6 +336,13 @@ specified in COMPARISON-REPORT."
 
   (define narinfos
     (comparison-report-narinfos comparison-report))
+
+  (define (restore-file* port directory)
+    ;; Since 'restore-file' sets "canonical" file permissions (read-only),
+    ;; make an extra traversal to make DIRECTORY writable so it can be deleted
+    ;; when the dynamic extent of 'call-with-temporary-directory' is left.
+    (restore-file port directory)
+    (make-directory-writable directory))
 
   (call-with-temporary-directory
    (lambda (directory1)
@@ -335,10 +364,10 @@ specified in COMPARISON-REPORT."
                      narinfos)))
 
         (rmdir directory1)
-        (call-with-nar narinfo1 (cut restore-file <> directory1))
+        (call-with-nar narinfo1 (cut restore-file* <> directory1))
         (when narinfo2
           (rmdir directory2)
-          (call-with-nar narinfo2 (cut restore-file <> directory2)))
+          (call-with-nar narinfo2 (cut restore-file* <> directory2)))
         (proc directory1
               (if local-hash
                   (comparison-report-item comparison-report)
@@ -359,6 +388,11 @@ COMPARISON-REPORT."
                           (apply system*
                                  (append command
                                          (list directory1 directory2))))))
+
+(define good-news
+  (coloring-procedure (color BOLD GREEN)))
+(define bad-news
+  (coloring-procedure (color BOLD RED)))
 
 (define* (summarize-report comparison-report
                            #:key
@@ -382,7 +416,7 @@ with COMPARISON-REPORT."
 
   (match comparison-report
     (($ <comparison-report> item 'mismatch local (narinfos ...))
-     (report (G_ "~a contents differ:~%") item)
+     (report (bad-news (G_ "~a contents differ:~%")) item)
      (report-hashes item local narinfos)
      (report-differences comparison-report))
     (($ <comparison-report> item 'inconclusive #f narinfos)
@@ -391,7 +425,7 @@ with COMPARISON-REPORT."
      (warning (G_ "could not challenge '~a': no substitutes~%") item))
     (($ <comparison-report> item 'match local (narinfos ...))
      (when verbose?
-       (report (G_ "~a contents match:~%") item)
+       (report (good-news (G_ "~a contents match:~%")) item)
        (report-hashes item local narinfos)))))
 
 (define (summarize-report-list reports)
@@ -400,10 +434,11 @@ with COMPARISON-REPORT."
         (inconclusive  (count comparison-report-inconclusive? reports))
         (matches       (count comparison-report-match? reports))
         (discrepancies (count comparison-report-mismatch? reports)))
-    (report (G_ "~h store items were analyzed:~%") total)
-    (report (G_ "  - ~h (~,1f%) were identical~%")
+    (report (highlight (G_ "~h store items were analyzed:~%")) total)
+    (report (highlight (G_ "  - ~h (~,1f%) were identical~%"))
             matches (* 100. (/ matches total)))
-    (report (G_ "  - ~h (~,1f%) differed~%")
+    (report ((if (zero? discrepancies) good-news bad-news)
+             (G_ "  - ~h (~,1f%) differed~%"))
             discrepancies (* 100. (/ discrepancies total)))
     (report (G_ "  - ~h (~,1f%) were inconclusive~%")
             inconclusive (* 100. (/ inconclusive total)))))
@@ -502,8 +537,9 @@ Challenge the substitutes for PACKAGE... provided by one or more servers.\n"))
                         (current-terminal-columns (terminal-columns)))
            (let ((files (match files
                           (()
-                           (filter (cut locally-built? store <>)
-                                   (live-paths store)))
+                           (warning
+                            (G_ "no arguments specified, nothing to do~%"))
+                           (exit 0))
                           (x
                            files))))
              (set-build-options store

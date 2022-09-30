@@ -1,5 +1,5 @@
 # GNU Guix --- Functional package management for GNU
-# Copyright © 2012, 2013, 2014, 2016, 2017, 2018, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+# Copyright © 2012-2014, 2016-2022 Ludovic Courtès <ludo@gnu.org>
 # Copyright © 2020 Marius Bakke <mbakke@fastmail.com>
 # Copyright © 2021 Chris Marusich <cmmarusich@gmail.com>
 #
@@ -30,6 +30,16 @@ guix build --version
 # Source-less packages are accepted; they just return nothing.
 guix build -e '(@ (gnu packages bootstrap) %bootstrap-glibc)' -S
 test "`guix build -e '(@ (gnu packages bootstrap) %bootstrap-glibc)' -S`" = ""
+
+# Warn when attempting to build an unsupported package.
+case "$(guix build intelmetool -s armhf-linux -v0 -n 2>&1)" in
+    *warning:*intelmetool*support*armhf*)
+	true
+	break;;
+    *)
+	false;
+	break;;
+esac
 
 # Should pass.
 guix build -e '(@@ (gnu packages bootstrap) %bootstrap-guile)' |	\
@@ -77,6 +87,16 @@ module_dir="t-guix-build-$$"
 mkdir "$module_dir"
 trap "rm -rf $module_dir" EXIT
 
+# Check error reporting for '-f'.
+cat > "$module_dir/foo.scm" <<EOF
+(use-modules (guix))
+) ;extra closing paren
+EOF
+! guix build -f "$module_dir/foo.scm" 2> "$module_dir/stderr"
+grep "read error" "$module_dir/stderr"
+rm "$module_dir/stderr" "$module_dir/foo.scm"
+
+# Check 'GUIX_PACKAGE_PATH' & co.
 cat > "$module_dir/foo.scm"<<EOF
 (define-module (foo)
   #:use-module (guix tests)
@@ -278,7 +298,7 @@ guix build --target=arm-linux-gnueabihf --dry-run \
      -e '(@ (gnu packages base) coreutils)'
 
 # Replacements.
-drv1=`guix build guix --with-input=guile@2.0=guile@2.2 -d`
+drv1=`guix build guix --with-input=guile-zstd=idutils -d`
 drv2=`guix build guix -d`
 test "$drv1" != "$drv2"
 

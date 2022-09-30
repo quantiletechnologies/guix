@@ -3,9 +3,9 @@
 ;;; Copyright © 2014, 2015, 2016 David Thompson <davet@gnu.org>
 ;;; Copyright © 2014, 2015, 2016, 2018, 2020 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2015 Taylan Ulrich Bayırlı/Kammer <taylanbayirli@gmail.com>
-;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2015, 2016 Andy Patterson <ajpatter@uwaterloo.ca>
-;;; Copyright © 2015, 2018, 2019, 2020 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2015, 2018, 2019, 2020, 2021 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2015, 2016, 2017, 2018, 2019 Alex Vong <alexvong1995@gmail.com>
 ;;; Copyright © 2016, 2017 Alex Griffin <a@ajgrf.com>
 ;;; Copyright © 2016 Kei Kebreau <kkebreau@posteo.net>
@@ -22,9 +22,9 @@
 ;;; Copyright © 2017 Gregor Giesen <giesen@zaehlwerk.net>
 ;;; Copyright © 2017, 2018, 2019 Rutger Helling <rhelling@mykolab.com>
 ;;; Copyright © 2018 Roel Janssen <roel@gnu.org>
-;;; Copyright © 2018, 2019, 2020 Marius Bakke <mbakke@fastmail.com>
+;;; Copyright © 2018-2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2018, 2019, 2020 Pierre Neidhardt <mail@ambrevar.xyz>
-;;; Copyright © 2018, 2019, 2020 Leo Famulari <leo@famulari.name>
+;;; Copyright © 2018, 2019, 2020, 2022 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2018 Brendan Tildesley <mail@brendan.scot>
 ;;; Copyright © 2018 Arun Isaac <arunisaac@systemreboot.net>
 ;;; Copyright © 2018 Björn Höfling <bjoern.hoefling@bjoernhoefling.de>
@@ -36,23 +36,32 @@
 ;;; Copyright © 2019 Riku Viitanen <riku.viitanen@protonmail.com>
 ;;; Copyright © 2020, 2021 Oleg Pykhalov <go.wigust@gmail.com>
 ;;; Copyright © 2020 Josh Holland <josh@inv.alid.pw>
-;;; Copyright © 2020 Brice Waegeneire <brice@waegenei.re>
+;;; Copyright © 2020, 2021 Brice Waegeneire <brice@waegenei.re>
 ;;; Copyright © 2020 Vincent Legoll <vincent.legoll@gmail.com>
-;;; Copyright © 2020 Guillaume Le Vaillant <glv@posteo.net>
+;;; Copyright © 2020, 2021 Guillaume Le Vaillant <glv@posteo.net>
 ;;; Copyright © 2020 Alex McGrath <amk@amk.ie>
-;;; Copyright © 2020, 2021 Michael Rohleder <mike@rohleder.de>
-;;; Copyright © 2020, 2021 Vinicius Monego <monego@posteo.net>
+;;; Copyright © 2020, 2021, 2022 Michael Rohleder <mike@rohleder.de>
+;;; Copyright © 2020, 2021, 2022 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2020 Brett Gilio <brettg@gnu.org>
 ;;; Copyright © 2020 Alexandru-Sergiu Marton <brown121407@posteo.ro>
 ;;; Copyright © 2020 Ivan Kozlov <kanichos@yandex.ru>
 ;;; Copyright © 2020 Antoine Côté <antoine.cote@posteo.net>
+;;; Copyright © 2020 Hartmut Goebel <h.goebel@crazy-compilers.com>
 ;;; Copyright © 2021 Alexey Abramov <levenson@mmer.org>
 ;;; Copyright © 2021 Andrew Tropin <andrew@trop.in>
 ;;; Copyright © 2021 David Wilson <david@daviwil.com>
-;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2021,2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2020 Hartmut Goebel <h.goebel@crazy-compilers.com>
 ;;; Copyright © 2021 Raghav Gururajan <rg@raghavgururajan.name>
+;;; Copyright © 2021 Thiago Jung Bauermann <bauermann@kolabnow.com>
 ;;; Copyright © 2021 Petr Hodina <phodina@protonmail.com>
+;;; Copyright © 2021 Robin Templeton <robin@terpri.org>
+;;; Copyright © 2021 Aleksandr Vityazev <avityazev@posteo.org>
+;;; Copyright © 2021 Pradana Aumars <paumars@courrier.dev>
+;;; Copyright © 2022 Denis 'GNUtoo' Carikli <GNUtoo@cyberdimension.org>
+;;; Copyright © 2022 Bird <birdsite@airmail.cc>
+;;; Copyright © 2022 Jai Vetrivelan <jaivetrivelan@gmail.com>
+;;; Copyright © 2022 Chadwain Holness <chadwainholness@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -77,6 +86,7 @@
   #:use-module (guix utils)
   #:use-module (guix packages)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix svn-download)
   #:use-module (guix hg-download)
@@ -99,8 +109,10 @@
   #:use-module (gnu packages avahi)
   #:use-module (gnu packages backup)
   #:use-module (gnu packages base)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages bison)
   #:use-module (gnu packages boost)
+  #:use-module (gnu packages build-tools)
   #:use-module (gnu packages cdrom)
   #:use-module (gnu packages check)
   #:use-module (gnu packages cmake)
@@ -109,6 +121,7 @@
   #:use-module (gnu packages crates-io)
   #:use-module (gnu packages crates-graphics)
   #:use-module (gnu packages curl)
+  #:use-module (gnu packages dbm)
   #:use-module (gnu packages dejagnu)
   #:use-module (gnu packages dns)
   #:use-module (gnu packages docbook)
@@ -130,6 +143,7 @@
   #:use-module (gnu packages gnupg)
   #:use-module (gnu packages gstreamer)
   #:use-module (gnu packages gtk)
+  #:use-module (gnu packages haskell-xyz)
   #:use-module (gnu packages image)
   #:use-module (gnu packages imagemagick)
   #:use-module (gnu packages iso-codes)
@@ -137,11 +151,13 @@
   #:use-module (gnu packages libreoffice)
   #:use-module (gnu packages libusb)
   #:use-module (gnu packages linux)
+  #:use-module (gnu packages llvm)
   #:use-module (gnu packages lua)
   #:use-module (gnu packages m4)
   #:use-module (gnu packages man)
   #:use-module (gnu packages markup)
   #:use-module (gnu packages maths)
+  #:use-module (gnu packages music)
   #:use-module (gnu packages mp3)
   #:use-module (gnu packages ncurses)
   #:use-module (gnu packages networking)
@@ -205,10 +221,15 @@
     (arguments
      `(#:configure-flags
        (list
-        "--enable-libv4l2"
+        "CFLAGS=-O2 -g -fcommon"
+        ;; XXX: Broken API.
+        ;; Undeclared variables 'sys_nerr' and 'sys_errlist'.
+        ;; "--enable-libv4l2"
         "--enable-libmpeg2"
         "--enable-libmpeg2convert"
-        "--enable-v4l"
+        ;; XXX: Broken API.
+        ;; Undeclared variables 'sys_nerr' and 'sys_errlist'.
+        ;; "--enable-v4l"
         ;;; XXX: Not available.
         ;"--enable-bktr"
         ;"--enable-sunau"
@@ -243,45 +264,44 @@
         ;"--enable-pv3"
         ;"--enable-nuv"
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("iconv" ,libiconv)
-       ("libtool" ,libtool)
-       ("libxml2" ,libxml2)
-       ("perl" ,perl)
-       ("pkg-config" ,pkg-config)
-       ("python" ,python-wrapper)))
+     (list autoconf
+           automake
+           libtool
+           libxml2
+           perl
+           pkg-config
+           python-wrapper))
     (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("faac" ,faac)
-       ("ffmpeg" ,ffmpeg)
-       ("freetype" ,freetype)
-       ("imagemagick" ,imagemagick)
-       ("lame" ,lame)
-       ("liba52" ,liba52)
-       ("libdv" ,libdv)
-       ("libdvdread" ,libdvdread)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libmpeg2" ,libmpeg2)
-       ("libogg" ,libogg)
-       ("libquicktime" ,libquicktime)
-       ("libtheora" ,libtheora)
-       ("libvorbis" ,libvorbis)
-       ("lzo" ,lzo)
-       ("mjepgtools" ,mjpegtools)
-       ("sdl" ,sdl)
-       ("v4l-utils" ,v4l-utils)
-       ("x11" ,libx11)
-       ("x264" ,libx264)
-       ("xaw" ,libxaw)
-       ("xext" ,libxext)
-       ("xpm" ,libxpm)
-       ("xv" ,libxv)
-       ("xvid" ,xvid)
-       ("zlib" ,zlib)))
+     (list alsa-lib
+           faac
+           ffmpeg
+           freetype
+           imagemagick
+           lame
+           liba52
+           libdv
+           libdvdread
+           libjpeg-turbo
+           libmpeg2
+           libogg
+           libquicktime
+           libtheora
+           libvorbis
+           lzo
+           mjpegtools
+           sdl
+           ;; ("v4l-utils" ,v4l-utils)
+           libx11
+           libx264
+           libxaw
+           libxext
+           libxpm
+           libxv
+           xvid
+           zlib))
     (synopsis "Audio/Video Transcoder")
     (description "Transcode is a fast, versatile and command-line based
-audio/video everything to everything converter primarily focussed on producing
+audio/video everything to everything converter primarily focused on producing
 AVI video files with MP3 audio, but also including a program to read all the
 video and audio streams from a DVD.")
     (home-page
@@ -306,7 +326,7 @@ video and audio streams from a DVD.")
     (arguments
      `(#:tests? #f)) ; Test script is stand-alone
     (native-inputs
-     `(("yasm" ,yasm)))
+     (list yasm))
     (synopsis "SVT HEVC encoder")
     (description "Scalable Video Technology (SVT) is a software-based video
 coding technology that is highly optimized for Intel's Xeon processors.  Using
@@ -314,12 +334,13 @@ the SVT-HEVC encoder, it is possible to spread video encoding processing across
 multiple Intel's Xeon processors to achieve a real advantage of processing
 efficiency.")
     (home-page "https://01.org/svt")
+    (supported-systems '("x86_64-linux" "i686-linux"))
     (license (license:non-copyleft "file:///LICENSE.md"))))
 
 (define-public mediasdk
   (package
     (name "mediasdk")
-    (version "20.1.1")
+    (version "22.4.4")
     (source
      (origin
        (method git-fetch)
@@ -329,33 +350,38 @@ efficiency.")
          (commit (string-append "intel-" name "-" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0blwcxr5j8762nylx2cxrq0h53bpgnk859dbs6crq4wr9fcxlx9z"))))
+        (base32 "18mrqringyv1drswm4m8ppw7sks6x4jzp6s0ag0h9hrpd15kn5rx"))))
     (build-system cmake-build-system)
     (arguments
-     `(#:configure-flags
-       (list
-        "-DENABLE_X11=ON"
-        "-DENABLE_X11_DRI3=ON"
-        "-DENABLE_WAYLAND=ON"
-        "-DENABLE_TEXTLOG=ON"
-        "-DENABLE_STAT=ON"
-        "-DBUILD_TESTS=ON"
-        "-DBUILD_TOOLS=ON"
-        (string-append "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath="
-                       (assoc-ref %outputs "out") "/lib"))))
+     (list
+      #:configure-flags
+      #~(list
+         "-DENABLE_X11=ON"
+         "-DENABLE_X11_DRI3=ON"
+         "-DENABLE_WAYLAND=ON"
+         "-DENABLE_TEXTLOG=ON"
+         "-DENABLE_STAT=ON"
+         "-DBUILD_TESTS=ON"
+         "-DBUILD_TOOLS=ON"
+         (string-append "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath="
+                        #$output "/lib"))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'do-not-embed-kernel-version
+            (lambda _
+              (substitute* "builder/FindGlobals.cmake"
+                (("set\\([[:blank:]]+?BUILD_INFO \"\\$\\{CMAKE_SYSTEM\\}\
+ \\$\\{CMAKE_SYSTEM_VERSION\\}")
+                 "set( BUILD_INFO \"Linux")))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("python" ,python-wrapper)))
+     (list pkg-config python-wrapper))
     (inputs
-     `(("libdrm" ,libdrm)
-       ("libva" ,libva)
-       ("pciaccess" ,libpciaccess)
-       ("wayland" ,wayland)
-       ("x11" ,libx11)))
+     (list libdrm libva libpciaccess wayland libx11))
     (synopsis "Intel Media SDK")
     (description "MediaSDK provides a plain C API to access hardware-accelerated
 video decode, encode and filtering on Intel's Gen graphics hardware platforms.")
     (home-page "http://mediasdk.intel.com/")
+    (supported-systems '("x86_64-linux" "i686-linux"))
     (license (license:non-copyleft "file:///LICENSE"))))
 
 (define-public schroedinger
@@ -385,14 +411,12 @@ video decode, encode and filtering on Intel's Gen graphics hardware platforms.")
                 (string-append doc "/share/gtk-doc"))
                #t))))))
     (native-inputs
-     `(("dash" ,dash)
-       ("gtk-doc" ,gtk-doc/stable)
-       ("pkg-config" ,pkg-config)))
+     (list dash gtk-doc/stable pkg-config))
     (inputs
      `(("glew" ,glew)
        ("opengl" ,mesa)))
     (propagated-inputs
-     `(("orc" ,orc)))
+     (list orc))
     (synopsis "Dirac video codec")
     (description "Schroedinger is a project implementing the Dirac video codec in
 ANSI C code.  It is meant to be highly optimized and portable.  It is developed
@@ -423,24 +447,22 @@ as a joint effort between the BBC and Fluendo.")
         (search-patches "libquicktime-ffmpeg.patch"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("doxygen" ,doxygen)
-       ("pkg-config" ,pkg-config)))
+     (list gettext-minimal doxygen pkg-config))
     (inputs
-     `(("alsa" ,alsa-lib)
-       ("ffmpeg" ,ffmpeg)
-       ("gtk+-2" ,gtk+-2)
-       ("lame" ,lame)
-       ("libdv" ,libdv)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libvorbis" ,libvorbis)
-       ("opengl" ,mesa)
-       ("schroedinger" ,schroedinger)
-       ("x11" ,libx11)
-       ("x264" ,libx264)
-       ("xaw" ,libxaw)
-       ("xv" ,libxv)))
+     (list alsa-lib
+           ffmpeg
+           gtk+-2
+           lame
+           libdv
+           libjpeg-turbo
+           libpng
+           libvorbis
+           mesa
+           schroedinger
+           libx11
+           libx264
+           libxaw
+           libxv))
     (synopsis "Quick Time Library")
     (description "The goal of this project is to enhance the quicktime4linux
 library.")
@@ -482,7 +504,7 @@ library.")
          (add-after 'unpack 'chdir
            (lambda* _
              (chdir "mjpg-streamer-experimental"))))))
-    (inputs `(("libjpeg-turbo" ,libjpeg-turbo)))
+    (inputs (list libjpeg-turbo))
     (synopsis "Stream JPEG over IP network")
     (description "Command line application that copies JPEG frames from one or
 more input plugins to multiple output plugins.  It can be used to stream JPEG
@@ -495,22 +517,20 @@ receiving MJPG streams.")
 (define-public mjpegtools
   (package
     (name "mjpegtools")
-    (version "2.1.0")
+    (version "2.2.1")
     (source
      (origin
        (method url-fetch)
        (uri
-        (string-append "https://sourceforge.net/projects/" name "/files/"
+        (string-append "https://sourceforge.net/projects/mjpeg/files/"
                        name "/" version "/" name "-" version ".tar.gz"))
        (sha256
-        (base32 "0kvhxr5hkabj9v7ah2rzkbirndfqdijd9hp8v52c1z6bxddf019w"))))
+        (base32 "16pl22ra3x2mkp8p3awslhlhj46b1nq9g89301gb0q4rgmnm705i"))))
     (build-system gnu-build-system)
     (inputs
-     `(("gtk+-2" ,gtk+-2)
-       ("libdv" ,libdv)
-       ("libpng" ,libpng)
-       ("libquicktime" ,libquicktime)
-       ("sdl" ,sdl)))
+     (list gtk+-2 libdv libjpeg-turbo libpng libquicktime sdl))
+    (native-inputs
+     (list pkg-config))
     (synopsis "Tools for handling MPEG")
     (description "Mjpeg tools is a suite of programs which support video capture,
 editing, playback, and compression to MPEG of MJPEG video.  Edit, play and
@@ -564,10 +584,7 @@ and mmsh protocols.")
                (("is != NULL") "is.good()"))
              #t)))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (inputs
      `(("ffmpeg" ,ffmpeg-2.8)
        ("jpeg" ,libjpeg-turbo)
@@ -642,13 +659,9 @@ other software.")
        #:configure-flags
        (list "--with-sdl2")))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (inputs
-     `(("linux-headers" ,linux-libre-headers)
-       ("sdl2" ,sdl2)))
+     `(("sdl2" ,sdl2)))
     (synopsis "Touchscreen access library")
     (description "TSLib is a cross-platform library that provides access to
 touchscreen devices and the ability to apply filters to their input events.")
@@ -685,17 +698,21 @@ touchscreen devices and the ability to apply filters to their input events.")
              (("\\(A52DIR\\)/include")
               "(A52DIR)/include/a52dec")
              (("LIBS = " match)
-              (string-append match "-la52 ")))
-           #t))
+              (string-append match "-la52 ")))))
+       (add-after 'unpack 'preseed-cflags
+         (lambda _
+           (setenv "CFLAGS"
+                   (string-append "-D_FILE_OFFSET_BITS=64 "
+                                  "-D_LARGEFILE_SOURCE "
+                                  "-D_LARGEFILE64_SOURCE"))))
        (add-before 'install 'create-destination-directory
          (lambda* (#:key outputs #:allow-other-keys)
            (let* ((out (string-append (assoc-ref outputs "out"))))
-             (mkdir-p (string-append out "/bin"))
-             #t))))))
+             (mkdir-p (string-append out "/bin"))))))))
   (native-inputs
-   `(("nasm" ,nasm)))
+   (list nasm))
   (inputs
-   `(("liba52" ,liba52)))
+   (list liba52))
   (synopsis "Advanced MPEG editing and manipulation library")
   (description "Libmpeg3 decodes MP2, MP3, AC3, MPEG-1 video, MPEG-2 video,
 and DVD footage in a single library.  It supports many esoteric features like
@@ -717,12 +734,22 @@ stream decoding")
                 "1vkh19gb76agvh4h87ysbrgy82hrw88lnsvhynjf4vng629dmpgv"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("makeinfo" ,texinfo)))
+     `(("config" ,config)
+       ("makeinfo" ,texinfo)))
     (inputs
-     `(("ncurses" ,ncurses)))
+     (list ncurses))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
+         (add-after 'unpack 'update-config-scripts
+           (lambda* (#:key inputs native-inputs #:allow-other-keys)
+             ;; Replace outdated config.guess and config.sub.
+             (for-each (lambda (file)
+                         (install-file
+                          (search-input-file
+                           (or native-inputs inputs)
+                           (string-append "/bin/" file)) "."))
+                       '("config.guess" "config.sub"))))
          (replace 'configure
                   (lambda* (#:key build inputs outputs #:allow-other-keys)
                     ;; This old `configure' script doesn't support
@@ -731,19 +758,9 @@ stream decoding")
                           (ncurses (assoc-ref inputs "ncurses")))
                       (setenv "CONFIG_SHELL" (which "bash"))
                       (invoke "./configure"
+                              "--disable-static"
                               (string-append "--prefix=" out)
                               (string-append "--build=" build)
-                              ;; The ancient config.guess is unable to
-                              ;; guess the host triplet on mips64el.
-                              ,@(if (string=? "mips64el-linux"
-                                              (%current-system))
-                                    '("--host=mips64el-unknown-linux-gnu")
-                                    '())
-                              ;; The same is also true with aarch64.
-                              ,@(if (string=? "aarch64-linux"
-                                              (%current-system))
-                                    '("--host=aarch64-unknown-linux-gnu")
-                                    '())
                               (string-append "--with-ncurses="
                                              ncurses))))))))
     (home-page "http://aa-project.sourceforge.net/aalib/")
@@ -757,7 +774,7 @@ old-fashioned output methods with powerful ascii-art renderer.")
 (define-public celluloid
   (package
     (name "celluloid")
-    (version "0.21")
+    (version "0.24")
     (source
      (origin
        (method url-fetch)
@@ -765,15 +782,12 @@ old-fashioned output methods with powerful ascii-art renderer.")
                            "/releases/download/v" version
                            "/celluloid-" version ".tar.xz"))
        (sha256
-        (base32 "1dvyf21iv9hrgv99szc24386vkacmhidm5b4d31hqqjs3b6di692"))))
+        (base32 "0ns9xh582c8kajw4v2x5ap5jfiba3gxywqc2klc0v6fc3id1gqii"))))
     (build-system glib-or-gtk-build-system)
     (native-inputs
-     `(("intltool" ,intltool)
-       ("pkg-config" ,pkg-config)))
+     (list intltool pkg-config))
     (inputs
-     `(("gtk+" ,gtk+)
-       ("libepoxy" ,libepoxy)
-       ("mpv" ,mpv)))
+     (list gtk libadwaita libepoxy mpv))
     (home-page "https://github.com/celluloid-player/celluloid")
     (synopsis "GTK+ frontend for the mpv media player")
     (description "Celluloid is a simple GTK+ frontend for the mpv media player.
@@ -802,9 +816,7 @@ mpv's powerful playback capabilities.")
     (build-system gnu-build-system)
     ;; XXX We need to run ./bootstrap because of the build system fixes above.
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (arguments `(#:configure-flags '("--enable-shared")
                  #:phases
                  (modify-phases %standard-phases
@@ -822,7 +834,7 @@ television and DVD.  It is also known as AC-3.")
 (define-public libaom
   (package
     (name "libaom")
-    (version "3.1.3")
+    (version "3.3.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -831,12 +843,10 @@ television and DVD.  It is also known as AC-3.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "08rk31d2cp9k9nj37s6a4n7klpfqfbj62anwyiggzsz7b68psjq3"))))
+                "024vhsx7bw9kajk65hhh5vmqrja0h33rmlcpngsj3yg4p8l29943"))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("perl" ,perl)
-       ("pkg-config" ,pkg-config)
-       ("python" ,python))) ; to detect the version
+     (list perl pkg-config python)) ; to detect the version
     (arguments
      `(#:tests? #f                      ; downloads many video clips
        #:configure-flags
@@ -875,12 +885,12 @@ shared library and encoder and decoder command-line executables.")
                (base32
                 "1m3i322n2fwgrvbs1yck7g5md1dbg22bhq5xdqmjpz5m7j4jxqny"))))
     (inputs
-     `(("libx11" ,libx11)
-       ("libxext" ,libxext)
-       ("libxv" ,libxv)
-       ("libsm" ,libsm)
-       ("libice" ,libice)
-       ("sdl" ,sdl)))
+     (list libx11
+           libxext
+           libxv
+           libsm
+           libice
+           sdl))
     (build-system gnu-build-system)
     (home-page "http://libmpeg2.sourceforge.net/")
     (synopsis "MPEG1 and MPEG2 video decoder library")
@@ -908,8 +918,9 @@ shared library and encoder and decoder command-line executables.")
                   "1i6v9h3xx9pi0zmlj3anwwjxqa63sbhy9crrif8dphipwfn9hyg5"))))
       (build-system gnu-build-system)
       (native-inputs
-       `(("pkg-config" ,pkg-config)
-         ("nasm" ,nasm)))
+       (list pkg-config nasm))
+      (inputs
+       (list config))
       ;; TODO: Add gpac input
       (arguments
        `(#:tests? #f                    ;no check target
@@ -920,6 +931,7 @@ shared library and encoder and decoder command-line executables.")
                              ;; program depends on ffmpeg and ffmpeg depends on
                              ;; libx264).
                              "--disable-cli"
+                             "--enable-pic"
 
                              ;; On MIPS, we must pass "--disable-asm" or else
                              ;; configure fails after printing: "You specified a
@@ -930,7 +942,17 @@ shared library and encoder and decoder command-line executables.")
                                                    (or (%current-target-system)
                                                        (%current-system)))
                                    '("--disable-asm")
-                                   '()))))
+                                   '()))
+         #:phases
+         (modify-phases %standard-phases
+           (add-after 'unpack 'update-config-scripts
+             (lambda* (#:key native-inputs inputs #:allow-other-keys)
+               (for-each (lambda (file)
+                               (install-file
+                                 (search-input-file
+                                   (or native-inputs inputs)
+                                   (string-append "/bin/" file)) "."))
+                         '("config.guess" "config.sub")))))))
       (home-page "https://www.videolan.org/developers/x264.html")
       (synopsis "H.264 video coding library")
       (description "libx264 is an advanced encoding library for creating
@@ -968,24 +990,24 @@ H.264 (MPEG-4 AVC) video streams.")
     (build-system gnu-build-system)
     (outputs '("out" "gui")) ; "mkvtoolnix-gui" brings the closure size from ~300 MB to 1.5+ GB.
     (inputs
-     `(("boost" ,boost)
-       ("bzip2" ,bzip2)
-       ("cmark" ,cmark)
-       ("libebml" ,libebml)
-       ("file" ,file)
-       ("flac" ,flac)
-       ("fmt" ,fmt)
-       ("libdvdread" ,libdvdread)
-       ("libmatroska" ,libmatroska)
-       ("libogg" ,libogg)
-       ("libvorbis" ,libvorbis)
-       ("lzo" ,lzo)
-       ("pcre2" ,pcre2)
-       ("pugixml" ,pugixml)
-       ("qtbase" ,qtbase-5)
-       ("qtmultimedia" ,qtmultimedia)
-       ("utfcpp" ,utfcpp)
-       ("zlib" ,zlib)))
+     (list boost
+           bzip2
+           cmark
+           libebml
+           file
+           flac
+           fmt
+           libdvdread
+           libmatroska
+           libogg
+           libvorbis
+           lzo
+           pcre2
+           pugixml
+           qtbase-5
+           qtmultimedia-5
+           utfcpp
+           zlib))
     (native-inputs
      `(("docbook-xsl" ,docbook-xsl)
        ("gettext" ,gettext-minimal)
@@ -995,7 +1017,7 @@ H.264 (MPEG-4 AVC) video streams.")
        ("perl" ,perl)
        ("pkg-config" ,pkg-config)
        ("po4a" ,po4a)
-       ("qttools" ,qttools)
+       ("qttools-5" ,qttools-5)
        ("ruby" ,ruby)))
     (arguments
      `(#:configure-flags
@@ -1018,10 +1040,8 @@ H.264 (MPEG-4 AVC) video streams.")
              #t)))
          (add-before 'configure 'add-googletest
            (lambda* (#:key inputs #:allow-other-keys)
-             (symlink
-               (string-append (assoc-ref inputs "googletest")
-                              "/include/gtest") "lib/gtest")
-             #t))
+             (symlink (search-input-directory inputs "/include/gtest")
+                      "lib/gtest")))
          (replace 'build
            (lambda _
              (let ((-j (list "-j" (number->string (parallel-job-count)))))
@@ -1071,7 +1091,7 @@ H.264 (MPEG-4 AVC) video streams.")
 (define-public pipe-viewer
   (package
     (name "pipe-viewer")
-    (version "0.1.4")
+    (version "0.2.0")
     (source
      (origin
        (method git-fetch)
@@ -1081,7 +1101,7 @@ H.264 (MPEG-4 AVC) video streams.")
          (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0d8b3gcr9dndw8qlwfrm0wgp4vjmn8fwd151kmzz7kkw57f5jfch"))))
+        (base32 "19qfs0nv7l01468f14a5zbvaiff5hrsk3a4zqknh15014xnvw08s"))))
     (build-system perl-build-system)
     (arguments
      `(#:imported-modules
@@ -1103,7 +1123,10 @@ H.264 (MPEG-4 AVC) video streams.")
              (substitute* (find-files "lib" "\\.pm$")
                (("\"youtube-dl\"")
                 (format #f "\"~a/bin/youtube-dl\""
-                        (assoc-ref inputs "youtube-dl"))))
+                        (assoc-ref inputs "youtube-dl")))
+               (("\"yt-dlp\"")
+                (format #f "\"~a/bin/yt-dlp\""
+                        (assoc-ref inputs "yt-dlp"))))
              (substitute* (find-files "bin" ".*-viewer$")
                (("'ffmpeg'")
                 (format #f "'~a/bin/ffmpeg'"
@@ -1116,7 +1139,10 @@ H.264 (MPEG-4 AVC) video streams.")
                         (assoc-ref inputs "xdg-utils")))
                (("'youtube-dl'")
                 (format #f "'~a/bin/youtube-dl'"
-                        (assoc-ref inputs "youtube-dl"))))))
+                        (assoc-ref inputs "youtube-dl")))
+               (("'yt-dlp'")
+                (format #f "'~a/bin/yt-dlp'"
+                        (assoc-ref inputs "yt-dlp"))))))
          (add-after 'install 'install-xdg
            (lambda args
              (apply (assoc-ref copy:%standard-phases 'install)
@@ -1138,40 +1164,39 @@ H.264 (MPEG-4 AVC) video streams.")
                      `("GI_TYPELIB_PATH" ":" prefix (,gi-typelib)))
                 (find-files bin-dir))))))))
     (native-inputs
-     `(("perl-module-build" ,perl-module-build)
-       ("perl-test-pod" ,perl-test-pod)
-       ("perl-test-simple" ,perl-test-simple)))
+     (list perl-module-build perl-test-pod perl-test-simple))
     (inputs
-     `(("perl-data-dump" ,perl-data-dump)
-       ("perl-digest-md5" ,perl-digest-md5)
-       ("perl-encode" ,perl-encode)
-       ("ffmpeg" ,ffmpeg)
-       ("perl-file-path" ,perl-file-path)
-       ("perl-file-sharedir" ,perl-file-sharedir)
-       ("perl-getopt-long" ,perl-getopt-long)
-       ("perl-gtk3" ,perl-gtk3)
-       ("perl-http-message" ,perl-http-message)
-       ("perl-json" ,perl-json)
-       ("perl-json-xs" ,perl-json-xs)
-       ("perl-libwww" ,perl-libwww)
-       ("perl-lwp-protocol-https" ,perl-lwp-protocol-https)
-       ("perl-lwp-useragent-cached" ,perl-lwp-useragent-cached)
-       ("perl-memoize" ,perl-memoize)
-       ("perl-mime-base64" ,perl-mime-base64)
-       ("perl-pathtools" ,perl-pathtools)
-       ("perl-scalar-list-utils" ,perl-scalar-list-utils)
-       ("perl-storable" ,perl-storable)
-       ("perl-term-ansicolor" ,perl-term-ansicolor)
-       ("perl-term-readline-gnu" ,perl-term-readline-gnu)
-       ("perl-text-parsewords" ,perl-text-parsewords)
-       ("perl-text-tabs+wrap" ,perl-text-tabs+wrap)
-       ("perl-unicode-linebreak" ,perl-unicode-linebreak)
-       ("perl-uri-escape" ,perl-uri-escape)
-       ("wget" ,wget)
-       ("xdg-utils" ,xdg-utils)
-       ("youtube-dl" ,youtube-dl)))
+     (list perl-data-dump
+           perl-digest-md5
+           perl-encode
+           ffmpeg
+           perl-file-path
+           perl-file-sharedir
+           perl-getopt-long
+           perl-gtk3
+           perl-http-message
+           perl-json
+           perl-json-xs
+           perl-libwww
+           perl-lwp-protocol-https
+           perl-lwp-useragent-cached
+           perl-memoize
+           perl-mime-base64
+           perl-pathtools
+           perl-scalar-list-utils
+           perl-storable
+           perl-term-ansicolor
+           perl-term-readline-gnu
+           perl-text-parsewords
+           perl-text-tabs+wrap
+           perl-unicode-linebreak
+           perl-uri-escape
+           wget
+           xdg-utils
+           youtube-dl
+           yt-dlp))
     (propagated-inputs
-     `(("dconf" ,dconf)))
+     (list dconf))
     (home-page "https://github.com/trizen/pipe-viewer")
     (synopsis "CLI+GUI YouTube Client")
     (description "Pipe-Viewer is a lightweight application for searching and
@@ -1185,22 +1210,19 @@ on the Invidious instances only as a fallback method.")
 (define-public x265
   (package
     (name "x265")
-    (version "3.4")
+    (version "3.5")
     (outputs '("out" "static"))
     (source
       (origin
         (method url-fetch)
-        (uri (list (string-append "https://bitbucket.org/multicoreware/x265"
-                                  "/downloads/x265_" version ".tar.gz")
-                   (string-append "https://download.videolan.org/videolan/x265/"
-                                  "x265_" version ".tar.gz")))
+        (uri (string-append "https://bitbucket.org/multicoreware/x265_git"
+                            "/downloads/x265_" version ".tar.gz"))
         (sha256
-         (base32 "0wl62hfsdqpf3r3z3s6l9bz7pdb1rcik5ll00b3yaadplqipy162"))
+         (base32 "1s6afxj61jdwfjnn70dwiql34fbqsvn6zv10785vmjyar8sk62p7"))
         (patches (search-patches "x265-arm-flags.patch"))
         (modules '((guix build utils)))
         (snippet '(begin
-                    (delete-file-recursively "source/compat/getopt")
-                    #t))))
+                    (delete-file-recursively "source/compat/getopt")))))
     (build-system cmake-build-system)
     (native-inputs
      ;; XXX: ASM optimization fails on i686-linux, see <https://bugs.gnu.org/41768>.
@@ -1208,13 +1230,10 @@ on the Invidious instances only as a fallback method.")
          '()
          `(("nasm" ,nasm))))
     (arguments
-     `(#:tests? #f ; tests are skipped if cpu-optimized code isn't built
+     `(#:tests? #f ; tests are skipped if ENABLE_ASSEMBLY is TRUE.
        #:configure-flags
          ;; Ensure position independent code for everyone.
          (list "-DENABLE_PIC=TRUE"
-               ,@(if (target-arm?)
-                     '("-DENABLE_ASSEMBLY=OFF")
-                     '())
                (string-append "-DCMAKE_INSTALL_PREFIX="
                               (assoc-ref %outputs "out")))
        #:phases
@@ -1223,13 +1242,25 @@ on the Invidious instances only as a fallback method.")
            (lambda _
              (delete-file-recursively "build")
              (chdir "source")
-             #t))
+             ;; We're not building from a git or mercurial repository,
+             ;; so help cmake find the version number.
+             (substitute* "cmake/Version.cmake"
+               (("if\\(X265_TAG_DISTANCE STREQUAL \"0\"\\)")
+                (string-append "if(TRUE)\n"
+                               "    set(X265_LATEST_TAG \"" ,version "\")\n")))))
          (add-before 'configure 'build-12-bit
-           (lambda* (#:key (configure-flags '()) #:allow-other-keys)
+           (lambda* (#:key (configure-flags '()) #:allow-other-keys #:rest args)
              (mkdir "../build-12bit")
              (with-directory-excursion "../build-12bit"
                (apply invoke
                  "cmake" "../source"
+                 ,@(if (target-aarch64?)
+                     '("-DENABLE_ASSEMBLY=OFF")
+                     '())
+                 ;; Altivec code produces many build errors.
+                 ,@(if (target-ppc64le?)
+                       '("-DENABLE_ALTIVEC=OFF")
+                       '())
                  "-DHIGH_BIT_DEPTH=ON"
                  "-DEXPORT_C_API=OFF"
                  "-DENABLE_CLI=OFF"
@@ -1237,32 +1268,39 @@ on the Invidious instances only as a fallback method.")
                  configure-flags)
                (substitute* (cons "cmake_install.cmake"
                                   (append
-                                    (find-files "CMakeFiles/x265-shared.dir" ".")
-                                    (find-files "CMakeFiles/x265-static.dir" ".")))
+                                    (find-files "CMakeFiles/x265-shared.dir")
+                                    (find-files "CMakeFiles/x265-static.dir")))
                  (("libx265") "libx265_main12"))
-               (invoke "make"))))
+               ((assoc-ref %standard-phases 'build)))))
          (add-before 'configure 'build-10-bit
-           (lambda* (#:key (configure-flags '()) #:allow-other-keys)
+           (lambda* (#:key (configure-flags '()) #:allow-other-keys #:rest args)
              (mkdir "../build-10bit")
              (with-directory-excursion "../build-10bit"
                (apply invoke
                  "cmake" "../source"
+                 ,@(if (target-aarch64?)
+                     '("-DENABLE_ASSEMBLY=OFF")
+                     '())
+                 ;; Altivec code produces many build errors.
+                 ,@(if (target-ppc64le?)
+                       '("-DENABLE_ALTIVEC=OFF")
+                       '())
                  "-DHIGH_BIT_DEPTH=ON"
                  "-DEXPORT_C_API=OFF"
                  "-DENABLE_CLI=OFF"
                  configure-flags)
                (substitute* (cons "cmake_install.cmake"
                                   (append
-                                    (find-files "CMakeFiles/x265-shared.dir" ".")
-                                    (find-files "CMakeFiles/x265-static.dir" ".")))
+                                    (find-files "CMakeFiles/x265-shared.dir")
+                                    (find-files "CMakeFiles/x265-static.dir")))
                  (("libx265") "libx265_main10"))
-               (invoke "make"))))
+               ((assoc-ref %standard-phases 'build)))))
          (add-after 'install 'install-more-libs
-           (lambda _
+           (lambda args
              (with-directory-excursion "../build-12bit"
-               (invoke "make" "install"))
+               ((assoc-ref %standard-phases 'install)))
              (with-directory-excursion "../build-10bit"
-               (invoke "make" "install"))))
+               ((assoc-ref %standard-phases 'install)))))
          (add-before 'strip 'move-static-libs
            (lambda* (#:key outputs #:allow-other-keys)
              (let ((out (assoc-ref outputs "out"))
@@ -1274,8 +1312,7 @@ on the Invidious instances only as a fallback method.")
                    (lambda (file)
                      (rename-file file
                                   (string-append static "/lib/" file)))
-                   (find-files "." "\\.a$"))))
-             #t)))))
+                   (find-files "." "\\.a$")))))))))
     (home-page "http://x265.org/")
     (synopsis "Library for encoding h.265/HEVC video streams")
     (description "x265 is a H.265 / HEVC video encoder application library,
@@ -1298,8 +1335,7 @@ designed to encode video or images into an H.265 / HEVC encoded bitstream.")
     (arguments
      '(#:configure-flags '("--disable-static")))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("nasm" ,nasm)))
+     (list pkg-config nasm))
     (propagated-inputs
      `(("freetype" ,freetype)
        ("fribidi" ,fribidi)
@@ -1327,15 +1363,15 @@ ASS/SSA (Advanced Substation Alpha/SubStation Alpha) subtitle format.")
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags '("--disable-static")))
-    (native-inputs `(("pkg-config" ,pkg-config)))
+    (native-inputs (list pkg-config))
     (inputs
-     `(("freeglut" ,freeglut)
-       ("ftgl" ,ftgl)
-       ("imlib2" ,imlib2)
-       ("libx11" ,libx11)
-       ("mesa" ,mesa)
-       ("ncurses" ,ncurses)
-       ("zlib" ,zlib)))
+     (list freeglut
+           ftgl
+           imlib2
+           libx11
+           mesa
+           ncurses
+           zlib))
     (home-page "http://caca.zoy.org/wiki/libcaca")
     (synopsis "Colour ASCII-art library")
     (description "libcaca is a graphics library that outputs text instead of
@@ -1358,9 +1394,7 @@ canvas operations.")
                 "0sjz0s0nrv7jcpvh1i432x3jza0y5yycmzw84cfncb2qby0i62rs"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (home-page "https://www.videolan.org/developers/libdca.html")
     (synopsis "DTS Coherent Acoustics decoder")
     (description "libdca is a library for decoding DTS Coherent Acoustics
@@ -1380,8 +1414,8 @@ streams.")
                (base32
                 "1fl96f2xh2slkv1i1ix7kqk576a0ak1d33cylm0mbhm96d0761d3"))))
     (build-system gnu-build-system)
-    (native-inputs `(("pkg-config" ,pkg-config)))
-    (inputs `(("libxv" ,libxv)))
+    (native-inputs (list pkg-config))
+    (inputs (list libxv))
     (home-page "http://libdv.sourceforge.net/")
     (synopsis "DV video (IEC 61834 and SMPTE 314M) codec")
     (description "The Quasar DV codec (libdv) is a software codec for DV
@@ -1404,7 +1438,7 @@ SMPTE 314M.")
         (base32 "06h81sxyz2riic0gpzik6ffcnq32wrqphi8c6k55glcdymiimyfs"))))
     (build-system cmake-build-system)
     (inputs
-     `(("libebml" ,libebml)))
+     (list libebml))
     (arguments
      `(#:configure-flags
        (list "-DBUILD_SHARED_LIBS=YES")
@@ -1420,27 +1454,64 @@ support in old parsers.
 libebml is a C++ library to read and write EBML files.")
     (license license:lgpl2.1)))
 
+(define-public libplacebo
+  (package
+    (name "libplacebo")
+    (version "4.208.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://code.videolan.org/videolan/libplacebo.git")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "161dp5781s74ca3gglaxlmchx7glyshf0wg43w98pl22n1jcm5qk"))))
+    (build-system meson-build-system)
+    (arguments
+     `(#:configure-flags
+       `("-Dopengl=enabled"
+         ,(string-append "-Dvulkan-registry="
+                         (assoc-ref %build-inputs "vulkan-headers")
+                         "/share/vulkan/registry/vk.xml"))))
+    (native-inputs
+     (list python python-mako pkg-config))
+    (inputs
+     (list lcms
+           libepoxy
+           mesa
+           shaderc
+           vulkan-headers
+           vulkan-loader))
+    (home-page "https://code.videolan.org/videolan/libplacebo")
+    (synopsis "GPU-accelerated image/video processing library")
+    (description "libplacebo is, in a nutshell, the core rendering algorithms
+and ideas of mpv rewritten as an independent library.  As of today, libplacebo
+contains a large assortment of video processing shaders, focusing on both
+quality and performance.")
+    (license license:lgpl2.1+)))
+
 (define-public libva
   (package
     (name "libva")
-    (version "2.10.0")
+    (version "2.13.0")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://github.com/intel/libva/releases/download/"
                            version "/libva-" version ".tar.bz2"))
        (sha256
-        (base32 "0dh2zjn6wi74ga75r6pbrrj8hjm213zyxvn9bv78z0fra1dy70gs"))))
+        (base32 "0q6l193x9whd80sjd5mx8cb7c0fcljb19nhfpla5h49nkzrq7lzs"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("libdrm" ,libdrm)
-       ("libx11" ,libx11)
-       ("libxext" ,libxext)
-       ("libxfixes" ,libxfixes)
-       ("mesa" ,mesa)
-       ("wayland" ,wayland)))
+     (list libdrm
+           libx11
+           libxext
+           libxfixes
+           mesa
+           wayland))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -1488,13 +1559,9 @@ standards (MPEG-2, MPEG-4 ASP/H.263, MPEG-4 AVC/H.264, and VC-1/VMW3).")
        (list "--enable-wayland"
              "--enable-x11")))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("libdrm" ,libdrm)
-       ("libva" ,libva)
-       ("libx11" ,libx11)
-       ("mesa" ,mesa)
-       ("wayland" ,wayland)))
+     (list libdrm libva libx11 mesa wayland))
     (home-page "https://01.org/linuxmedia/vaapi")
     (synopsis "Collection of testing utilities for VA-API")
     (description
@@ -1505,115 +1572,114 @@ These tools require a supported graphics chip, driver, and VA-API back end to
 operate properly.")
     (license license:expat)))
 
-(define-public ffmpeg
+(define-public ffmpeg-5
   (package
     (name "ffmpeg")
-    (version "4.4")
+    (version "5.1")
     (source (origin
-             (method url-fetch)
-             (uri (string-append "https://ffmpeg.org/releases/ffmpeg-"
-                                 version ".tar.xz"))
-             (sha256
-              (base32
-               "02fr8mvf2agwmyb9q2bmh9p09gpz3xxmpcbbbj8iydz57hc0mc86"))))
+              (method url-fetch)
+              (uri (string-append "https://ffmpeg.org/releases/ffmpeg-"
+                                  version ".tar.xz"))
+              (sha256
+               (base32
+                "00wbd5skv6ba5yqq4ca505ncckhvpzwflcsall7madg2bsmnmssm"))))
     (build-system gnu-build-system)
     (inputs
-     `(("dav1d" ,dav1d)
-       ("fontconfig" ,fontconfig)
-       ("freetype" ,freetype)
-       ("frei0r-plugins" ,frei0r-plugins)
-       ("gnutls" ,gnutls)
-       ("opus" ,opus)
-       ("ladspa" ,ladspa)
-       ("lame" ,lame)
-       ("libaom" ,libaom)
-       ("libass" ,libass)
-       ("libbluray" ,libbluray)
-       ("libcaca" ,libcaca)
-       ("libcdio-paranoia" ,libcdio-paranoia)
-       ("libdrm" ,libdrm)
-       ("libtheora" ,libtheora)
-       ("libva" ,libva)
-       ("libvdpau" ,libvdpau)
-       ("libvorbis" ,libvorbis)
-       ("libvpx" ,libvpx)
-       ("libx11" ,libx11)
-       ("libx264" ,libx264)
-       ("mesa" ,mesa)
-       ("openal" ,openal)
-       ("pulseaudio" ,pulseaudio)
-       ;; XXX: rav1e depends on rust, which currently only works on x86_64.
-       ;; See also the related configure flag when changing this.
-       ,@(if (string-prefix? "x86_64" (or (%current-target-system)
-                                          (%current-system)))
-             `(("rav1e" ,rav1e))
-             '())
-       ("sdl" ,sdl2)
-       ("soxr" ,soxr)
-       ("speex" ,speex)
-       ("srt" ,srt)
-       ("twolame" ,twolame)
-       ("vidstab" ,vidstab)
-       ("x265" ,x265)
-       ("xvid" ,xvid)
-       ("zlib" ,zlib)))
+     (append
+      ;; XXX: rav1e depends on rust, which currently only works on x86_64.
+      ;; See also the related configure flag when changing this.
+      (if (target-x86-64?) (list rav1e) '())
+      (list dav1d
+            fontconfig
+            freetype
+            frei0r-plugins
+            gnutls
+            opus
+            ladspa
+            lame
+            libaom
+            libass
+            libbluray
+            libcaca
+            libcdio-paranoia
+            libdrm
+            libtheora
+            libva
+            libvdpau
+            libvorbis
+            libvpx
+            libx11
+            libx264
+            mesa
+            openal
+            pulseaudio
+            sdl2
+            soxr
+            speex
+            srt
+            twolame
+            vidstab
+            x265
+            xvid
+            zlib)))
     (native-inputs
-     `(("bc" ,bc)
-       ("perl" ,perl)
-       ("pkg-config" ,pkg-config)
-       ("texinfo" ,texinfo)
-       ("speex" ,speex)
-       ("yasm" ,yasm)))
+     (list bc
+           perl
+           pkg-config
+           texinfo
+           speex
+           yasm))
     (arguments
-     `(#:test-target "fate"
-       #:configure-flags
-       ;; possible additional inputs:
-       ;;   --enable-avisynth        enable reading of AviSynth script
-       ;;                            files [no]
-       ;;   --enable-libaacplus      enable AAC+ encoding via libaacplus [no]
-       ;;   --enable-libcelt         enable CELT decoding via libcelt [no]
-       ;;   --enable-libdc1394       enable IIDC-1394 grabbing using libdc1394
-       ;;                            and libraw1394 [no]
-       ;;   --enable-libfaac         enable AAC encoding via libfaac [no]
-       ;;   --enable-libfdk-aac      enable AAC de/encoding via libfdk-aac [no]
-       ;;   --enable-libflite        enable flite (voice synthesis) support via
-       ;;                            libflite [no]
-       ;;   --enable-libgme          enable Game Music Emu via libgme [no]
-       ;;   --enable-libgsm          enable GSM de/encoding via libgsm [no]
-       ;;   --enable-libiec61883     enable iec61883 via libiec61883 [no]
-       ;;   --enable-libilbc         enable iLBC de/encoding via libilbc [no]
-       ;;   --enable-libmodplug      enable ModPlug via libmodplug [no]
-       ;;   --enable-libnut          enable NUT (de)muxing via libnut,
-       ;;                            native (de)muxer exists [no]
-       ;;   --enable-libopencore-amrnb    enable AMR-NB de/encoding via
-       ;;                                 libopencore-amrnb [no]
-       ;;   --enable-libopencore-amrwb    enable AMR-WB decoding via
-       ;;                                 libopencore-amrwb [no]
-       ;;   --enable-libopencv       enable video filtering via libopencv [no]
-       ;;   --enable-libopenjpeg     enable JPEG 2000 de/encoding via
-       ;;                            OpenJPEG [no]
-       ;;   --enable-librtmp         enable RTMP[E] support via librtmp [no]
-       ;;   --enable-libschroedinger enable Dirac de/encoding via
-       ;;                            libschroedinger [no]
-       ;;   --enable-libshine        enable fixed-point MP3 encoding via
-       ;;                            libshine [no]
-       ;;   --enable-libssh          enable SFTP protocol via libssh [no]
-       ;;                            (libssh2 does not work)
-       ;;   --enable-libstagefright-h264  enable H.264 decoding via
-       ;;                                 libstagefright [no]
-       ;;   --enable-libutvideo      enable Ut Video encoding and decoding via
-       ;;                            libutvideo [no]
-       ;;   --enable-libv4l2         enable libv4l2/v4l-utils [no]
-       ;;   --enable-libvo-aacenc    enable AAC encoding via libvo-aacenc [no]
-       ;;   --enable-libvo-amrwbenc  enable AMR-WB encoding via
-       ;;                            libvo-amrwbenc [no]
-       ;;   --enable-libwavpack      enable wavpack encoding via libwavpack [no]
-       ;;   --enable-libxavs         enable AVS encoding via xavs [no]
-       ;;   --enable-libzmq          enable message passing via libzmq [no]
-       ;;   --enable-libzvbi         enable teletext support via libzvbi [no]
-       ;;   --enable-opencl          enable OpenCL code
-       '("--enable-avresample"
-         "--enable-gpl" ; enable optional gpl licensed parts
+     (list
+      #:test-target "fate"
+      #:configure-flags
+      ;; possible additional inputs:
+      ;;   --enable-avisynth        enable reading of AviSynth script
+      ;;                            files [no]
+      ;;   --enable-libaacplus      enable AAC+ encoding via libaacplus [no]
+      ;;   --enable-libcelt         enable CELT decoding via libcelt [no]
+      ;;   --enable-libdc1394       enable IIDC-1394 grabbing using libdc1394
+      ;;                            and libraw1394 [no]
+      ;;   --enable-libfaac         enable AAC encoding via libfaac [no]
+      ;;   --enable-libfdk-aac      enable AAC de/encoding via libfdk-aac [no]
+      ;;   --enable-libflite        enable flite (voice synthesis) support via
+      ;;                            libflite [no]
+      ;;   --enable-libgme          enable Game Music Emu via libgme [no]
+      ;;   --enable-libgsm          enable GSM de/encoding via libgsm [no]
+      ;;   --enable-libiec61883     enable iec61883 via libiec61883 [no]
+      ;;   --enable-libilbc         enable iLBC de/encoding via libilbc [no]
+      ;;   --enable-libmodplug      enable ModPlug via libmodplug [no]
+      ;;   --enable-libnut          enable NUT (de)muxing via libnut,
+      ;;                            native (de)muxer exists [no]
+      ;;   --enable-libopencore-amrnb    enable AMR-NB de/encoding via
+      ;;                                 libopencore-amrnb [no]
+      ;;   --enable-libopencore-amrwb    enable AMR-WB decoding via
+      ;;                                 libopencore-amrwb [no]
+      ;;   --enable-libopencv       enable video filtering via libopencv [no]
+      ;;   --enable-libopenjpeg     enable JPEG 2000 de/encoding via
+      ;;                            OpenJPEG [no]
+      ;;   --enable-librtmp         enable RTMP[E] support via librtmp [no]
+      ;;   --enable-libschroedinger enable Dirac de/encoding via
+      ;;                            libschroedinger [no]
+      ;;   --enable-libshine        enable fixed-point MP3 encoding via
+      ;;                            libshine [no]
+      ;;   --enable-libssh          enable SFTP protocol via libssh [no]
+      ;;                            (libssh2 does not work)
+      ;;   --enable-libstagefright-h264  enable H.264 decoding via
+      ;;                                 libstagefright [no]
+      ;;   --enable-libutvideo      enable Ut Video encoding and decoding via
+      ;;                            libutvideo [no]
+      ;;   --enable-libv4l2         enable libv4l2/v4l-utils [no]
+      ;;   --enable-libvo-aacenc    enable AAC encoding via libvo-aacenc [no]
+      ;;   --enable-libvo-amrwbenc  enable AMR-WB encoding via
+      ;;                            libvo-amrwbenc [no]
+      ;;   --enable-libwavpack      enable wavpack encoding via libwavpack [no]
+      ;;   --enable-libxavs         enable AVS encoding via xavs [no]
+      ;;   --enable-libzmq          enable message passing via libzmq [no]
+      ;;   --enable-libzvbi         enable teletext support via libzvbi [no]
+      ;;   --enable-opencl          enable OpenCL code
+      #~(list
+         "--enable-gpl"                 ;enable optional gpl licensed parts
          "--enable-shared"
          "--enable-frei0r"
          "--enable-fontconfig"
@@ -1629,10 +1695,9 @@ operate properly.")
          "--enable-libmp3lame"
          "--enable-libopus"
          "--enable-libpulse"
-         ,@(if (string-prefix? "x86_64" (or (%current-target-system)
-                                            (%current-system)))
-               '("--enable-librav1e")
-               '())
+         #$@(if (target-x86-64?)
+                '("--enable-librav1e")
+                '())
          "--enable-libsoxr"
          "--enable-libspeex"
          "--enable-libsrt"
@@ -1663,35 +1728,32 @@ operate properly.")
          "--disable-mipsdsp"
          "--disable-mipsdspr2"
          "--disable-mipsfpu")
-       #:phases
-       (modify-phases %standard-phases
-         (replace
-          'configure
-          ;; configure does not work followed by "SHELL=..." and
-          ;; "CONFIG_SHELL=..."; set environment variables instead
-          (lambda* (#:key outputs configure-flags #:allow-other-keys)
-            (let ((out (assoc-ref outputs "out")))
-              (substitute* "configure"
-                (("#! /bin/sh") (string-append "#!" (which "sh"))))
-              (setenv "SHELL" (which "bash"))
-              (setenv "CONFIG_SHELL" (which "bash"))
-              (apply invoke
-                     "./configure"
-                     (string-append "--prefix=" out)
-                     ;; Add $libdir to the RUNPATH of all the binaries.
-                     (string-append "--extra-ldflags=-Wl,-rpath="
-                                    out "/lib")
-                     configure-flags))))
-         (add-before
-          'check 'set-ld-library-path
-          (lambda _
-            ;; Allow $(top_builddir)/ffmpeg to find its dependencies when
-            ;; running tests.
-            (let* ((dso  (find-files "." "\\.so$"))
-                   (path (string-join (map dirname dso) ":")))
-              (format #t "setting LD_LIBRARY_PATH to ~s~%" path)
-              (setenv "LD_LIBRARY_PATH" path)
-              #t))))))
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'configure
+            ;; configure does not work followed by "SHELL=..." and
+            ;; "CONFIG_SHELL=..."; set environment variables instead
+            (lambda* (#:key outputs configure-flags #:allow-other-keys)
+              (let ((out (assoc-ref outputs "out")))
+                (substitute* "configure"
+                  (("#! /bin/sh") (string-append "#!" (which "sh"))))
+                (setenv "SHELL" (which "bash"))
+                (setenv "CONFIG_SHELL" (which "bash"))
+                (apply invoke
+                       "./configure"
+                       (string-append "--prefix=" out)
+                       ;; Add $libdir to the RUNPATH of all the binaries.
+                       (string-append "--extra-ldflags=-Wl,-rpath="
+                                      out "/lib")
+                       configure-flags))))
+          (add-before 'check 'set-ld-library-path
+            (lambda _
+              ;; Allow $(top_builddir)/ffmpeg to find its dependencies when
+              ;; running tests.
+              (let* ((dso  (find-files "." "\\.so$"))
+                     (path (string-join (map dirname dso) ":")))
+                (format #t "setting LD_LIBRARY_PATH to ~s~%" path)
+                (setenv "LD_LIBRARY_PATH" path)))))))
     (home-page "https://www.ffmpeg.org/")
     (synopsis "Audio and video framework")
     (description "FFmpeg is a complete, cross-platform solution to record,
@@ -1699,55 +1761,58 @@ convert and stream audio and video.  It includes the libavcodec
 audio/video codec library.")
     (license license:gpl2+)))
 
-(define-public ffmpeg-4.3
-  (package/inherit ffmpeg
-    (version "4.3.2")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append "https://ffmpeg.org/releases/ffmpeg-"
-                                  version ".tar.xz"))
-              (sha256
-               (base32
-                "1nyd9jlcy0pqnwzi29a7sg50hq37vb0g3f9l16y3q8yh3m7ydr26"))))))
-
-(define-public ffmpeg-3.4
+(define-public ffmpeg-4
   (package
-    (inherit ffmpeg)
-    (version "3.4.7")
+    (inherit ffmpeg-5)
+    (version "4.4.2")
     (source (origin
              (method url-fetch)
              (uri (string-append "https://ffmpeg.org/releases/ffmpeg-"
                                  version ".tar.xz"))
              (sha256
               (base32
-               "1j7mdk9szrljgv4sdx69bm1pnbb3cldbdxbkr42jbdi9zn11gl7g"))))
+               "14xadxm1yaamp216nq09xwasxg5g133v86dbb33mdg5di1zrlhdg"))))
     (arguments
-     (substitute-keyword-arguments (package-arguments ffmpeg)
+     (substitute-keyword-arguments (package-arguments ffmpeg-5)
+       ((#:configure-flags flags ''())
+        #~(cons "--enable-avresample" #$flags))))))
+
+(define-public ffmpeg-3.4
+  (package
+    (inherit ffmpeg-4)
+    (version "3.4.11")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "https://ffmpeg.org/releases/ffmpeg-"
+                                 version ".tar.xz"))
+             (sha256
+              (base32
+               "1rijdvcx8xjqwh084qchwz91vcj8wsvb4diax0g8miywpir00ccw"))))
+    (arguments
+     (substitute-keyword-arguments (package-arguments ffmpeg-4)
        ((#:modules modules %gnu-build-system-modules)
         `((srfi srfi-1)
           ,@modules))
        ((#:configure-flags flags)
-        `(fold delete
-               ,flags
-               '("--enable-libdav1d"
-                 "--enable-libaom"
-                 "--enable-librav1e"
-                 "--enable-libsrt")))))
-    (inputs (fold alist-delete
-                  (package-inputs ffmpeg)
-                  '("dav1d" "libaom" "rav1e" "srt")))))
+        #~(fold delete #$flags
+                '("--enable-libdav1d"
+                  "--enable-libaom"
+                  "--enable-librav1e"
+                  "--enable-libsrt")))))
+    (inputs (modify-inputs (package-inputs ffmpeg-4)
+              (delete "dav1d" "libaom" "rav1e" "srt")))))
 
 (define-public ffmpeg-2.8
   (package
-    (inherit ffmpeg)
-    (version "2.8.16")
+    (inherit ffmpeg-3.4)
+    (version "2.8.20")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://ffmpeg.org/releases/ffmpeg-"
                                   version ".tar.xz"))
               (sha256
                (base32
-                "14n0xg22yz1r4apif2idm91s3avcmkz4sl8gyj5763gcy415k2bb"))))
+                "1ivnfqmfnp3zmn1q2dxy4p85427y3r6d3jbnl5kprr7lqckf6rl5"))))
     (arguments
      `(#:tests? #f               ; XXX: Enable them later, if required
        #:configure-flags
@@ -1781,16 +1846,14 @@ audio/video codec library.")
              (let* ((dso  (find-files "." "\\.so$"))
                     (path (string-join (map dirname dso) ":")))
                (format #t "setting LD_LIBRARY_PATH to ~s~%" path)
-               (setenv "LD_LIBRARY_PATH" path)
-               #t))))))
-    (inputs (fold alist-delete
-                  (package-inputs ffmpeg)
-                  '("dav1d" "libaom" "rav1e" "srt")))))
+               (setenv "LD_LIBRARY_PATH" path)))))))))
+
+(define-public ffmpeg ffmpeg-4)
 
 (define-public ffmpeg-for-stepmania
   (hidden-package
    (package
-     (inherit ffmpeg)
+     (inherit ffmpeg-4)
      (version "2.1.3")
      (source
       (origin
@@ -1802,17 +1865,17 @@ audio/video codec library.")
          (base32 "1by8rmbva8mfrivdbbkr2gx4kga89zqygkd4cfjl76nr8mdcdamb"))
         (file-name (git-file-name "ffmpeg" version))))
      (arguments
-      (substitute-keyword-arguments (package-arguments ffmpeg)
+      (substitute-keyword-arguments (package-arguments ffmpeg-4)
         ((#:configure-flags flags)
-         '(list "--disable-programs"
-                "--disable-doc"
-                "--disable-debug"
-                "--disable-avdevice"
-                "--disable-swresample"
-                "--disable-postproc"
-                "--disable-avfilter"
-                "--disable-shared"
-                "--enable-static"))))
+         #~(list "--disable-programs"
+                 "--disable-doc"
+                 "--disable-debug"
+                 "--disable-avdevice"
+                 "--disable-swresample"
+                 "--disable-postproc"
+                 "--disable-avfilter"
+                 "--disable-shared"
+                 "--enable-static"))))
      (inputs '()))))
 
 (define-public ffmpegthumbnailer
@@ -1830,12 +1893,9 @@ audio/video codec library.")
                 "1bakbr714j7yxdal1f5iq0gcl4cxggbbgj227ihdh5kvygqlwich"))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("ffmpeg" ,ffmpeg)
-       ("libjpeg-turbo" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("gvfs" ,gvfs)))
+     (list ffmpeg libjpeg-turbo libpng gvfs))
     (arguments
      `(#:configure-flags (list "-DENABLE_GIO=ON" "-DENABLE_THUMBNAILER=ON")))
     (home-page "https://github.com/dirkvdb/ffmpegthumbnailer")
@@ -1849,7 +1909,7 @@ videoformats depend on the configuration flags of ffmpeg.")
 (define-public vlc
   (package
     (name "vlc")
-    (version "3.0.16")
+    (version "3.0.17.4")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -1858,90 +1918,87 @@ videoformats depend on the configuration flags of ffmpeg.")
                     "/vlc-" version ".tar.xz"))
               (sha256
                (base32
-                "1xhhjhwihkz74dag25r5fscvw1v2byy4c8qxaxsw29gncky3bbpz"))))
+                "0cs1vnv91mg7p6253v6wms3zlz91xzphpwaw14dmrd2gibc64nlc"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("flex" ,flex)
-       ("bison" ,bison)
-       ("gettext" ,gettext-minimal)
-       ("pkg-config" ,pkg-config)))
+     (list flex bison gettext-minimal pkg-config))
     ;; FIXME: Add optional inputs once available.
     (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("avahi" ,avahi)
-       ("dav1d" ,dav1d)
-       ("dbus" ,dbus)
-       ("eudev" ,eudev)
-       ("flac" ,flac)
-       ("ffmpeg" ,ffmpeg)
-       ("fontconfig" ,fontconfig)
-       ("freetype" ,freetype)
-       ("fribidi" ,fribidi)
-       ("gnutls" ,gnutls)
-       ("liba52" ,liba52)
-       ("libarchive" ,libarchive)
-       ("libass" ,libass)
-       ("libavc1394" ,libavc1394)
-       ("libbluray" ,libbluray)
-       ("libcaca" ,libcaca)
-       ("libcddb" ,libcddb)
-       ("libdca" ,libdca)
-       ("libdvbpsi" ,libdvbpsi)
-       ("libdvdnav" ,libdvdnav)
-       ("libdvdread" ,libdvdread)
-       ("libebml" ,libebml)
-       ("libgcrypt" ,libgcrypt)
-       ("libidn" ,libidn)
-       ("libkate" ,libkate)
-       ("libmad" ,libmad)
-       ("libmatroska" ,libmatroska)
-       ("libmicrodns" ,libmicrodns)
-       ("libmodplug" ,libmodplug)
-       ("libmpeg2" ,libmpeg2)
-       ("libogg" ,libogg)
-       ("libpng" ,libpng)
-       ("libraw1394" ,libraw1394)
-       ("librsvg" ,librsvg)
-       ("libsamplerate" ,libsamplerate)
-       ("libsecret" ,libsecret)
-       ("libssh2" ,libssh2)
-       ("libupnp" ,libupnp)
-       ("libva" ,libva)
-       ("libvdpau" ,libvdpau)
-       ("libvorbis" ,libvorbis)
-       ("libvpx" ,libvpx)
-       ("libtheora" ,libtheora)
-       ("libx264" ,libx264)
-       ("libxext" ,libxext)
-       ("libxi" ,libxi)
-       ("libxinerama" ,libxinerama)
-       ("libxml2" ,libxml2)
-       ("libxpm" ,libxpm)
-       ("livemedia-utils" ,livemedia-utils)
-       ("lua" ,lua-5.2)
-       ("mesa" ,mesa)
-       ("opus" ,opus)
-       ("perl" ,perl)
-       ("pulseaudio" ,pulseaudio)
-       ("protobuf" ,protobuf)
-       ("python" ,python-wrapper)
-       ("qtbase" ,qtbase-5)
-       ("qtsvg" ,qtsvg)
-       ("qtx11extras" ,qtx11extras)
-       ("samba" ,samba)
-       ("sdl" ,sdl)
-       ("sdl-image" ,sdl-image)
-       ("speex" ,speex)
-       ("speexdsp" ,speexdsp)
-       ;; VLC is not yet compatible with SRT > 1.4.1.
-       ("srt" ,srt-1.4.1)
-       ("taglib" ,taglib)
-       ("twolame" ,twolame)
-       ("unzip" ,unzip)
-       ("wayland" ,wayland)
-       ("wayland-protocols" ,wayland-protocols)
-       ("x265" ,x265)
-       ("xcb-util-keysyms" ,xcb-util-keysyms)))
+     (list alsa-lib
+           avahi
+           bash-minimal
+           dav1d
+           dbus
+           eudev
+           ffmpeg
+           flac
+           fontconfig
+           freetype
+           fribidi
+           gnutls
+           liba52
+           libarchive
+           libass
+           libavc1394
+           libbluray
+           libcaca
+           libcddb
+           libdca
+           libdvbpsi
+           libdvdnav
+           libdvdread
+           libebml
+           libgcrypt
+           libidn
+           libkate
+           libmad
+           libmatroska
+           libmicrodns
+           libmodplug
+           libmpeg2
+           libogg
+           libpng
+           libraw1394
+           (librsvg-for-system)
+           libsamplerate
+           libsecret
+           libssh2
+           libtheora
+           libupnp
+           libva
+           libvdpau
+           libvorbis
+           libvpx
+           libx264
+           libxext
+           libxi
+           libxinerama
+           libxml2
+           libxpm
+           livemedia-utils
+           lua-5.2
+           mesa
+           opus
+           perl
+           protobuf
+           pulseaudio
+           python-wrapper
+           qtbase-5
+           qtsvg-5
+           qtx11extras
+           samba
+           sdl
+           sdl-image
+           speex
+           speexdsp
+           srt
+           taglib
+           twolame
+           unzip
+           wayland
+           wayland-protocols
+           x265
+           xcb-util-keysyms))
     (arguments
      `(#:configure-flags
        `("BUILDCC=gcc"
@@ -1994,6 +2051,8 @@ videoformats depend on the configuration flags of ffmpeg.")
     (description "VLC is a cross-platform multimedia player and framework
 that plays most multimedia files as well as DVD, Audio CD, VCD, and various
 streaming protocols.")
+    (properties
+     '((release-monitoring-url . "https://download.videolan.org/pub/videolan/vlc/last")))
     (license license:gpl2+)))
 
 (define-public mplayer
@@ -2011,8 +2070,7 @@ streaming protocols.")
     (build-system gnu-build-system)
     ;; FIXME: Add additional inputs once available.
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("yasm" ,yasm)))
+     (list pkg-config yasm))
     (inputs
      `(("alsa-lib" ,alsa-lib)
        ("cdparanoia" ,cdparanoia)
@@ -2093,7 +2151,7 @@ SVCD, DVD, 3ivx, DivX 3/4/5, WMV and H.264 movies.")
 (define-public mpv
   (package
     (name "mpv")
-    (version "0.33.1")
+    (version "0.34.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -2101,13 +2159,11 @@ SVCD, DVD, 3ivx, DivX 3/4/5, WMV and H.264 movies.")
                     (commit (string-append "v" version))))
               (file-name (git-file-name name version))
               (sha256
-               (base32
-                "06rw1f55zcsj78ql8w70j9ljp2qb1pv594xj7q9cmq7i92a7hq45"))))
+               (base32 "12qxwm1ww5vhjddl8yvj1xa0n1fi9z3lmzwhaiday2v59ca0qgsk"))))
     (build-system waf-build-system)
     (native-inputs
-     `(("perl" ,perl) ; for zsh completion file
-       ("pkg-config" ,pkg-config)
-       ("python-docutils" ,python-docutils)))
+     (list perl ; for zsh completion file
+           pkg-config python-docutils))
     ;; Missing features: libguess, V4L2
     (inputs
      `(("alsa-lib" ,alsa-lib)
@@ -2146,19 +2202,17 @@ SVCD, DVD, 3ivx, DivX 3/4/5, WMV and H.264 movies.")
        ("wayland" ,wayland)
        ("wayland-protocols" ,wayland-protocols)
        ("libxkbcommon" ,libxkbcommon)
-       ("youtube-dl" ,youtube-dl)
+       ("yt-dlp" ,yt-dlp)
        ("zlib" ,zlib)))
     (arguments
      '(#:phases
        (modify-phases %standard-phases
-         (add-after
-          'unpack 'patch-paths
-          (lambda* (#:key inputs #:allow-other-keys)
-            (let ((ytdl (assoc-ref inputs "youtube-dl")))
-              (substitute* "player/lua/ytdl_hook.lua"
-                (("\"youtube-dl\",")
-                 (string-append "\"" ytdl "/bin/youtube-dl\",")))
-              #t)))
+         (add-after 'unpack 'patch-paths
+           (lambda* (#:key inputs #:allow-other-keys)
+             (let ((ytdl (assoc-ref inputs "yt-dlp")))
+               (substitute* "player/lua/ytdl_hook.lua"
+                 (("\"yt-dlp\",")
+                  (string-append "\"" ytdl "/bin/yt-dlp\","))))))
          (add-before 'configure 'build-reproducibly
            (lambda _
              ;; Somewhere in the build system library dependencies are enumerated
@@ -2187,13 +2241,89 @@ fork of mplayer2 and MPlayer.  It shares some features with the former
 projects while introducing many more.")
     (license license:gpl2+)))
 
+(define-public smplayer
+  (package
+    (name "smplayer")
+    (version "21.10.0")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "mirror://sourceforge/smplayer/SMPlayer/" version
+                    "/smplayer-" version ".tar.bz2"))
+              (sha256
+               (base32
+                "12nvcl0cfix1xay9hfi7856vg4lpv8y5b0a22212bsjbvl5g22rc"))))
+    (build-system qt-build-system)
+    (native-inputs
+     (list qttools-5))
+    (inputs
+     (list bash-minimal qtbase-5 zlib mpv))
+    (arguments
+     (list #:tests? #false              ; no tests
+           #:make-flags #~(list (string-append "PREFIX=" #$output)
+                                (string-append "CC=" #+(cc-for-target))
+                                ;; A KLUDGE to turn off invoking lrelease on the
+                                ;; project for now, because it fails consistently
+                                ;; with "WARNING: Could not find qmake spec
+                                ;; 'default'". See below.
+                                "LRELEASE=true")
+           #:phases
+           #~(modify-phases %standard-phases
+               (delete 'configure)
+               ;; Due to the above, we must run lrelease separately on each .ts file
+               ;; (as opposed to running `lrelease-pro smplayer.pro` for the entire
+               ;; project, as the Makefile does normally without the above kludge).
+               (add-after 'build 'compile-ts-files
+                 (lambda _
+                   (for-each (lambda (file)
+                               (invoke "lrelease" file))
+                             (find-files "./" "\\.ts$"))))
+               (add-after 'install 'wrap-executable
+                 (lambda* (#:key inputs outputs #:allow-other-keys)
+                   (let* ((out (assoc-ref outputs "out"))
+                          (mpv (assoc-ref inputs "mpv")))
+                     (wrap-program (string-append out "/bin/smplayer")
+                       `("PATH" ":" prefix
+                         ,(list (string-append mpv "/bin"))))))))))
+    (home-page "https://www.smplayer.info")
+    (synopsis "Complete front-end for MPlayer, a media player")
+    (description "SMPlayer is a graphical user interface (GUI) for
+MPlayer, which is capable of playing almost all known video and audio
+formats.  Apart from providing access for the most common and useful
+options of MPlayer, SMPlayer adds other interesting features like the
+possibility to play Youtube videos, download subtitles, remember
+the last played position, etc.")
+    (license license:gpl2+)))
+
+(define-public gallery-dl
+  (package
+    (name "gallery-dl")
+    (version "1.20.5")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "https://github.com/mikf/gallery-dl"
+                                  "/releases/download/v" version "/gallery_dl-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "0149hd4nh7bk2yqjdnvrkvag5mwgsb6gxrgfcd88q4cv3k2ji42h"))))
+    (build-system python-build-system)
+    (inputs (list python-requests ffmpeg))
+    (home-page "https://github.com/mikf/gallery-dl")
+    (synopsis "Command-line program to download images from several sites")
+    (description "Gallery-dl is a command-line program that downloads image
+galleries and collections from several image hosting sites.  While this package
+can use youtube-dl or yt-dlp packages to download videos, the focus is more on
+images and image hosting sites.")
+    (license license:gpl2)))
+
 (define-public gnome-mpv
   (deprecated-package "gnome-mpv" celluloid))
 
 (define-public mpv-mpris
   (package
     (name "mpv-mpris")
-    (version "0.5")
+    (version "0.6")
     (source
       (origin
         (method git-fetch)
@@ -2202,8 +2332,7 @@ projects while introducing many more.")
                (commit version)))
         (file-name (git-file-name name version))
         (sha256
-         (base32
-          "07p6li5z38pkfd40029ag2jqx917vyl3ng5p2i4v5a0af14slcnk"))))
+         (base32 "03gldk149i2108w3ylyfmci77kdq4whdzfavh7hjviwyj534101r"))))
     (build-system copy-build-system)
     (arguments
      '(#:install-plan
@@ -2215,10 +2344,9 @@ projects while introducing many more.")
              (setenv "CC" (which "gcc"))
              (invoke "make"))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("glib" ,glib)
-       ("mpv" ,mpv)))
+     (list glib mpv))
     (home-page "https://github.com/hoyon/mpv-mpris")
     (synopsis "MPRIS plugin for mpv")
     (description "This package provides an @dfn{MPRIS} (Media Player Remote
@@ -2234,7 +2362,7 @@ To load this plugin, specify the following option when starting mpv:
 (define-public libvpx
   (package
     (name "libvpx")
-    (version "1.10.0")
+    (version "1.11.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -2243,7 +2371,7 @@ To load this plugin, specify the following option when starting mpv:
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1p4v6j1505n3gnvx3iksciyi818ymxpazj9fmdrchzbl9pfzg4qi"))
+                "00f1jrclai2b6ys78dpsg6r1mvcyxlna93vxcz8zjyia24c2pjsb"))
               (patches (search-patches "libvpx-CVE-2016-2818.patch"))))
     (build-system gnu-build-system)
     (arguments
@@ -2267,8 +2395,7 @@ To load this plugin, specify the following option when starting mpv:
        ;; custom directory, but there seems to be no tarball with all files.
        #:tests? #f))
     (native-inputs
-     `(("perl" ,perl)
-       ("yasm" ,yasm)))
+     (list perl yasm))
     (synopsis "VP8/VP9 video codec")
     (description "libvpx is a codec for the VP8/VP9 video compression format.")
     (license license:bsd-3)
@@ -2277,14 +2404,14 @@ To load this plugin, specify the following option when starting mpv:
 (define-public youtube-dl
   (package
     (name "youtube-dl")
-    (version "2021.06.06")
+    (version "2021.12.17")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://youtube-dl.org/downloads/latest/"
                                   "youtube-dl-" version ".tar.gz"))
               (sha256
                (base32
-                "1hqan9h55x9gfdakw554vic68w9gpvhblchwxlw265zxp56hxjrw"))
+                "1prm84ci1n1kjzhikhrsbxbgziw6br822psjnijm2ibqnz49jfwz"))
               (snippet
                '(begin
                   ;; Delete the pre-generated files, except for the man page
@@ -2294,8 +2421,7 @@ To load this plugin, specify the following option when starting mpv:
                                           ;;"youtube-dl.1"
                                           "youtube-dl.bash-completion"
                                           "youtube-dl.fish"
-                                          "youtube-dl.zsh"))
-                  #t))))
+                                          "youtube-dl.zsh"))))))
     (build-system python-build-system)
     (arguments
      ;; The problem here is that the directory for the man page and completion
@@ -2314,8 +2440,7 @@ To load this plugin, specify the following option when starting mpv:
                       ;; Continue respecting the --ffmpeg-location argument.
                       (substitute* "youtube_dl/postprocessor/ffmpeg.py"
                         (("\\.get\\('ffmpeg_location'\\)" match)
-                         (format #f "~a or '~a'" match (which "ffmpeg"))))
-                      #t))
+                         (format #f "~a or '~a'" match (which "ffmpeg"))))))
                   (add-before 'build 'build-generated-files
                     (lambda _
                       ;; Avoid the make targets that require pandoc.
@@ -2338,8 +2463,7 @@ To load this plugin, specify the following option when starting mpv:
                           (("'etc/")
                            (string-append "'" prefix "/etc/"))
                           (("'share/")
-                           (string-append "'" prefix "/share/")))
-                        #t)))
+                           (string-append "'" prefix "/share/"))))))
                   (add-after 'install 'install-completion
                     (lambda* (#:key outputs #:allow-other-keys)
                       (let* ((out (assoc-ref outputs "out"))
@@ -2347,122 +2471,94 @@ To load this plugin, specify the following option when starting mpv:
                                                  "/share/zsh/site-functions")))
                         (mkdir-p zsh)
                         (copy-file "youtube-dl.zsh"
-                                   (string-append zsh "/_youtube-dl"))
-                        #t))))))
+                                   (string-append zsh "/_youtube-dl"))))))))
     (native-inputs
-     `(("zip" ,zip)))
+     (list zip))
     (inputs
-     `(("ffmpeg" ,ffmpeg)))
+     (list ffmpeg))
     (synopsis "Download videos from YouTube.com and other sites")
     (description
      "Youtube-dl is a small command-line program to download videos from
 YouTube.com and many more sites.")
     (home-page "https://yt-dl.org")
+    (properties '((release-monitoring-url . "https://yt-dl.org/downloads/")))
     (license license:public-domain)))
 
-(define-public youtube-dl-gui
-  (package
-    (name "youtube-dl-gui")
-    (version "0.4")
+(define-public yt-dlp
+  (package/inherit youtube-dl
+    (name "yt-dlp")
+    (version "2022.08.08")
     (source
      (origin
-       (method url-fetch)
-       (uri (pypi-uri "Youtube-DLG" version))
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/yt-dlp/yt-dlp/")
+             (commit version)))
+       (file-name (git-file-name name version))
        (sha256
-        (base32
-         "1bvq2wyn6az59vpdy04dh68fs8m2qzz948xhphibbcpwpcdk00cd"))))
-    (build-system python-build-system)
+        (base32 "07qz1zdndlpki0asw35zk5hdjcwpl3n1g54nxg4yb1iykbyv7rll"))))
     (arguments
-     ;; In Guix, wxpython has not yet been packaged for Python 3.
-     `(#:python ,python-2
-       ;; This package has no tests.
-       #:tests? #f
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'patch-source
-           (lambda* (#:key inputs #:allow-other-keys)
-             ;; The youtube-dl-gui program lets you configure options.  Some of
-             ;; them are problematic, so we change their defaults.
-             (substitute* "youtube_dl_gui/optionsmanager.py"
-               ;; When this is true, the builder process will try (and fail) to
-               ;; write logs to the builder user's home directory.
-               (("'enable_log': True") "'enable_log': False")
-               ;; This determines which youtube-dl program youtube-dl-gui will
-               ;; run.  If we don't set this, then youtube-dl-gui might download
-               ;; an arbitrary copy from the Internet into the user's home
-               ;; directory and run it, so let's make sure youtube-dl-gui uses
-               ;; the youtube-dl from the inputs by default.
-               (("'youtubedl_path': self.config_path")
-                (string-append "'youtubedl_path': '"
-                               (assoc-ref inputs "youtube-dl")
-                               "/bin'"))
-               ;; When this is True, when youtube-dl-gui is finished downloading
-               ;; a file, it will try (and possibly fail) to open the directory
-               ;; containing the downloaded file.  This can fail because it
-               ;; assumes that xdg-open is in PATH.  Unfortunately, simply
-               ;; adding xdg-utils to the propagated inputs is not enough to
-               ;; make this work, so for now we set the default to False.
-               (("'open_dl_dir': True") "'open_dl_dir': False"))
-             ;; The youtube-dl program from the inputs is actually a wrapper
-             ;; script written in bash, so attempting to invoke it as a python
-             ;; script will fail.
-             (substitute* "youtube_dl_gui/downloaders.py"
-               (("cmd = \\['python', self\\.youtubedl_path\\]")
-                "cmd = [self.youtubedl_path]"))
-             ;; Use relative paths for installing data files so youtube-dl-gui
-             ;; installs the files relative to its prefix in the store, rather
-             ;; than relative to /.  Also, instead of installing data files into
-             ;; $prefix/usr/share, install them into $prefix/share for
-             ;; consistency (see: (standards) Directory Variables).
-             (substitute* "setup.py"
-               (("= '/usr/share") "= 'share"))
-             ;; Update get_locale_file() so it finds the installed localization
-             ;; files.
-             (substitute* "youtube_dl_gui/utils.py"
-               (("os\\.path\\.join\\('/usr', 'share'")
-                (string-append "os.path.join('"
-                               (assoc-ref %outputs "out")
-                               "', 'share'")))
-             #t))
-         (add-after 'install 'create-desktop-file
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (applications (string-append out "/share/applications")))
-               (mkdir-p applications)
-               (call-with-output-file
-                   (string-append applications "/youtube-dl-gui.desktop")
-                 (lambda (file)
-                   (format
-                    file
-                    "[Desktop Entry]~@
-                     Name=Youtube-dl GUI~@
-                     Comment=Graphical interface to download video with youtube-dl~@
-                     Exec=youtube-dl-gui~@
-                     TryExec=youtube-dl-gui~@
-                     Terminal=false~@
-                     Icon=youtube-dl-gui~@
-                     Type=Application~@
-                     Categories=AudioVideo;Audio;Video;Network~%")))
-               #t))))))
+     (substitute-keyword-arguments (package-arguments youtube-dl)
+       ((#:tests? _) #t)
+       ((#:phases phases)
+        #~(modify-phases #$phases
+            ;; See the comment for the corresponding phase in youtube-dl.
+            (replace 'default-to-the-ffmpeg-input
+              (lambda _
+                (substitute* "yt_dlp/postprocessor/ffmpeg.py"
+                  (("\\.get_param\\('ffmpeg_location'\\)" match)
+                   (format #f "~a or '~a'" match (which "ffmpeg"))))))
+            (replace 'build-generated-files
+              (lambda* (#:key inputs #:allow-other-keys)
+                (if (assoc-ref inputs "pandoc")
+                  (invoke "make"
+                          "PYTHON=python"
+                          "yt-dlp"
+                          "yt-dlp.1"
+                          "completions")
+                  (invoke "make"
+                          "PYTHON=python"
+                          "yt-dlp"
+                          "completions"))))
+            (replace 'fix-the-data-directories
+              (lambda* (#:key outputs #:allow-other-keys)
+                (let ((prefix (assoc-ref outputs "out")))
+                  (substitute* "setup.py"
+                    (("'etc/")
+                     (string-append "'" prefix "/etc/"))
+                    (("'share/")
+                     (string-append "'" prefix "/share/"))))))
+            (delete 'install-completion)
+            (replace 'check
+              (lambda* (#:key tests? #:allow-other-keys)
+                (when tests?
+                  (invoke "pytest" "-k" "not download"))))))))
+    (inputs (modify-inputs (package-inputs youtube-dl)
+              (append python-brotli
+                      python-certifi
+                      python-mutagen
+                      python-pycryptodomex
+                      python-websockets)))
     (native-inputs
-     `(("gettext-minimal" ,gettext-minimal)))
-    (inputs
-     `(("python2-twodict" ,python2-twodict)
-       ("python2-wxpython" ,python2-wxpython)
-       ("youtube-dl" ,youtube-dl)))
-    (home-page "https://github.com/MrS0m30n3/youtube-dl-gui")
-    (synopsis
-     "GUI (Graphical User Interface) for @command{youtube-dl}")
+     (append
+       ;; To generate the manpage.
+       (if (member (%current-system)
+                   (package-transitive-supported-systems pandoc))
+         (list pandoc)
+         '())
+       (list python-pytest zip)))
     (description
-     "Youtube-dlG is a GUI (Graphical User Interface) for
-@command{youtube-dl}.  You can use it to download videos from YouTube and any
-other site that youtube-dl supports.")
-    (license license:unlicense)))
+     "yt-dlp is a small command-line program to download videos from
+YouTube.com and many more sites.  It is a fork of youtube-dl with a
+focus on adding new features while keeping up-to-date with the
+original project.")
+    (properties '((release-monitoring-url . "https://pypi.org/project/yt-dlp/")))
+    (home-page "https://github.com/yt-dlp/yt-dlp")))
 
 (define-public you-get
   (package
     (name "you-get")
-    (version "0.4.1500")
+    (version "0.4.1555")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -2471,10 +2567,10 @@ other site that youtube-dl supports.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "02wkmq6bjg9iz0kccsgs192aiky99l2jnw1xs6zjhvjvq7jyvf7s"))))
+                "0gn86i6nfsw395r9a3i88nv2g08s5bgjps7w4qawb9gvk4h7zqap"))))
     (build-system python-build-system)
     (inputs
-     `(("ffmpeg" ,ffmpeg)))             ; for multi-part and >=1080p videos
+     (list ffmpeg))             ; for multi-part and >=1080p videos
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -2482,14 +2578,12 @@ other site that youtube-dl supports.")
            ;; Explicitly invoke the input ffmpeg, instead of whichever one
            ;; happens to be in the user's $PATH at run time.
            (lambda* (#:key inputs #:allow-other-keys)
-             (let ((ffmpeg (string-append (assoc-ref inputs "ffmpeg")
-                                          "/bin/ffmpeg")))
+             (let ((ffmpeg (search-input-file inputs "/bin/ffmpeg")))
                (substitute* "src/you_get/processor/ffmpeg.py"
                  ;; Don't blindly replace all occurrences of ‘'ffmpeg'’: the
                  ;; same string is also used when sniffing ffmpeg's output.
                  (("(FFMPEG == |\\()'ffmpeg'" _ prefix)
-                  (string-append prefix "'" ffmpeg "'")))
-               #t))))
+                  (string-append prefix "'" ffmpeg "'")))))))
        #:tests? #f))                    ; XXX some tests need Internet access
     (synopsis "Download videos, audio, or images from Web sites")
     (description
@@ -2513,24 +2607,23 @@ audio, images) from the Web.  It can use either mpv or vlc for playback.")
                 "0xdybiihd66b79rbsawjhxs9snm78gld5ziz3gnp8vdcw0bshwz7"))))
     (build-system perl-build-system)
     (native-inputs
-     `(("perl-module-build" ,perl-module-build)))
+     (list perl-module-build))
     (inputs
-     `(("perl-data-dump" ,perl-data-dump)
-       ("perl-file-sharedir" ,perl-file-sharedir)
-       ("perl-gtk2" ,perl-gtk2)
-       ("perl-json" ,perl-json)
-       ("perl-json-xs" ,perl-json-xs)
-       ("perl-libwww" ,perl-libwww)
-       ("perl-lwp-protocol-https" ,perl-lwp-protocol-https)
-       ("perl-lwp-useragent-cached" ,perl-lwp-useragent-cached)
-       ("perl-memoize" ,perl-memoize)
-       ("perl-mozilla-ca" ,perl-mozilla-ca)
-       ("perl-term-readline-gnu" ,perl-term-readline-gnu)
-       ("perl-unicode-linebreak" ,perl-unicode-linebreak)
-       ("xdg-utils" ,xdg-utils)
-
-       ;; Some videos play without youtube-dl, but others silently fail to.
-       ("youtube-dl" ,youtube-dl)))
+     (list perl-data-dump
+           perl-file-sharedir
+           perl-gtk2
+           perl-json
+           perl-json-xs
+           perl-libwww
+           perl-lwp-protocol-https
+           perl-lwp-useragent-cached
+           perl-memoize
+           perl-mozilla-ca
+           perl-term-readline-gnu
+           perl-unicode-linebreak
+           xdg-utils
+           ;; Some videos play without youtube-dl, but others silently fail to.
+           youtube-dl))
     (arguments
      `(#:modules ((guix build perl-build-system)
                   (guix build utils)
@@ -2622,7 +2715,7 @@ Both command-line and GTK2 interface are available.")
                  (("\"libbdplus\"")
                   (string-append "\"" libbdplus "/lib/libbdplus\"")))
                #t))))))
-    (native-inputs `(("pkg-config" ,pkg-config)))
+    (native-inputs (list pkg-config))
     (inputs
      `(("fontconfig" ,fontconfig)
        ("freetype" ,freetype)
@@ -2652,9 +2745,9 @@ players, like VLC or MPlayer.")
     (arguments
      `(#:configure-flags '("--with-libdvdcss=yes")))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (propagated-inputs
-     `(("libdvdcss" ,libdvdcss)))
+     (list libdvdcss))
     (home-page "http://dvdnav.mplayerhq.hu/")
     (synopsis "Library for reading video DVDs")
     (description
@@ -2679,13 +2772,9 @@ installed).")
          "1drfc47hikfzc9d7hjk34rw10iqw01d2vwmn91pv73ppx4nsj81h"))))
     (build-system gnu-build-system)
     (inputs
-     `(("libdvdread" ,libdvdread)
-       ("libpng" ,libpng)
-       ("imagemagick" ,imagemagick)
-       ("libxml2" ,libxml2)
-       ("freetype" ,freetype)))
+     (list libdvdread libpng imagemagick libxml2 freetype))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (synopsis "Generates a DVD-Video movie from a MPEG-2 stream")
     (description "@command{dvdauthor} will generate a DVD-Video movie from a
 MPEG-2 stream containing VOB packets.")
@@ -2706,9 +2795,9 @@ MPEG-2 stream containing VOB packets.")
                 "0cv7j8irsv1n2dadlnhr6i1b8pann2ah6xpxic41f04my6ba6rp5"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("libdvdread" ,libdvdread)))
+     (list libdvdread))
     (home-page "http://dvdnav.mplayerhq.hu/")
     (synopsis "Library for video DVD navigation features")
     (description
@@ -2775,9 +2864,9 @@ device without having to bother about the decryption.")
                  `("GUILE_LOAD_PATH" ":" prefix (,site))
                  `("GUILE_LOAD_COMPILED_PATH" ":" prefix (,compiled)))))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("guile" ,guile-3.0)))
+     (list guile-3.0))
     (synopsis "SubRip to WebVTT subtitle converter")
     (description "srt2vtt converts SubRip formatted subtitles to WebVTT format
 for use with HTML5 video.")
@@ -2802,7 +2891,7 @@ for use with HTML5 video.")
      `(("perl" ,perl)
        ("pkg-config" ,pkg-config)
        ("python" ,python-wrapper)
-       ("qttools" ,qttools)
+       ("qttools-5" ,qttools-5)
        ("yasm" ,yasm)))
     ;; FIXME: Once packaged, add libraries not found during the build.
     (inputs
@@ -2938,11 +3027,7 @@ capabilities.")
        ("pkg-config" ,pkg-config)
        ("yasm" ,yasm)))
     (inputs
-     `(("ffmpeg" ,ffmpeg)
-       ("libass" ,libass)
-       ("python" ,python)
-       ("tesseract-ocr" ,tesseract-ocr)
-       ("zimg" ,zimg)))
+     (list ffmpeg libass python tesseract-ocr zimg))
     (home-page "http://www.vapoursynth.com/")
     (synopsis "Video processing framework")
     (description "VapourSynth is a C++ library and Python module for video
@@ -2968,7 +3053,7 @@ format changes.")
                (base32
                 "1xyg3amgg27zf7188kss7y248s0xhh1vv8rrk0j9bcsd5nasxsmf"))))
     (build-system gnu-build-system)
-    (native-inputs `(("yasm" ,yasm)))
+    (native-inputs (list yasm))
     (arguments
      '(#:phases
        (modify-phases %standard-phases
@@ -2990,30 +3075,34 @@ and custom quantization matrices.")
 (define-public streamlink
   (package
     (name "streamlink")
-    (version "2.0.0")
+    (version "3.2.0")
     (source
       (origin
         (method url-fetch)
         (uri (pypi-uri "streamlink" version))
         (sha256
          (base32
-          "1nv2kj1k42a1b20ws8sdzlxk3wh1qz6pg5mxp75433b3c7lxksn0"))))
+          "09nrspga15svzi0hmakcarbciav0nzf30hg1ff53gia473cd4w4p"))))
     (build-system python-build-system)
-    (home-page "https://github.com/streamlink/streamlink")
+    (arguments
+     `(#:phases (modify-phases %standard-phases
+         (replace 'check
+          (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                  (invoke "python" "-m" "pytest")))))))
     (native-inputs
-     `(("python-freezegun" ,python-freezegun)
-       ("python-pytest" ,python-pytest)
-       ("python-mock" ,python-mock)
-       ("python-requests-mock" ,python-requests-mock)))
+     (list python-freezegun python-mock python-pytest
+           python-requests-mock))
     (propagated-inputs
-     `(("python-pysocks" ,python-pysocks)
-       ("python-websocket-client" ,python-websocket-client)
-       ("python-iso3166" ,python-iso3166)
-       ("python-iso639" ,python-iso639)
-       ("python-isodate" ,python-isodate)
-       ("python-pycryptodome" ,python-pycryptodome)
-       ("python-requests" ,python-requests)
-       ("python-urllib3" ,python-urllib3)))
+     (list python-pysocks
+           python-websocket-client
+           python-isodate
+           python-lxml-4.7
+           python-pycountry
+           python-pycryptodome
+           python-requests
+           python-urllib3))
+    (home-page "https://github.com/streamlink/streamlink")
     (synopsis "Extract streams from various services")
     (description "Streamlink is command-line utility that extracts streams
 from sites like Twitch.tv and pipes them into a video player of choice.")
@@ -3056,8 +3145,7 @@ from sites like Twitch.tv and pipes them into a video player of choice.")
                                             "/bin"))
                #t)))))
       (inputs
-       `(("python-requests" ,python-requests)
-         ("streamlink" ,streamlink)))
+       (list python-requests streamlink))
       (home-page "https://github.com/BasioMeusPuga/twitchy")
       (synopsis "Command-line interface for Twitch.tv")
       (description
@@ -3067,7 +3155,7 @@ from sites like Twitch.tv and pipes them into a video player of choice.")
 (define-public mlt
   (package
     (name "mlt")
-    (version "7.0.1")
+    (version "7.8.0")
     (source
      (origin
        (method git-fetch)
@@ -3076,44 +3164,60 @@ from sites like Twitch.tv and pipes them into a video player of choice.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "13c5miph9jjbz69dhy0zvbkk5zbb05dr3vraaci0d5fdbrlhyscf"))))
+        (base32 "01589xpx1vgx1l1zjg553nbjks5wy31rdvyq1sjnbp9w7p7nzjdg"))))
     (build-system cmake-build-system)
     (arguments
-     `(#:tests? #f ;requires "Kwalify"
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'configure 'override-LDFLAGS
-           (lambda* (#:key outputs #:allow-other-keys)
-             (setenv "LDFLAGS"
-                     (string-append
-                      "-Wl,-rpath="
-                      (assoc-ref outputs "out") "/lib")))))))
+     (list
+      #:tests? #f                       ;requires "Kwalify"
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-before 'configure 'override-LDFLAGS
+            (lambda _
+              (setenv "LDFLAGS"
+                      (string-append "-Wl,-rpath=" #$output "/lib"))))
+          (add-after 'install 'wrap-executable
+            (lambda _
+              (let* ((frei0r #$(this-package-input "frei0r-plugins"))
+                     (ladspa #$(this-package-input "ladspa"))
+                     ;; In MLT 7, 'melt' symlinks to 'melt-7'.  Try to keep
+                     ;; compatibility with MLT 6 where it's only 'melt'.
+                     (major #$(version-major version))
+                     (exec (if (file-exists?
+                                (string-append #$output "/bin/melt-" major))
+                               (string-append "melt-" major)
+                               "melt")))
+                (wrap-program (string-append #$output "/bin/" exec)
+                  `("FREI0R_PATH" ":" =
+                    (,(string-append frei0r "/lib/frei0r-1")))
+                  `("LADSPA_PATH" ":" =
+                    (,(string-append ladspa "/lib/ladspa"))))))))))
     (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("alsa-plugins" ,alsa-plugins "pulseaudio")
-       ("ffmpeg" ,ffmpeg)
-       ("fftw" ,fftw)
-       ("frei0r-plugins" ,frei0r-plugins)
-       ("gdk-pixbuf" ,gdk-pixbuf)
-       ("gtk+" ,gtk+)
-       ("libxml2" ,libxml2)
-       ("jack" ,jack-1)
-       ("ladspa" ,ladspa)
-       ("libebur128" ,libebur128)
-       ("libexif" ,libexif)
-       ("libvorbis" ,libvorbis)
-       ("rubberband" ,rubberband)
-       ("libsamplerate" ,libsamplerate)
-       ("pulseaudio" ,pulseaudio)
-       ("qtbase" ,qtbase-5)
-       ("qtsvg" ,qtsvg)
-       ("rtaudio" ,rtaudio)
-       ("sdl2" ,sdl2)
-       ("sdl2-image" ,sdl2-image)
-       ("sox" ,sox)
-       ("vidstab" ,vidstab)))
+     (list alsa-lib
+           `(,alsa-plugins "pulseaudio")
+           bash-minimal
+           ffmpeg
+           fftw
+           frei0r-plugins
+           gdk-pixbuf
+           gtk+
+           libxml2
+           jack-1
+           ladspa
+           libebur128
+           libexif
+           libvorbis
+           rubberband
+           libsamplerate
+           pulseaudio
+           qtbase-5
+           qtsvg-5
+           rtaudio
+           sdl2
+           sdl2-image
+           sox
+           vidstab))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (home-page "https://www.mltframework.org/")
     (synopsis "Author, manage, and run multitrack audio/video compositions")
     (description
@@ -3148,20 +3252,20 @@ tools, XML authoring components, and an extensible plug-in based API.")
                             "/lib/glib-2.0/include"))
        ,@(package-arguments mlt)))
     (inputs
-     `(("gtk+", gtk+-2)
-       ,@(alist-delete "gtk+" (package-inputs mlt))))))
+     (modify-inputs (package-inputs mlt)
+       (replace "gtk+" gtk+-2)))))
 
 (define-public v4l-utils
   (package
     (name "v4l-utils")
-    (version "1.20.0")
+    (version "1.22.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://linuxtv.org/downloads/v4l-utils"
                                   "/v4l-utils-" version ".tar.bz2"))
               (sha256
                (base32
-                "1xr66y6w422hil6s7n8d61a2vhwh4im8l267amf41jvw7xqihqcm"))))
+                "0cafp64b7ylxhjnp47hxm59r0b0v5hc2gc23qh2s2k5463lgpik5"))))
     (build-system gnu-build-system)
     ;; Separate graphical tools in order to save almost 1 GiB on the closure
     ;; for the common case.
@@ -3198,15 +3302,14 @@ tools, XML authoring components, and an extensible plug-in based API.")
                (rmdir (string-append out "/share/applications"))
                #t))))))
     (native-inputs
-     `(("perl" ,perl)
-       ("pkg-config" ,pkg-config)))
+     (list perl pkg-config))
     (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("glu" ,glu)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libx11" ,libx11)
-       ("qtbase" ,qtbase-5)
-       ("eudev" ,eudev)))
+     (list alsa-lib
+           glu
+           libjpeg-turbo
+           libx11
+           qtbase-5
+           eudev))
     (synopsis "Realtime video capture utilities for Linux")
     (description "The v4l-utils provide a series of libraries and utilities to
 be used for realtime video capture via Linux-specific APIs.")
@@ -3217,7 +3320,7 @@ be used for realtime video capture via Linux-specific APIs.")
 (define-public obs
   (package
     (name "obs")
-    (version "27.0.1")
+    (version "27.1.3")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -3227,26 +3330,25 @@ be used for realtime video capture via Linux-specific APIs.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "04fzsr9yizmxy0r7z2706crvnsnybpnv5kgfn77znknxxjacfhkn"))
+                "1ndiarr3d6qihymaigf34jjml0lrgbj640fnpnffz2ysj7276q0j"))
               (patches
                (search-patches "obs-modules-location.patch"))))
     (build-system cmake-build-system)
     (arguments
-     `(#:configure-flags
-       (list (string-append "-DOBS_VERSION_OVERRIDE=" ,version)
-             "-DENABLE_UNIT_TESTS=TRUE"
-             ;; Browser plugin requires cef, but it is not packaged yet.
-             ;; <https://bitbucket.org/chromiumembedded/cef/src/master/>
-             "-DBUILD_BROWSER=FALSE")
+     (list
+      #:configure-flags
+      #~(list (string-append "-DOBS_VERSION_OVERRIDE=" #$version)
+              "-DENABLE_UNIT_TESTS=TRUE"
+              ;; Browser plugin requires cef, but it is not packaged yet.
+              ;; <https://bitbucket.org/chromiumembedded/cef/src/master/>
+              "-DBUILD_BROWSER=FALSE")
        #:phases
-       (modify-phases %standard-phases
-         (add-after 'install 'wrap-executable
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out"))
-                   (plugin-path (getenv "QT_PLUGIN_PATH")))
-               (wrap-program (string-append out "/bin/obs")
-                 `("QT_PLUGIN_PATH" ":" prefix (,plugin-path))))
-             #t)))))
+       #~(modify-phases %standard-phases
+           (add-after 'install 'wrap-executable
+             (lambda* _
+               (let ((plugin-path (getenv "QT_PLUGIN_PATH")))
+                 (wrap-program (string-append #$output "/bin/obs")
+                   `("QT_PLUGIN_PATH" ":" prefix (,plugin-path)))))))))
     (native-search-paths
      (list (search-path-specification
             (variable "OBS_PLUGINS_DIRECTORY")
@@ -3257,32 +3359,33 @@ be used for realtime video capture via Linux-specific APIs.")
             (separator #f)                         ;single entry
             (files '("share/obs/obs-plugins")))))
     (native-inputs
-     `(("cmocka" ,cmocka)
-       ("pkg-config" ,pkg-config)))
+     (list cmocka pkg-config))
     (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("curl" ,curl)
-       ("eudev" ,eudev)
-       ("ffmpeg" ,ffmpeg)
-       ("fontconfig" ,fontconfig)
-       ("freetype" ,freetype)
-       ("glib" ,glib)
-       ("jack" ,jack-1)
-       ("jansson" ,jansson)
-       ("libx264" ,libx264)
-       ("libxcomposite" ,libxcomposite)
-       ("mbedtls" ,mbedtls-apache)
-       ("mesa" ,mesa)
-       ("pipewire" ,pipewire-0.3)
-       ("pulseaudio" ,pulseaudio)
-       ("qtbase" ,qtbase-5)
-       ("qtsvg" ,qtsvg)
-       ("qtx11extras" ,qtx11extras)
-       ("speexdsp" ,speexdsp)
-       ("v4l-utils" ,v4l-utils)
-       ("wayland" ,wayland)
-       ("wayland-protocols" ,wayland-protocols)
-       ("zlib" ,zlib)))
+     (list
+      alsa-lib
+      curl
+      eudev
+      ffmpeg
+      fontconfig
+      freetype
+      glib
+      jack-1
+      jansson
+      libx264
+      libxcomposite
+      mbedtls-apache
+      mesa
+      pipewire-0.3
+      pulseaudio
+      qtbase-5
+      qtsvg-5
+      qtx11extras
+      qtwayland
+      speexdsp
+      v4l-utils
+      wayland
+      wayland-protocols
+      zlib))
     (synopsis "Live streaming software")
     (description "Open Broadcaster Software provides a graphical interface for
 video recording and live streaming.  OBS supports capturing audio and video
@@ -3315,8 +3418,7 @@ and JACK.")
      `(#:tests? #f
        #:configure-flags
        (list "-DGLOBAL_INSTALLATION=ON" "-DUSE_CMAKE_LIBDIR=ON")))
-    (inputs `(("obs" ,obs)
-              ("fftw" ,fftw)))
+    (inputs (list obs fftw))
     (home-page "https://github.com/univrsal/spectralizer")
     (synopsis "OBS plugin for audio visualization")
     (description "This OBS plugins allows you to vizualize MPD and internal
@@ -3326,7 +3428,7 @@ OBS audio sources.")
 (define-public obs-websocket
   (package
     (name "obs-websocket")
-    (version "4.9.0")
+    (version "4.9.1")
     (source
      (origin
        (method git-fetch)
@@ -3336,7 +3438,7 @@ OBS audio sources.")
              (recursive? #t)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1r47861ma1s3998clahbnbc216wcf706b1ps514k5p28h511l5w0"))))
+        (base32 "0giwhm0rbc578qng4invqqma935zzjlf05msz1gx986aqk654s7k"))))
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #f                      ;no tests
@@ -3346,13 +3448,12 @@ OBS audio sources.")
            (lambda* _
              (substitute* "CMakeLists.txt"
                ;; Remove lines that set writeable permissions on outputs.
+               (("PERMISSIONS [^)]*") "")
                (("set\\(CMAKE_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS") "")
-               (("OWNER_READ.*\\)") "")
-               (("PERMISSIONS") ")"))
-             #t)))))
+               ;; Ug^WClever hack to comment out the next line, which is ‘)’.
+               (("(OWNER|GROUP|WORLD)_READ .*") "#")))))))
     (inputs
-     `(("obs" ,obs)
-       ("qtbase" ,qtbase-5)))
+     (list obs qtbase-5))
     (home-page "https://github.com/Palakis/obs-websocket")
     (synopsis "OBS plugin for remote control via WebSockets")
     (description "This OBS plugin allows you to establish a WebSocket channel
@@ -3376,12 +3477,10 @@ programs on your current machine or on other machines.")
           "1faiq2gdb7qis3m1hilm4pz8lkmkab75vzm608dbiazahhybf96p"))))
     (build-system meson-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (propagated-inputs `() )
-    (inputs `(("obs" ,obs)
-              ("libx11" ,libx11 "out")
-              ("wayland" ,wayland)
-              ("wayland-protocols" ,wayland-protocols)))
+    (inputs (list obs
+                  `(,libx11 "out") wayland wayland-protocols))
     (home-page "https://hg.sr.ht/~scoopta/wlrobs")
     (synopsis "OBS plugin for Wayland (wlroots) screen capture")
     (description
@@ -3405,11 +3504,9 @@ Wayland compositors.")
           "1hc4mcrbr1yhfiy4zfd8wc2iiqbp90z6jswap0jia20vmyk5lqld"))))
     (build-system meson-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("libx11" ,libx11 "out")
-       ("libxext" ,libxext)
-       ("xorgproto" ,xorgproto)))
+     (list `(,libx11 "out") libxext xorgproto))
     (home-page "https://wiki.freedesktop.org/www/Software/VDPAU/")
     (synopsis "Video Decode and Presentation API")
     (description "VDPAU is the Video Decode and Presentation API for UNIX.  It
@@ -3439,12 +3536,9 @@ present in modern GPUs.")
            (lambda _
              (invoke "autoreconf" "-fiv"))))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libx11" ,libx11)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libx11 pkg-config))
     (propagated-inputs
-     `(("libvdpau" ,libvdpau)))
+     (list libvdpau))
     (home-page "https://wiki.freedesktop.org/www/Software/VDPAU/")
     (synopsis "Tool to query the capabilities of a VDPAU implementation")
     (description "Vdpauinfo is a tool to query the capabilities of a VDPAU
@@ -3472,11 +3566,9 @@ implementation.")
     (arguments
      '(#:tests? #f)) ; Tests require a running X11 server, with VA-API support.
     (native-inputs
-     `(("libvdpau" ,libvdpau)
-       ("pkg-config" ,pkg-config)))
+     (list libvdpau pkg-config))
     (inputs
-     `(("libva" ,libva)
-       ("mesa" ,mesa)))
+     (list libva mesa))
     (home-page "https://github.com/i-rinat/libvdpau-va-gl")
     (synopsis "VDPAU driver with VA-API/OpenGL backend")
     (description
@@ -3490,27 +3582,28 @@ scaling and VA-API (if available) to accelerate video decoding.")
 (define-public recordmydesktop
   (package
     (name "recordmydesktop")
-    (version "0.3.8.1")
+    (version "0.4.0")
     (source (origin
               (method url-fetch)
-              (uri (string-append "mirror://sourceforge/" name "/" name "/"
-                                  version "/recordmydesktop-" version ".tar.gz"))
+              (uri (string-append "https://github.com/Enselic/"
+                                  name "/releases/download/v" version
+                                  "/recordmydesktop-" version ".tar.gz"))
               (sha256
                (base32
-                "133kkl5j0r877d41bzj7kj0vf3xm8x80yyx2n8nqxrva304f58ik"))))
+                "17kjgmkl45zma64a5dg1hyvnjkzk4vl8milgi6ic7hlsbmywpig7"))))
     (build-system gnu-build-system)
-    (inputs `(("popt" ,popt)
-              ("zlib" ,zlib)
-              ("libx11" ,libx11)
-              ("libice" ,libice)
-              ("libsm" ,libsm)
-              ("libxfixes" ,libxfixes)
-              ("libxdamage" ,libxdamage)
-              ("libxext" ,libxext)
-              ("alsa-lib" ,alsa-lib)
-              ("libvorbis" ,libvorbis)
-              ("libtheora" ,libtheora)))
-    (home-page "http://recordmydesktop.sourceforge.net/")
+    (inputs (list popt
+                  zlib
+                  libx11
+                  libice
+                  libsm
+                  libxfixes
+                  libxdamage
+                  libxext
+                  alsa-lib
+                  libvorbis
+                  libtheora))
+    (home-page "https://enselic.github.io/recordmydesktop/")
     (synopsis "Desktop session video recorder")
     (description
      "recordMyDesktop is a command-line tool that captures the activity in
@@ -3537,16 +3630,16 @@ making @dfn{screencasts}.")
     ;; README.md, the program builds and functions properly without them.
     ;; As a result, they are omitted. Please add them back if problems appear.
     (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("ffmpeg" ,ffmpeg)
-       ("glu" ,glu)
-       ("jack" ,jack-1)
-       ("libxi" ,libxi)
-       ("libxinerama" ,libxinerama)
-       ("pulseaudio" ,pulseaudio)
-       ("qtbase" ,qtbase-5)
-       ("qtx11extras" ,qtx11extras)))
-    (native-inputs `(("pkg-config" ,pkg-config)))
+     (list alsa-lib
+           ffmpeg
+           glu
+           jack-1
+           libxi
+           libxinerama
+           pulseaudio
+           qtbase-5
+           qtx11extras))
+    (native-inputs (list pkg-config))
     (arguments
      `(#:configure-flags
        (list "-DWITH_QT5=TRUE")
@@ -3582,8 +3675,7 @@ Other features include a live preview and live streaming.")
      ;; GCC 7.  Also, 'configure' does CXXFLAGS=$CFLAGS, hence this hack.
      '(#:configure-flags '("CFLAGS=-O2 -g -std=c++03")))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)))
+     (list autoconf automake))
     (inputs
      `(("sdl" ,sdl2)))
     (home-page "https://icculus.org/smpeg/")
@@ -3614,7 +3706,7 @@ and MPEG system streams.")
                (base32
                 "0jfi085rf3fa5xsn0vd3nqf32my8ph9c6a9445y7a8lrlz4dms64"))))
     (inputs
-     `(("sdl" ,sdl)))))
+     (list sdl))))
 
 (define-public libbdplus
   (package
@@ -3628,7 +3720,7 @@ and MPEG system streams.")
        (sha256
         (base32 "02n87lysqn4kg2qk7d1ffrp96c44zkdlxdj0n16hbgrlrpiwlcd6"))))
     (inputs
-     `(("libgcrypt" ,libgcrypt)))
+     (list libgcrypt))
     (build-system gnu-build-system)
     (home-page "https://www.videolan.org/developers/libbdplus.html")
     (synopsis "Library for decrypting certain Blu-Ray discs")
@@ -3648,10 +3740,9 @@ specifications.")
        (sha256
         (base32 "11skjqjlldmbjkyxdcz4fmcn6y4p95r1xagbcnjy4ndnzf0l723d"))))
     (inputs
-     `(("libgcrypt" ,libgcrypt)))
+     (list libgcrypt))
     (native-inputs
-     `(("bison" ,bison)
-       ("flex" ,flex)))
+     (list bison flex))
     (build-system gnu-build-system)
     (home-page "https://www.videolan.org/developers/libaacs.html")
     (synopsis "Library for decrypting certain Blu-Ray discs")
@@ -3679,10 +3770,13 @@ Content System specification.")
      ;; test suite results differ depending on the country and also introduce
      ;; non-determinism in the tests.
      ;; https://github.com/mps-youtube/mps-youtube/issues/556
-     `(#:tests? #f))
+     '(#:tests? #f
+       #:phases (modify-phases %standard-phases
+                  ;; Loading this as a library will create cache directories,
+                  ;; etc; which fails in the build container.
+                  (delete 'sanity-check))))
     (propagated-inputs
-     `(("python-pafy" ,python-pafy)
-       ("python-pygobject" ,python-pygobject))) ; For mpris2 support
+     (list python-pafy python-pygobject)) ; For mpris2 support
     (home-page "https://github.com/mps-youtube/mps-youtube")
     (synopsis "Terminal based YouTube player and downloader")
     (description
@@ -3697,7 +3791,7 @@ supported players in addition to this package.")
 (define-public handbrake
   (package
     (name "handbrake")
-    (version "1.4.2")
+    (version "1.5.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://github.com/HandBrake/HandBrake/"
@@ -3705,7 +3799,7 @@ supported players in addition to this package.")
                                   "HandBrake-" version "-source.tar.bz2"))
               (sha256
                (base32
-                "0qgvdpnjjvh9937cr0yry1lkz5fj6x9pz32fx7s80c9fvjvq33lb"))
+                "1w1hjj6gvdydypw4mdn281w0x163is59cfm7k6bq371hsl3gx69r"))
               (modules '((guix build utils)))
               (snippet
                ;; Remove "contrib" and source not necessary for
@@ -3830,14 +3924,9 @@ of modern, widely supported codecs.")
        (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (inputs
-     `(("libdrm" ,libdrm)
-       ("libva" ,libva)
-       ("libx11" ,libx11)))
+     (list libdrm libva libx11))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -3867,7 +3956,7 @@ post-processing of video formats like MPEG2, H.264/AVC, and VC-1.")
 (define-public openh264
   (package
     (name "openh264")
-    (version "2.1.1")
+    (version "2.3.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -3876,18 +3965,20 @@ post-processing of video formats like MPEG2, H.264/AVC, and VC-1.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0ffav46pz3sbj92nipd62z03fibyqgclfq9w8lgr80s6za6zdk5s"))))
+                "1yr6nsjpnazq4z6dvjfyanljwgwnyjh3ddxa0sq6hl9qc59yq91r"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("nasm" ,nasm)
-       ("python" ,python)))
+     (list nasm python))
     (arguments
-     '(#:make-flags (list (string-append "PREFIX=" (assoc-ref %outputs "out"))
-                          "CC=gcc")
-       #:test-target "test"
-       #:phases (modify-phases %standard-phases
-                  ;; no configure script
-                  (delete 'configure))))
+     (list
+      #:make-flags
+      #~(list (string-append "PREFIX=" #$output)
+                             "CC=gcc")
+      #:test-target "test"
+      #:phases
+      #~(modify-phases %standard-phases
+          ;; no configure script
+          (delete 'configure))))
     (home-page "https://www.openh264.org/")
     (synopsis "H264 decoder library")
     (description
@@ -3919,7 +4010,10 @@ post-processing of video formats like MPEG2, H.264/AVC, and VC-1.")
     (outputs '("out"
                "static")) ; 3.7MiB .a file
     (arguments
-     `(#:phases
+     `(;; Build as C++2003 to avoid C++11 "narrowing conversion" errors.
+       #:configure-flags '("CXXFLAGS=-O2 -g -std=c++03")
+
+       #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'remove-dates
            (lambda _
@@ -3942,8 +4036,7 @@ post-processing of video formats like MPEG2, H.264/AVC, and VC-1.")
                          (find-files lib "\\.a$"))
                #t))))))
     (native-inputs
-     `(("help2man" ,help2man)
-       ("dejagnu" ,dejagnu)))
+     (list help2man dejagnu))
     (home-page "https://code.google.com/archive/p/mp4v2/")
     (synopsis "API to create and modify mp4 files")
     (description
@@ -3957,7 +4050,7 @@ practically any type of media.")
 (define-public libmediainfo
   (package
     (name "libmediainfo")
-    (version "21.03")
+    (version "22.03")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://mediaarea.net/download/source/"
@@ -3965,18 +4058,13 @@ practically any type of media.")
                                   name "_" version ".tar.xz"))
               (sha256
                (base32
-                "1jm4mk539wf3crgpcddgwdixshwdzm37mkb5441lifhcz2mykdsn"))))
+                "1fc0ihj17cdv9zb346llwvbv0hn3sl3ax398ankgp74fcaxvll7w"))))
     ;; TODO add a Big Buck Bunny webm for tests.
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (propagated-inputs
-     `(("zlib" ,zlib)
-       ("tinyxml2" ,tinyxml2)
-       ("curl" ,curl) ; In Requires.private of libmediainfo.pc.
-       ("libzen" ,libzen)))
+     (list zlib tinyxml2 curl ; In Requires.private of libmediainfo.pc.
+           libzen))
     (build-system gnu-build-system)
     (arguments
      '(#:tests? #f ; see above TODO
@@ -4018,7 +4106,7 @@ MPEG-2, MPEG-4, DVD (VOB)...
 (define-public mediainfo
   (package
     (name "mediainfo")
-    (version "21.03")
+    (version "22.03")
     (source (origin
               (method url-fetch)
               ;; Warning: This source has proved unreliable 1 time at least.
@@ -4029,14 +4117,11 @@ MPEG-2, MPEG-4, DVD (VOB)...
                                   name "_" version ".tar.xz"))
               (sha256
                (base32
-                "07h2a1lbw5ak6c9bcn8qydchl0wpgk945rf9sfcqjyv05h5wll6y"))))
+                "1r1bh1lk2dsiv0j84whgca7qslxbibg6vsih7x5iga2p3lmgjdk2"))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake libtool pkg-config))
     (inputs
-     `(("libmediainfo" ,libmediainfo)))
+     (list libmediainfo))
     (build-system gnu-build-system)
     (arguments
      '(#:tests? #f ; lacks tests
@@ -4087,7 +4172,7 @@ many codecs and formats supported by libmediainfo.")
                (install-file "AtomicParsley" bin))
              #t)))))
     (inputs
-     `(("zlib" ,zlib)))
+     (list zlib))
     (synopsis "Metadata editor for MPEG-4 files")
     (description "AtomicParsley is a lightweight command line program for
 reading, parsing and setting metadata into MPEG-4 files, in particular,
@@ -4127,7 +4212,7 @@ iTunes-style metadata.")
                       (invoke "./genMakefiles"
                               "linux-with-shared-libraries"))))))
     (inputs
-     `(("openssl" ,openssl)))
+     (list openssl))
     (home-page "http://www.live555.com/liveMedia/")
     (synopsis "Set of C++ libraries for multimedia streaming")
     (description "This code forms a set of C++ libraries for multimedia
@@ -4178,11 +4263,11 @@ and ITU-T H.222.0.")
      '(#:configure-flags
        (list "--enable-avresample")))
     (inputs
-     `(("zlib" ,zlib)))
+     (list zlib))
     (propagated-inputs
-     `(("ffmpeg" ,ffmpeg)))
+     (list ffmpeg))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (synopsis "Cross-platform wrapper around ffmpeg/libav")
     (description
       "FFMpegSource is a wrapper library around ffmpeg/libav that allows
@@ -4233,21 +4318,19 @@ programmers to access a standard API to open and decompress media files.")
                     "#include <boost/gil.hpp>"))
                  #t)))))
     (inputs
-     `(("boost" ,boost)
-       ("ffms2" ,ffms2)
-       ("fftw" ,fftw)
-       ("hunspell" ,hunspell)
-       ("mesa" ,mesa)
-       ("libass" ,libass)
-       ("alsa-lib" ,alsa-lib)
-       ("pulseaudio" ,pulseaudio)
-       ("libx11" ,libx11)
-       ("freetype" ,freetype)
-       ("wxwidgets-gtk2" ,wxwidgets-gtk2)))
+     (list boost
+           ffms2
+           fftw
+           hunspell
+           mesa
+           libass
+           alsa-lib
+           pulseaudio
+           libx11
+           freetype
+           wxwidgets-gtk2))
     (native-inputs
-     `(("intltool" ,intltool)
-       ("desktop-file-utils" ,desktop-file-utils)
-       ("pkg-config" ,pkg-config)))
+     (list intltool desktop-file-utils pkg-config))
     (home-page "http://www.aegisub.org/")
     (synopsis "Subtitle engine")
     (description
@@ -4262,71 +4345,73 @@ tools for styling them, including a built-in real-time video preview.")
    ; src/MatroskaParser.(c|h) is under bsd-3 with permission from the author
 
 (define-public pitivi
-  ;; Pitivi switched to a non-semantic versioning scheme close before 1.0
-  (let ((latest-semver "0.999.0")
-        (%version "2021.05.0"))
-   (package
-     (name "pitivi")
-     (version (string-append latest-semver "-" %version))
-     (source
-      (origin
-        (method git-fetch)
-        (uri (git-reference
-              (url "https://gitlab.gnome.org/GNOME/pitivi.git")
-              (commit %version)))
-        (file-name (git-file-name name version))
-        (sha256
-         (base32 "08x2fs2bak1fbmkvjijgx1dsawispv91bpv5j5gkqbv5dfgf7wah"))))
-     (build-system meson-build-system)
-     (inputs
-      `(("glib" ,glib)
-        ("gst-editing-services" ,gst-editing-services)
-        ("gstreamer" ,gstreamer)
-        ("gst-plugins-base" ,gst-plugins-base)
-        ("gst-plugins-good" ,gst-plugins-good)
-        ("gst-plugins-bad"
-         ,(gst-plugins/selection gst-plugins-bad
-                                 #:plugins '("debugutils" "transcoder")
-                                 #:configure-flags '("-Dintrospection=enabled")))
-        ("gst-libav" ,gst-libav)
-        ("gsound" ,gsound)
-        ("gtk+" ,gtk+)
-        ("gdk-pixbuf+svg" ,gdk-pixbuf+svg)
-        ("libpeas" ,libpeas)
-        ("libnotify" ,libnotify)
-        ("pango" ,pango)
-        ("python-gst" ,python-gst)
-        ("python-numpy" ,python-numpy)
-        ("python-matplotlib" ,python-matplotlib)
-        ("python-pycairo" ,python-pycairo)
-        ("python-pygobject" ,python-pygobject)))
+  (package
+    (name "pitivi")
+    (version "2022.06.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://gitlab.gnome.org/GNOME/pitivi.git")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1wgfi8srblqzd2y6528cyvn56rbdxpwlq0wmwqhabshdk28zyx8d"))))
+    (build-system meson-build-system)
     (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("glib:bin" ,glib "bin")
-       ("itstool" ,itstool)
-       ("pkg-config" ,pkg-config)))
-     (arguments
-      `(#:glib-or-gtk? #t
-        #:phases
-        (modify-phases %standard-phases
-          (add-after 'glib-or-gtk-wrap 'wrap-other-dependencies
-            (lambda* (#:key outputs #:allow-other-keys)
-              (let ((prog (string-append (assoc-ref outputs "out")
-                                         "/bin/pitivi")))
-                (wrap-program prog
-                  `("PYTHONPATH" = (,(getenv "PYTHONPATH")))
-                  `("GI_TYPELIB_PATH" = (,(getenv "GI_TYPELIB_PATH")))
-                  ;; We've only added inputs for what Pitivi deems either
-                  ;; necessary or optional.  Let the user's packages take
-                  ;; precedence in case they have e.g. the full gst-plugins-bad.
-                  `("GST_PLUGIN_SYSTEM_PATH" suffix
-                    (,(getenv "GST_PLUGIN_SYSTEM_PATH"))))))))))
-     (home-page "http://www.pitivi.org")
-     (synopsis "Video editor based on GStreamer Editing Services")
-     (description "Pitivi is a video editor built upon the GStreamer Editing
+     (list gettext-minimal
+           `(,glib "bin")
+           itstool
+           pkg-config))
+    (inputs
+     (list bash-minimal
+           glib
+           gst-editing-services
+           gstreamer
+           gst-plugins-base
+           gst-plugins-good
+           ;; TODO: Add the 'cvtracker' plugin after our gstreamer packages
+           ;; has been upgraded to version 1.20.
+           (gst-plugins/selection gst-plugins-bad #:plugins
+                                  '("debugutils" "transcode")
+                                  #:configure-flags
+                                  '("-Dintrospection=enabled"))
+           gst-libav
+           gsound
+           gtk+
+           libpeas
+           libnotify
+           pango
+           python
+           python-gst
+           python-librosa
+           python-numpy
+           python-matplotlib
+           python-pycairo
+           python-pygobject))
+    ;; Propagate librsvg so that is is registered in GDK_PIXBUF_MODULE_FILE,
+    ;; otherwise pitivi fails to launch.
+    (propagated-inputs (list librsvg))
+    (arguments
+     `(#:glib-or-gtk? #t
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'glib-or-gtk-wrap 'wrap-other-dependencies
+           (lambda* (#:key outputs #:allow-other-keys)
+             (wrap-program (search-input-file outputs "bin/pitivi")
+               `("GUIX_PYTHONPATH" = (,(getenv "GUIX_PYTHONPATH")))
+               `("GI_TYPELIB_PATH" = (,(getenv "GI_TYPELIB_PATH")))
+               ;; We've only added inputs for what Pitivi deems either
+               ;; necessary or optional.  Let the user's packages take
+               ;; precedence in case they have e.g. the full gst-plugins-bad.
+               `("GST_PLUGIN_SYSTEM_PATH" suffix
+                 (,(getenv "GST_PLUGIN_SYSTEM_PATH")))))))))
+    (home-page "http://www.pitivi.org")
+    (synopsis "Video editor based on GStreamer Editing Services")
+    (description "Pitivi is a video editor built upon the GStreamer Editing
 Services.  It aims to be an intuitive and flexible application that can appeal
 to newbies and professionals alike.")
-     (license license:lgpl2.1+))))
+    (license license:lgpl2.1+)))
 
 (define-public gavl
   (package
@@ -4346,8 +4431,7 @@ to newbies and professionals alike.")
     (arguments
      '(#:configure-flags '("LIBS=-lm")))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("doxygen" ,doxygen)))
+     (list pkg-config doxygen))
     (home-page "http://gmerlin.sourceforge.net")
     (synopsis "Low level library for multimedia API building")
     (description
@@ -4389,10 +4473,9 @@ alpha blending etc).")
              #t)))))
     ;; TODO: opencv for additional face detection filters.
     (inputs
-     `(("gavl" ,gavl)
-       ("cairo" ,cairo)))
+     (list gavl cairo))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (home-page "https://www.dyne.org/software/frei0r/")
     (synopsis "Minimalistic plugin API for video effects")
     (description
@@ -4487,7 +4570,7 @@ changed.  Or in other words, it can detect motion.")
                        (install-file (string-append source "/subdl") bin)
                        (patch-shebang (string-append bin "/subdl")
                                       (list (string-append python "/bin")))))))
-      (inputs `(("python" ,python)))
+      (inputs (list python))
       (synopsis "Command-line tool for downloading subtitles from opensubtitles.org")
       (description "Subdl is a command-line tool for downloading subtitles from
 opensubtitles.org.  By default, it will search for English subtitles, display
@@ -4524,7 +4607,7 @@ save it to the appropriate filename.")
                (invoke "./configure" (string-append "--prefix=" out)
                        "--disable-static")))))))
     (native-inputs
-     `(("which" ,which)))
+     (list which))
     (home-page "https://l-smash.github.io/l-smash/")
     (synopsis "MP4 multiplexer and demultiplexer library")
     (description
@@ -4589,7 +4672,7 @@ create smoother and stable videos.")
 (define-public libopenshot
   (package
     (name "libopenshot")
-    (version "0.2.5")
+    (version "0.2.7")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -4598,11 +4681,11 @@ create smoother and stable videos.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1mxjkgjmjzgf628y3rscc6rqf55hxgjpmvwxlncfk1216i5xskwp"))
+                "0i9bsn8gklm1mvj60l3d3xrxdgy8svpxjfqcwsr308j5zjn30pv8"))
               (modules '((guix build utils)))
               (snippet '(begin
                           ;; Allow overriding of the python installation dir
-                          (substitute* "src/bindings/python/CMakeLists.txt"
+                          (substitute* "bindings/python/CMakeLists.txt"
                             (("(SET\\(PYTHON_MODULE_PATH.*)\\)" _ set)
                              (string-append set " CACHE PATH "
                                             "\"Python bindings directory\")")))
@@ -4614,17 +4697,17 @@ create smoother and stable videos.")
        ("python" ,python)
        ("swig" ,swig)
        ("unittest++" ,unittest-cpp)))
+    (inputs
+     (list alsa-lib zlib))
     (propagated-inputs                  ;all referenced in installed headers
-     `(("cppzmq" ,cppzmq)
-       ;; libopenshot doesn't yet build with ffmpeg 4.4 (see:
-       ;; https://github.com/OpenShot/libopenshot/issues/676).
-       ("ffmpeg" ,ffmpeg-4.3)
-       ("imagemagick" ,imagemagick)
-       ("jsoncpp" ,jsoncpp)
-       ("libopenshot-audio" ,libopenshot-audio)
-       ("qtbase" ,qtbase-5)
-       ("qtmultimedia" ,qtmultimedia)
-       ("zeromq" ,zeromq)))
+     (list cppzmq
+           ffmpeg
+           imagemagick
+           jsoncpp
+           libopenshot-audio
+           qtbase-5
+           qtmultimedia-5
+           zeromq))
     (arguments
      `(#:configure-flags
        (list (string-append "-DPYTHON_MODULE_PATH:PATH=" %output "/lib/python"
@@ -4640,9 +4723,8 @@ create smoother and stable videos.")
              (setenv "ZMQDIR"
                      (assoc-ref inputs "zeromq"))
              (setenv "UNITTEST_DIR"
-                     (string-append (assoc-ref inputs "unittest++")
-                                    "/include/UnitTest++"))
-             #t)))))
+                     (search-input-directory inputs
+                                             "include/UnitTest++")))))))
     (home-page "https://openshot.org")
     (synopsis "Video-editing, animation, and playback library")
     (description "OpenShot Library (libopenshot) is a powerful C++ video
@@ -4653,7 +4735,7 @@ API.  It includes bindings for Python, Ruby, and other languages.")
 (define-public openshot
   (package
     (name "openshot")
-    (version "2.5.1")
+    (version "2.6.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -4662,7 +4744,7 @@ API.  It includes bindings for Python, Ruby, and other languages.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0qc5i0ay6j2wab1whl41sjb71cj02pg6y79drf7asrprq8b2rmfq"))
+                "0pa8iwl217503bjlqg2zlrw5lxyq5hvxrf5apxrh3843hj1w1myv"))
        (modules '((guix build utils)))
        (snippet
         '(begin
@@ -4670,14 +4752,14 @@ API.  It includes bindings for Python, Ruby, and other languages.")
            (delete-file-recursively "src/images/fonts") #t))))
     (build-system python-build-system)
     (inputs
-     `(("ffmpeg" ,ffmpeg)
-       ("font-dejavu" ,font-dejavu)
-       ("libopenshot" ,libopenshot)
-       ("python" ,python)
-       ("python-pyqt" ,python-pyqt)
-       ("python-pyzmq" ,python-pyzmq)
-       ("python-requests" ,python-requests)
-       ("qtsvg" ,qtsvg)))
+     (list ffmpeg
+           font-dejavu
+           libopenshot
+           python
+           python-pyqt
+           python-pyzmq
+           python-requests
+           qtsvg-5))
     (arguments
      `(#:modules ((guix build python-build-system)
                   (guix build qt-utils)
@@ -4687,9 +4769,10 @@ API.  It includes bindings for Python, Ruby, and other languages.")
        #:phases (modify-phases %standard-phases
                   (delete 'build)       ;install phase does all the work
                   (replace 'check
-                    (lambda _
-                      (setenv "QT_QPA_PLATFORM" "offscreen")
-                      (invoke "python" "src/tests/query_tests.py")))
+                    (lambda* (#:key tests? #:allow-other-keys)
+                      (when tests?
+                        (setenv "QT_QPA_PLATFORM" "offscreen")
+                        (invoke "python" "src/tests/query_tests.py"))))
                   (add-after 'unpack 'patch-font-location
                     (lambda* (#:key inputs #:allow-other-keys)
                       (let ((font (assoc-ref inputs "font-dejavu")))
@@ -4698,6 +4781,12 @@ API.  It includes bindings for Python, Ruby, and other languages.")
                           (("fonts") "share/fonts/truetype")
                           (("[A-Za-z_-]+.ttf") "DejaVuSans.ttf")))
                       #t))
+                  ;; https://github.com/OpenShot/openshot-qt/issues/4502
+                  (add-before 'ensure-no-mtimes-pre-1980 'fix-symbolic-link
+                    (lambda _
+                      (delete-file "images/Humanity/actions/custom/razor_line_with_razor.png")
+                      (symlink "../../../../src/timeline/media/images/razor_line_with_razor.png"
+                               "images/Humanity/actions/custom/razor_line_with_razor.png")))
                   (add-before 'install 'set-tmp-home
                     (lambda _
                       ;; src/classes/info.py "needs" to create several
@@ -4720,7 +4809,7 @@ transitions, and effects and then export your film to many common formats.")
 (define-public shotcut
   (package
     (name "shotcut")
-    (version "21.09.20")
+    (version "22.06.23")
     (source
      (origin
        (method git-fetch)
@@ -4729,61 +4818,67 @@ transitions, and effects and then export your film to many common formats.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1y46n5gmlayfl46l0vhg5g5dbbc0sg909mxb68sia0clkaas8xrh"))))
+        (base32 "1kvhcblzjdjiv3jggdx41djq9pz6a9hg4ilgcwin13gb19ir7dcc"))))
     (build-system qt-build-system)
     (arguments
-     `(#:tests? #f ;there are no tests
+     `(#:tests? #f                      ;there are no tests
        #:phases
        (modify-phases %standard-phases
-         (replace 'configure
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out")))
-               (invoke "qmake"
-                       (string-append "PREFIX=" out)
-                       "QMAKE_LRELEASE=lrelease"
-                       "QMAKE_LUPDATE=lupdate"
-                       "shotcut.pro"))))
+         (add-after 'unpack 'patch-executable-paths
+           (lambda* (#:key inputs #:allow-other-keys)
+             ;; Shotcut expects ffmpeg and melt executables in the shotcut
+             ;; directory.  Use full store paths.
+             (let* ((ffmpeg (assoc-ref inputs "ffmpeg"))
+                    (mlt (assoc-ref inputs "mlt")))
+               (substitute* "src/jobs/ffmpegjob.cpp"
+                 (("\"ffmpeg\"") (string-append "\"" ffmpeg "/bin/ffmpeg\"")))
+               (substitute* "src/jobs/meltjob.cpp"
+                 (("\"melt\"") (string-append "\"" mlt "/bin/melt\""))
+                 (("\"melt-7\"") (string-append "\"" mlt "/bin/melt-7\""))))))
          (add-after 'install 'wrap-executable
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
                     (frei0r (assoc-ref inputs "frei0r-plugins"))
-                    (ffmpeg (assoc-ref inputs "ffmpeg"))
                     (jack (assoc-ref inputs "jack"))
+                    (ladspa (assoc-ref inputs "ladspa"))
+                    (mlt (assoc-ref inputs "mlt"))
                     (sdl2 (assoc-ref inputs "sdl2")))
                (wrap-program (string-append out "/bin/shotcut")
-                 `("PATH" ":" prefix
-                   ,(list (string-append ffmpeg "/bin")))
+                 `("FREI0R_PATH" ":" =
+                   (,(string-append frei0r "/lib/frei0r-1")))
+                 `("LADSPA_PATH" ":" =
+                   (,(string-append ladspa "/lib/ladspa")))
                  `("LD_LIBRARY_PATH" ":" prefix
                    ,(list (string-append jack "/lib" ":" sdl2 "/lib")))
-                 `("FREI0R_PATH" ":" =
-                   (,(string-append frei0r "/lib/frei0r-1/")))
-                 `("MLT_PREFIX" ":" =
-                   (,(assoc-ref inputs "mlt"))))))))))
+                 `("PATH" ":" prefix
+                   ,(list (string-append mlt "/bin"))))))))))
     (native-inputs
      `(("pkg-config" ,pkg-config)
-       ("python" ,python-wrapper)
-       ("qttools" ,qttools)))
+       ("python-wrapper" ,python-wrapper)
+       ("qttools-5" ,qttools-5)))
     (inputs
-     `(("ffmpeg" ,ffmpeg)
-       ("frei0r-plugins" ,frei0r-plugins)
-       ("jack" ,jack-1)
-       ("ladspa" ,ladspa)
-       ("lame" ,lame)
-       ("libvpx" ,libvpx)
-       ("libx264" ,libx264)
-       ("mlt" ,mlt)
-       ("pulseaudio" ,pulseaudio)
-       ("qtbase" ,qtbase-5)
-       ("qtdeclarative" ,qtdeclarative)
-       ("qtgraphicaleffects" ,qtgraphicaleffects)
-       ("qtmultimedia" ,qtmultimedia)
-       ("qtquickcontrols" ,qtquickcontrols)
-       ("qtquickcontrols2" ,qtquickcontrols2)
-       ("qtsvg" ,qtsvg)
-       ("qtwebkit" ,qtwebkit)
-       ("qtwebsockets" ,qtwebsockets)
-       ("qtx11extras" ,qtx11extras)
-       ("sdl2" ,sdl2)))
+     (list bash-minimal
+           ffmpeg
+           fftw
+           frei0r-plugins
+           jack-1
+           ladspa
+           lame
+           libvpx
+           libx264
+           mlt
+           pulseaudio
+           qtbase-5
+           qtdeclarative-5
+           qtgraphicaleffects
+           qtmultimedia-5
+           qtquickcontrols-5
+           qtquickcontrols2-5
+           qtsvg-5
+           qtwebkit
+           qtwebsockets-5
+           qtx11extras
+           sdl2))
     (home-page "https://www.shotcut.org/")
     (synopsis "Video editor built on the MLT framework")
     (description
@@ -4806,7 +4901,7 @@ and audio capture, network stream playback, and many more.")
         (sha256
          (base32 "0bkps488h9s15ylvkm4fmfywgrpbw570glawpnv6khpq9n223dzl"))))
     (build-system meson-build-system)
-    (native-inputs `(("nasm" ,nasm)))
+    (native-inputs (list nasm))
     (home-page "https://code.videolan.org/videolan/dav1d")
     (synopsis "AV1 decoder")
     (description "dav1d is a new AV1 cross-platform decoder, and focused on
@@ -4830,12 +4925,8 @@ speed and correctness.")
           (base32
            "01qbcgfl3g9kfwn1jf1z9pdj3bvf5lmg71d1vwkcllc2az24bjqp"))))
       (build-system meson-build-system)
-      (native-inputs `(("libdrm" ,libdrm)
-                       ("pkg-config" ,pkg-config)))
-      (inputs `(("ffmpeg" ,ffmpeg)
-                ("pulseaudio" ,pulseaudio)
-                ("wayland" ,wayland)
-                ("wayland-protocols" ,wayland-protocols)))
+      (native-inputs (list libdrm pkg-config))
+      (inputs (list ffmpeg pulseaudio wayland wayland-protocols))
       (home-page "https://github.com/atomnuker/wlstream")
       (synopsis "Screen capture tool for Wayland sessions")
       (description "Wlstream is a screen capture tool for recording audio and
@@ -4845,7 +4936,7 @@ video from a Wayland session.")
 (define-public gaupol
   (package
     (name "gaupol")
-    (version "1.9")
+    (version "1.11")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -4854,28 +4945,35 @@ video from a Wayland session.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1mmjg8nwhif2hmmp8i11643izwzdf839brqdai3ksfg0qkh8rnxk"))))
+                "01qbhhycmy26b2mw2jlri321k478jhp7y0jzlcv87iaq05qr4pc8"))))
     (build-system python-build-system)
     (native-inputs
      `(("gettext" ,gettext-minimal)
        ("pkg-config" ,pkg-config)))
     (inputs
-     `(("python-pygobject" ,python-pygobject)
-       ("gtk+" ,gtk+)
-       ("python-pycairo" ,python-pycairo) ; Required or else clicking on a subtitle line fails.
-       ("python-chardet" ,python-chardet) ; Optional: Character encoding detection.
-       ("gtkspell3" ,gtkspell3)           ; Optional: Inline spell-checking.
-       ("iso-codes" ,iso-codes)           ; Optional: Translations.
-       ("gstreamer" ,gstreamer)
-       ("gst-libav" ,gst-libav)
-       ("gst-plugins-base" ,gst-plugins-base)
-       ("gst-plugins-good" ,gst-plugins-good)
-       ("gst-plugins-bad" ,gst-plugins-bad)
-       ("gst-plugins-ugly" ,gst-plugins-ugly)))
+     (list python-pygobject
+           gtk+
+           python-pycairo ; Required or else clicking on a subtitle line fails.
+           python-chardet ; Optional: Character encoding detection.
+           gtkspell3 ; Optional: Inline spell-checking.
+           iso-codes ; Optional: Translations.
+           gstreamer
+           gst-libav
+           gst-plugins-base
+           gst-plugins-good
+           gst-plugins-bad
+           gst-plugins-ugly))
     (arguments
      `(#:tests? #f                      ; Tests seem to require networking.
        #:phases
        (modify-phases %standard-phases
+         (add-after 'unpack 'disable-builtin-byte-compilation
+           (lambda _
+             ;; The setup.py script attempts to compile bytecode and fails.
+             ;; We compile bytecode in a separate phase, so just disable it.
+             (substitute* "setup.py"
+               (("distutils\\.util\\.byte_compile\\(.*")
+                ""))))
          ;; gaupol's setup.py script does not support one of the Python build
          ;; system's default flags, "--single-version-externally-managed".
          (replace 'install
@@ -4890,8 +4988,7 @@ video from a Wayland session.")
                    (gi-typelib-path (getenv "GI_TYPELIB_PATH")))
                (wrap-program (string-append out "/bin/gaupol")
                  `("GST_PLUGIN_SYSTEM_PATH" ":" prefix (,gst-plugin-path))
-                 `("GI_TYPELIB_PATH" ":" prefix (,gi-typelib-path))))
-             #t))
+                 `("GI_TYPELIB_PATH" ":" prefix (,gi-typelib-path))))))
          (add-after 'unpack 'patch-data-dir
            ;; Fix some path variables that setup.py seems to garble.
            (lambda* (#:key outputs #:allow-other-keys)
@@ -4900,8 +4997,7 @@ video from a Wayland session.")
                  (("DATA_DIR = \\{!r\\}\"\\.format\\(data_dir\\)")
                   (string-append "DATA_DIR = '" out "/share/gaupol'\""))
                  (("LOCALE_DIR = \\{!r\\}\"\\.format\\(locale_dir\\)")
-                  (string-append "LOCALE_DIR = '" out "/share/locale'\"")))
-               #t))))))
+                  (string-append "LOCALE_DIR = '" out "/share/locale'\"")))))))))
     (synopsis "Editor for text-based subtitles")
     (description
      "Gaupol supports multiple subtitle file formats and provides means of
@@ -4943,7 +5039,7 @@ to convenience of translating and batch processing of multiple documents.")
                #t)))))
       (native-inputs
        ;; For tests.
-       `(("sdl2" ,sdl2)))
+       (list sdl2))
       (home-page "https://github.com/FNA-XNA/Theorafile")
       (synopsis "Ogg Theora Video Decoder Library")
       (description "Theorafile is a library for quickly and easily decoding Ogg
@@ -4964,8 +5060,7 @@ Theora videos.  Theorafile was written to be used for FNA's VideoPlayer.")
         (base32 "1rl3h7waqja8blmbpmwy01q9fgr5r0c32b8dy3pbf59bp3xmd37g"))))
     (build-system gnu-build-system)
     (inputs
-     `(("libdvdcss" ,libdvdcss)
-       ("libdvdread" ,libdvdread)))
+     (list libdvdcss libdvdread))
     (home-page "http://dvdbackup.sourceforge.net")
     (synopsis "DVD video ripper")
     (description
@@ -4977,7 +5072,7 @@ transcode or reformat the videos in any way, producing perfect backups.")
 (define-public svt-av1
   (package
     (name "svt-av1")
-    (version "0.8.7")
+    (version "0.9.1")
     (source
      (origin
        (method git-fetch)
@@ -4986,7 +5081,7 @@ transcode or reformat the videos in any way, producing perfect backups.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1xlxb6kn6hqz9dxz0nd905m4i2mwjwq1330rbabwzmg4b66cdslg"))))
+        (base32 "02fchq2vlxcxzbrss72xl9vrxzysdy39d5i159bmg3qa45ngd2iw"))))
     (build-system cmake-build-system)
     ;; SVT-AV1 only supports 64-bit Intel-compatible CPUs.
     (supported-systems '("x86_64-linux"))
@@ -5003,7 +5098,7 @@ transcode or reformat the videos in any way, producing perfect backups.")
                (copy-recursively "../source/Docs" doc)
                #t))))))
     (native-inputs
-     `(("yasm" ,yasm)))
+     (list yasm))
     (synopsis "AV1 video codec")
     (description "SVT-AV1 is an AV1 codec implementation.  The encoder is a
 work-in-progress, aiming to support video-on-demand and live streaming
@@ -5038,7 +5133,7 @@ applications.  It only supports Intel-compatible CPUs (x86).")
                (copy-recursively "../source/Docs" doc)
                #t))))))
     (native-inputs
-     `(("yasm" ,yasm)))
+     (list yasm))
     (home-page "https://github.com/OpenVisualCloud/SVT-VP9")
     (synopsis "VP9 video encoder")
     (description "SVT-VP9 is a VP9 video encoder implementation.  It is focused
@@ -5057,6 +5152,8 @@ on supporting video-on-demand and live encoding on Intel Xeon processors.")
        (sha256
         (base32 "1zkgnj2sfvckix360wwk1v5s43g69snm45m0drnzyv7hgf5g7q1q"))))
     (build-system gnu-build-system)
+    (arguments
+     `(#:configure-flags '("CFLAGS=-O2 -g -fcommon")))
     (synopsis "Scan ATSC/DVB-C/DVB-S/DVB-T channels")
     (description
      "This is a small command line utility used to perform frequency scans for
@@ -5073,10 +5170,38 @@ result in several formats:
     (home-page "https://www.gen2vdr.de/wirbel/w_scan/index2.html")
     (license license:gpl2+)))
 
+;;; XXX: This crate is used only for rav1e and can be removed once the latter
+;;; is updated.  See <https://issues.guix.gnu.org/52837>.
+(define rust-dav1d-sys-0.3.2
+  (package
+    (name "rust-dav1d-sys")
+    (version "0.3.2")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (crate-uri "dav1d-sys" version))
+       (file-name
+        (string-append name "-" version ".tar.gz"))
+       (sha256
+        (base32 "1jdxhnlxcml6jd67lx78ifzkn1xm18zfk4li7vjdh3fa61i073kx"))))
+    (build-system cargo-build-system)
+    (arguments
+     `(#:cargo-inputs
+       (("rust-bindgen" ,rust-bindgen-0.54)
+        ("rust-metadeps" ,rust-metadeps-1))))
+    (native-inputs
+     (list pkg-config))
+    (inputs
+     (list dav1d clang llvm))
+    (home-page "https://github.com/rust-av/dav1d-rs")
+    (synopsis "FFI bindings to dav1d")
+    (description "This package provides FFI bindings to dav1d.")
+    (license license:expat)))
+
 (define-public rav1e
   (package
     (name "rav1e")
-    (version "0.4.1")
+    (version "0.5.1")
     (source
      (origin
        (method url-fetch)
@@ -5085,15 +5210,18 @@ result in several formats:
         (string-append name "-" version ".tar.gz"))
        (sha256
         (base32
-         "00rjil6qbrwfxhhlq9yvidxm0gp9qdbywhf5zvkj85lykbhyff09"))))
+         "006bfcmjwg0phg8gc25b1sl2ngjrb2bh1b3fd0s5gbf9nlkr8qsn"))))
     (build-system cargo-build-system)
     (arguments
-     `(#:cargo-inputs
-       (("rust-aom-sys" ,rust-aom-sys-0.2)
+     `(;; Strip the '--release' flag to work around the doctest failures with
+       ;; Rust 1.57 (see: https://github.com/xiph/rav1e/issues/2851).
+       #:cargo-test-flags '()
+       #:cargo-inputs
+       (("rust-aom-sys" ,rust-aom-sys-0.3)
         ("rust-arbitrary" ,rust-arbitrary-0.4)
         ("rust-arg-enum-proc-macro" ,rust-arg-enum-proc-macro-0.3)
-        ("rust-arrayvec" ,rust-arrayvec-0.5)
-        ("rust-av-metrics" ,rust-av-metrics-0.6)
+        ("rust-arrayvec" ,rust-arrayvec-0.7)
+        ("rust-av-metrics" ,rust-av-metrics-0.7)
         ("rust-backtrace" ,rust-backtrace-0.3)
         ("rust-bitstream-io" ,rust-bitstream-io-1)
         ("rust-byteorder" ,rust-byteorder-1)
@@ -5120,7 +5248,7 @@ result in several formats:
         ("rust-rayon" ,rust-rayon-1)
         ("rust-regex" ,rust-regex-1)
         ("rust-rust-hawktracer" ,rust-rust-hawktracer-0.7)
-        ("rust-rustc-version" ,rust-rustc-version-0.3)
+        ("rust-rustc-version" ,rust-rustc-version-0.4)
         ("rust-scan-fmt" ,rust-scan-fmt-0.2)
         ("rust-serde" ,rust-serde-1)
         ("rust-signal-hook" ,rust-signal-hook-0.3)
@@ -5132,24 +5260,33 @@ result in several formats:
         ("rust-wasm-bindgen" ,rust-wasm-bindgen-0.2)
         ("rust-y4m" ,rust-y4m-0.7))
        #:cargo-development-inputs
-       (("rust-assert-cmd" ,rust-assert-cmd-1)
+       (("rust-assert-cmd" ,rust-assert-cmd-2)
         ("rust-cc" ,rust-cc-1)
         ("rust-criterion" ,rust-criterion-0.3)
         ("rust-interpolate-name" ,rust-interpolate-name-0.2)
-        ("rust-pretty-assertions" ,rust-pretty-assertions-0.6)
+        ("rust-pretty-assertions" ,rust-pretty-assertions-0.7)
         ("rust-rand" ,rust-rand-0.8)
         ("rust-rand-chacha" ,rust-rand-chacha-0.3)
-        ("rust-semver" ,rust-semver-0.11))
+        ("rust-semver" ,rust-semver-1))
        #:phases
        (modify-phases %standard-phases
+         (add-after 'unpack 'relax-versions
+           (lambda _
+             (substitute* "Cargo.toml"
+               ;; Allow using more recent versions of
+               (("~3.1.2") "~3"))))
          (replace 'build
            (lambda* (#:key outputs #:allow-other-keys)
              (let ((out (assoc-ref outputs "out")))
                (invoke "cargo" "cinstall" "--release"
-                       (string-append "--prefix=" out))))))))
+                       (string-append "--prefix=" out)))))
+         (add-after 'install 'delete-static-library
+           (lambda* (#:key outputs #:allow-other-keys)
+             ;; Delete 80 MiB (!) static library.
+             (delete-file (string-append (assoc-ref outputs "out")
+                                         "/lib/librav1e.a")))))))
     (native-inputs
-     `(("cargo-c" ,rust-cargo-c)
-       ("nasm" ,nasm)))
+     (list rust-cargo-c nasm))
     (home-page "https://github.com/xiph/rav1e/")
     (synopsis "Fast and safe AV1 encoder")
     (description "@code{rav1e} is an AV1 video encoder.  It is designed to
@@ -5173,7 +5310,8 @@ for cases where libaom (the reference encoder) is too slow.")
     (build-system meson-build-system)
     (arguments '(#:glib-or-gtk? #t))
     (inputs
-     `(("gtk+" ,gtk+)))
+     `(("gtk+" ,gtk+)
+       ("python" ,python-wrapper)))
     (native-inputs
      `(("desktop-file-utils" ,desktop-file-utils) ; for update-desktop-database
        ("gettext" ,gettext-minimal)
@@ -5207,13 +5345,9 @@ can also directly record to WebM or MP4 if you prefer.")
                 "1cw6kpcbl33wh95pvy32xrsrm6kkk1awccr3phyh885xjs3b3iim"))))
     (build-system meson-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("ffmpeg" ,ffmpeg)
-       ("pulseaudio" ,pulseaudio)
-       ("wayland" ,wayland)
-       ("wayland-protocols" ,wayland-protocols)
-       ("libx264" ,libx264)))
+     (list ffmpeg pulseaudio wayland wayland-protocols libx264))
     (home-page "https://github.com/ammen99/wf-recorder")
     (synopsis "Screen recorder for wlroots-based compositors")
     (description
@@ -5225,31 +5359,32 @@ wlroots-based compositors.  More specifically, those that support
 (define-public guvcview
   (package
     (name "guvcview")
-    (version "2.0.6")
+    (version "2.0.8")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://sourceforge/guvcview/source/guvcview-"
-                                  "src-" version ".tar.gz"))
+                                  "src-" version ".tar.bz2"))
               (sha256
                (base32
-                "11byyfpkcik7wvf2qic77zjamfr2rhji97dpj1gy2fg1bvpiqf4m"))))
+                "108c4g0ns9i1wnxyalmpjqbhlflmrj855vxgggr6qrl6h924w7x2"))))
     (build-system gnu-build-system)
     (arguments
      ;; There are no tests and "make check" would fail on an intltool error.
      '(#:tests? #f))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("intltool" ,intltool)))
+     (list pkg-config intltool))
     (inputs
-     `(("gtk+" ,gtk+)
-       ("eudev" ,eudev)
-       ("libusb" ,libusb)
-       ("v4l-utils" ,v4l-utils)                   ;libv4l2
-       ("ffmpeg" ,ffmpeg)                         ;libavcodec, libavutil
-       ("sdl2" ,sdl2)
-       ("gsl" ,gsl)
-       ("portaudio" ,portaudio)
-       ("alsa-lib" ,alsa-lib)))
+     (list bdb
+           gtk+
+           eudev
+           libjpeg-turbo
+           libusb
+           v4l-utils                    ;libv4l2
+           ffmpeg                       ;libavcodec, libavutil
+           sdl2
+           gsl
+           portaudio
+           alsa-lib))
     (home-page "http://guvcview.sourceforge.net/")
     (synopsis "Control your webcam and capture videos and images")
     (description
@@ -5264,7 +5399,7 @@ brightness, contrast, and frame rate.")
 (define-public get-iplayer
   (package
     (name "get-iplayer")
-    (version "3.27")
+    (version "3.30")
     (source
       (origin
         (method git-fetch)
@@ -5273,7 +5408,7 @@ brightness, contrast, and frame rate.")
                (commit (string-append "v" version))))
         (file-name (git-file-name name version))
         (sha256
-         (base32 "077y31gg020wjpx5pcivqgkqawcjxh5kjnvq97x2gd7i3wwc30qi"))))
+         (base32 "1kzsdq1mhm5h83bbdbhh3jhpfvq4f13ly22mfd6vvmhj8mq084pi"))))
     (build-system perl-build-system)
     (arguments
      `(#:tests? #f                      ; no tests
@@ -5288,8 +5423,7 @@ brightness, contrast, and frame rate.")
                     (man (string-append out "/share/man/man1")))
                (install-file "get_iplayer" bin)
                (install-file "get_iplayer.cgi" bin)
-               (install-file "get_iplayer.1" man))
-             #t))
+               (install-file "get_iplayer.1" man))))
          (add-after 'install 'wrap-program
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
@@ -5300,12 +5434,9 @@ brightness, contrast, and frame rate.")
                    prefix (,(string-append perllib ":" (getenv "PERL5LIB")))))
                (wrap-program (string-append out "/bin/get_iplayer.cgi")
                  `("PERL5LIB" ":"
-                   prefix (,(string-append perllib ":" (getenv "PERL5LIB")))))
-               #t))))))
+                   prefix (,(string-append perllib ":" (getenv "PERL5LIB")))))))))))
     (inputs
-     `(("perl-mojolicious" ,perl-mojolicious)
-       ("perl-lwp-protocol-https" ,perl-lwp-protocol-https)
-       ("perl-xml-libxml" ,perl-xml-libxml)))
+     (list perl-mojolicious perl-lwp-protocol-https perl-xml-libxml))
     (home-page "https://github.com/get-iplayer/get_iplayer")
     (synopsis "Download or stream available BBC iPlayer TV and radio programmes")
     (description "@code{get_iplayer} lists, searches and records BBC iPlayer
@@ -5331,8 +5462,7 @@ BBC iPlayer output.")
                 "1spx81p5wf59ksl3r3gvf78d77sh7gj8a6lw773iv67bphfivmn8"))))
     (build-system gnu-build-system)
     (inputs
-     `(("libvorbis" ,libvorbis)
-       ("libdvdread" ,libdvdread)))
+     (list libvorbis libdvdread))
     (synopsis "Information, extraction or creation for OGG media streams")
     (description
      "These tools allow information about (@code{ogminfo}) or extraction from
@@ -5359,7 +5489,7 @@ includes @code{dvdxchap} tool for extracting chapter information from DVD.")
      `(#:tests? #f ; Cannot figure out how to run the unit tests
        #:configure-flags '("-DENABLE_RE2C=ON")))
     (native-inputs
-     `(("re2c" ,re2c)))
+     (list re2c))
     (synopsis "CEA608 / CEA708 closed-caption codec")
     (description "Libcaption creates and parses closed-caption data,
 providing an encoder / decoder for the EIA608 and CEA708 closed-caption
@@ -5377,3 +5507,43 @@ information) NALUs (Network Abstraction Layer Unit) for inclusion into an h.264
 elementary stream are provided.")
     (home-page "https://github.com/szatmary/libcaption")
     (license license:expat)))
+
+(define-public video-contact-sheet
+  (package
+   (name "video-contact-sheet")
+   (version "1.13.4")
+   (source (origin
+            (method url-fetch)
+            (uri (string-append "http://p.outlyer.net/vcs/files/vcs-" version
+				".tar.gz"))
+            (sha256
+             (base32
+              "0jsl93r0rnybjcipqbww5hwsr9ln6kz1qnf32qfxdvhfw52n27fw"))))
+   (build-system gnu-build-system)
+   (arguments
+     (list
+       #:make-flags
+       #~(list (string-append "prefix=" #$output))
+       #:phases
+       #~(modify-phases %standard-phases
+          (delete 'configure)
+          (delete 'build)
+          (delete 'check)
+          (add-after 'install 'wrap-program
+            (lambda _
+              (wrap-program (string-append #$output "/bin/vcs")
+                `("PATH" ":" prefix
+                  ,(map (lambda (dir)
+                          (string-append dir "/bin"))
+                        (list #$(this-package-input "ffmpeg")
+                              #$(this-package-input "imagemagick"))))))))))
+   (inputs
+     (list bash-minimal ffmpeg imagemagick))
+   (synopsis "Create contact sheets (preview images) from videos")
+   (description "@acronym{VCS, Video Contact Sheet} is a Bash script meant to
+create video contact sheets (previews) of videos.  Any video supported by
+MPlayer and FFmpeg can be used.  A note of warning: Unlike most similar tools
+VCS, by default, makes screenshots the same size as the video, see the manual
+for details on how to change this.")
+   (home-page "http://p.outlyer.net/vcs/")
+   (license license:lgpl2.1+)))

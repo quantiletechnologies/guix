@@ -25,16 +25,20 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module ((guix licenses) #:prefix license:)
+  #:use-module (guix gexp)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system qt)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages glib)
+  #:use-module (gnu packages gtk)
   #:use-module (gnu packages kde-frameworks)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages python)
   #:use-module (gnu packages qt)
-  #:use-module (gnu packages xorg))
+  #:use-module (gnu packages xorg)
+  #:use-module (gnu packages web))
 
 (define-public breeze
   (package
@@ -60,28 +64,51 @@
     ;; - kwin-style-breeze
     ;; - qml-module-qtquick-controls-styles-breeze - QtQuick style
     (native-inputs
-     `(("extra-cmake-modules" ,extra-cmake-modules)
-       ("pkg-config" ,pkg-config)))
+     (list extra-cmake-modules pkg-config))
     (inputs
-     `(("kcmutils" ,kcmutils) ; optional
-       ("kconfigwidgets" ,kconfigwidgets)
-       ("kcoreaddons" ,kcoreaddons)
-       ("kde-frameworkintegration" ,kde-frameworkintegration) ; optional
-       ("kdecoration" ,kdecoration)
-       ("kguiaddons" ,kguiaddons)
-       ("ki18n" ,ki18n)
-       ("kiconthemes" ,kiconthemes) ; for optional kde-frameworkintegration
-       ("kpackage" ,kpackage)
-       ("kwayland" ,kwayland) ; optional
-       ("kwindowsystem" ,kwindowsystem)
-       ("qtbase" ,qtbase-5)
-       ("qtdeclarative" ,qtdeclarative) ; optional
-       ("qtx11extras" ,qtx11extras)))
+     (list kcmutils ; optional
+           kconfigwidgets
+           kcoreaddons
+           kde-frameworkintegration ; optional
+           kdecoration
+           kguiaddons
+           ki18n
+           kiconthemes ; for optional kde-frameworkintegration
+           kpackage
+           kwayland ; optional
+           kwindowsystem
+           qtbase-5
+           qtdeclarative-5 ; optional
+           qtx11extras))
     (home-page "https://invent.kde.org/plasma/breeze")
     (synopsis "Default KDE Plasma theme")
     (description "Artwork, styles and assets for the Breeze visual style for
 the Plasma Desktop.  Breeze is the default theme for the KDE Plasma desktop.")
     (license license:gpl2+)))
+
+(define-public breeze-gtk
+  (package
+    (name "breeze-gtk")
+    (version "5.19.5")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://kde/stable/plasma/"
+                                  version "/" name
+                                  "-" version ".tar.xz"))
+              (sha256
+               (base32
+                "1j2nq9yw1ragmgwrz9f6ca4ifpi86qv1bbprdgd2qm2yh7vb44sj"))))
+    (build-system qt-build-system)
+    (arguments
+     '(#:tests? #f))                              ;no 'test' target
+    (native-inputs (list breeze extra-cmake-modules sassc python
+                         python-pycairo))
+    (home-page "https://invent.kde.org/plasma/breeze")
+    (synopsis "Default KDE Plasma theme (GTK+ port)")
+    (description "GTK+ port of the Breeze visual style for the Plasma Desktop.
+Breeze is the default theme for the KDE Plasma desktop.")
+    (license (list license:bsd-3                  ;cmake/FindSass.cmake
+                   license:lgpl2.1+))))           ;<all other files>
 
 (define-public kdecoration
   (package
@@ -96,10 +123,9 @@ the Plasma Desktop.  Breeze is the default theme for the KDE Plasma desktop.")
                 "0pn8n7zyb0adzjnn92vmbcf7pmpss60k9k1rk5llamj016xzfgnf"))))
     (build-system qt-build-system)
     (native-inputs
-     `(("extra-cmake-modules" ,extra-cmake-modules)))
+     (list extra-cmake-modules))
     (inputs
-     `(("ki18n" ,ki18n)
-       ("qtbase" ,qtbase-5)))
+     (list ki18n qtbase-5))
     (home-page "https://invent.kde.org/plasma/kdecoration")
     (synopsis "Plugin based library to create window decorations")
     (description "KDecoration is a library to create window decorations.
@@ -120,14 +146,9 @@ manager which re-parents a Client window to a window decoration frame.")
                 "1k2va2v9051f71w78dn3gihk642iyy5yzrkcfnp97fag8g6dpisi"))))
     (build-system qt-build-system)
     (native-inputs
-     `(("extra-cmake-modules" ,extra-cmake-modules)
-       ("kdoctools" ,kdoctools)))
+     (list extra-cmake-modules kdoctools))
     (inputs
-     `(("kcoreaddons" ,kcoreaddons)
-       ("ki18n" ,ki18n)
-       ("kwallet" ,kwallet)
-       ("kwidgetsaddons" ,kwidgetsaddons)
-       ("qtbase" ,qtbase-5)))
+     (list kcoreaddons ki18n kwallet kwidgetsaddons qtbase-5))
     (home-page "https://invent.kde.org/plasma/ksshaskpass")
     (synopsis "Front-end for ssh-add using kwallet")
     (description "Ksshaskpass is a front-end for @code{ssh-add} which stores the
@@ -154,8 +175,7 @@ call it if it is not associated to a terminal.")
        (modify-phases %standard-phases
          (add-before 'check 'check-setup
            (lambda* (#:key inputs outputs #:allow-other-keys)
-             (system (string-append (assoc-ref inputs "xorg-server")
-                                   "/bin/Xvfb :1 -screen 0 640x480x24 &"))
+             (system "Xvfb :1 -screen 0 640x480x24 &")
              (setenv "DISPLAY" ":1")
              #t))
          (delete 'check)
@@ -168,11 +188,9 @@ call it if it is not associated to a terminal.")
                    (invoke "dbus-launch" "ctest" ".")))
              #t)))))
     (native-inputs
-     `(("extra-cmake-modules" ,extra-cmake-modules)
-       ("pkg-config" ,pkg-config)
-       ;; For tests.
-       ("dbus" ,dbus)
-       ("xorg-server" ,xorg-server-for-tests)))
+     (list extra-cmake-modules pkg-config
+           ;; For tests.
+           dbus xorg-server-for-tests))
     (inputs
      `(("kcmutils" ,kcmutils)
        ("kcrash" ,kcrash)
@@ -191,7 +209,7 @@ call it if it is not associated to a terminal.")
        ("linux-pam" ,linux-pam)
        ("logind" ,elogind)        ;optional loginctl support
        ("qtbase" ,qtbase-5)
-       ("qtdeclarative" ,qtdeclarative)
+       ("qtdeclarative-5" ,qtdeclarative-5)
        ("qtx11extras" ,qtx11extras)
        ("solid" ,solid)
        ("wayland" ,wayland)
@@ -215,14 +233,11 @@ call it if it is not associated to a terminal.")
         (base32 "0rf1pm0yyc069f4n5s9ipdx4glzfr9zvv5cbrmn4q9i4v6z1qd8i"))))
     (build-system qt-build-system)
     (native-inputs
-     `(("extra-cmake-modules" ,extra-cmake-modules)
-       ;; For testing.
-       ("dbus" ,dbus)))
+     (list extra-cmake-modules
+           ;; For testing.
+           dbus))
     (inputs
-     `(("kwayland" ,kwayland)
-       ("libxrandr" ,libxrandr)
-       ("qtbase" ,qtbase-5)
-       ("qtx11extras" ,qtx11extras)))
+     (list kwayland libxrandr qtbase-5 qtx11extras))
     (arguments
      '(#:tests? #f)) ; FIXME: 55% tests passed, 5 tests failed out of 11
     (home-page "https://community.kde.org/Solid/Projects/ScreenManagement")
@@ -244,8 +259,7 @@ basic needs and easy to configure for those who want special setups.")
        (sha256
         (base32 "1kd0h3p8bf9k5pqp0frhr81pa0yyrpkckg9zznirk9p1v88v7bfq"))))
     (native-inputs
-     `(("extra-cmake-modules" ,extra-cmake-modules)
-       ("pkg-config" ,pkg-config)))
+     (list extra-cmake-modules pkg-config))
     (inputs
      `(("kconfigwidgets" ,kconfigwidgets)
        ("kiconthemes" ,kiconthemes)
@@ -262,7 +276,7 @@ basic needs and easy to configure for those who want special setups.")
        ("kwidgetsaddons" ,kwidgetsaddons)
        ("kservice" ,kservice)
        ("qtbase" ,qtbase-5)
-       ("qtdeclarative" ,qtdeclarative)
+       ("qtdeclarative-5" ,qtdeclarative-5)
        ("qtscript" ,qtscript)
        ("qtwebkit" ,qtwebkit)
        ("qtx11extras" ,qtx11extras)
@@ -270,21 +284,22 @@ basic needs and easy to configure for those who want special setups.")
        ("zlib" ,zlib)))
     (build-system qt-build-system)
     (arguments
-     `(#:configure-flags
-       `(,(string-append "-DKDE_INSTALL_DATADIR="
-                         (assoc-ref %outputs "out") "/share"))
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'configure 'patch-cmakelists
-           (lambda _
-             ;; TODO: Verify: This should no longer be necessary, since
-             ;; KF5AuthConfig.cmake.in contains this already.
-             (substitute* "processcore/CMakeLists.txt"
-               (("KAUTH_HELPER_INSTALL_DIR") "KDE_INSTALL_LIBEXECDIR"))))
-         (replace 'check
-           (lambda _
-             ;; TODO: Fix this failing test-case
-             (invoke "ctest" "-E" "processtest"))))))
+     (list #:configure-flags
+           #~`(,(string-append "-DKDE_INSTALL_DATADIR="
+                               #$output "/share"))
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-before 'configure 'patch-cmakelists
+                 (lambda _
+                   ;; TODO: Verify: This should no longer be necessary, since
+                   ;; KF5AuthConfig.cmake.in contains this already.
+                   (substitute* "processcore/CMakeLists.txt"
+                     (("KAUTH_HELPER_INSTALL_DIR")
+                      "KDE_INSTALL_LIBEXECDIR"))))
+               (replace 'check
+                 (lambda _
+                   ;; TODO: Fix this failing test-case
+                   (invoke "ctest" "-E" "processtest"))))))
     (home-page "https://userbase.kde.org/KSysGuard")
     (synopsis "Network enabled task and system monitoring")
     (description "KSysGuard can obtain information on system load and

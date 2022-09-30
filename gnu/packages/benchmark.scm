@@ -1,14 +1,14 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2016, 2017 Marius Bakke <mbakke@fastmail.com>
+;;; Copyright © 2016, 2017, 2021 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2017 Dave Love <fx@gnu.org>
-;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2018–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018, 2019 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2019 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2019 Gábor Boskovits <boskovits@gmail.com>
 ;;; Copyright © 2019, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2020 Vincent Legoll <vincent.legoll@gmail.com>
 ;;; Copyright © 2020 malte Frank Gerdes <malte.f.gerdes@gmail.com>
-;;; Copyright © 2020, 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2020, 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2020 Greg Hogan <code@greghogan.com>
 ;;; Copyright © 2021 Arun Isaac <arunisaac@systemreboot.net>
 ;;;
@@ -31,88 +31,91 @@
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system python)
   #:use-module (gnu packages)
+  #:use-module (gnu packages autotools)
+  #:use-module (gnu packages base)
+  #:use-module (gnu packages bash)
+  #:use-module (gnu packages c)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages databases)
+  #:use-module (gnu packages docbook)
+  #:use-module (gnu packages kde-frameworks)
   #:use-module (gnu packages linux)
+  #:use-module (gnu packages lua)
   #:use-module (gnu packages maths)
   #:use-module (gnu packages mpi)
   #:use-module (gnu packages opencl)
   #:use-module (gnu packages perl)
+  #:use-module (gnu packages php)
+  #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-science)
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
-  #:use-module (gnu packages storage)
+  #:use-module (gnu packages qt)
+  #:use-module (gnu packages xml)
   #:use-module (ice-9 match))
+
+;; Lazily resolve the gcc-toolchain to avoid a circular dependency.  Always
+;; use the latest available toolchain to avoid conflicts in user profiles.
+(define gcc-toolchain*
+  (delay (module-ref (resolve-interface '(gnu packages commencement))
+                     'gcc-toolchain-12)))
 
 (define-public fio
   (package
     (name "fio")
-    (version "3.28")
+    (version "3.31")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://brick.kernel.dk/snaps/"
                                   "fio-" version ".tar.bz2"))
               (sha256
                (base32
-                "0ba9cnjrnm3nwcfbhh5x2sycr54j3yn1rqn76kjdyz40f3pdg3qm"))))
+                "03x0n18f2wsyjh6qv57kvgqcwga54rzngwzr6fzlrjsalqw7mxlp"))))
     (build-system gnu-build-system)
     (arguments
-     '(#:test-target "test"
-       #:phases
-       (modify-phases %standard-phases
-         (add-after
-          'unpack 'patch-paths
-          (lambda* (#:key inputs outputs #:allow-other-keys)
-            (let ((out (assoc-ref outputs "out"))
-                  (gnuplot (string-append (assoc-ref inputs "gnuplot")
-                                          "/bin/gnuplot")))
-              (substitute* "tools/plot/fio2gnuplot"
-                (("/usr/share/fio") (string-append out "/share/fio"))
-                ;; FIXME (upstream): The 'gnuplot' executable is used inline
-                ;; in various os.system() calls mixed with *.gnuplot filenames.
-                (("; do gnuplot") (string-append "; do " gnuplot))
-                (("gnuplot mymath") (string-append gnuplot " mymath"))
-                (("gnuplot mygraph") (string-append gnuplot " mygraph"))))))
-         (replace 'configure
-           (lambda* (#:key outputs #:allow-other-keys)
-             ;; The configure script doesn't understand some of the
-             ;; GNU options, so we can't use #:configure-flags.
-             (let ((out (assoc-ref outputs "out")))
-               (invoke "./configure"
-                       (string-append "--prefix=" out)))))
-         ;; The main `fio` executable is fairly small and self contained.
-         ;; Moving the auxiliary python and gnuplot scripts to a separate
-         ;; output saves almost 400 MiB on the closure.
-         (add-after 'install 'move-outputs
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((oldbin (string-append (assoc-ref outputs "out") "/bin"))
-                   (newbin (string-append (assoc-ref outputs "utils") "/bin")))
-               (mkdir-p newbin)
-               (for-each (lambda (file)
-                           (let ((src (string-append oldbin "/" file))
-                                 (dst (string-append newbin "/" file)))
-                             (link src dst)
-                             (delete-file src)))
-                         '("fio2gnuplot"  "fiologparser_hist.py"
-                           "fiologparser.py"))
-               ;; Make sure numpy et.al is found.
-               (wrap-program (string-append newbin "/fiologparser_hist.py")
-                 `("PYTHONPATH" ":" prefix (,(getenv "PYTHONPATH"))))))))))
+     (list #:modules
+           `(,@%gnu-build-system-modules
+             (ice-9 textual-ports))
+           #:test-target "test"
+           #:configure-flags
+           #~(list "--disable-native")  ;don't generate code for the build CPU
+           #:phases
+           #~(modify-phases %standard-phases
+               (replace 'configure
+                 (lambda* (#:key (configure-flags ''()) #:allow-other-keys)
+                   ;; The configure script doesn't understand some of the
+                   ;; GNU options, so we can't use the stock phase.
+                   (apply invoke "./configure"
+                          (string-append "--prefix=" #$output)
+                          configure-flags)))
+               ;; The main `fio` executable is fairly small and self contained.
+               ;; Moving the auxiliary scripts to a separate output saves ~100 MiB
+               ;; on the closure.
+               (add-after 'install 'move-outputs
+                 (lambda _
+                   (let ((oldbin (string-append #$output "/bin"))
+                         (newbin (string-append #$output:utils "/bin"))
+                         (script? (lambda* (file #:rest _)
+                                    (call-with-input-file file
+                                      (lambda (port)
+                                        (char=? #\# (peek-char port)))))))
+                     (mkdir-p newbin)
+                     (for-each (lambda (file)
+                                 (link file (string-append newbin "/" (basename file)))
+                                 (delete-file file))
+                               (find-files oldbin script?))))))))
     (outputs '("out" "utils"))
     (inputs
-     `(("ceph" ,ceph "lib")
-       ("libaio" ,libaio)
-       ("gnuplot" ,gnuplot)
-       ("zlib" ,zlib)
-       ("python-numpy" ,python2-numpy)
-       ("python-pandas" ,python2-pandas)
-       ("python" ,python-2)))
+     (list libaio python zlib))
     (home-page "https://github.com/axboe/fio")
     (synopsis "Flexible I/O tester")
     (description
@@ -148,7 +151,7 @@ is to write a job file matching the I/O load one wants to simulate.")
                   #t))))
     (build-system gnu-build-system)
     (inputs
-     `(("openmpi" ,openmpi)))
+     (list openmpi))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -187,9 +190,6 @@ and throughput;
 Efficiency of the MPI implementation.
 @end itemize")
     (license license:cpl1.0)))
-
-(define-public imb-openmpi
-  (deprecated-package "imb-openmpi" intel-mpi-benchmarks/openmpi))
 
 (define-public multitime
   (package
@@ -260,7 +260,7 @@ tests.")
                 "010bmlmi0nrlp3aq7p624sfaj5a65lswnyyxk3cnz1bqig0cn2vf"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("perl" ,perl)))
+     (list perl))
     (arguments '(#:tests? #f)) ; there are no tests
     (home-page "https://doc.coker.com.au/projects/bonnie/")
     (synopsis "Hard drive and file system benchmark suite")
@@ -272,65 +272,127 @@ speed, the number of seeks that can be performed per second, and the number of
 file metadata operations that can be performed per second.")
     (license license:gpl2)))   ;GPL 2 only, see copyright.txt
 
+(define-public phoronix-test-suite
+  (package
+    (name "phoronix-test-suite")
+    (version "10.8.3")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://phoronix-test-suite.com/releases/"
+                           name "-" version ".tar.gz"))
+       (sha256
+        (base32
+         "105shk78jy46nwj6vnlmgp3y3lv9klar3dmcgasy4bslm4l2wx2b"))
+       (patches (search-patches "phoronix-test-suite-fsdg.patch"))))
+    (arguments
+     (list
+      #:tests? #f                       ;no test suite
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)
+          (delete 'build)
+          (replace 'install
+            (lambda _
+              (invoke "./install-sh" #$output "--free-software-only")))
+          (add-after 'install 'wrap-binary
+            (lambda* (#:key inputs #:allow-other-keys)
+              (let ((pts (string-append #$output "/bin/phoronix-test-suite")))
+                (wrap-program pts
+                  (list "PATH" 'prefix
+                        (map (lambda (binary)
+                               (dirname (search-input-file
+                                         inputs (string-append "bin/" binary))))
+                             '("bash" "cat" ;coreutils
+                               "gzip" "make" "php" "sed" "tar" "which"))))))))))
+    (build-system gnu-build-system)
+    (native-inputs (list python which))
+    ;; Wrap the most basic build tools needed by Phoronix Test Suite to build
+    ;; simple tests such as 'fio'.
+    (inputs (list bash coreutils gnu-make gzip php sed tar which))
+    ;; Phoronix Test Suite builds and caches the benchmarking tools itself;
+    ;; the user is required to manually install extra libraries depending on
+    ;; the selected test; but at least a working C/C++ toolchain is assumed to
+    ;; be available.
+    (propagated-inputs (list (force gcc-toolchain*)))
+    (home-page "https://www.phoronix-test-suite.com/")
+    (synopsis "Automated testing/benchmarking software")
+    (description
+     "The Phoronix Test Suite is a comprehensive testing and benchmarking platform
+that provides an extensible framework for which new tests can be easily added.
+It can carry out both qualitative and quantitative benchmarks in a clean,
+reproducible, and easy-to-use manner, making it easy to compare one particular
+setup against another one.")
+    (license license:gpl3+)))
+
 (define-public python-locust
   (package
     (name "python-locust")
-    (version "1.4.3")
+    (version "2.8.6")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "locust" version))
        (sha256
         (base32
-         "0vmw151xcaznd2j85n96iyv9fniss0bkk91xn4maw2gwzym424xk"))))
+         "1gn13j758j36knlcdyyyggn60rpw98iqdkvl3kjsz34brysic6q1"))))
     (build-system python-build-system)
     (arguments
-     `(#:phases
+     '(#:phases
        (modify-phases %standard-phases
-         (add-before 'check 'extend-PATH
-           ;; Add the 'locust' script to PATH, which is used in the test
-           ;; suite.
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (setenv "PATH" (string-append out "/bin:"
-                                             (getenv "PATH"))))))
-         (replace 'check
+         (add-after 'unpack 'relax-requirements
            (lambda _
-             (invoke "python" "-m" "pytest"
-                     "-k" (string-join
-                           (list
-                            ;; These tests return "non-zero exit status 1".
-                            "not test_default_headless_spawn_options"
-                            "not test_default_headless_spawn_options_with_shape"
-                            "not test_headless_spawn_options_wo_run_time"
-                            ;; These tests depend on networking.
-                            "not test_html_report_option"
-                            "not test_web_options"
-                            ;; This test fails because of the warning "System open
-                            ;; file limit '1024' is below minimum setting '10000'".
-                            "not test_skip_logging"
-                            ;; On some (slow?) machines, the following tests
-                            ;; fail, with the processes returning exit code
-                            ;; -15 instead of the expected 42 and 0,
-                            ;; respectively (see:
-                            ;; https://github.com/locustio/locust/issues/1708).
-                            "not test_custom_exit_code"
-                            "not test_webserver") " and ")))))))
+             (substitute* "setup.py"
+               (("setuptools_scm<=6.0.1")
+                "setuptools_scm")
+               (("Jinja2<3.1.0")
+                "Jinja2"))))
+         (replace 'check
+           (lambda* (#:key tests? #:allow-other-keys)
+             (when tests?
+               (invoke "python" "-m" "pytest" "locust"
+                       "-k" (string-join
+                             '(;; These tests return "non-zero exit status 1".
+                               "not test_default_headless_spawn_options"
+                               "not test_default_headless_spawn_options_with_shape"
+                               "not test_headless_spawn_options_wo_run_time"
+                               ;; These tests depend on networking.
+                               "not test_html_report_option"
+                               "not test_web_options"
+                               ;; This test fails because of the warning "System open
+                               ;; file limit '1024' is below minimum setting '10000'".
+                               "not test_skip_logging"
+                               ;; On some (slow?) machines, the following tests
+                               ;; fail, with the processes returning exit code
+                               ;; -15 instead of the expected 42 and 0,
+                               ;; respectively (see:
+                               ;; https://github.com/locustio/locust/issues/1708).
+                               "not test_custom_exit_code"
+                               "not test_webserver"
+                               ;; This test fails with "AssertionError:
+                               ;; 'stopped' != 'stopping'".
+                               "not test_distributed_shape") " and "))))))))
     (propagated-inputs
-     `(("python-configargparse" ,python-configargparse)
-       ("python-flask" ,python-flask)
-       ("python-flask-basicauth" ,python-flask-basicauth)
-       ("python-gevent" ,python-gevent)
-       ("python-geventhttpclient" ,python-geventhttpclient)
-       ("python-msgpack" ,python-msgpack)
-       ("python-psutil" ,python-psutil)
-       ("python-pyzmq" ,python-pyzmq)
-       ("python-requests" ,python-requests)
-       ("python-werkzeug" ,python-werkzeug)))
+     (list python-configargparse
+           python-flask
+           python-flask-basicauth
+           python-flask-cors
+           python-gevent
+           python-geventhttpclient
+           python-jinja2
+           python-msgpack
+           python-psutil
+           python-pyzmq
+           python-requests
+           python-roundrobin
+           python-typing-extensions
+           python-werkzeug))
     (native-inputs
-     `(("python-mock" ,python-mock)
-       ("python-pyquery" ,python-pyquery)
-       ("python-pytest" ,python-pytest))) ;for more easily skipping tests
+     (list python-mock
+           python-pyquery
+           python-pytest
+           python-retry
+           python-setuptools-scm))
     (home-page "https://locust.io/")
     (synopsis "Distributed load testing framework")
     (description "Locust is a performance testing tool that aims to be easy to
@@ -402,11 +464,185 @@ and options.  With careful benchmarking, different hardware can be compared.")
       (build-system cmake-build-system)
       (home-page "https://github.com/krrishnarraj/clpeak")
       (inputs
-        `(("opencl-clhpp" ,opencl-clhpp)
-          ("opencl-icd-loader" ,opencl-icd-loader)))
+        (list opencl-clhpp opencl-icd-loader))
       (synopsis "OpenCL benchmark tool")
       (description
         "A synthetic benchmarking tool to measure peak capabilities of OpenCL
         devices.  It only measures the peak metrics that can be achieved using
         vector operations and does not represent a real-world use case.")
         (license license:unlicense))))
+
+(define-public kdiskmark
+  (package
+    (name "kdiskmark")
+    (version "2.3.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/JonMagon/KDiskMark")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1l4sw05yx70pcnaa64arjc414mgvyz05pn3gz9nc9hga8v2d3rzn"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      #:configure-flags
+      ;; Drop runtime dependency on KDE's KFAuth.
+      #~(list "-DPERFORM_PAGECACHE_CLEARING_USING_KF5AUTH=no")
+      #:tests? #f                       ;no test suite
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'patch-paths
+            (lambda* (#:key inputs #:allow-other-keys)
+              (substitute* "src/benchmark.cpp"
+                (("\"fio\"")
+                 (format #f "~s" (search-input-file inputs "bin/fio")))))))))
+    (native-inputs (list extra-cmake-modules qttools-5))
+    (inputs (list fio qtbase-5))
+    (home-page "https://github.com/JonMagon/KDiskMark")
+    (synopsis "Simple disk benchmark tool")
+    (description "KDiskMark is an HDD and SSD benchmark tool.  KDiskMark
+abstracts away the complexity of the Flexible I/O Tester (@command{fio})
+command via a convenient graphical user interface (GUI) and handles its output
+to provide an easy to view and interpret benchmark result.  The application is
+written in C++ with Qt and doesn't have any runtime KDE dependencies.  Among
+its features are:
+@itemize
+@item Configurable block size, queues, and threads count for each test
+@item Many languages support
+@item Report generation.
+@end itemize")
+    (license license:gpl3+)))
+
+(define-public sysbench
+  (package
+    (name "sysbench")
+    (version "1.0.20")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/akopytov/sysbench")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (modules '((guix build utils)))
+              (snippet '(begin
+                          ;; Ensure no bundled libraries get used.
+                          (delete-file-recursively "third_party")
+                          (substitute* "configure.ac"
+                            (("^third_party/.*")
+                             ""))
+                          (substitute* "Makefile.am"
+                            ((".*(LUAJIT|CK)_DIR =.*")
+                             ""))))
+              (sha256
+               (base32
+                "1sanvl2a52ff4shj62nw395zzgdgywplqvwip74ky8q7s6qjf5qy"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:configure-flags #~(list "--with-pgsql"
+                                ;; Explicitly specify the library directory of
+                                ;; MySQL, otherwise `mysql_config` gets
+                                ;; consulted and adds unnecessary link
+                                ;; directives.
+                                (string-append "--with-mysql-libs="
+                                               #$(this-package-input "mysql")
+                                               "/lib")
+                                "--with-system-luajit"
+                                "--with-system-ck"
+                                ;; If we let the build tool select the most
+                                ;; optimal compiler architecture flag, the
+                                ;; build is not reproducible.
+                                "--without-gcc-arch")
+      #:phases #~(modify-phases %standard-phases
+                   (add-after 'unpack 'patch-test-runner
+                     (lambda _
+                       (substitute* "tests/test_run.sh"
+                         (("/bin/bash")
+                          (which "bash"))
+                         ;; Do not attempt to invoke the cram command via
+                         ;; Python, as on Guix it is a shell script (wrapper).
+                         (("\\$\\(command -v cram\\)")
+                          "-m cram"))))
+                   (add-after 'unpack 'disable-test-installation
+                     (lambda _
+                       (substitute* "tests/Makefile.am"
+                         (("install-data-local")
+                          "do-not-install-data-local")
+                         (("^test_SCRIPTS.*")
+                          ""))))
+                   (add-after 'unpack 'fix-docbook
+                     (lambda* (#:key native-inputs inputs #:allow-other-keys)
+                       (substitute* "m4/ax_check_docbook.m4"
+                         (("DOCBOOK_ROOT=.*" all)
+                          (string-append
+                           all "XML_CATALOG="
+                           (search-input-file (or native-inputs inputs)
+                                              "xml/dtd/docbook/catalog.xml")
+                           "\n")))
+                       (substitute* "doc/xsl/xhtml.xsl"
+                         (("http://docbook.sourceforge.net/release/xsl\
+/current/xhtml/docbook.xsl")
+                          (search-input-file
+                           (or native-inputs inputs)
+                           (string-append "xml/xsl/docbook-xsl-"
+                                          #$(package-version docbook-xsl)
+                                          "/xhtml/docbook.xsl"))))
+                       (substitute* "doc/xsl/xhtml-chunk.xsl"
+                         (("http://docbook.sourceforge.net/release/xsl\
+/current/xhtml/chunk.xsl")
+                          (search-input-file
+                           (or native-inputs inputs)
+                           (string-append "xml/xsl/docbook-xsl-"
+                                          #$(package-version docbook-xsl)
+                                          "/xhtml/chunk.xsl")))))))))
+    (native-inputs (list autoconf
+                         automake
+                         libtool
+                         pkg-config
+                         python-cram
+                         python-wrapper
+                         which
+                         ;; For documentation
+                         libxml2        ;for XML_CATALOG_FILES
+                         libxslt
+                         docbook-xml
+                         docbook-xsl))
+    (inputs (list ck libaio luajit mysql postgresql))
+    (home-page "https://github.com/akopytov/sysbench/")
+    (synopsis "Scriptable database and system performance benchmark")
+    (description "@command{sysbench} is a scriptable multi-threaded benchmark
+tool based on LuaJIT.  It is most frequently used for database benchmarks, but
+can also be used to create arbitrarily complex workloads that do not involve a
+database server.  @command{sysbench} comes with the following bundled
+benchmarks:
+@table @file
+@item oltp_*.lua
+A collection of OLTP-like database benchmarks.
+@item fileio
+A filesystem-level benchmark.
+@item cpu
+A simple CPU benchmark.
+@item memory
+A memory access benchmark.
+@item threads
+A thread-based scheduler benchmark.
+@item mutex
+A POSIX mutex benchmark.
+@end table
+It includes features such as:
+@itemize
+@item
+Extensive statistics about rate and latency is available, including latency
+percentiles and histograms.
+@item
+Low overhead even with thousands of concurrent threads.  @command{sysbench} is
+capable of generating and tracking hundreds of millions of events per second.
+@item
+New benchmarks can be easily created by implementing pre-defined hooks in
+user-provided Lua scripts.
+@item
+@end itemize")
+    (license license:gpl2+)))

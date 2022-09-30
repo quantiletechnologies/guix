@@ -1,13 +1,13 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2018, 2019 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015, 2018 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2015 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2016, 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2016, 2017, 2018, 2021 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2016, 2017 Danny Milosavljevic <dannym@scratchpost.org>
 ;;; Copyright © 2016, 2017 David Craven <david@craven.ch>
-;;; Copyright © 2017, 2018, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
-;;; Copyright © 2018, 2019, 2020, 2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2017, 2018, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2018–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 nee <nee@cock.li>
 ;;; Copyright © 2019 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2020 Björn Höfling <bjoern.hoefling@bjoernhoefling.de>
@@ -15,6 +15,7 @@
 ;;; Copyright © 2020, 2021 Pierre Langlois <pierre.langlois@gmx.com>
 ;;; Copyright © 2021 Vincent Legoll <vincent.legoll@gmail.com>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
+;;; Copyright © 2022 Denis 'GNUtoo' Carikli <GNUtoo@cyberdimension.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -114,6 +115,8 @@
        ;; calling the ‘true’ binary instead.  Python is only needed during
        ;; bootstrapping (for genptl.py), not when building from a release.
        (list "PYTHON=true")
+       ;; Grub fails to load modules stripped with --strip-unneeded.
+       #:strip-flags '("--strip-debug" "--enable-deterministic-archives")
        #:phases (modify-phases %standard-phases
                   (add-after 'unpack 'patch-stuff
                    (lambda* (#:key native-inputs inputs #:allow-other-keys)
@@ -140,9 +143,9 @@
                      ;; Give the absolute file name of 'ckbcomp'.
                      (substitute* "util/grub-kbdcomp.in"
                        (("^ckbcomp ")
-                        (string-append (assoc-ref inputs "console-setup")
-                                       "/bin/ckbcomp ")))
-                     #t))
+                        (string-append
+                         (search-input-file inputs "/bin/ckbcomp")
+                         " ")))))
                   (add-after 'unpack 'set-freetype-variables
                     ;; These variables need to be set to the native versions
                     ;; of the dependencies because they are used to build
@@ -261,11 +264,11 @@ menu to select one of the installed operating systems.")
     (inherit grub)
     (name "grub-minimal")
     (inputs
-     (fold alist-delete (package-inputs grub)
-           '("lvm2" "mdadm" "fuse" "console-setup")))
+     (modify-inputs (package-inputs grub)
+       (delete "lvm2" "mdadm" "fuse" "console-setup")))
     (native-inputs
-     (fold alist-delete (package-native-inputs grub)
-           '("help2man" "texinfo" "parted" "qemu" "xorriso")))
+     (modify-inputs (package-native-inputs grub)
+       (delete "help2man" "texinfo" "parted" "qemu" "xorriso")))
     (arguments
      (substitute-keyword-arguments (package-arguments grub)
        ((#:configure-flags _ ''())
@@ -293,9 +296,8 @@ menu to select one of the installed operating systems.")
     (name "grub-efi")
     (synopsis "GRand Unified Boot loader (UEFI version)")
     (inputs
-     `(("efibootmgr" ,efibootmgr)
-       ("mtools" ,mtools)
-       ,@(package-inputs grub)))
+     (modify-inputs (package-inputs grub)
+       (prepend efibootmgr mtools)))
     (arguments
      `(;; TODO: Tests need a UEFI firmware for qemu. There is one at
        ;; https://github.com/tianocore/edk2/tree/master/OvmfPkg .
@@ -316,9 +318,8 @@ menu to select one of the installed operating systems.")
                  (lambda* (#:key inputs #:allow-other-keys)
                    (substitute* "grub-core/osdep/unix/platform.c"
                      (("efibootmgr")
-                      (string-append (assoc-ref inputs "efibootmgr")
-                                     "/sbin/efibootmgr")))
-                   #t))
+                      (search-input-file inputs
+                                         "/sbin/efibootmgr")))))
                (add-after 'patch-stuff 'use-absolute-mtools-path
                  (lambda* (#:key inputs #:allow-other-keys)
                    (let ((mtools (assoc-ref inputs "mtools")))
@@ -332,6 +333,31 @@ menu to select one of the installed operating systems.")
                                        "/bin/mcopy\"")))
                      #t))))))))))
 
+(define-public grub-efi32
+  (package
+    (inherit grub-efi)
+    (name "grub-efi32")
+    (synopsis "GRand Unified Boot loader (UEFI 32bit version)")
+    (arguments
+     `(,@(substitute-keyword-arguments (package-arguments grub-efi)
+           ((#:configure-flags flags ''())
+            `(cons*
+               ,@(cond ((target-x86?) '("--target=i386"))
+                       ((target-aarch64?)
+                        (list "--target=arm"
+                              (string-append "TARGET_CC="
+                                             (cc-for-target "arm-linux-gnueabihf"))))
+                       ((target-arm?) '("--target=arm"))
+                       (else '()))
+               ,flags)))))
+    (native-inputs
+     (if (target-aarch64?)
+       (modify-inputs (package-native-inputs grub-efi)
+         (prepend
+           (cross-gcc "arm-linux-gnueabihf")
+           (cross-binutils "arm-linux-gnueabihf")))
+       (package-native-inputs grub-efi)))))
+
 ;; Because grub searches hardcoded paths it's easiest to just build grub
 ;; again to make it find both grub-pc and grub-efi.  There is a command
 ;; line argument which allows you to specify ONE platform - but
@@ -343,8 +369,8 @@ menu to select one of the installed operating systems.")
     (name "grub-hybrid")
     (synopsis "GRand Unified Boot loader (hybrid version)")
     (inputs
-     `(("grub" ,grub)
-       ,@(package-inputs grub-efi)))
+     (modify-inputs (package-inputs grub-efi)
+       (prepend grub)))
     (arguments
      (substitute-keyword-arguments (package-arguments grub-efi)
        ((#:modules modules `((guix build utils) (guix build gnu-build-system)))
@@ -353,8 +379,8 @@ menu to select one of the installed operating systems.")
         `(modify-phases ,phases
            (add-after 'install 'install-non-efi
              (lambda* (#:key inputs outputs #:allow-other-keys)
-               (let ((input-dir (string-append (assoc-ref inputs "grub")
-                                               "/lib/grub"))
+               (let ((input-dir (search-input-directory inputs
+                                                        "/lib/grub"))
                      (output-dir (string-append (assoc-ref outputs "out")
                                                 "/lib/grub")))
                  (for-each
@@ -379,7 +405,10 @@ menu to select one of the installed operating systems.")
                 (file-name (git-file-name name version))
                 (sha256
                  (base32
-                  "0k8dvafd6410kqxf3kyr4y8jzmpmrih6wbjqg6gklak7945yflrc"))))
+                  "0k8dvafd6410kqxf3kyr4y8jzmpmrih6wbjqg6gklak7945yflrc"))
+                (patches
+                 (search-patches "syslinux-gcc10.patch"
+                                 "syslinux-strip-gnu-property.patch"))))
       (build-system gnu-build-system)
       (native-inputs
        `(("nasm" ,nasm)
@@ -399,6 +428,7 @@ menu to select one of the installed operating systems.")
                (string-append "MANDIR=" %output "/share/man")
                "PERL=perl"
                "bios")
+         #:strip-flags '("--strip-debug" "--enable-deterministic-archives")
          #:phases
          (modify-phases %standard-phases
            (add-after 'unpack 'patch-files
@@ -444,20 +474,23 @@ menu to select one of the installed operating systems.")
               (method url-fetch)
               (uri (string-append
                     "mirror://kernel.org/software/utils/dtc/"
-                    "dtc-" version ".tar.xz"))
+                    "dtc-" version ".tar.gz"))
               (sha256
                (base32
-                "0wrl43rvd8nnm1v1wyfdr17vk8q7ymib62vli6da8n9ni4lwbkk5"))))
+                "0xm38h31jb29xfh2sfyk48d8wdfq4b8lmb412zx9vjr35izjb9iq"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("bison" ,bison)
-       ("flex" ,flex)
-       ("libyaml" ,libyaml)
-       ("pkg-config" ,pkg-config)
-       ("swig" ,swig)
-       ("valgrind" ,valgrind)))
+     (append
+       (list bison
+             flex
+             libyaml
+             pkg-config
+             swig)
+       (if (member (%current-system) (package-supported-systems valgrind))
+           (list valgrind)
+           '())))
     (inputs
-     `(("python" ,python)))
+     (list python))
     (arguments
      `(#:make-flags
        (list (string-append "CC=" ,(cc-for-target))
@@ -476,10 +509,7 @@ menu to select one of the installed operating systems.")
              (substitute* '("Makefile"
                             "tests/run_tests.sh")
                (("pkg-config")
-                (or (which "pkg-config")
-                    (string-append ,(%current-target-system)
-                                   "-pkg-config"))))
-             #t))
+                ,(pkg-config-for-target)))))
          (delete 'configure))))         ; no configure script
     (home-page "https://www.devicetree.org")
     (synopsis "Compiles device tree source files")
@@ -504,38 +534,48 @@ tree binary files.  These are board description files used by Linux and BSD.")
   ;; https://lists.denx.de/pipermail/u-boot/2021-October/462728.html
   (search-patch "u-boot-allow-disabling-openssl.patch"))
 
+(define %u-boot-rk3399-enable-emmc-phy-patch
+  ;; Fix emmc boot on rockpro64 and pinebook-pro, this was a regression
+  ;; therefore should hopefully be fixed when updating u-boot.
+  ;; https://lists.denx.de/pipermail/u-boot/2021-November/466329.html
+  (search-patch "u-boot-rk3399-enable-emmc-phy.patch"))
+
 (define u-boot
   (package
     (name "u-boot")
-    (version "2021.10")
+    (version "2022.04")
     (source (origin
 	      (patches
                (list %u-boot-rockchip-inno-usb-patch
                      %u-boot-allow-disabling-openssl-patch
-                     %u-boot-sifive-prevent-relocating-initrd-fdt))
+                     %u-boot-sifive-prevent-relocating-initrd-fdt
+                     %u-boot-rk3399-enable-emmc-phy-patch))
               (method url-fetch)
               (uri (string-append
                     "https://ftp.denx.de/pub/u-boot/"
                     "u-boot-" version ".tar.bz2"))
               (sha256
                (base32
-                "1m0bvwv8r62s4wk4w3cmvs888dhv9gnfa98dczr4drk2jbhj7ryd"))))
+                "1l5w13dznj0z1ibqv2d6ljx2ma1gnf5x5ay3dqkqwxr6750nbq38"))))
     (native-inputs
      `(("bc" ,bc)
        ("bison" ,bison)
        ("dtc" ,dtc)
+       ("gnutls" ,gnutls)
        ("flex" ,flex)
        ("lz4" ,lz4)
+       ("tinfo" ,ncurses/tinfo)
        ("perl" ,perl)
        ("python" ,python)
        ("python-coverage" ,python-coverage)
        ("python-pycryptodomex" ,python-pycryptodomex)
        ("python-pytest" ,python-pytest)
-       ("swig" ,swig)))
+       ("swig" ,swig)
+       ("libuuid" ,util-linux "lib")))
     (build-system  gnu-build-system)
     (home-page "https://www.denx.de/wiki/U-Boot/")
     (synopsis "ARM bootloader")
-    (description "U-Boot is a bootloader used mostly for ARM boards. It
+    (description "U-Boot is a bootloader used mostly for ARM boards.  It
 also initializes the boards (RAM etc).")
     (license license:gpl2+)))
 
@@ -544,8 +584,8 @@ also initializes the boards (RAM etc).")
     (inherit u-boot)
     (name "u-boot-tools")
     (native-inputs
-     `(("sdl2" ,sdl2)
-       ,@(package-native-inputs u-boot)))
+     (modify-inputs (package-native-inputs u-boot)
+       (prepend sdl2)))
     (arguments
      `(#:make-flags '("HOSTCC=gcc")
        #:test-target "tcheck"
@@ -734,7 +774,7 @@ board-independent tools.")))
     (package
       (inherit base)
       (name "u-boot-am335x-boneblack")
-      (description "U-Boot is a bootloader used mostly for ARM boards. It
+      (description "U-Boot is a bootloader used mostly for ARM boards.  It
 also initializes the boards (RAM etc).
 
 This U-Boot is built for the BeagleBone Black, which was removed upstream,
@@ -854,7 +894,7 @@ device while it's being turned on (and a while longer).")
   (let ((base (make-u-boot-package "novena" "arm-linux-gnueabihf")))
     (package
       (inherit base)
-      (description "U-Boot is a bootloader used mostly for ARM boards. It
+      (description "U-Boot is a bootloader used mostly for ARM boards.  It
 also initializes the boards (RAM etc).
 
 This U-Boot is built for Novena.  Be advised that this version, contrary
@@ -887,9 +927,8 @@ to Novena upstream, does not load u-boot.img from the first partition.")
            `(modify-phases ,phases
               (add-after 'unpack 'set-environment
                 (lambda* (#:key inputs #:allow-other-keys)
-                  (setenv "BL31" (string-append (assoc-ref inputs "firmware")
-                                                "/bl31.elf"))
-                  #t))
+                  (setenv "BL31"
+                          (search-input-file inputs "/bl31.elf"))))
               ;; Phases do not succeed on the bl31 ELF.
               (delete 'strip)
               (delete 'validate-runpath)))))
@@ -901,20 +940,27 @@ to Novena upstream, does not load u-boot.img from the first partition.")
   (make-u-boot-package "qemu-riscv64" "riscv64-linux-gnu"))
 
 (define-public u-boot-qemu-riscv64-smode
-  (let ((base (make-u-boot-package "qemu-riscv64_smode" "riscv64-linux-gnu")))
-    (package
-      (inherit base)
-      (source (origin
-                (inherit (package-source u-boot))
-                (patches
-                 (search-patches "u-boot-riscv64-fix-extlinux.patch"
-                                 %u-boot-allow-disabling-openssl-patch)))))))
+  (make-u-boot-package "qemu-riscv64_smode" "riscv64-linux-gnu"))
 
 (define-public u-boot-sifive-unleashed
   (make-u-boot-package "sifive_unleashed" "riscv64-linux-gnu"))
 
 (define-public u-boot-sifive-unmatched
-  (make-u-boot-package "sifive_unmatched" "riscv64-linux-gnu"))
+  (let ((base (make-u-boot-package "sifive_unmatched" "riscv64-linux-gnu")))
+    (package
+      (inherit base)
+      (arguments
+       (substitute-keyword-arguments (package-arguments base)
+         ((#:phases phases)
+          `(modify-phases ,phases
+             (add-after 'unpack 'set-environment
+               (lambda* (#:key inputs #:allow-other-keys)
+                 (let ((opensbi (string-append (assoc-ref inputs "firmware")
+                                               "/fw_dynamic.bin")))
+                   (setenv "OPENSBI" opensbi))))))))
+      (inputs
+       `(("firmware" ,opensbi-generic)
+         ,@(package-inputs base))))))
 
 (define-public u-boot-rock64-rk3328
   (let ((base (make-u-boot-package "rock64-rk3328" "aarch64-linux-gnu")))
@@ -926,10 +972,8 @@ to Novena upstream, does not load u-boot.img from the first partition.")
           `(modify-phases ,phases
              (add-after 'unpack 'set-environment
                (lambda* (#:key inputs #:allow-other-keys)
-                 (let ((bl31 (string-append (assoc-ref inputs "firmware")
-                                            "/bl31.elf")))
-                   (setenv "BL31" bl31))
-                 #t))))))
+                 (let ((bl31 (search-input-file inputs "/bl31.elf")))
+                   (setenv "BL31" bl31))))))))
       (native-inputs
        `(("firmware" ,arm-trusted-firmware-rk3328)
          ,@(package-native-inputs base))))))
@@ -944,9 +988,7 @@ to Novena upstream, does not load u-boot.img from the first partition.")
            `(modify-phases ,phases
               (add-after 'unpack 'set-environment
                 (lambda* (#:key inputs #:allow-other-keys)
-                  (setenv "BL31" (string-append (assoc-ref inputs "firmware")
-                                                "/bl31.elf"))
-                  #t))
+                  (setenv "BL31" (search-input-file inputs "/bl31.elf"))))
               ;; Phases do not succeed on the bl31 ELF.
               (delete 'strip)
               (delete 'validate-runpath)))))
@@ -964,9 +1006,39 @@ to Novena upstream, does not load u-boot.img from the first partition.")
            `(modify-phases ,phases
               (add-after 'unpack 'set-environment
                 (lambda* (#:key inputs #:allow-other-keys)
-                  (setenv "BL31" (string-append (assoc-ref inputs "firmware")
-                                                "/bl31.elf"))
-                  #t))
+                  (setenv "BL31"
+                          (search-input-file inputs "/bl31.elf"))))
+              (add-after 'unpack 'patch-config
+                (lambda _
+                  (substitute* "configs/rockpro64-rk3399_defconfig"
+                    (("CONFIG_USB=y") "\
+CONFIG_USB=y
+CONFIG_AHCI=y
+CONFIG_AHCI_PCI=y
+CONFIG_SATA=y
+CONFIG_SATA_SIL=y
+CONFIG_SCSI=y
+CONFIG_SCSI_AHCI=y
+CONFIG_DM_SCSI=y
+"))
+                  (substitute* "include/config_distro_bootcmd.h"
+                    (("\"scsi_need_init=false")
+                     "\"setenv scsi_need_init false")
+                    (("#define BOOTENV_SET_SCSI_NEED_INIT \"scsi_need_init=;")
+                     "#define BOOTENV_SET_SCSI_NEED_INIT \"setenv scsi_need_init;"))
+                  (substitute* "include/configs/rockchip-common.h"
+                    (("#define BOOT_TARGET_DEVICES\\(func\\)")
+                     "
+#if CONFIG_IS_ENABLED(CMD_SCSI)
+       #define BOOT_TARGET_SCSI(func) func(SCSI, scsi, 0)
+#else
+       #define BOOT_TARGET_SCSI(func)
+#endif
+#define BOOT_TARGET_DEVICES(func)")
+                    (("BOOT_TARGET_NVME\\(func\\) \\\\")
+                     "\
+BOOT_TARGET_NVME(func) \\
+       BOOT_TARGET_SCSI(func) \\"))))
               ;; Phases do not succeed on the bl31 ELF.
               (delete 'strip)
               (delete 'validate-runpath)))))
@@ -984,9 +1056,8 @@ to Novena upstream, does not load u-boot.img from the first partition.")
            `(modify-phases ,phases
               (add-after 'unpack 'set-environment
                 (lambda* (#:key inputs #:allow-other-keys)
-                  (setenv "BL31" (string-append (assoc-ref inputs "firmware")
-                                                "/bl31.elf"))
-                  #t))
+                  (setenv "BL31"
+                          (search-input-file inputs "/bl31.elf"))))
               ;; Phases do not succeed on the bl31 ELF.
               (delete 'strip)
               (delete 'validate-runpath)))))
@@ -1086,14 +1157,14 @@ tools, and more.")
 (define-public os-prober
   (package
     (name "os-prober")
-    (version "1.79")
+    (version "1.81")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://debian/pool/main/o/os-prober/os-prober_"
                            version ".tar.xz"))
        (sha256
-        (base32 "1vhhk0bl2j4910513gn5h3z8nsaavyv3c8764bim2klc0xyk3rmb"))))
+        (base32 "10w8jz6mqhp0skdcam9mpgv79vx1sv7lkpra3rqjg0jkhvn2in9g"))))
     (build-system gnu-build-system)
     (arguments
      `(#:modules ((guix build gnu-build-system)
@@ -1110,8 +1181,7 @@ tools, and more.")
              (substitute* (find-files ".")
                (("/usr") (assoc-ref outputs "out")))
              (substitute* (find-files "." "50mounted-tests$")
-               (("mkdir") "mkdir -p"))
-             #t))
+               (("mkdir") "mkdir -p"))))
          (replace 'install
            (lambda* (#:key outputs #:allow-other-keys)
              (define (find-files-non-recursive directory)
@@ -1142,8 +1212,7 @@ tools, and more.")
                    (append (find-files-non-recursive (string-append directory "/common"))
                            (find-files-non-recursive (string-append directory "/x86")))))
                 (list "os-probes" "os-probes/mounted" "os-probes/init"
-                      "linux-boot-probes" "linux-boot-probes/mounted"))
-               #t))))))
+                      "linux-boot-probes" "linux-boot-probes/mounted"))))))))
     (home-page "https://joeyh.name/code/os-prober")
     (synopsis "Detect other operating systems")
     (description "os-prober probes disks on the system for other operating
@@ -1258,9 +1327,7 @@ order to add a suitable bootloader menu entry.")
              (lambda _ (chdir "..") #t)))
          #:tests? #f))                  ; no test suite
       (native-inputs
-       `(("perl" ,perl)
-         ("syslinux" ,syslinux)
-         ("xorriso" ,xorriso)))
+       (list perl syslinux xorriso))
       (home-page "https://ipxe.org")
       (synopsis "PXE-compliant network boot firmware")
       (description "iPXE is a network boot firmware.  It provides a full PXE

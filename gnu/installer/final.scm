@@ -85,8 +85,9 @@ USERS."
                              (uid (if root? 0 #f))
                              (home-directory
                               (user-home-directory user))
-                             (password (crypt (user-password user)
-                                              (salt)))
+                             (password (crypt
+                                        (secret-content (user-password user))
+                                        (salt)))
 
                              ;; We need a string here, not a file-like, hence
                              ;; this choice.
@@ -105,36 +106,6 @@ USERS."
   (write-passwd password (string-append etc "/passwd"))
   (write-shadow shadow (string-append etc "/shadow")))
 
-(define* (kill-cow-users cow-path #:key (spare '("udevd")))
-  "Kill all processes that have references to the given COW-PATH in their
-'maps' file.  The process whose names are in SPARE list are spared."
-  (define %not-nul
-    (char-set-complement (char-set #\nul)))
-
-  (let ((pids
-         (filter-map (lambda (pid)
-                       (false-if-exception
-                        (call-with-input-file
-                            (string-append "/proc/" pid "/maps")
-                          (lambda (port)
-                            (and (string-contains (get-string-all port)
-                                                  cow-path)
-                                 (string->number pid))))))
-                     (scandir "/proc" string->number))))
-    (for-each (lambda (pid)
-                ;; cmdline does not always exist.
-                (false-if-exception
-                 (call-with-input-file
-                     (string-append "/proc/" (number->string pid) "/cmdline")
-                   (lambda (port)
-                     (match (string-tokenize (read-string port) %not-nul)
-                       ((argv0 _ ...)
-                        (unless (member (basename argv0) spare)
-                          (syslog "Killing process ~a (~a)~%" pid argv0)
-                          (kill pid SIGKILL)))
-                       (_ #f))))))
-              pids)))
-
 (define (call-with-mnt-container thunk)
   "This is a variant of call-with-container. Run THUNK in a new container
 process, within a separate MNT namespace. The container is not jailed so that
@@ -148,6 +119,28 @@ it can interact with the rest of the system."
 
     (match (waitpid pid)
       ((_ . status) status))))
+
+(define (install-locale locale)
+  "Install the given LOCALE or the en_US.utf8 locale as a fallback."
+  (let ((supported? (false-if-exception
+                     (setlocale LC_ALL locale))))
+    (if supported?
+        (begin
+          (installer-log-line "install supported locale ~a." locale)
+          (setenv "LC_ALL" locale))
+        (begin
+          ;; If the selected locale is not supported, install a default UTF-8
+          ;; locale. This is required to copy some files with UTF-8
+          ;; characters, in the nss-certs package notably. Set LANGUAGE
+          ;; anyways, to have translated messages if possible.
+          (installer-log-line "~a locale is not supported, installing \
+en_US.utf8 locale instead." locale)
+          (setlocale LC_ALL "en_US.utf8")
+          (setenv "LC_ALL" "en_US.utf8")
+          (setenv "LANGUAGE"
+                  (string-take locale
+                               (or (string-index locale #\_)
+                                   (string-length locale))))))))
 
 (define* (install-system locale #:key (users '()))
   "Create /etc/shadow and /etc/passwd on the installation target for USERS.
@@ -199,6 +192,10 @@ or #f.  Return #t on success and #f on failure."
        (lambda ()
          (dynamic-wind
            (lambda ()
+             ;; Install the locale before mounting the cow-store, otherwise
+             ;; the loaded cow-store locale files will prevent umounting.
+             (install-locale locale)
+
              ;; Save the database, so that it can be restored once the
              ;; cow-store is umounted.
              (copy-file database-file saved-database)
@@ -212,18 +209,9 @@ or #f.  Return #t on success and #f on failure."
              (setvbuf (current-output-port) 'none)
              (setvbuf (current-error-port) 'none)
 
-             ;; If there are any connected clients, assume that we are running
-             ;; installation tests. In that case, dump the standard and error
-             ;; outputs to syslog.
-             (set! ret
-                   (if (not (null? (current-clients)))
-                       (with-output-to-file "/dev/console"
-                         (lambda ()
-                           (with-error-to-file "/dev/console"
-                             (lambda ()
-                               (run-command install-command
-                                            #:locale locale)))))
-                       (run-command install-command #:locale locale))))
+             (setenv "PATH" "/run/current-system/profile/bin/")
+
+             (set! ret (run-command install-command)))
            (lambda ()
              ;; Restart guix-daemon so that it does no keep the MNT namespace
              ;; alive.

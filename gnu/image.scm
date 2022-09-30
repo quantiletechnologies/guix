@@ -17,8 +17,12 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu image)
-  #:use-module (gnu platform)
+  #:use-module (guix platform)
   #:use-module (guix records)
+  #:use-module (guix diagnostics)
+  #:use-module (guix i18n)
+  #:use-module (srfi srfi-34)
+  #:use-module (srfi srfi-35)
   #:export (partition
             partition?
             partition-device
@@ -38,9 +42,12 @@
             image-platform
             image-size
             image-operating-system
+            image-partition-table-type
             image-partitions
             image-compression?
             image-volatile-root?
+            image-shared-store?
+            image-shared-network?
             image-substitutable?
 
             image-type
@@ -67,31 +74,57 @@
   (label                partition-label (default #f))
   (uuid                 partition-uuid (default #f))
   (flags                partition-flags (default '()))
-  (initializer          partition-initializer (default #f)))
+  (initializer          partition-initializer (default #f))) ;gexp | #f
 
 
 ;;;
 ;;; Image record.
 ;;;
 
+(define-syntax-rule (define-set-sanitizer name field set)
+  "Define NAME as a procedure or macro that raises an error if passed a value
+that is not in SET, mentioning FIELD in the error message."
+  (define-with-syntax-properties (name (value properties))
+    (unless (memq value 'set)
+      (raise
+       (make-compound-condition
+        (condition
+         (&error-location
+          (location (source-properties->location properties))))
+        (formatted-message (G_ "~s: invalid '~a' value") value 'field))))
+    value))
+
+(define-set-sanitizer validate-image-format format
+  (disk-image compressed-qcow2 docker iso9660))
+(define-set-sanitizer validate-partition-table-type partition-table-type
+  (mbr gpt))
+
 (define-record-type* <image>
   image make-image
   image?
   (name               image-name ;symbol
                       (default #f))
-  (format             image-format) ;symbol
+  (format             image-format                ;symbol
+                      (sanitize validate-image-format))
   (platform           image-platform ;<platform>
                       (default #f))
   (size               image-size  ;size in bytes as integer
                       (default 'guess))
   (operating-system   image-operating-system  ;<operating-system>
                       (default #f))
+  (partition-table-type image-partition-table-type ; 'mbr or 'gpt
+                      (default 'mbr)
+                      (sanitize validate-partition-table-type))
   (partitions         image-partitions ;list of <partition>
                       (default '()))
   (compression?       image-compression? ;boolean
                       (default #t))
   (volatile-root?     image-volatile-root? ;boolean
                       (default #t))
+  (shared-store?      image-shared-store? ;boolean
+                      (default #f))
+  (shared-network?    image-shared-network? ;boolean
+                      (default #f))
   (substitutable?     image-substitutable? ;boolean
                       (default #t)))
 

@@ -3,8 +3,9 @@
 ;;; Copyright © 2017 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2017, 2018 Clément Lassieur <clement@lassieur.org>
 ;;; Copyright © 2021 Xinglu Chen <public@yoctocell.xyz>
-;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Andrew Tropin <andrew@trop.in>
+;;; Copyright © 2022 Maxime Devos <maximedevos@telenet.be>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,7 +27,8 @@
   #:use-module (guix records)
   #:use-module (guix gexp)
   #:use-module ((guix utils) #:select (source-properties->location))
-  #:use-module ((guix diagnostics) #:select (formatted-message location-file))
+  #:use-module ((guix diagnostics)
+                #:select (formatted-message location-file &error-location))
   #:use-module ((guix modules) #:select (file-name->module-name))
   #:use-module (guix i18n)
   #:autoload   (texinfo) (texi-fragment->stexi)
@@ -55,7 +57,9 @@
             serialize-configuration
             define-maybe
             define-maybe/no-serialization
-            validate-configuration
+            %unset-value
+            maybe-value
+            maybe-value-set?
             generate-documentation
             configuration->documentation
             empty-serializer
@@ -86,13 +90,21 @@
 (define (configuration-error message)
   (raise (condition (&message (message message))
                     (&configuration-error))))
-(define (configuration-field-error field val)
-  (configuration-error
-   (format #f "Invalid value for field ~a: ~s" field val)))
+(define (configuration-field-error loc field value)
+  (raise (apply
+          make-compound-condition
+          (formatted-message (G_ "invalid value ~s for field '~a'")
+                             value field)
+          (condition (&configuration-error))
+          (if loc
+              (list (condition
+                     (&error-location (location loc))))
+              '()))))
+
 (define (configuration-missing-field kind field)
   (configuration-error
    (format #f "~a configuration missing required field ~a" kind field)))
-(define (configuration-no-default-value kind field)
+(define (configuration-missing-default-value kind field)
   (configuration-error
    (format #f "The field `~a' of the `~a' configuration record \
 does not have a default value" field kind)))
@@ -115,14 +127,6 @@ does not have a default value" field kind)))
                 ((configuration-field-getter field) config)))
              fields)))
 
-(define (validate-configuration config fields)
-  (for-each (lambda (field)
-              (let ((val ((configuration-field-getter field) config)))
-                (unless ((configuration-field-predicate field) val)
-                  (configuration-field-error
-                   (configuration-field-name field) val))))
-            fields))
-
 (define-syntax-rule (id ctx parts ...)
   "Assemble PARTS into a raw (unhygienic) identifier."
   (datum->syntax ctx (symbol-append (syntax->datum parts) ...)))
@@ -141,7 +145,8 @@ does not have a default value" field kind)))
                                     (id #'stem #'serialize-maybe- #'stem))))
        #`(begin
            (define (maybe-stem? val)
-             (or (eq? val 'disabled) (stem? val)))
+             (or (not (maybe-value-set? val))
+                 (stem? val)))
            #,@(if serialize?
                   (list #'(define (serialize-maybe-stem field-name val)
                             (if (stem? val)
@@ -162,78 +167,109 @@ does not have a default value" field kind)))
 (define-syntax-rule (define-maybe/no-serialization stem)
   (define-maybe stem (no-serialization)))
 
+(define (normalize-field-type+def s)
+  (syntax-case s ()
+    ((field-type def)
+     (identifier? #'field-type)
+     (values #'(field-type def)))
+    ((field-type)
+     (identifier? #'field-type)
+     (values #'(field-type %unset-value)))
+    (field-type
+     (identifier? #'field-type)
+     (values #'(field-type %unset-value)))))
+
 (define (define-configuration-helper serialize? serializer-prefix syn)
   (syntax-case syn ()
-    ((_ stem (field (field-type def ...) doc custom-serializer ...) ...)
-     (with-syntax (((field-getter ...)
-                    (map (lambda (field)
-                           (id #'stem #'stem #'- field))
-    			 #'(field ...)))
-                   ((field-predicate ...)
-                    (map (lambda (type)
-                           (id #'stem type #'?))
-    			 #'(field-type ...)))
-                   ((field-default ...)
-                    (map (match-lambda
-    			   ((field-type default-value)
-                            default-value)
-    			   ((field-type)
-                            ;; Quote `undefined' to prevent a possibly
-                            ;; unbound warning.
-                            (syntax 'undefined)))
-    			 #'((field-type def ...) ...)))
-                   ((field-serializer ...)
-                    (map (lambda (type custom-serializer)
-                           (and serialize?
-                                (match custom-serializer
-                                  ((serializer)
-                                   serializer)
-                                  (()
-                                   (if serializer-prefix
-                                       (id #'stem
-                                           serializer-prefix
-                                           #'serialize- type)
-                                       (id #'stem #'serialize- type))))))
-                         #'(field-type ...)
-                         #'((custom-serializer ...) ...))))
-       #`(begin
-    	   (define-record-type* #,(id #'stem #'< #'stem #'>)
-    	     #,(id #'stem #'% #'stem)
-    	     #,(id #'stem #'make- #'stem)
-    	     #,(id #'stem #'stem #'?)
-    	     (%location #,(id #'stem #'stem #'-location)
-    			(default (and=> (current-source-location)
-    					source-properties->location))
-    			(innate))
-    	     #,@(map (lambda (name getter def)
-    		       (if (eq? (syntax->datum def) (quote 'undefined))
-    			   #`(#,name #,getter)
-    			   #`(#,name #,getter (default #,def))))
-    		     #'(field ...)
-    		     #'(field-getter ...)
-    		     #'(field-default ...)))
-    	   (define #,(id #'stem #'stem #'-fields)
-    	     (list (configuration-field
-    		    (name 'field)
-    		    (type 'field-type)
-    		    (getter field-getter)
-    		    (predicate field-predicate)
-    		    (serializer field-serializer)
-    		    (default-value-thunk
-    		      (lambda ()
-    			(display '#,(id #'stem #'% #'stem))
-    			(if (eq? (syntax->datum field-default)
-    				 'undefined)
-    			    (configuration-no-default-value
-    			     '#,(id #'stem #'% #'stem) 'field)
-    			    field-default)))
-    		    (documentation doc))
-    		   ...))
-    	   (define-syntax-rule (stem arg (... ...))
-    	     (let ((conf (#,(id #'stem #'% #'stem) arg (... ...))))
-    	       (validate-configuration conf
-    				       #,(id #'stem #'stem #'-fields))
-    	       conf)))))))
+    ((_ stem (field field-type+def doc custom-serializer ...) ...)
+     (with-syntax
+         ((((field-type def) ...)
+           (map normalize-field-type+def #'(field-type+def ...))))
+       (with-syntax
+           (((field-getter ...)
+             (map (lambda (field)
+                    (id #'stem #'stem #'- field))
+                  #'(field ...)))
+            ((field-predicate ...)
+             (map (lambda (type)
+                    (id #'stem type #'?))
+                  #'(field-type ...)))
+            ((field-default ...)
+             (map (match-lambda
+                    ((field-type default-value)
+                     default-value))
+                  #'((field-type def) ...)))
+            ((field-serializer ...)
+             (map (lambda (type custom-serializer)
+                    (and serialize?
+                         (match custom-serializer
+                           ((serializer)
+                            serializer)
+                           (()
+                            (if serializer-prefix
+                                (id #'stem
+                                    serializer-prefix
+                                    #'serialize- type)
+                                (id #'stem #'serialize- type))))))
+                  #'(field-type ...)
+                  #'((custom-serializer ...) ...))))
+         (define (field-sanitizer name pred)
+           ;; Define a macro for use as a record field sanitizer, where NAME
+           ;; is the name of the field and PRED is the predicate that tells
+           ;; whether a value is valid for this field.
+           #`(define-syntax #,(id #'stem #'validate- #'stem #'- name)
+               (lambda (s)
+                 ;; Make sure the given VALUE, for field NAME, passes PRED.
+                 (syntax-case s ()
+                   ((_ value)
+                    (with-syntax ((name #'#,name)
+                                  (pred #'#,pred)
+                                  (loc (datum->syntax #'value
+                                                      (syntax-source #'value))))
+                      #'(if (pred value)
+                            value
+                            (configuration-field-error
+                             (and=> 'loc source-properties->location)
+                             'name value))))))))
+
+         #`(begin
+             ;; Define field validation macros.
+             #,@(map field-sanitizer
+                     #'(field ...)
+                     #'(field-predicate ...))
+
+             (define-record-type* #,(id #'stem #'< #'stem #'>)
+               stem
+               #,(id #'stem #'make- #'stem)
+               #,(id #'stem #'stem #'?)
+               (%location #,(id #'stem #'stem #'-location)
+                          (default (and=> (current-source-location)
+                                          source-properties->location))
+                          (innate))
+               #,@(map (lambda (name getter def)
+                         #`(#,name #,getter (default #,def)
+                                   (sanitize
+                                    #,(id #'stem #'validate- #'stem #'- name))))
+                       #'(field ...)
+                       #'(field-getter ...)
+                       #'(field-default ...)))
+
+             (define #,(id #'stem #'stem #'-fields)
+               (list (configuration-field
+                      (name 'field)
+                      (type 'field-type)
+                      (getter field-getter)
+                      (predicate field-predicate)
+                      (serializer field-serializer)
+                      (default-value-thunk
+                        (lambda ()
+                          (display '#,(id #'stem #'% #'stem))
+                          (if (maybe-value-set? (syntax->datum field-default))
+                              field-default
+                              (configuration-missing-default-value
+                               '#,(id #'stem #'% #'stem) 'field))))
+                      (documentation doc))
+                     ...))))))))
 
 (define no-serialization         ;syntactic keyword for 'define-configuration'
   '(no serialization))
@@ -241,31 +277,54 @@ does not have a default value" field kind)))
 (define-syntax define-configuration
   (lambda (s)
     (syntax-case s (no-serialization prefix)
-      ((_ stem (field (field-type def ...) doc custom-serializer ...) ...
+      ((_ stem (field field-type+def doc custom-serializer ...) ...
           (no-serialization))
        (define-configuration-helper
-         #f #f #'(_ stem (field (field-type def ...) doc custom-serializer ...)
+         #f #f #'(_ stem (field field-type+def doc custom-serializer ...)
                  ...)))
-      ((_ stem  (field (field-type def ...) doc custom-serializer ...) ...
+      ((_ stem  (field field-type+def doc custom-serializer ...) ...
           (prefix serializer-prefix))
        (define-configuration-helper
-         #t #'serializer-prefix #'(_ stem (field (field-type def ...)
+         #t #'serializer-prefix #'(_ stem (field field-type+def
                                                  doc custom-serializer ...)
                  ...)))
-      ((_ stem (field (field-type def ...) doc custom-serializer ...) ...)
+      ((_ stem (field field-type+def doc custom-serializer ...) ...)
        (define-configuration-helper
-         #t #f #'(_ stem (field (field-type def ...) doc custom-serializer ...)
+         #t #f #'(_ stem (field field-type+def doc custom-serializer ...)
                  ...))))))
 
 (define-syntax-rule (define-configuration/no-serialization
-                      stem (field (field-type def ...)
+                      stem (field field-type+def
                                   doc custom-serializer ...) ...)
-  (define-configuration stem (field (field-type def ...)
+  (define-configuration stem (field field-type+def
                                     doc custom-serializer ...) ...
     (no-serialization)))
 
 (define (empty-serializer field-name val) "")
 (define serialize-package empty-serializer)
+
+;; Ideally this should be an implementation detail, but we export it
+;; to provide a simpler API that enables unsetting a configuration
+;; field that has a maybe type, but also a default value.  We give it
+;; a value that sticks out to the reader when something goes wrong.
+;;
+;; An example use-case would be something like a network application
+;; that uses a default port, but the field can explicitly be unset to
+;; request a random port at startup.
+(define %unset-value '%unset-marker%)
+
+(define (maybe-value-set? value)
+  "Predicate to check whether a 'maybe' value was explicitly provided."
+  (not (eq? %unset-value value)))
+
+;; Ideally there should be a compiler macro for this predicate, that expands
+;; to a conditional that only instantiates the default value when needed.
+(define* (maybe-value value #:optional (default #f))
+  "Returns VALUE, unless it is the unset value, in which case it returns
+DEFAULT."
+  (if (maybe-value-set? value)
+      value
+      default))
 
 ;; A little helper to make it easier to document all those fields.
 (define (generate-documentation documentation documentation-name)
@@ -359,10 +418,7 @@ DELIMITER interposed LS.  Support 'infix and 'suffix GRAMMAR values."
       (G_ "The GRAMMAR value must be 'infix or 'suffix, but ~a provided.")
       grammar)))
   (fold-right (lambda (e acc)
-                (cons #~(begin
-                          (use-modules (ice-9 rdelim))
-                          (with-fluids ((%default-port-encoding "UTF-8"))
-                            (with-input-from-file #$e read-string)))
+                (cons e
                       (if (and (null? acc) (eq? grammar 'infix))
                           acc
                           (cons delimiter acc))))
@@ -387,7 +443,16 @@ the list result in @code{#t} when applying PRED? on them."
 (define (text-config? config)
   (list-of file-like?))
 (define (serialize-text-config field-name val)
-  #~(string-append #$@(interpose val "\n" 'suffix)))
+  #~(string-append
+     #$@(interpose
+         (map
+          (lambda (e)
+            #~(begin
+                (use-modules (ice-9 rdelim))
+                (with-fluids ((%default-port-encoding "UTF-8"))
+                  (with-input-from-file #$e read-string))))
+          val)
+         "\n" 'suffix)))
 
 (define ((generic-serialize-alist-entry serialize-field) entry)
   "Apply the SERIALIZE-FIELD procedure on the field and value of ENTRY."

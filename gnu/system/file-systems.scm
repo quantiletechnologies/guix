@@ -1,9 +1,10 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2020 Google LLC
 ;;; Copyright © 2020 Jakub Kądziołka <kuba@kadziolka.net>
 ;;; Copyright © 2020, 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2022 Oleg Pykhalov <go.wigust@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -30,7 +31,8 @@
   #:use-module (srfi srfi-35)
   #:use-module (srfi srfi-9 gnu)
   #:use-module (guix records)
-  #:use-module ((guix diagnostics) #:select (&fix-hint))
+  #:use-module ((guix diagnostics)
+                #:select (source-properties->location leave &fix-hint))
   #:use-module (guix i18n)
   #:use-module (gnu system uuid)
   #:re-export (uuid                               ;backward compatibility
@@ -59,6 +61,7 @@
             file-system-location
 
             file-system-type-predicate
+            file-system-mount-point-predicate
             btrfs-subvolume?
             btrfs-store-subvolume-file-name
 
@@ -96,7 +99,14 @@
 
             %store-mapping
             %network-configuration-files
-            %network-file-mappings))
+            %network-file-mappings
+
+            swap-space
+            swap-space?
+            swap-space-target
+            swap-space-dependencies
+            swap-space-priority
+            swap-space-discard?))
 
 ;;; Commentary:
 ;;;
@@ -107,6 +117,46 @@
 ;;;
 ;;; Code:
 
+(eval-when (expand load eval)
+  (define invalid-file-system-flags
+    ;; Note: Keep in sync with 'mount-flags->bit-mask'.
+    (let ((known-flags '(read-only
+                         bind-mount no-suid no-dev no-exec
+                         no-atime strict-atime lazy-time
+                         shared)))
+      (lambda (flags)
+        "Return the subset of FLAGS that is invalid."
+        (remove (cut memq <> known-flags) flags))))
+
+  (define (%validate-file-system-flags flags location)
+    "Raise an error if FLAGS contains invalid mount flags; otherwise return
+FLAGS."
+    (match (invalid-file-system-flags flags)
+      (() flags)
+      (invalid
+       (leave (source-properties->location location)
+              (N_ "invalid file system mount flag:~{ ~s~}~%"
+                  "invalid file system mount flags:~{ ~s~}~%"
+                  (length invalid))
+              invalid)))))
+
+(define-syntax validate-file-system-flags
+  (lambda (s)
+    "Validate the given file system mount flags, raising an error if invalid
+flags are found."
+    (syntax-case s (quote)
+      ((_ (quote (symbols ...)))                  ;validate at expansion time
+       (begin
+         (%validate-file-system-flags (syntax->datum #'(symbols ...))
+                                      (syntax-source s))
+         #'(quote (symbols ...))))
+      ((_ flags)
+       #`(%validate-file-system-flags flags
+                                      '#,(datum->syntax s (syntax-source s))))
+      (id
+       (identifier? #'id)
+       #'%validate-file-system-flags))))
+
 ;; File system declaration.
 (define-record-type* <file-system> %file-system
   make-file-system
@@ -115,7 +165,8 @@
   (mount-point      file-system-mount-point)      ; string
   (type             file-system-type)             ; string
   (flags            file-system-flags             ; list of symbols
-                    (default '()))
+                    (default '())
+                    (sanitize validate-file-system-flags))
   (options          file-system-options           ; string or #f
                     (default #f))
   (mount?           file-system-mount?            ; Boolean
@@ -223,7 +274,8 @@
   ;; Note: If we have (guix store database) in the search path and we do *not*
   ;; have (guix store) proper, 'resolve-module' returns an empty (guix store)
   ;; with one sub-module.
-  (cond ((and=> (resolve-module '(guix store) #:ensure #f)
+  (cond ((and=> (parameterize ((current-warning-port (%make-void-port "w0")))
+                  (resolve-module '(guix store) #:ensure #f))
                 (lambda (store)
                   (module-variable store '%store-prefix)))
          =>
@@ -623,6 +675,12 @@ system has the given TYPE."
   (lambda (fs)
     (string=? (file-system-type fs) type)))
 
+(define (file-system-mount-point-predicate mount-point)
+  "Return a predicate that, when passed a file system, returns #t if that file
+system has the given MOUNT-POINT."
+  (lambda (fs)
+    (string=? (file-system-mount-point fs) mount-point)))
+
 
 ;;;
 ;;; Btrfs specific helpers.
@@ -670,5 +728,20 @@ subvolume name is unknown."))
                  (hint
                   (G_ "Use the @code{subvol} Btrfs file system option."))))))))
 
+
+;;;
+;;; Swap space
+;;;
+
+(define-record-type* <swap-space> swap-space make-swap-space
+  swap-space?
+  this-swap-space
+  (target swap-space-target)
+  (dependencies swap-space-dependencies
+                (default '()))
+  (priority swap-space-priority
+            (default #f))
+  (discard? swap-space-discard?
+           (default #f)))
 
 ;;; file-systems.scm ends here

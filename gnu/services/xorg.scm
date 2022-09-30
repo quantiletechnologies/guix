@@ -10,6 +10,8 @@
 ;;; Copyright © 2020 Alex Griffin <a@ajgrf.com>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
 ;;; Copyright © 2021 Oleg Pykhalov <go.wigust@gmail.com>
+;;; Copyright © 2021 Josselin Poiret <josselin.poiret@protonmail.ch>
+;;; Copyright © 2022 Chris Marusich <cmmarusich@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -27,6 +29,7 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu services xorg)
+  #:autoload   (gnu services sddm) (sddm-service-type)
   #:use-module (gnu artwork)
   #:use-module (gnu services)
   #:use-module (gnu services shepherd)
@@ -48,6 +51,7 @@
   #:use-module (gnu packages admin)
   #:use-module (gnu packages bash)
   #:use-module (gnu system shadow)
+  #:use-module (guix build-system glib-or-gtk)
   #:use-module (guix build-system trivial)
   #:use-module (guix gexp)
   #:use-module (guix store)
@@ -55,6 +59,7 @@
   #:use-module (guix derivations)
   #:use-module (guix records)
   #:use-module (guix deprecation)
+  #:use-module (guix utils)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
   #:use-module (srfi srfi-26)
@@ -140,8 +145,7 @@
 
         xf86-input-evdev
         xf86-input-keyboard
-        xf86-input-mouse
-        xf86-input-synaptics))
+        xf86-input-mouse))
 
 (define %default-xorg-fonts
   ;; Default list of fonts available to the X server.
@@ -161,7 +165,7 @@
 (define-record-type* <xorg-configuration>
   xorg-configuration make-xorg-configuration
   xorg-configuration?
-  (modules          xorg-configuration-modules    ;list of packages
+  (modules          xorg-configuration-modules    ;list of file-like
                     (thunked)
                     ; filter out modules not supported on current system
                     (default (filter
@@ -179,7 +183,7 @@
                     (default #f))
   (extra-config     xorg-configuration-extra-config ;list of strings
                     (default '()))
-  (server           xorg-configuration-server     ;package
+  (server           xorg-configuration-server     ;file-like
                     (default xorg-server))
   (server-arguments xorg-configuration-server-arguments ;list of strings
                     (default %default-xorg-server-arguments)))
@@ -869,6 +873,24 @@ the GNOME desktop environment.")
        (apply execl (string-append #$dbus "/bin/dbus-daemon")
               (program-arguments)))))
 
+;; Wrapper script for Wayland sessions, similar to Xsession.
+;;
+;; See `xinitrc`.  By default, it launches the specified session through a
+;; login shell.  With the default Guix configuration, this should source
+;; /etc/profile, setting up the Guix profile environment variables.  However,
+;; gdm launches its own graphical session through the same method, so we need
+;; to ignore this case, since `gdm` doesn't have a login shell.
+(define gdm-wayland-session-wrapper
+  (program-file
+   "gdm-wayland-session-wrapper"
+   #~((let* ((user (getpw (getuid)))
+	    (name (passwd:name user))
+	    (shell (passwd:shell user))
+	    (args (cdr (command-line))))
+        (if (string=? name "gdm")
+	    (apply execl (cons (car args) args))
+	    (execl shell shell "--login" "-c" (string-join args)))))))
+
 (define-record-type* <gdm-configuration>
   gdm-configuration make-gdm-configuration
   gdm-configuration?
@@ -883,7 +905,10 @@ the GNOME desktop environment.")
   (xorg-configuration gdm-configuration-xorg
                       (default (xorg-configuration)))
   (x-session gdm-configuration-x-session
-             (default (xinitrc))))
+             (default (xinitrc)))
+  (wayland? gdm-configuration-wayland? (default #f))
+  (wayland-session gdm-configuration-wayland-session
+                   (default gdm-wayland-session-wrapper)))
 
 (define (gdm-configuration-file config)
   (mixed-text-file "gdm-custom.conf"
@@ -909,8 +934,9 @@ the GNOME desktop environment.")
                    ;; See also
                    ;; <https://debbugs.gnu.org/cgi/bugreport.cgi?bug=39281>.
                    "InitialSetupEnable=false\n"
-                   ;; Enable me once X is working.
-                   "WaylandEnable=false\n"
+                   "WaylandEnable=" (if (gdm-configuration-wayland? config)
+                                        "true"
+                                        "false") "\n"
                    "\n"
                    "[debug]\n"
                    "Enable=" (if (gdm-configuration-debug? config)
@@ -948,7 +974,7 @@ the GNOME desktop environment.")
   (list (shepherd-service
          (documentation "Xorg display server (GDM)")
          (provision '(xorg-server))
-         (requirement '(dbus-system user-processes host-name udev))
+         (requirement '(dbus-system user-processes host-name udev elogind))
          (start #~(lambda ()
                     (fork+exec-command
                      (list #$(file-append (gdm-configuration-gdm config)
@@ -976,7 +1002,17 @@ the GNOME desktop environment.")
                                   ;; can depend on GNOME Shell directly.
                                   (cons #$gnome-shell
                                         '#$(gdm-configuration-gnome-shell-assets
-                                            config)))))))))
+                                            config)))))
+                           ;; Add XCURSOR_PATH so that mutter can find its
+                           ;; cursors.  gdm doesn't login so doesn't source
+                           ;; the corresponding line in /etc/profile.
+                           "XCURSOR_PATH=/run/current-system/profile/share/icons"
+                           (string-append
+                            "GDK_PIXBUF_MODULE_FILE="
+                            #$gnome-shell "/" #$%gdk-pixbuf-loaders-cache-file)
+                           (string-append
+                            "GDM_WAYLAND_SESSION="
+                            #$(gdm-configuration-wayland-session config))))))
          (stop #~(make-kill-destructor))
          (respawn? #t))))
 
@@ -1006,10 +1042,15 @@ the GNOME desktop environment.")
                    "Run the GNOME Desktop Manager (GDM), a program that allows
 you to log in in a graphical session, whether or not you use GNOME."))))
 
+;; Since GDM depends on Rust (gdm -> gnome-shell -> gjs -> mozjs -> rust)
+;; and Rust is currently unavailable on non-x86_64 platforms, default to
+;; SDDM there (FIXME).
 (define* (set-xorg-configuration config
                                  #:optional
                                  (login-manager-service-type
-                                  gdm-service-type))
+                                  (if (target-x86-64?)
+                                      gdm-service-type
+                                      sddm-service-type)))
   "Tell the log-in manager (of type @var{login-manager-service-type}) to use
 @var{config}, an <xorg-configuration> record."
   (simple-service 'set-xorg-configuration

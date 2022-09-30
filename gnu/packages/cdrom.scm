@@ -3,7 +3,7 @@
 ;;; Copyright © 2013, 2014 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2015 Taylan Ulrich Bayırlı/Kammer <taylanbayirli@gmail.com>
 ;;; Copyright © 2015 Paul van der Walt <paul@denknerd.org>
-;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016 Alex Kost <alezost@gmail.com>
 ;;; Copyright © 2016 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2017 John Darrington <jmd@gnu.org>
@@ -118,11 +118,9 @@ caching facility provided by the library.")
                "0avi6apv5ydjy6b9c3z9a46rvp5i57qyr09vr7x4nndxkmcfjl45"))))
     (build-system gnu-build-system)
     (inputs
-     `(("ncurses" ,ncurses)
-       ("libcddb" ,libcddb)))
+     (list ncurses libcddb))
     (native-inputs
-     `(("help2man" ,help2man)
-       ("pkg-config" ,pkg-config)))
+     (list help2man pkg-config))
     (home-page "https://www.gnu.org/software/libcdio/")
     (synopsis "CD Input and Control library")
     (description
@@ -147,8 +145,8 @@ extraction from CDs.")
               (base32
                "12hfnrq7amv9qjzc92cr265m7kh0a1hpasck8cxx1gygbhqczc9k"))))
     (build-system gnu-build-system)
-    (native-inputs `(("pkg-config" ,pkg-config)))
-    (propagated-inputs `(("libcdio" ,libcdio)))
+    (native-inputs (list pkg-config))
+    (propagated-inputs (list libcdio))
     (home-page "https://www.gnu.org/software/libcdio/")
     (synopsis "Jitter- and error-tolerant CD audio extraction")
     (description
@@ -198,10 +196,7 @@ libcdio.")
                  `("PATH" ":" prefix (,(string-append out "/bin"))))
                #t))))))
     (inputs
-     `(("acl" ,acl)
-       ("readline" ,readline)
-       ("tk" ,tk)
-       ("zlib" ,zlib)))
+     (list acl readline tk zlib))
     (home-page "https://www.gnu.org/software/xorriso/")
     (synopsis "Create, manipulate, burn ISO-9660 file systems")
     (description
@@ -235,6 +230,7 @@ files.")
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f ; there is no check target
+       #:parallel-build? #f             ;randomly fails to link
        #:configure-flags ; Add $libdir to the RUNPATH of all the executables.
        (list (string-append "LDFLAGS=-Wl,-rpath=" %output "/lib"))
        ;; Building in parallel is flaky: “ld: […]/cachetest.c:393: undefined
@@ -282,14 +278,9 @@ reconstruction capability.")
              (substitute* "configure.ac" (("^AM_GCONF_SOURCE_2.*") ""))
              #t)))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake pkg-config))
     (inputs
-     `(("ao" ,ao)
-       ("lame" ,lame)
-       ("libmad" ,libmad)
-       ("libvorbis" ,libvorbis)))
+     (list ao lame libmad libvorbis))
     (home-page "http://cdrdao.sourceforge.net")
     (synopsis "Read and write CDs in disk-at-once mode")
     (description "cdrdao records audio or data CDs in disk-at-once (DAO) mode,
@@ -322,39 +313,37 @@ format, commonly used for VCDs or disks with subchannel data.")
                      (string-append
                       "actual_os := $(shell uname -o)\n"
                       "actual_arch := $(shell uname -m)\n"
-                      "VERSION_OS = _$(actual_os)_$(actual_arch)\n")))
-                  #t))
+                      "VERSION_OS = _$(actual_os)_$(actual_arch)\n")))))
               (patches (search-patches "cdrtools-3.01-mkisofs-isoinfo.patch"))))
     (build-system gnu-build-system)
     ;; XXX cdrtools bundles a modified, relicensed early version of cdparanoia.
-    (inputs
-     `(("linux-headers" ,linux-libre-headers)))
     (arguments
-     `(#:make-flags
-       (list "RM=rm" "LN=ln" "SYMLINK=ln -s"
-             "CONFIG_SHELL=sh" "CCOM=gcc"
-             (string-append "INS_BASE=" (assoc-ref %outputs "out"))
-             (string-append "INS_RBASE=" (assoc-ref %outputs "out")))
-       ;; Parallel builds appear to be unsafe, see
-       ;; https://hydra.gnu.org/build/3346840/log/raw
-       #:parallel-build? #f
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)
-         (add-before 'build 'set-linux-headers
-           (lambda _
-             (substitute* "autoconf/configure"
-               (("/usr/src/linux")
-                (assoc-ref %build-inputs "linux-headers")))
-             #t))
-         (add-before 'build 'substitute-dirs
-           (lambda _
-             (substitute* (append (find-files "DEFAULTS" "^Defaults\\.")
-                                  (find-files "DEFAULTS_ENG" "^Defaults\\.")
-                                  (find-files "TEMPLATES" "^Defaults\\."))
-               (("/opt/schily") (assoc-ref %outputs "out")))
-             #t)))
-       #:tests? #f))  ; no tests
+     (list #:make-flags
+        #~(list "RM=rm" "LN=ln" "SYMLINK=ln -s"
+                "CONFIG_SHELL=sh"
+                (string-append "CCOM=" #$(cc-for-target))
+                "LINKMODE=dynamic"
+                (string-append "INS_BASE=" #$output)
+                (string-append "INS_RBASE=" #$output))
+        ;; Parallel builds appear to be unsafe, see
+        ;; https://hydra.gnu.org/build/3346840/log/raw
+        #:parallel-build? #f
+        #:phases
+        #~(modify-phases %standard-phases
+            (delete 'configure)
+            (add-before 'build 'set-linux-headers
+              (lambda _
+                (substitute* "autoconf/configure"
+                  (("/usr/src/linux")
+                   (assoc-ref %build-inputs "kernel-headers")))))
+            (add-before 'build 'avoid-bogus-RPATH-entry
+              (lambda _
+                (substitute* (append (find-files "DEFAULTS" "^Defaults\\.")
+                                     (find-files "DEFAULTS_ENG" "^Defaults\\.")
+                                     (find-files "TEMPLATES" "^Defaults\\."))
+                  (("/opt/schily")
+                   #$output)))))
+        #:tests? #f))  ; no tests
    (synopsis "Command line utilities to manipulate and burn CD/DVD/BD images")
    (description "cdrtools is a collection of command line utilities to create
 CD's, DVD's or Blue Ray discs.  The most important components are
@@ -381,9 +370,9 @@ images.")
               (patches (search-patches "dvd+rw-tools-add-include.patch"))))
     (build-system gnu-build-system)
     (inputs
-     `(("cdrtools" ,cdrtools)))
+     (list cdrtools))
     (native-inputs
-     `(("m4" ,m4)))
+     (list m4))
     (arguments
      `(#:tests? #f ; No tests.
        #:phases
@@ -419,59 +408,60 @@ or @command{xorrisofs} to create ISO 9660 images.")
 (define-public dvdisaster
   (package
     (name "dvdisaster")
-    (version "0.79.5")
+    (version "0.79.10")
     (source
      (origin
        (method url-fetch)
-       ;; Update this (and update HOME-PAGE) when/if one reappears.
-       (uri (string-append "https://web.archive.org/web/20180428070843/"
-                           "http://dvdisaster.net/downloads/dvdisaster-"
+       (uri (string-append "https://dvdisaster.jcea.es/downloads/dvdisaster-"
                            version ".tar.bz2"))
        (sha256
-        (base32 "0f8gjnia2fxcbmhl8b3qkr5b7idl8m855dw7xw2fnmbqwvcm6k4w"))))
+        (base32 "1s3z4098ixdjr3gjs36fg7rykqs0zz1rnvz2v9rvyj0s5zv9y2nx"))))
     (build-system gnu-build-system)
     (inputs
-     `(("gtk+" ,gtk+-2)))
+     (list gtk+-2))
     (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("pkg-config" ,pkg-config)
-       ("which" ,which)))
+     (list gettext-minimal pkg-config which))
     (arguments
-     `(;; Parallel builds appear to be unsafe, see
-       ;; <http://hydra.gnu.org/build/49331/nixlog/1/raw>.
-       #:parallel-build? #f
-       #:phases
-       (modify-phases %standard-phases
-         (replace 'check
-           (lambda _
-             (with-directory-excursion "regtest"
-               (substitute* "common.bash"
-                 (("ISODIR=/var/tmp/regtest") "ISODIR=/tmp"))
-               (for-each invoke (find-files "." "rs.*\\.bash")))
-             #t))
-         (add-after 'install 'install-desktop
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((datadir (string-append (assoc-ref outputs "out") "/share")))
-               (substitute* "contrib/dvdisaster.desktop"
-                 (("dvdisaster48.png") "dvdisaster.png"))
-               (install-file "contrib/dvdisaster.desktop"
-                             (string-append datadir "/applications"))
-               (for-each
-                (lambda (png)
-                  (let* ((size (substring png
-                                          (string-index png char-set:digit)
-                                          (string-rindex png #\.)))
-                         (icondir (string-append datadir "/icons/"
-                                                 size "x" size "/apps")))
-                    (mkdir-p icondir)
-                    (copy-file png (string-append icondir "/dvdisaster.png"))))
-                (find-files "contrib" "dvdisaster[0-9]*\\.png"))
-               (mkdir-p (string-append datadir "/pixmaps"))
-               (copy-file "contrib/dvdisaster48.xpm"
-                          (string-append datadir "/pixmaps/dvdisaster.xpm"))
-               #t))))))
-    (home-page (string-append "https://web.archive.org/web/20180428070843/"
-                              "http://dvdisaster.net/en/index.html"))
+     (list #:parallel-build? #f ; http://hydra.gnu.org/build/49331/nixlog/1/raw
+           #:phases
+           #~(modify-phases %standard-phases
+               (replace 'check
+                 (lambda _
+                   (with-directory-excursion "regtest"
+                     (substitute* "common.bash"
+                       (("ISODIR=/var/tmp/regtest") "ISODIR=/tmp"))
+                     (for-each invoke (find-files "." "rs.*\\.bash")))))
+               (add-after 'install 'install-desktop
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   (let* ((datadir (string-append (assoc-ref outputs "out")
+                                                  "/share")))
+                     (substitute* "contrib/dvdisaster.desktop"
+                       (("dvdisaster48.png") "dvdisaster.png"))
+                     (install-file "contrib/dvdisaster.desktop"
+                                   (string-append datadir "/applications"))
+                     (for-each
+                      (lambda (png)
+                        (let* ((size (substring
+                                      png
+                                      (string-index png char-set:digit)
+                                      (string-rindex png #\.)))
+                               (icondir (string-append datadir "/icons/"
+                                                       size "x" size "/apps")))
+                          (mkdir-p icondir)
+                          (copy-file png
+                                     (string-append icondir
+                                                    "/dvdisaster.png"))))
+                      (find-files "contrib" "dvdisaster[0-9]*\\.png"))
+                     (mkdir-p (string-append datadir "/pixmaps"))
+                     (copy-file "contrib/dvdisaster48.xpm"
+                                (string-append datadir
+                                               "/pixmaps/dvdisaster.xpm")))))
+               (add-after 'install 'remove-uninstall-script
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   (let* ((out (assoc-ref outputs "out")))
+                     (delete-file
+                      (string-append out "/bin/dvdisaster-uninstall.sh"))))))))
+    (home-page "https://dvdisaster.jcea.es/")
     (synopsis "Error correcting codes for optical media images")
     (description "Optical media (CD,DVD,BD) keep their data only for a
 finite time (typically for many years).  After that time, data loss develops
@@ -571,8 +561,7 @@ graphical interface.")
     (arguments
      `(#:configure-flags '("-DBUILD_SHARED_LIBS=ON")))
     (native-inputs
-     `(("bison" ,bison)
-       ("flex" ,flex)))
+     (list bison flex))
     (home-page "https://github.com/lipnitsk/libcue")
     (synopsis "C library to parse cue sheets")
     (description "Libcue is a C library to parse so-called @dfn{cue sheets}
@@ -683,20 +672,18 @@ from an audio CD.")
              #t)))
        #:tests? #f)) ; no test target
 
-    (inputs `(("wget" ,wget)
-              ("which" ,which)
-              ("cdparanoia" ,cdparanoia)
-              ("cd-discid" ,cd-discid)
-              ("vorbis-tools" ,vorbis-tools)
-              ("flac" ,flac)
-
-              ("perl-musicbrainz-discid" ,perl-musicbrainz-discid)
-              ("perl-webservice-musicbrainz" ,perl-webservice-musicbrainz)
-              ("perl-mojolicious" ,perl-mojolicious) ;indirect dependency
-
-              ;; A couple of Python and Perl scripts are included.
-              ("python" ,python)
-              ("perl" ,perl)))
+    (inputs (list wget
+                  which
+                  cdparanoia
+                  cd-discid
+                  vorbis-tools
+                  flac
+                  perl-musicbrainz-discid
+                  perl-webservice-musicbrainz
+                  perl-mojolicious ;indirect dependency
+                  ;; A couple of Python and Perl scripts are included.
+                  python
+                  perl))
 
     (synopsis "Command-line audio CD ripper")
     (description
@@ -729,7 +716,7 @@ and/or MPP/MP+ (Musepack) format, and tags them, all in one go.")
              (let ((out (assoc-ref outputs "out")))
                (install-file "geteltorito"
                              (string-append out "/bin"))))))))
-    (inputs `(("perl" ,perl)))
+    (inputs (list perl))
     (synopsis "Extract the boot image from a CD-ROM")
     (description
      "@command{geteltorito} can extract the initial/default boot
@@ -770,8 +757,7 @@ information is written to standard error.")
                                                       "flac"
                                                       "opus-tools"
                                                       "wavpack"))))))))))
-    (native-inputs `(("intltool" ,intltool)
-                     ("pkg-config" ,pkg-config)))
+    (native-inputs (list intltool pkg-config))
     ;; TODO: Add the necessary packages for Musepack encoding.
     (inputs `(("gtk+-2" ,gtk+-2)
               ("glib" ,glib)
@@ -822,15 +808,11 @@ session, and it can create M3U playlists.")
                (("\\$\\(DESTDIR\\)/usr/local") (assoc-ref outputs "out"))
                (("../../etc") "etc")))))))
     (native-inputs
-     `(("coreutils" ,coreutils)))
+     (list coreutils))
     (inputs
-     `(("perl" ,perl)))
+     (list perl))
     (propagated-inputs
-     `(("cdparanoia" ,cdparanoia)
-       ("flac" ,flac)
-       ("vorbis-tools" ,vorbis-tools)
-       ("wavpack" ,wavpack)
-       ("perl-cddb-get" ,perl-cddb-get)))
+     (list cdparanoia flac vorbis-tools wavpack perl-cddb-get))
     (home-page (string-append "https://web.archive.org/web/20170119092156/"
                               "http://www.suwald.com/ripit/about.php"))
     (synopsis "Command-line program to extract audio CDs")
@@ -874,7 +856,7 @@ laid out on the image.")
                "0m1vyry6pi115nysfgb0cg313qqhnlxqdg7f920wpiar0z8mjl2j"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (home-page "https://dev.lovelyhq.com/libburnia/libburn")
     (synopsis "Library for reading and writing optical discs")
     (description
@@ -896,10 +878,9 @@ DVD-RW, DVD-R, DVD-R/DL, BD-R, and BD-RE.")
                "13m82l13cb5d7ca53dv3akma1jr9gw0hnnshdwqpj6ahly0fv85a"))))
     (build-system gnu-build-system)
     (inputs
-     `(("zlib" ,zlib)
-       ("acl" ,acl)))
+     (list zlib acl))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (home-page "https://dev.lovelyhq.com/libburnia/libisofs")
     (synopsis "Library to create ISO 9660 images")
     (description
@@ -927,13 +908,18 @@ Supported extensions to ISO 9660 are Rock Ridge, Joliet, AAIP, zisofs.")
                     version ".tar.gz"))
               (sha256
                (base32
-                "0g2zyzb56czh429qy87lvaddzjnlcq8c616ddxsmsshz3clhyzrh"))))
+                "0g2zyzb56czh429qy87lvaddzjnlcq8c616ddxsmsshz3clhyzrh"))
+              (patches (search-patches "cdrkit-libre-cross-compile.patch"))
+              (modules '((guix build utils)))
+              (snippet
+                #~(begin
+                    ;; Fix building with gcc-10.
+                    (substitute* "genisoimage/genisoimage.h"
+                      (("char\t\t\\*outfile")
+                       "extern char\t*outfile"))))))
     (build-system cmake-build-system)
     (inputs
-     `(("bzip2" ,bzip2)
-       ("libcap" ,libcap)
-       ("perl" ,perl)
-       ("zlib" ,zlib)))
+     (list bzip2 libcap perl zlib))
     (arguments
      `(#:tests? #f ;no tests
        #:phases
@@ -955,7 +941,7 @@ CD data, and more.  It's mostly compatible with @code{cdrtools}.")
 (define-public libmirage
   (package
     (name "libmirage")
-    (version "3.2.5")
+    (version "3.2.6")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -963,13 +949,12 @@ CD data, and more.  It's mostly compatible with @code{cdrtools}.")
                     version ".tar.xz"))
               (sha256
                (base32
-                "0f8i2ha44rykkk3ac2q8zsw3y1zckw6qnf6zvkyrj3qqbzhrf3fm"))))
+                "19pjdmxhzl8y3brhg8fsv99b6jg4lfnl8jvcjgm4jmqrr684czr5"))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("intltool" ,intltool)))
+     (list pkg-config intltool))
     (inputs
-     `(("glib" ,glib)))
+     (list glib))
     (arguments
      ;; No tests.
      '(#:tests? #f))
@@ -984,7 +969,7 @@ the data stored in various image formats.")
 (define-public cdemu-daemon
   (package
     (name "cdemu-daemon")
-    (version "3.2.5")
+    (version "3.2.6")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -992,15 +977,12 @@ the data stored in various image formats.")
                     "cdemu-daemon-" version ".tar.xz"))
               (sha256
                (base32
-                "16g6fv1lxkdmbsy6zh5sj54dvgwvm900fd18aq609yg8jnqm644d"))))
+                "13vxhl7ik3h5qnfh6m0zxywb8qzx1n46akrm6rp19ikmxzih9r56"))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("intltool" ,intltool)))
+     (list pkg-config intltool))
     (inputs
-     `(("libmirage" ,libmirage)
-       ("glib" ,glib)
-       ("ao" ,ao)))
+     (list libmirage glib ao))
     (arguments
      ;; No tests.
      '(#:tests? #f))
@@ -1024,12 +1006,9 @@ drive and disc (including CD-ROMs and DVD-ROMs).")
                 "1prrdhv0ia0axc6b73crszqzh802wlkihz6d100yvg7wbgmqabd7"))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("intltool" ,intltool)))
+     (list pkg-config intltool))
     (inputs
-     `(("python" ,python)
-       ("python-pygobject" ,python-pygobject)
-       ("cdemu-daemon" ,cdemu-daemon)))
+     (list python python-pygobject cdemu-daemon))
     (arguments
      ;; No tests.
      `(#:tests? #f
@@ -1045,7 +1024,7 @@ drive and disc (including CD-ROMs and DVD-ROMs).")
              (let ((prog (string-append (assoc-ref outputs "out")
                                         "/bin/cdemu")))
                (wrap-program prog
-                 `("PYTHONPATH" = (,(getenv "PYTHONPATH"))))
+                 `("GUIX_PYTHONPATH" = (,(getenv "GUIX_PYTHONPATH"))))
                #t))))))
     (home-page "https://cdemu.sourceforge.io/")
     (synopsis "Command-line client for controlling cdemu-daemon")

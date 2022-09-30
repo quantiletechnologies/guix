@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2016 Alex Kost <alezost@gmail.com>
 ;;; Copyright © 2016, 2017, 2018 Chris Marusich <cmmarusich@gmail.com>
 ;;; Copyright © 2017, 2019 Mathieu Othacehe <m.othacehe@gmail.com>
@@ -10,6 +10,7 @@
 ;;; Copyright © 2020 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
 ;;; Copyright © 2021 Simon Tournier <zimon.toutoune@gmail.com>
+;;; Copyright © 2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -29,6 +30,7 @@
 (define-module (guix scripts system)
   #:use-module (guix config)
   #:use-module (guix ui)
+  #:autoload   (guix colors) (supports-hyperlinks? file-hyperlink)
   #:use-module ((guix status) #:select (with-status-verbosity))
   #:use-module (guix store)
   #:autoload   (guix base16) (bytevector->base16-string)
@@ -48,15 +50,17 @@
   #:use-module (guix channels)
   #:use-module (guix scripts build)
   #:autoload   (guix scripts package) (delete-generations
-                                       delete-matching-generations)
+                                       delete-matching-generations
+                                       list-installed)
   #:autoload   (guix scripts pull) (channel-commit-hyperlink)
   #:autoload   (guix graph) (export-graph node-type
-                             graph-backend-name %graph-backends)
+                             graph-backend-name lookup-backend)
   #:use-module (guix scripts graph)
   #:use-module (guix scripts system reconfigure)
   #:use-module (guix build utils)
   #:use-module (guix progress)
   #:use-module ((guix build syscalls) #:select (terminal-columns))
+  #:use-module (gnu build image)
   #:use-module (gnu build install)
   #:autoload   (gnu build file-systems)
                  (find-partition-by-label find-partition-by-uuid)
@@ -64,7 +68,7 @@
                  (device-module-aliases matching-modules)
   #:use-module (gnu system linux-initrd)
   #:use-module (gnu image)
-  #:use-module (gnu platform)
+  #:use-module (guix platform)
   #:use-module (gnu system)
   #:use-module (gnu bootloader)
   #:use-module (gnu system file-systems)
@@ -87,7 +91,9 @@
   #:use-module (ice-9 match)
   #:use-module (rnrs bytevectors)
   #:export (guix-system
-            read-operating-system))
+
+            service-node-type
+            shepherd-service-node-type))
 
 
 ;;;
@@ -99,10 +105,6 @@
   (make-user-module '((gnu system)
                       (gnu services)
                       (gnu system shadow))))
-
-(define (read-operating-system file)
-  "Read the operating-system declaration from FILE and return it."
-  (load* file %user-module))
 
 
 ;;;
@@ -474,8 +476,10 @@ list of services."
 ;;;
 
 (define* (display-system-generation number
-                                    #:optional (profile %system-profile))
-  "Display a summary of system generation NUMBER in a human-readable format."
+                                    #:optional (profile %system-profile)
+                                    #:key (list-installed-regex #f))
+  "Display a summary of system generation NUMBER in a human-readable format.
+List packages in that system that match LIST-INSTALLED-REGEX."
   (define (display-channel channel)
     (format #t     "    ~a:~%" (channel-name channel))
     (format #t (G_ "      repository URL: ~a~%") (channel-url channel))
@@ -538,23 +542,35 @@ list of services."
         (format #t (G_ "  configuration file: ~a~%")
                 (if (supports-hyperlinks?)
                     (file-hyperlink config-file)
-                    config-file))))))
+                    config-file)))
+      (when list-installed-regex
+        (format #t (G_ "  packages:\n"))
+        (pretty-print-table (list-installed
+                             list-installed-regex
+                             (list (string-append generation "/profile")))
+                            #:left-pad 4)))))
 
-(define* (list-generations pattern #:optional (profile %system-profile))
+(define* (list-generations pattern #:optional (profile %system-profile)
+                           #:key (list-installed-regex #f))
   "Display in a human-readable format all the system generations matching
-PATTERN, a string.  When PATTERN is #f, display all the system generations."
+PATTERN, a string.  When PATTERN is #f, display all the system generations.
+List installed packages that match LIST-INSTALLED-REGEX."
   (cond ((not (file-exists? profile))             ; XXX: race condition
          (raise (condition (&profile-not-found-error
                             (profile profile)))))
         ((not pattern)
-         (for-each display-system-generation (profile-generations profile)))
+         (for-each (cut display-system-generation <>
+                        #:list-installed-regex list-installed-regex)
+                   (profile-generations profile)))
         ((matching-generations pattern profile)
          =>
          (lambda (numbers)
            (if (null-list? numbers)
                (exit 1)
                (leave-on-EPIPE
-                (for-each display-system-generation numbers)))))))
+                (for-each (cut display-system-generation <>
+                               #:list-installed-regex list-installed-regex)
+                          numbers)))))))
 
 
 ;;;
@@ -689,6 +705,8 @@ checking this by themselves in their 'check' procedure."
 (define* (system-derivation-for-action image action
                                        #:key
                                        full-boot?
+                                       volatile?
+                                       (graphic? #t)
                                        container-shared-network?
                                        mappings)
   "Return as a monadic value the derivation for IMAGE according to ACTION."
@@ -706,21 +724,18 @@ checking this by themselves in their 'check' procedure."
       ((vm)
        (system-qemu-image/shared-store-script os
                                               #:full-boot? full-boot?
-                                              #:disk-image-size
-                                              (if full-boot?
-                                                  image-size
-                                                  (* 70 (expt 2 20)))
+                                              #:volatile? volatile?
+                                              #:graphic? graphic?
+                                              #:disk-image-size image-size
                                               #:mappings mappings))
-      ((image disk-image vm-image)
+      ((image disk-image vm-image docker-image)
        (when (eq? action 'disk-image)
          (warning (G_ "'disk-image' is deprecated: use 'image' instead~%")))
        (when (eq? action 'vm-image)
          (warning (G_ "'vm-image' is deprecated: use 'image' instead~%")))
-       (lower-object (system-image image)))
-      ((docker-image)
-       (system-docker-image os
-                            #:memory-size 1024
-                            #:shared-network? container-shared-network?)))))
+       (when (eq? action 'docker-image)
+         (warning (G_ "'docker-image' is deprecated: use 'image' instead~%")))
+       (lower-object (system-image image))))))
 
 (define (maybe-suggest-running-guix-pull)
   "Suggest running 'guix pull' if this has never been done before."
@@ -772,6 +787,8 @@ and TARGET arguments."
                          dry-run? derivations-only?
                          use-substitutes? target
                          full-boot?
+                         volatile-vm-root?
+                         (graphic? #t)
                          container-shared-network?
                          (mappings '())
                          (gc-root #f))
@@ -793,11 +810,6 @@ static checks."
   (define println
     (cut format #t "~a~%" <>))
 
-  (define menu-entries
-    (if (eq? 'init action)
-        '()
-        (map boot-parameters->menu-entry (profile-boot-parameters))))
-
   (define os
     (image-operating-system image))
 
@@ -806,7 +818,11 @@ static checks."
 
   (define bootcfg
     (and (memq action '(init reconfigure))
-         (operating-system-bootcfg os menu-entries)))
+         (operating-system-bootcfg
+          os
+          (if (eq? action 'init)
+              '()
+              (map boot-parameters->menu-entry (profile-boot-parameters))))))
 
   (when (eq? action 'reconfigure)
     (maybe-suggest-running-guix-pull)
@@ -825,6 +841,9 @@ static checks."
   (mlet* %store-monad
       ((sys       (system-derivation-for-action image action
                                                 #:full-boot? full-boot?
+                                                #:volatile?
+                                                volatile-vm-root?
+                                                #:graphic? graphic?
                                                 #:container-shared-network? container-shared-network?
                                                 #:mappings mappings))
 
@@ -882,13 +901,6 @@ Run 'herd status' to view the list of services on your system.\n"))))))
                    (register-root* (list output) gc-root))
                  (return output)))))))))
 
-(define (lookup-backend name)                     ;TODO: factorize
-  "Return the graph backend called NAME.  Raise an error if it is not found."
-  (or (find (lambda (backend)
-              (string=? (graph-backend-name backend) name))
-            %graph-backends)
-      (leave (G_ "~a: unknown backend~%") name)))
-
 (define* (export-extension-graph os port
                                  #:key (backend (lookup-backend "graphviz")))
   "Export the service extension graph of OS to PORT using BACKEND."
@@ -896,7 +908,7 @@ Run 'herd status' to view the list of services on your system.\n"))))))
          (system   (find (lambda (service)
                            (eq? (service-kind service) system-service-type))
                          services)))
-    (export-graph (list system) (current-output-port)
+    (export-graph (list system) port
                   #:backend backend
                   #:node-type (service-node-type services)
                   #:reverse-edges? #t)))
@@ -912,7 +924,7 @@ Run 'herd status' to view the list of services on your system.\n"))))))
          (sinks     (filter (lambda (service)
                               (null? (shepherd-service-requirement service)))
                             shepherds)))
-    (export-graph sinks (current-output-port)
+    (export-graph sinks port
                   #:backend backend
                   #:node-type (shepherd-service-node-type shepherds)
                   #:reverse-edges? #t)))
@@ -942,6 +954,8 @@ Some ACTIONS support additional ARGS.\n"))
   (newline)
   (display (G_ "\
    search           search for existing service types\n"))
+  (display (G_ "\
+   edit             edit the definition of an existing service type\n"))
   (display (G_ "\
    reconfigure      switch to a new operating system configuration\n"))
   (display (G_ "\
@@ -995,6 +1009,8 @@ Some ACTIONS support additional ARGS.\n"))
   (display (G_ "
       --volatile         for 'image', make the root file system volatile"))
   (display (G_ "
+      --persistent       for 'vm', make the root file system persistent"))
+  (display (G_ "
       --label=LABEL      for 'image', label disk image with LABEL"))
   (display (G_ "
       --save-provenance  save provenance information"))
@@ -1013,6 +1029,8 @@ Some ACTIONS support additional ARGS.\n"))
   (display (G_ "
       --full-boot        for 'vm', make a full boot sequence"))
   (display (G_ "
+      --no-graphic       for 'vm', use the tty that we are started in for IO"))
+  (display (G_ "
       --skip-checks      skip file system and initrd module safety checks"))
   (display (G_ "
       --target=TRIPLET   cross-build for TRIPLET--e.g., \"armel-linux-gnu\""))
@@ -1022,6 +1040,11 @@ Some ACTIONS support additional ARGS.\n"))
   (display (G_ "
       --graph-backend=BACKEND
                          use BACKEND for 'extension-graphs' and 'shepherd-graph'"))
+  (newline)
+  (display (G_ "
+  -I, --list-installed[=REGEXP]
+                         for 'describe' and 'list-generations', list installed
+                         packages matching REGEXP"))
   (newline)
   (display (G_ "
   -h, --help             display this help and exit"))
@@ -1074,13 +1097,19 @@ Some ACTIONS support additional ARGS.\n"))
                    (alist-cons 'install-bootloader? #f result)))
          (option '("volatile") #f #f
                  (lambda (opt name arg result)
-                   (alist-cons 'volatile-root? #t result)))
+                   (alist-cons 'volatile-image-root? #t result)))
+         (option '("persistent") #f #f
+                 (lambda (opt name arg result)
+                   (alist-cons 'volatile-vm-root? #f result)))
          (option '("label") #t #f
                  (lambda (opt name arg result)
                    (alist-cons 'label arg result)))
          (option '("full-boot") #f #f
                  (lambda (opt name arg result)
                    (alist-cons 'full-boot? #t result)))
+         (option '("no-graphic") #f #f
+                 (lambda (opt name arg result)
+                   (alist-cons 'no-graphic? #t result)))
          (option '("save-provenance") #f #f
                  (lambda (opt name arg result)
                    (alist-cons 'save-provenance? #t result)))
@@ -1121,6 +1150,9 @@ Some ACTIONS support additional ARGS.\n"))
          (option '("graph-backend") #t #f
                  (lambda (opt name arg result)
                    (alist-cons 'graph-backend arg result)))
+         (option '(#\I "list-installed") #f #t
+                 (lambda (opt name arg result)
+                   (alist-cons 'list-installed (or arg "") result)))
          %standard-build-options))
 
 (define %default-options
@@ -1140,7 +1172,8 @@ Some ACTIONS support additional ARGS.\n"))
     (image-size . guess)
     (install-bootloader? . #t)
     (label . #f)
-    (volatile-root? . #f)
+    (volatile-image-root? . #f)
+    (volatile-vm-root? . #t)
     (graph-backend . "graphviz")))
 
 (define (verbosity-level opts)
@@ -1159,7 +1192,8 @@ Some ACTIONS support additional ARGS.\n"))
                   "extension-graph" "shepherd-graph"
                   "list-generations" "describe"
                   "delete-generations" "roll-back"
-                  "switch-generation" "search" "docker-image"))
+                  "switch-generation" "search" "edit"
+                  "docker-image"))
 
 (define (process-action action args opts)
   "Process ACTION, a sub-command, with the arguments are listed in ARGS.
@@ -1205,11 +1239,15 @@ resulting from command-line parsing."
          (label       (assoc-ref opts 'label))
          (image-type  (lookup-image-type-by-name
                        (assoc-ref opts 'image-type)))
-         (image       (let* ((image-type (if (eq? action 'vm-image)
-                                            qcow2-image-type
-                                            image-type))
+         (image       (let* ((image-type (case action
+                                           ((vm-image) qcow2-image-type)
+                                           ((docker-image) docker-image-type)
+                                           (else image-type)))
                             (image-size (assoc-ref opts 'image-size))
-                            (volatile?  (assoc-ref opts 'volatile-root?))
+                            (volatile?
+                             (assoc-ref opts 'volatile-image-root?))
+                            (shared-network?
+                               (assoc-ref opts 'container-shared-network?))
                             (base-image (if (operating-system? obj)
                                             (os->image obj
                                                        #:type image-type)
@@ -1219,7 +1257,8 @@ resulting from command-line parsing."
                                       (image-with-label base-image label)
                                       base-image))
                          (size image-size)
-                         (volatile-root? volatile?))))
+                         (volatile-root? volatile?)
+                         (shared-network? shared-network?))))
          (os          (image-operating-system image))
          (target-file (match args
                         ((first second) second)
@@ -1252,7 +1291,7 @@ resulting from command-line parsing."
                (export-shepherd-graph os (current-output-port)
                                       #:backend (graph-backend)))
               (else
-               (unless (memq action '(build init))
+               (unless (memq action '(build init reconfigure))
                  (warn-about-old-distro #:suggested-command
                                         "guix system reconfigure"))
 
@@ -1266,6 +1305,9 @@ resulting from command-line parsing."
                                #:validate-reconfigure
                                (assoc-ref opts 'validate-reconfigure)
                                #:full-boot? (assoc-ref opts 'full-boot?)
+                               #:volatile-vm-root?
+                               (assoc-ref opts 'volatile-vm-root?)
+                               #:graphic? (not (assoc-ref opts 'no-graphic?))
                                #:container-shared-network?
                                (assoc-ref opts 'container-shared-network?)
                                #:mappings (filter-map (match-lambda
@@ -1298,19 +1340,33 @@ argument list and OPTS is the option alist."
     ;; The following commands do not need to use the store, and they do not need
     ;; an operating system configuration file.
     ((list-generations)
-     (let ((pattern (match args
+     (let ((list-installed-regex (assoc-ref opts 'list-installed))
+           (pattern (match args
                       (() #f)
                       ((pattern) pattern)
                       (x (leave (G_ "wrong number of arguments~%"))))))
-       (list-generations pattern)))
+       (list-generations pattern #:list-installed-regex list-installed-regex)))
     ((describe)
-     (match (generation-number %system-profile)
-       (0
-        (error (G_ "no system generation, nothing to describe~%")))
-       (generation
-        (display-system-generation generation))))
+     ;; Describe the running system, which is not necessarily the current
+     ;; generation.  /run/current-system might point to
+     ;; /var/guix/profiles/system-N-link, or it might point directly to
+     ;; /gnu/store/…-system.  Try both.
+     (let ((list-installed-regex (assoc-ref opts 'list-installed)))
+       (match (generation-number "/run/current-system" %system-profile)
+         (0
+          (match (generation-number %system-profile)
+            (0
+             (leave (G_ "no system generation, nothing to describe~%")))
+            (generation
+             (display-system-generation
+              generation #:list-installed-regex list-installed-regex))))
+         (generation
+          (display-system-generation
+           generation #:list-installed-regex list-installed-regex)))))
     ((search)
      (apply (resolve-subcommand "search") args))
+    ((edit)
+     (apply (resolve-subcommand "edit") args))
     ;; The following commands need to use the store, but they do not need an
     ;; operating system configuration file.
     ((delete-generations)

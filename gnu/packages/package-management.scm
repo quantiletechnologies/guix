@@ -1,15 +1,15 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
-;;; Copyright © 2015, 2017, 2020, 2021 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2013-2022 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015, 2017, 2020, 2021, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2017 Muriithi Frederick Muriuki <fredmanglis@gmail.com>
 ;;; Copyright © 2017, 2018 Oleg Pykhalov <go.wigust@gmail.com>
 ;;; Copyright © 2017 Roel Janssen <roel@gnu.org>
-;;; Copyright © 2017–2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2017–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2018, 2019 Rutger Helling <rhelling@mykolab.com>
 ;;; Copyright © 2018 Sou Bunnbu <iyzsong@member.fsf.org>
 ;;; Copyright © 2018, 2019 Eric Bavier <bavier@member.fsf.org>
-;;; Copyright © 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2019, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2019 Jonathan Brielmaier <jonathan.brielmaier@web.de>
 ;;; Copyright © 2020 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
@@ -18,7 +18,9 @@
 ;;; Copyright © 2020 Martin Becze <mjbecze@riseup.net>
 ;;; Copyright © 2020 Vincent Legoll <vincent.legoll@gmail.com>
 ;;; Copyright © 2021 Ivan Gankevich <i.gankevich@spbu.ru>
-;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2021 John Kehayias <john.kehayias@protonmail.com>
+;;; Copyright © 2022 Zhu Zihao <all_but_last@163.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -36,6 +38,7 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages package-management)
+  #:use-module (gnu artwork)
   #:use-module (gnu packages)
   #:use-module (gnu packages acl)
   #:use-module (gnu packages attr)
@@ -60,6 +63,8 @@
   #:use-module (gnu packages dbm)
   #:use-module (gnu packages docbook)
   #:use-module (gnu packages file)
+  #:use-module (gnu packages flex)
+  #:use-module (gnu packages gcc)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gnome)
@@ -68,12 +73,16 @@
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages guile)
   #:use-module (gnu packages guile-xyz)
+  #:use-module (gnu packages hardware)
   #:use-module (gnu packages hurd)
+  #:use-module (gnu packages imagemagick)
   #:use-module (gnu packages less)
   #:use-module (gnu packages libedit)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages lisp)
+  #:use-module (gnu packages lua)
   #:use-module (gnu packages man)
+  #:use-module (gnu packages markup)
   #:use-module (gnu packages nettle)
   #:use-module (gnu packages networking)
   #:use-module (gnu packages ninja)
@@ -84,6 +93,7 @@
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages popt)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-check)
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
@@ -100,16 +110,24 @@
   #:use-module (gnu packages xml)
   #:use-module (gnu packages xorg)
   #:use-module (gnu packages version-control)
+  #:autoload   (guix build-system channel) (channel-build-system)
   #:use-module (guix build-system glib-or-gtk)
   #:use-module (guix build-system gnu)
+  #:use-module (guix build-system guile)
   #:use-module (guix build-system meson)
   #:use-module (guix build-system python)
+  #:use-module (guix build-system trivial)
   #:use-module (guix download)
   #:use-module (guix gexp)
   #:use-module (guix git-download)
+  #:autoload   (guix describe) (current-channels)
+  #:autoload   (guix channels) (channel?
+                                guix-channel?
+                                repository->guix-channel)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
   #:use-module (guix utils)
+  #:use-module ((guix search-paths) #:select ($SSL_CERT_DIR $SSL_CERT_FILE))
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1))
 
@@ -137,13 +155,17 @@
 ;; Instead, please push one commit that rolls back Guix to before the mistake,
 ;; and then another that points to the first one. That way, the faulty commit
 ;; won't appear on the linked list.
+;;
+;; If you are updating this package because it fails to build, you need to
+;; actually update it *twice*, as the installer is pointing to the N-1 guix
+;; package revision.
 (define-public guix
   ;; Latest version of Guix, which may or may not correspond to a release.
   ;; Note: the 'update-guix-package.scm' script expects this definition to
   ;; start precisely like this.
   (let ((version "1.3.0")
-        (commit "c3c502896b1454b345ee9f17d20063853652a35a")
-        (revision 10))
+        (commit "9e4632081ff31bf0d1715edd66f514614c6dc4bb")
+        (revision 29))
     (package
       (name "guix")
 
@@ -159,7 +181,7 @@
                       (commit commit)))
                 (sha256
                  (base32
-                  "037nlr5z8qmq2zp0slcg5lyhcdp7v6vxl1f36wkqrw9xzgq8k6kf"))
+                  "1x32l8szclv8zlwdjr8yfidxxm4n7dgm6j7xypmx5mg5pkakyan5"))
                 (file-name (string-append "guix-" version "-checkout"))))
       (build-system gnu-build-system)
       (arguments
@@ -225,6 +247,12 @@ $(prefix)/etc/init.d\n")))
 $(prefix)/etc/openrc\n")))
 
                         (invoke "sh" "bootstrap")))
+                    ,@(if (target-riscv64?)
+                        `((add-after 'unpack 'use-correct-guile-version-for-tests
+                            (lambda _
+                              (substitute* "tests/gexp.scm"
+                                (("2\\.0") "3.0")))))
+                        '())
                     (add-before 'build 'use-host-compressors
                       (lambda* (#:key inputs target #:allow-other-keys)
                         (when target
@@ -323,10 +351,11 @@ $(prefix)/etc/openrc\n")))
                                (ssh    (assoc-ref inputs "guile-ssh"))
                                (gnutls (assoc-ref inputs "gnutls"))
                                (disarchive (assoc-ref inputs "disarchive"))
+                               (lzma (assoc-ref inputs "guile-lzma"))
                                (locales (assoc-ref inputs "glibc-utf8-locales"))
                                (deps   (list gcrypt json sqlite gnutls git
                                              bs ssh zlib lzlib zstd guile-lib
-                                             disarchive))
+                                             disarchive lzma))
                                (deps*  (if avahi (cons avahi deps) deps))
                                (effective
                                 (read-line
@@ -429,6 +458,7 @@ $(prefix)/etc/openrc\n")))
          ("bootstrap/xz" ,(bootstrap-executable "xz" (%current-system)))
 
          ("disarchive" ,disarchive)               ;for 'guix perform-download'
+         ("guile-lzma" ,guile-lzma)               ;for Disarchive
 
          ("glibc-utf8-locales" ,glibc-utf8-locales)))
       (propagated-inputs
@@ -450,14 +480,9 @@ $(prefix)/etc/openrc\n")))
        (list (search-path-specification
               (variable "GUIX_EXTENSIONS_PATH")
               (files '("share/guix/extensions")))
-
              ;; (guix git) and (guix build download) honor this variable whose
              ;; name comes from OpenSSL.
-             (search-path-specification
-              (variable "SSL_CERT_DIR")
-              (separator #f)                      ;single entry
-              (files '("etc/ssl/certs")))))
-
+             $SSL_CERT_DIR))
       (home-page "https://www.gnu.org/software/guix/")
       (synopsis "Functional package manager for installed software packages and versions")
       (description
@@ -468,6 +493,45 @@ upgrades and roll-backs, per-user profiles, and much more.  It is based on
 the Nix package manager.")
       (license license:gpl3+)
       (properties '((ftp-server . "alpha.gnu.org"))))))
+
+(define* (channel-source->package source #:key commit)
+  "Return a package for the given channel SOURCE, a lowerable object."
+  (package
+    (inherit guix)
+    (version (string-append (package-version guix) "."
+                            (if commit (string-take commit 7) "")))
+    (build-system channel-build-system)
+    (arguments `(#:source ,source
+                 #:commit ,commit))
+    (inputs '())
+    (native-inputs '())
+    (propagated-inputs '())))
+
+(export channel-source->package)
+
+(define-public guix-for-cuirass
+  ;; Known-good revision before commit
+  ;; bd86bbd300474204878e927f6cd3f0defa1662a5, which introduced
+  ;; 'primitive-fork' in 'open-inferior'.
+  (let ((version "1.3.0")
+        (commit "a27e47f9d1e22dc32bb250cfeef88cfacb930e23")
+        (revision 23))
+    (package
+      (inherit guix)
+      (version (string-append version "-"
+                              (number->string revision)
+                              "." (string-take commit 7)))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://git.savannah.gnu.org/git/guix.git")
+                      (commit commit)))
+                (sha256
+                 (base32
+                  "12jmvagbw05hmmlrb82i0qazhlv7mcfnl4dmknwx3a9hd760g9y1"))
+                (file-name (string-append "guix-" version "-checkout"))))
+      (properties `((hidden? . #t)
+                    ,@(package-properties guix))))))
 
 (define-public guix-daemon
   ;; This package is for internal consumption: it allows us to quickly build
@@ -480,15 +544,12 @@ the Nix package manager.")
 
     ;; Use a minimum set of dependencies.
     (native-inputs
-     (fold alist-delete (package-native-inputs guix)
-           '("po4a" "graphviz" "help2man")))
+     (modify-inputs (package-native-inputs guix)
+       (delete "po4a" "graphviz" "help2man")))
     (inputs
-     `(("gnutls" ,gnutls)
-       ("guile-git" ,guile-git)
-       ("guile-json" ,guile-json-3)
-       ("guile-gcrypt" ,guile-gcrypt)
-       ,@(fold alist-delete (package-inputs guix)
-               '("boot-guile" "boot-guile/i686" "util-linux"))))
+     (modify-inputs (package-inputs guix)
+       (delete "boot-guile" "boot-guile/i686" "util-linux")
+       (prepend gnutls guile-git guile-json-3 guile-gcrypt)))
 
     (propagated-inputs '())
 
@@ -528,9 +589,6 @@ the Nix package manager.")
                (invoke "make" "install-binPROGRAMS")))
            (delete 'wrap-program)))))))
 
-(define-public guile3.0-guix
-  (deprecated-package "guile3.0-guix" guix))
-
 (define-public guix-minimal
   ;; A version of Guix which is built with the minimal set of dependencies, as
   ;; outlined in the README "Requirements" section.  Intended as a CI job, so
@@ -540,53 +598,145 @@ the Nix package manager.")
      (inherit guix)
      (name "guix-minimal")
      (native-inputs
-      (fold alist-delete
-            (package-native-inputs guix)
-            '("guile-ssh")))
+      (modify-inputs (package-native-inputs guix)
+        (delete "guile-ssh")))
      (propagated-inputs
-      (fold alist-delete
-            (package-propagated-inputs guix)
-            '("guile-ssh"))))))
-
-(define (source-file? file stat)
-  "Return true if FILE is likely a source file, false if it is a typical
-generated file."
-  (define (wrong-extension? file)
-    (or (string-suffix? "~" file)
-        (member (file-extension file)
-                '("o" "a" "lo" "so" "go"))))
-
-  (match (basename file)
-    ((or ".git" "autom4te.cache" "configure" "Makefile" "Makefile.in" ".libs")
-     #f)
-    ((? wrong-extension?)
-     #f)
-    (_
-     #t)))
+      (modify-inputs (package-propagated-inputs guix)
+        (delete "guile-ssh"))))))
 
 (define-public current-guix-package
   ;; This parameter allows callers to override the package that 'current-guix'
   ;; returns.  This is useful when 'current-guix' cannot compute it by itself,
   ;; for instance because it's not running from a source code checkout.
-  (make-parameter #f))
+  ;;
+  ;; The default value is obtained by creating a package from the 'guix'
+  ;; channel returned by 'current-channels' or, if that's the empty list, that
+  ;; returned by 'repository->guix-channel' for the current directory (which
+  ;; assumes that we're running from a Git checkout).  Delay computation so
+  ;; that the relevant modules can be loaded lazily.
+  (make-parameter
+   (delay (match (or (find guix-channel? (current-channels))
+                     (repository->guix-channel
+                      (current-source-directory)))
+            ((? channel? source)
+             (package
+               (inherit guix)
+               (source source)
+               (build-system channel-build-system)
+               (inputs '())
+               (native-inputs '())
+               (propagated-inputs '())))
+            (#f #f)))))
 
 (define-public current-guix
-  (let* ((repository-root (delay (canonicalize-path
-                                  (string-append (current-source-directory)
-                                                 "/../.."))))
-         (select? (delay (or (git-predicate (force repository-root))
-                             source-file?))))
-    (lambda ()
-      "Return a package representing Guix built from the current source tree.
-This works by adding the current source tree to the store (after filtering it
-out) and returning a package that uses that as its 'source'."
-      (or (current-guix-package)
-          (package
-            (inherit guix)
-            (version (string-append (package-version guix) "+"))
-            (source (local-file (force repository-root) "guix-current"
-                                #:recursive? #t
-                                #:select? (force select?))))))))
+  (lambda ()
+    "Return a package representing the currently-used Guix.  It can be
+overridden by setting the 'current-guix-package' parameter."
+    (match (current-guix-package)
+      ((? promise? package) (force package))
+      (package package))))
+
+(define-public guix-icons
+  (package
+    (inherit guix)
+    (name "guix-icons")
+    (version "0.1")
+    (source %artwork-repository)
+    (build-system trivial-build-system)
+    (native-inputs
+     (list imagemagick))
+    (inputs
+     '())
+    (arguments
+     `(#:modules ((guix build utils)
+                  (gnu build svg))
+       #:builder
+       ,(with-extensions (list guile-rsvg guile-cairo)
+          #~(begin
+              (use-modules (guix build utils)
+                           (gnu build svg))
+              (let* ((logo (string-append #$source "/logo/Guix.svg"))
+                     (logo-white
+                      (string-append #$source
+                                     "/logo/Guix-horizontal-white.svg"))
+                     (theme "hicolor")
+                     (category "apps")
+                     (sizes '(16 24 32 48 64 72 96 128 256 512 1024))
+                     (icons
+                      (string-append #$output "/share/icons/" theme))
+                     (scalable-dir
+                      (string-append icons "/scalable/" category)))
+                (setenv "XDG_CACHE_HOME" (getcwd))
+
+                ;; Create the scalable icon files.
+                (mkdir-p scalable-dir)
+                (copy-file logo
+                           (string-append scalable-dir "/guix-icon.svg"))
+                (copy-file logo-white
+                           (string-append scalable-dir
+                                          "/guix-white-icon.svg"))
+
+                ;; Create the fixed dimensions icon files.
+                (for-each
+                 (lambda (size)
+                   (let* ((dimension
+                           (format #f "~ax~a" size size))
+                          (file
+                           (string-append icons "/" dimension "/" category
+                                          "/guix-icon.png")))
+                     (mkdir-p (dirname file))
+                     (svg->png logo file
+                               #:width size
+                               #:height size)))
+                 sizes))))))
+    (synopsis "GNU Guix icons")
+    (description "This package contains GNU Guix icons organized according to
+the Icon Theme Specification.  They can be used by applications querying the
+GTK icon cache for instance.")))
+
+(define-public guix-modules
+  (package
+    (name "guix-modules")
+    (version "0.1.0")
+    (home-page "https://gitlab.inria.fr/guix-hpc/guix-modules")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference (url home-page)
+                                  (commit (string-append "v" version))))
+              (file-name (string-append "guix-modules-" version "-checkout"))
+              (sha256
+               (base32
+                "1ckvrrmkgzz93i35sj1372wxs7ln4gzszpri1pcdf473z0p7nh7w"))))
+    (build-system guile-build-system)
+    (arguments
+     '(#:phases (modify-phases %standard-phases
+                  (add-after 'install 'move-to-extension-directory
+                    (lambda* (#:key outputs #:allow-other-keys)
+                      (let* ((out (assoc-ref outputs "out"))
+                             (target (string-append
+                                      out
+                                      "/share/guix/extensions/module.scm")))
+                        (mkdir-p (dirname target))
+                        (rename-file (car (find-files out "module.scm"))
+                                     target)))))))
+    (native-inputs (list (lookup-package-input guix "guile") guix))
+    (synopsis "Generate environment modules from Guix packages")
+    (description
+     "Guix-Modules is an extension of Guix that provides a new @command{guix
+module} command.  The @command{guix module create} sub-command creates
+@dfn{environment modules}, allowing you to manipulate software environments
+with the @command{module} command commonly found on @acronym{HPC,
+high-performance computing} clusters.
+
+To use this extension, set the @env{GUIX_EXTENSIONS_PATH} environment
+variable, along these lines:
+
+@example
+export GUIX_EXTENSIONS_PATH=\"$HOME/.guix-profile/share/guix/extensions\"
+@end example
+
+Replace @code{$HOME/.guix-profile} with the appropriate profile.")
+    (license license:gpl3+)))
 
 
 ;;;
@@ -596,41 +746,62 @@ out) and returning a package that uses that as its 'source'."
 (define-public nix
   (package
     (name "nix")
-    (version "2.3.16")
-    (source (origin
-             (method url-fetch)
-             (uri (string-append "https://releases.nixos.org/nix/nix-"
-                                 version "/nix-" version ".tar.xz"))
-             (sha256
-              (base32
-               "1g5aqavr6i3c1xln53w1pdh1kvlxrpnknb105m4jbd85kyv83rky"))))
+    (version "2.5.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "http://github.com/NixOS/nix")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1m8rmv8i6lg83pmalvjlq1fn8mcghn3ngjv3kw1kqsa45ymj5sqq"))
+       (patches
+        (search-patches "nix-dont-build-html-doc.diff"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:configure-flags '("--sysconfdir=/etc" "--enable-gc")
-       #:phases
-       (modify-phases %standard-phases
-         (replace 'install
-           ;; Don't try & fail to create subdirectories in /etc, but keep them
-           ;; in the output as examples.
-           (lambda* (#:key (make-flags '()) outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (etc (string-append out "/etc")))
-               (apply invoke "make" "install"
-                      (string-append "sysconfdir=" etc)
-                      (string-append "profiledir=" etc "/profile.d")
-                      make-flags)))))))
-    (native-inputs `(("pkg-config" ,pkg-config)))
-    (inputs `(("boost" ,boost)
-              ("brotli" ,brotli)
-              ("bzip2" ,bzip2)
-              ("curl" ,curl)
-              ("editline" ,editline)
-              ("libgc" ,libgc)
-              ("libseccomp" ,libseccomp)
-              ("libsodium" ,libsodium)
-              ("openssl" ,openssl)
-              ("sqlite" ,sqlite)
-              ("xz" ,xz)))
+     (list
+      #:configure-flags #~(list "--sysconfdir=/etc" "--enable-gc")
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'install
+            ;; Don't try & fail to create subdirectories in /etc, but keep them
+            ;; in the output as examples.
+            (lambda* (#:key (make-flags '()) outputs #:allow-other-keys)
+              (let ((etc (string-append #$output "/etc")))
+                (apply invoke "make" "install"
+                       (string-append "sysconfdir=" etc)
+                       (string-append "profiledir=" etc "/profile.d")
+                       make-flags)))))))
+    (native-inputs
+     (list autoconf
+           autoconf-archive
+           automake
+           bison
+           flex
+           googletest
+           jq
+           libtool
+           pkg-config))
+    (inputs
+     (append (list boost
+                   brotli
+                   bzip2
+                   curl
+                   editline
+                   libarchive
+                   libgc
+                   libseccomp
+                   libsodium
+                   lowdown
+                   openssl
+                   sqlite
+                   xz
+                   zlib)
+             (if (or (target-x86-64?)
+                     (target-x86-32?))
+                 (list libcpuid)
+                 '())))
     (home-page "https://nixos.org/nix/")
     (synopsis "The Nix package manager")
     (description
@@ -655,12 +826,10 @@ sub-directory.")
                 "0jrxy12ywn7smdzdnvwzjw77l6knx6jkj2rckgykg1dpf6bdkm89"))))
     (build-system gnu-build-system)
     (inputs
-     `(("perl" ,perl)))
+     (list perl))
     (native-inputs
-     `(("perl-test-simple" ,perl-test-simple)
-       ("perl-test-output" ,perl-test-output)
-       ("perl-capture-tiny" ,perl-capture-tiny)
-       ("perl-io-stringy" ,perl-io-stringy)))
+     (list perl-test-simple perl-test-output perl-capture-tiny
+           perl-io-stringy))
     (home-page "https://www.gnu.org/software/stow/")
     (synopsis "Managing installed software packages")
     (description
@@ -693,7 +862,7 @@ features of Stow with some extensions.")
 (define-public rpm
   (package
     (name "rpm")
-    (version "4.16.1.3")
+    (version "4.17.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "http://ftp.rpm.org/releases/rpm-"
@@ -701,35 +870,42 @@ features of Stow with some extensions.")
                                   version ".tar.bz2"))
               (sha256
                (base32
-                "07g2g0adgjm29wqy94iqhpp5dk0hacfw1yf7kzycrrxnfbwwfgai"))))
+                "0pbfj94ha59lbnd8dk0aqyxjv37xixfdcazq3y2mhwkf8s9vf48c"))))
     (build-system gnu-build-system)
     (arguments
-     '(#:configure-flags '("--with-external-db"   ;use the system's bdb
-                           "--enable-python"
-                           "--without-lua")
+     '(#:configure-flags '("--with-external-db" ;use the system's bdb
+                           "--enable-python")
        #:phases (modify-phases %standard-phases
+                  (add-after 'unpack 'fix-lua-check
+                    (lambda _
+                      (substitute* "configure"
+                        (("lua >= 5.3")
+                         "lua-5.3 >= 5.3"))))
                   (add-before 'configure 'set-nss-library-path
                     (lambda* (#:key inputs #:allow-other-keys)
                       (let ((nss (assoc-ref inputs "nss")))
                         (setenv "LIBRARY_PATH"
                                 (string-append (getenv "LIBRARY_PATH") ":"
-                                               nss "/lib/nss"))
-                        #t))))))
+                                               nss "/lib/nss"))))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("python" ,python)
-       ("xz" ,xz)
-       ("bdb" ,bdb)
-       ("popt" ,popt)
-       ("nss" ,nss)
-       ("nspr" ,nspr)
-       ("libarchive" ,libarchive)
-       ("libgcrypt" ,libgcrypt)
-       ("file" ,file)
-       ("bzip2" ,bzip2)
-       ("zlib" ,zlib)
-       ("cpio" ,cpio)))
+     (list bdb
+           bzip2
+           cpio
+           file
+           libarchive
+           libgcrypt
+           lua
+           nspr
+           nss
+           python
+           sqlite
+           xz
+           zlib))
+    (propagated-inputs
+     ;; popt is listed in the 'Requires' of rpm.pc.
+     (list popt))
     (home-page "https://rpm.org/")
     (synopsis "The RPM Package Manager")
     (description
@@ -759,17 +935,14 @@ transactions from C or Python.")
          "1vyk0g0gci4z9psisb8h50zi3j1nwfdg1jw3j76cxv0brln0v3fw"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-clyent" ,python-clyent)
-       ("python-nbformat" ,python-nbformat)
-       ("python-pyyaml" ,python-pyyaml)
-       ("python-requests" ,python-requests)))
+     (list python-clyent python-nbformat python-pyyaml python-requests))
     (native-inputs
-     `(("python-coverage" ,python-coverage)
-       ("python-dateutil" ,python-dateutil)
-       ("python-freezegun" ,python-freezegun)
-       ("python-mock" ,python-mock)
-       ("python-pillow" ,python-pillow)
-       ("python-pytz" ,python-pytz)))
+     (list python-coverage
+           python-dateutil
+           python-freezegun
+           python-mock
+           python-pillow
+           python-pytz))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -825,16 +998,12 @@ environments.")
              (add-installed-pythonpath inputs outputs)
              (invoke "pytest" "-vv" "tests"))))))
     (propagated-inputs
-     `(("python-six" ,python-six)
-       ("python-tqdm" ,python-tqdm)))
+     (list python-six python-tqdm))
     (inputs
-     `(("libarchive" ,libarchive)))
+     (list libarchive))
     (native-inputs
-     `(("python-cython" ,python-cython)
-       ("python-pytest" ,python-pytest)
-       ("python-pytest-cov" ,python-pytest-cov)
-       ("python-pytest-mock" ,python-pytest-mock)
-       ("python-mock" ,python-mock)))
+     (list python-cython python-pytest python-pytest-cov
+           python-pytest-mock python-mock))
     (home-page "https://conda.io")
     (synopsis "Create and extract conda packages of various formats")
     (description
@@ -954,22 +1123,22 @@ extracting, creating, and converting between formats.")
                                     "/bin/conda")
                      "init"))))))
     (inputs
-     `(("python-wrapper" ,python-wrapper)))
+     (list python-wrapper))
     (propagated-inputs
-     `(("python-anaconda-client" ,python-anaconda-client)
-       ("python-conda-package-handling" ,python-conda-package-handling)
-       ("python-cytoolz" ,python-cytoolz)
-       ("python-pycosat" ,python-pycosat)
-       ("python-pytest" ,python-pytest)
-       ("python-pyyaml" ,python-pyyaml)
-       ("python-requests" ,python-requests)
-       ("python-responses" ,python-responses)
-       ("python-ruamel.yaml" ,python-ruamel.yaml)
-       ("python-tqdm" ,python-tqdm)
-       ;; XXX: This is dragged in by libarchive and is needed at runtime.
-       ("zstd" ,zstd)))
+     (list python-anaconda-client
+           python-conda-package-handling
+           python-cytoolz
+           python-pycosat
+           python-pytest
+           python-pyyaml
+           python-requests
+           python-responses
+           python-ruamel.yaml
+           python-tqdm
+           ;; XXX: This is dragged in by libarchive and is needed at runtime.
+           zstd))
     (native-inputs
-     `(("python-pytest-timeout" ,python-pytest-timeout)))
+     (list python-pytest-timeout))
     (home-page "https://github.com/conda/conda")
     (synopsis "Cross-platform, OS-agnostic, system-level binary package manager")
     (description
@@ -980,13 +1149,10 @@ it easy to create independent environments even for C libraries.  Conda is
 written entirely in Python.")
     (license license:bsd-3)))
 
-(define-public python-conda
-  (deprecated-package "python-conda" conda))
-
 (define-public conan
   (package
     (name "conan")
-    (version "1.40.2")
+    (version "1.50.0")
     (source
      (origin
        (method git-fetch)               ;no tests in PyPI archive
@@ -996,7 +1162,7 @@ written entirely in Python.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "0hp8qs54l4cw043f1kycjwgdr7f388lsyxqcbzfaayr6xg1d3dw0"))))
+         "1jjrinz5wkcxfvwdpldrv4h7vacdyz88cc4af5vi3sdnjra0i0m5"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
@@ -1005,7 +1171,11 @@ written entirely in Python.")
            (lambda _
              (substitute* "conans/requirements.txt"
                (("node-semver==0.6.1")
-                "node-semver>=0.6.1"))))
+                "node-semver>=0.6.1")
+               (("Jinja2>=2.9, <3")
+                "Jinja2>=2.9")
+               (("PyYAML>=3.11, <6.0")
+                "PyYAML"))))
          (add-after 'unpack 'patch-paths
            (lambda* (#:key inputs #:allow-other-keys)
              (let ((coreutils (assoc-ref inputs "coreutils")))
@@ -1061,6 +1231,9 @@ written entirely in Python.")
                         ;; This one fails for unknown reasons (see:
                         ;; https://github.com/conan-io/conan/issues/9671).
                         "and not test_build "
+                        ;; These tests expect the 'apt' command to be available.
+                        "and not test_apt_check "
+                        "and not test_apt_install_substitutes "
                         (if (not (string-prefix? "x86_64" system))
                             ;; These tests either assume the machine is
                             ;; x86_64, or require a cross-compiler to target
@@ -1088,31 +1261,31 @@ written entirely in Python.")
                              "and not settings_as_a_dict_conanfile ")
                             "")))))))))
     (propagated-inputs
-     `(("python-bottle" ,python-bottle)
-       ("python-colorama" ,python-colorama)
-       ("python-dateutil" ,python-dateutil)
-       ("python-distro" ,python-distro)
-       ("python-fasteners" ,python-fasteners)
-       ("python-future" ,python-future)
-       ("python-jinja2" ,python-jinja2)
-       ("python-node-semver" ,python-node-semver)
-       ("python-patch-ng" ,python-patch-ng)
-       ("python-pluginbase" ,python-pluginbase)
-       ("python-pygments" ,python-pygments)
-       ("python-pyjwt" ,python-pyjwt)
-       ("python-pyyaml" ,python-pyyaml)
-       ("python-requests" ,python-requests)
-       ("python-six" ,python-six)
-       ("python-tqdm" ,python-tqdm)
-       ("python-urllib3" ,python-urllib3)))
+     (list python-bottle
+           python-colorama
+           python-dateutil
+           python-distro
+           python-fasteners
+           python-future
+           python-jinja2
+           python-node-semver
+           python-patch-ng
+           python-pluginbase
+           python-pygments
+           python-pyjwt
+           python-pyyaml-5
+           python-requests
+           python-six
+           python-tqdm
+           python-urllib3))
     (inputs
-     `(("coreutils" ,coreutils)))       ;for printenv
+     (list coreutils))       ;for printenv
     (native-inputs
      `(("autoconf" ,autoconf)
        ("automake" ,automake)
-       ("cmake" ,cmake)                 ;requires cmake >= 3.17
+       ("cmake" ,cmake)
        ("git" ,git-minimal)
-       ("meson" ,meson-0.55)
+       ("meson" ,meson)
        ("ninja",ninja)
        ("pkg-config" ,pkg-config)
        ("python-bottle" ,python-bottle)
@@ -1144,36 +1317,33 @@ allow for great power and flexibility.
 (define-public gwl
   (package
     (name "gwl")
-    (version "0.3.0")
+    (version "0.5.0")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://gnu/gwl/gwl-" version ".tar.gz"))
               (sha256
                (base32
-                "1lqif00mq7fsaknbc2gvvcv1j89k311sm44jp9jklbrv0v2lc83n"))))
+                "09r22gqgaj2mxvlwvfach5j1n66y3yggmzc6d2gxq7lyywbcvjvs"))))
     (build-system gnu-build-system)
     (arguments
      `(#:parallel-build? #false ; for reproducibility
        #:make-flags
-       '("GUILE_AUTO_COMPILE=0")))
+       '("GUILE_AUTO_COMPILE=0" "GWL_SKIP_INTEGRATION_TESTS=1")))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("pkg-config" ,pkg-config)
-       ("texinfo" ,texinfo)
-       ("graphviz" ,graphviz)))
+     (list autoconf automake pkg-config texinfo graphviz))
     (inputs
      (let ((p (package-input-rewriting
                `((,guile-3.0 . ,guile-3.0-latest))
                #:deep? #false)))
-       `(("guix" ,guix)
-         ("guile" ,guile-3.0-latest)
-         ("guile-commonmark" ,(p guile-commonmark))
-         ("guile-config" ,(p guile-config))
-         ("guile-gcrypt" ,(p guile-gcrypt))
-         ("guile-pfds" ,(p guile-pfds))
-         ("guile-syntax-highlight" ,(p guile-syntax-highlight))
-         ("guile-wisp" ,(p guile-wisp)))))
+       (list guix
+             guile-3.0-latest
+             (p guile-commonmark)
+             (p guile-config)
+             (p guile-drmaa)
+             (p guile-gcrypt)
+             (p guile-pfds)
+             (p guile-syntax-highlight)
+             (p guile-wisp))))
     (home-page "https://workflows.guix.info")
     (synopsis "Workflow management extension for GNU Guix")
     (description "The @dfn{Guix Workflow Language} (GWL) provides an
@@ -1186,9 +1356,26 @@ environments.")
     ;; and the fonts included in this package are licensed OFL1.1.
     (license (list license:gpl3+ license:agpl3+ license:silofl1.1))))
 
+(define-public gwl/next
+  (let ((commit "706a0895f639ed3ed77d0fe88382f51a6638b514")
+        (revision "1"))
+    (package
+      (inherit gwl)
+      (name "gwl-next")
+      (version (git-version "0.5.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://git.savannah.gnu.org/git/gwl.git")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0k9zkdyyzir3fvlbcfcqy17k28b51i20rpbjwlx2i1mwd2pw9cxc")))))))
+
 (define-public guix-build-coordinator
-  (let ((commit "a4d0ec6bc564bbe98d3e6c03be41de16edbda928")
-        (revision "35"))
+  (let ((commit "cc884efa7ee8a481cd3dae1b93d27454ac8dfcd2")
+        (revision "59"))
     (package
       (name "guix-build-coordinator")
       (version (git-version "0" revision commit))
@@ -1199,7 +1386,7 @@ environments.")
                       (commit commit)))
                 (sha256
                  (base32
-                  "0qa7qkskp9xzhyl0fgbm98f8apy8cn2yc9gpxhw0dfc9bkbs1pb9"))
+                  "03yz8if282mvkgqn0pxlqj0h3nyjfag7a835v9s98nkqfbj1ixcl"))
                 (file-name (string-append name "-" version "-checkout"))))
       (build-system gnu-build-system)
       (arguments
@@ -1276,41 +1463,41 @@ environments.")
                #t))
            (delete 'strip))))             ; As the .go files aren't compatible
       (native-inputs
-       `(("pkg-config" ,pkg-config)
-         ("autoconf" ,autoconf)
-         ("automake" ,automake)
-         ("gnutls" ,gnutls)
+       (list pkg-config
+             autoconf
+             automake
+             gnutls
 
-         ;; Guile libraries are needed here for cross-compilation.
-         ("guile-json" ,guile-json-4)
-         ("guile-gcrypt" ,guile-gcrypt)
-         ("guix" ,guix)
-         ("guile-prometheus" ,guile-prometheus)
-         ("guile-fibers" ,guile-fibers)
-         ("guile-lib" ,guile-lib)
-         ("guile" ,@(assoc-ref (package-native-inputs guix) "guile"))))
+             ;; Guile libraries are needed here for cross-compilation.
+             guile-json-4
+             guile-gcrypt
+             guix
+             guile-prometheus
+             guile-fibers-1.1
+             guile-lib
+             (first (assoc-ref (package-native-inputs guix) "guile"))))
       (inputs
-       `(("guile" ,@(assoc-ref (package-native-inputs guix) "guile"))
-         ,@(if (%current-target-system)
-               `(("bash" ,bash-minimal))
-               '())
-         ("sqlite" ,sqlite)
-         ,@(if (hurd-target?)
-               '()
-               `(("sqitch" ,sqitch)))))
+       (append
+        (list (first (assoc-ref (package-native-inputs guix) "guile"))
+              sqlite
+              bash-minimal)
+        (if (hurd-target?)
+            '()
+            (list sqitch))))
       (propagated-inputs
-       `(,@(if (hurd-target?)
-               '()
-               `(("guile-fibers" ,guile-fibers)))
-         ("guile-prometheus" ,guile-prometheus)
-         ("guile-gcrypt" ,guile-gcrypt)
-         ("guile-json" ,guile-json-4)
-         ("guile-lib" ,guile-lib)
-         ("guile-lzlib" ,guile-lzlib)
-         ("guile-zlib" ,guile-zlib)
-         ("guile-sqlite3" ,guile-sqlite3)
-         ("guix" ,guix)
-         ("gnutls" ,gnutls)))
+       (append
+        (list guile-prometheus
+              guile-gcrypt
+              guile-json-4
+              guile-lib
+              guile-lzlib
+              guile-zlib
+              guile-sqlite3
+              guix
+              gnutls)
+        (if (hurd-target?)
+            '()
+            (list guile-fibers-1.1))))
       (home-page "https://git.cbaines.net/guix/build-coordinator/")
       (synopsis "Tool to help build derivations")
       (description
@@ -1318,6 +1505,100 @@ environments.")
 potentially many machines, and with doing something with the results and
 outputs of those builds.")
       (license license:gpl3+))))
+
+(define-public guix-build-coordinator/agent-only
+  (package
+    (inherit guix-build-coordinator)
+    (name "guix-build-coordinator-agent-only")
+    (arguments
+     `(#:modules (((guix build guile-build-system)
+                   #:select (target-guile-effective-version))
+                  ,@%gnu-build-system-modules)
+       #:imported-modules ((guix build guile-build-system)
+                           ,@%gnu-build-system-modules)
+       #:phases
+       (modify-phases %standard-phases
+         (add-before 'build 'set-GUILE_AUTO_COMPILE
+           (lambda _
+             ;; To avoid warnings relating to 'guild'.
+             (setenv "GUILE_AUTO_COMPILE" "0")
+             #t))
+         (add-after 'install 'wrap-executable
+           (lambda* (#:key inputs outputs target #:allow-other-keys)
+             (let* ((out (assoc-ref outputs "out"))
+                    (bin (string-append out "/bin"))
+                    (guile (assoc-ref inputs "guile"))
+                    (version (target-guile-effective-version))
+                    (scm (string-append out "/share/guile/site/" version))
+                    (go  (string-append out "/lib/guile/" version "/site-ccache")))
+               (for-each
+                (lambda (file)
+                  (simple-format (current-error-port) "wrapping: ~A\n" file)
+                  (let ((guile-inputs (list
+                                       "guile-json"
+                                       "guile-gcrypt"
+                                       "guix"
+                                       "guile-prometheus"
+                                       "guile-lib"
+                                       "guile-lzlib"
+                                       "guile-zlib"
+                                       "guile-sqlite3"
+                                       "gnutls")))
+                    (wrap-program file
+                      `("PATH" ":" prefix (,bin))
+                      `("GUILE_LOAD_PATH" ":" prefix
+                        (,scm ,(string-join
+                                (map (lambda (input)
+                                       (simple-format
+                                        #f "~A/share/guile/site/~A"
+                                        (assoc-ref inputs input)
+                                        version))
+                                     guile-inputs)
+                                ":")))
+                      `("GUILE_LOAD_COMPILED_PATH" ":" prefix
+                        (,go ,(string-join
+                               (map (lambda (input)
+                                      (simple-format
+                                       #f "~A/lib/guile/~A/site-ccache"
+                                       (assoc-ref inputs input)
+                                       version))
+                                    guile-inputs)
+                               ":"))))))
+                (find-files bin)))
+             #t))
+         (delete 'strip))))             ; As the .go files aren't compatible
+    (native-inputs
+     (list pkg-config
+           autoconf
+           automake
+           gnutls
+
+           ;; Guile libraries are needed here for cross-compilation.
+           guile-json-4
+           guile-gcrypt
+           guix
+           guile-prometheus
+           guile-lib
+           (first (assoc-ref (package-native-inputs guix) "guile"))))
+    (inputs
+     (list (first (assoc-ref (package-native-inputs guix) "guile"))
+           bash-minimal))
+    (propagated-inputs
+     (append
+         (list guile-prometheus
+               guile-gcrypt
+               guile-json-4
+               guile-lib
+               guile-lzlib
+               guile-zlib
+               guix
+               gnutls)))
+    (description
+     "The Guix Build Coordinator helps with performing lots of builds across
+potentially many machines, and with doing something with the results and
+outputs of those builds.
+
+This package just includes the agent component.")))
 
 (define-public guix-jupyter
   (package
@@ -1379,21 +1660,18 @@ outputs of those builds.")
                                  "guix-jupyter-kernel.scm")))
                #t))))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("pkg-config" ,pkg-config)
-
-       ;; For testing.
-       ("jupyter" ,jupyter)
-       ("python-ipython" ,python-ipython)
-       ("python-ipykernel" ,python-ipykernel)))
+     (list autoconf
+           automake
+           pkg-config
+           ;; For testing.
+           jupyter
+           python-ipython
+           python-ipykernel))
     (inputs
      `(("guix" ,guix)
        ("guile" ,@(assoc-ref (package-native-inputs guix) "guile"))))
     (propagated-inputs
-     `(("guile-json" ,guile-json-4)
-       ("guile-simple-zmq" ,guile-simple-zmq)
-       ("guile-gcrypt" ,guile-gcrypt)))
+     (list guile-json-4 guile-simple-zmq guile-gcrypt))
     (synopsis "Guix kernel for Jupyter")
     (description
      "Guix-Jupyter is a Jupyter kernel.  It allows you to annotate notebooks
@@ -1402,6 +1680,119 @@ in the right software environment.  Guix-Jupyter spawns the actual kernels
 such as @code{python-ipykernel} on behalf of the notebook user and runs them
 in an isolated environment, in separate namespaces.")
     (license license:gpl3+)))
+
+(define-public nar-herder
+  (let ((commit "5acfcc0a9d99d78a167c365534aa5bf592f5625e")
+        (revision "9"))
+    (package
+      (name "nar-herder")
+      (version (git-version "0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://git.cbaines.net/git/guix/nar-herder")
+                      (commit commit)))
+                (sha256
+                 (base32
+                  "1mxdkay3l1la7b6m0455s8cansd6qcdhv0k231aik0ayhbck8kby"))
+                (file-name (string-append name "-" version "-checkout"))))
+      (build-system gnu-build-system)
+      (arguments
+       `(#:modules (((guix build guile-build-system)
+                     #:select (target-guile-effective-version))
+                    ,@%gnu-build-system-modules)
+         #:imported-modules ((guix build guile-build-system)
+                             ,@%gnu-build-system-modules)
+         #:phases
+         (modify-phases %standard-phases
+           (add-before 'build 'set-GUILE_AUTO_COMPILE
+             (lambda _
+               ;; To avoid warnings relating to 'guild'.
+               (setenv "GUILE_AUTO_COMPILE" "0")))
+           (add-after 'install 'wrap-executable
+             (lambda* (#:key inputs outputs target #:allow-other-keys)
+               (let* ((out (assoc-ref outputs "out"))
+                      (bin (string-append out "/bin"))
+                      (guile (assoc-ref inputs "guile"))
+                      (version (target-guile-effective-version))
+                      (scm (string-append out "/share/guile/site/" version))
+                      (go  (string-append out "/lib/guile/" version "/site-ccache")))
+                 (for-each
+                  (lambda (file)
+                    (simple-format (current-error-port) "wrapping: ~A\n" file)
+                    (let ((guile-inputs (list
+                                         "guile-json"
+                                         "guile-gcrypt"
+                                         "guix"
+                                         "guile-lib"
+                                         "guile-lzlib"
+                                         "guile-prometheus"
+                                         "guile-sqlite3"
+                                         "gnutls"
+                                         "guile-fibers")))
+                      (wrap-program file
+                        `("GUILE_LOAD_PATH" ":" prefix
+                          (,scm ,(string-join
+                                  (map (lambda (input)
+                                         (string-append
+                                          (assoc-ref inputs input)
+                                          "/share/guile/site/"
+                                          version))
+                                       guile-inputs)
+                                  ":")))
+                        `("GUILE_LOAD_COMPILED_PATH" ":" prefix
+                          (,go ,(string-join
+                                 (map (lambda (input)
+                                        (string-append
+                                         (assoc-ref inputs input)
+                                         "/lib/guile/" version "/site-ccache"))
+                                      guile-inputs)
+                                 ":"))))))
+                  (find-files bin)))
+               #t))
+           (delete 'strip))))           ; As the .go files aren't compatible
+      (native-inputs
+       (list pkg-config
+             autoconf
+             automake
+             gnutls
+
+             ;; Guile libraries are needed here for cross-compilation.
+             (car (assoc-ref (package-native-inputs guix) "guile"))
+             guile-json-4
+             guile-gcrypt
+             guix
+             guile-fibers-1.1
+             guile-prometheus
+             guile-lib
+             guile-lzlib
+             guile-sqlite3))
+      (inputs
+       (list bash-minimal
+             (car (assoc-ref (package-native-inputs guix) "guile"))))
+      (propagated-inputs
+       (list guile-json-4
+             guile-gcrypt
+             guix
+             guile-fibers-1.1
+             guile-prometheus
+             guile-lib
+             guile-lzlib
+             guile-sqlite3
+             gnutls))
+      (home-page "https://git.cbaines.net/guix/nar-herder")
+      (synopsis "Utility for managing and serving nars")
+      (description
+       "The Nar Herder is a utility for managing a collection of
+nars (normalized archives, in the context of Guix) along with the
+corresponding narinfo files which contain some signed metadata.
+
+It can assist in serving a collection of nars, moving them between machines,
+or mirroring an existing collection of nars.
+
+It's currently a working prototype, many designed features aren't implemented,
+and the error handling is very rough.")
+      (license license:agpl3+))))
 
 (define-public gcab
   (package
@@ -1421,8 +1812,7 @@ in an isolated environment, in separate namespaces.")
        ("pkg-config" ,pkg-config)
        ("vala" ,vala)))
     (inputs
-     `(("glib" ,glib)
-       ("zlib" ,zlib)))
+     (list glib zlib))
     (arguments
      `(#:configure-flags
        ;; XXX This ‘documentation’ is for developers, and fails informatively:
@@ -1450,14 +1840,10 @@ Microsoft cabinet (.@dfn{CAB}) files.")
                 "1skq17qr2ic4qr3779j49byfm8rncwbsq9rj1a33ncn2m7isdwdv"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("bison" ,bison)
-       ("pkg-config" ,pkg-config)))
+     (list bison pkg-config))
     (inputs
-     `(("gcab" ,gcab)
-       ("glib" ,glib)
-       ("libgsf" ,libgsf)
-       ("libxml2" ,libxml2)
-       ("uuid" ,util-linux "lib")))
+     (list gcab glib libgsf libxml2
+           `(,util-linux "lib")))
     (home-page "https://wiki.gnome.org/msitools")
     (synopsis "Windows Installer file manipulation tool")
     (description
@@ -1469,7 +1855,7 @@ for packaging and deployment of cross-compiled Windows applications.")
 (define-public libostree
   (package
     (name "libostree")
-    (version "2021.3")
+    (version "2022.5")
     (source
      (origin
        (method url-fetch)
@@ -1477,7 +1863,7 @@ for packaging and deployment of cross-compiled Windows applications.")
              "https://github.com/ostreedev/ostree/releases/download/v"
              (version-major+minor version) "/libostree-" version ".tar.xz"))
        (sha256
-        (base32 "1cyhr3s7xsgnsais5m4cjwdwcq46naf25r1k042c4n1y1jgs798g"))))
+        (base32 "0gq53g601x09gc4ips6n3zmmdaz8zyv235xf63fxf4f17fclsk4i"))))
     (build-system gnu-build-system)
     (arguments
      '(#:phases
@@ -1486,31 +1872,30 @@ for packaging and deployment of cross-compiled Windows applications.")
            (lambda _
              ;; Don't try to use the non-existing '/var/tmp' as test
              ;; directory.
-             (setenv "TEST_TMPDIR" (getenv "TMPDIR"))
-             #t)))
+             (setenv "TEST_TMPDIR" (getenv "TMPDIR")))))
        ;; XXX: fails with:
        ;;     tap-driver.sh: missing test plan
        ;;     tap-driver.sh: internal error getting exit status
        ;;     tap-driver.sh: fatal: I/O or internal error
        #:tests? #f))
     (native-inputs
-     `(("attr" ,attr)                   ; for tests
-       ("bison" ,bison)
-       ("glib:bin" ,glib "bin")         ; for 'glib-mkenums'
-       ("gobject-introspection" ,gobject-introspection)
-       ("pkg-config" ,pkg-config)
-       ("xsltproc" ,libxslt)))
+     (list attr ; for tests
+           bison
+           `(,glib "bin") ; for 'glib-mkenums'
+           gobject-introspection
+           pkg-config
+           libxslt))
     (inputs
-     `(("avahi" ,avahi)
-       ("docbook-xml" ,docbook-xml-4.2)
-       ("docbook-xsl" ,docbook-xsl)
-       ("e2fsprogs" ,e2fsprogs)
-       ("fuse" ,fuse)
-       ("glib" ,glib)
-       ("gpgme" ,gpgme)
-       ("libarchive" ,libarchive)
-       ("libsoup" ,libsoup)
-       ("util-linux" ,util-linux)))
+     (list avahi
+           docbook-xml
+           docbook-xsl
+           e2fsprogs
+           fuse
+           glib
+           gpgme
+           libarchive
+           libsoup-minimal-2 ; needs libsoup-2.4
+           util-linux))
     (home-page "https://ostree.readthedocs.io/en/latest/")
     (synopsis "Operating system and container binary deployment and upgrades")
     (description
@@ -1522,107 +1907,118 @@ the boot loader configuration.")
 
 (define-public flatpak
   (package
-   (name "flatpak")
-   (version "1.10.2")
-   (source
-    (origin
-     (method url-fetch)
-     (uri (string-append "https://github.com/flatpak/flatpak/releases/download/"
-                         version "/flatpak-" version ".tar.xz"))
-     (sha256
-      (base32 "1r6xw7r3ir2vaa30n3mily6m7d51cf4qv22fkqlzzy3js0wjf5fv"))))
+    (name "flatpak")
+    (version "1.12.7")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://github.com/flatpak/flatpak/releases/download/"
+                           version "/flatpak-" version ".tar.xz"))
+       (sha256
+        (base32 "05lkpbjiwp69q924i1jfyk5frcqbdbv9kyzbqwm2hy723i9jmdbd"))
+       (patches
+        (search-patches "flatpak-fix-path.patch"
+                        "flatpak-unset-gdk-pixbuf-for-sandbox.patch"))))
 
-   ;; Wrap 'flatpak' so that GIO_EXTRA_MODULES is set, thereby allowing GIO to
-   ;; find the TLS backend in glib-networking.
-   (build-system glib-or-gtk-build-system)
+    ;; Wrap 'flatpak' so that GIO_EXTRA_MODULES is set, thereby allowing GIO to
+    ;; find the TLS backend in glib-networking.
+    (build-system glib-or-gtk-build-system)
 
-   (arguments
-    '(#:configure-flags
-      (list
-       "--enable-documentation=no" ;; FIXME
-       "--enable-system-helper=no"
-       "--localstatedir=/var"
-       (string-append "--with-system-bubblewrap="
-                      (assoc-ref %build-inputs "bubblewrap")
-                      "/bin/bwrap")
-       (string-append "--with-system-dbus-proxy="
-                      (assoc-ref %build-inputs "xdg-dbus-proxy")
-                      "/bin/xdg-dbus-proxy"))
+    (arguments
+     (list
+      #:configure-flags
+      #~(list
+         "--enable-documentation=no" ;; FIXME
+         "--enable-system-helper=no"
+         "--localstatedir=/var"
+         (string-append "--with-system-bubblewrap="
+                        (assoc-ref %build-inputs "bubblewrap")
+                        "/bin/bwrap")
+         (string-append "--with-system-dbus-proxy="
+                        (assoc-ref %build-inputs "xdg-dbus-proxy")
+                        "/bin/xdg-dbus-proxy"))
       #:phases
-      (modify-phases %standard-phases
-        (add-after 'unpack 'fix-tests
-          (lambda* (#:key inputs #:allow-other-keys)
-            (copy-recursively
-             (string-append (assoc-ref inputs "glibc-utf8-locales")
-                            "/lib/locale/") "/tmp/locale")
-            (for-each make-file-writable (find-files "/tmp"))
-            (substitute* "tests/make-test-runtime.sh"
-              (("cp `which.*") "echo guix\n")
-              (("cp -r /usr/lib/locale/C\\.\\*")
-               (string-append "mkdir ${DIR}/usr/lib/locale/en_US; \
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'fix-tests
+            (lambda* (#:key inputs #:allow-other-keys)
+              (copy-recursively
+               (search-input-directory inputs "lib/locale")
+               "/tmp/locale")
+              (for-each make-file-writable (find-files "/tmp"))
+              (substitute* "tests/make-test-runtime.sh"
+                (("cp `which.*") "echo guix\n")
+                (("cp -r /usr/lib/locale/C\\.\\*")
+                 (string-append "mkdir ${DIR}/usr/lib/locale/en_US; \
 cp -r /tmp/locale/*/en_US.*")))
-            (substitute* "tests/libtest.sh"
-              (("/bin/kill") (which "kill"))
-              (("/usr/bin/python3") (which "python3")))
-            #t))
-        ;; Many tests fail for unknown reasons, so we just run a few basic
-        ;; tests.
-        (replace 'check
-          (lambda _
-            (setenv "HOME" "/tmp")
-            (invoke "make" "check"
-                    "TESTS=tests/test-basic.sh tests/test-config.sh testcommon"))))))
+              (substitute* "tests/libtest.sh"
+                (("/bin/kill") (which "kill"))
+                (("/usr/bin/python3") (which "python3")))
+              #t))
+          (add-after 'unpack 'p11-kit-fix
+            (lambda* (#:key inputs #:allow-other-keys)
+              (let ((p11-path (search-input-file inputs "/bin/p11-kit")))
+                (substitute* "session-helper/flatpak-session-helper.c"
+                  (("\"p11-kit\",")
+                   (string-append "\"" p11-path "\","))
+                  (("if \\(g_find_program_in_path \\(\"p11-kit\"\\)\\)")
+                   (string-append "if (g_find_program_in_path (\""
+                                  p11-path "\"))"))))))
+          ;; Many tests fail for unknown reasons, so we just run a few basic
+          ;; tests.
+          (replace 'check
+            (lambda _
+              (setenv "HOME" "/tmp")
+              (invoke "make" "check"
+                      "TESTS=tests/test-basic.sh tests/test-config.sh testcommon"))))))
     (native-inputs
-    `(("bison" ,bison)
-      ("dbus" ,dbus) ; for dbus-daemon
-      ("gettext" ,gettext-minimal)
-      ("glib:bin" ,glib "bin")          ; for glib-mkenums + gdbus-codegen
-      ("glibc-utf8-locales" ,glibc-utf8-locales)
-      ("gobject-introspection" ,gobject-introspection)
-      ("libcap" ,libcap)
-      ("pkg-config" ,pkg-config)
-      ("python" ,python)
-      ("python-pyparsing" ,python-pyparsing)
-      ("socat" ,socat)
-      ("which" ,which)))
-   (propagated-inputs `(("glib-networking" ,glib-networking)
-                        ("gnupg" ,gnupg)
-                        ("gsettings-desktop-schemas"
-                         ,gsettings-desktop-schemas)))
-   (inputs
-    `(("appstream-glib" ,appstream-glib)
-      ("bubblewrap" ,bubblewrap)
-      ("dconf" ,dconf)
-      ("fuse" ,fuse)
-      ("gdk-pixbuf" ,gdk-pixbuf)
-      ("gpgme" ,gpgme)
-      ("json-glib" ,json-glib)
-      ("libarchive" ,libarchive)
-      ("libostree" ,libostree)
-      ("libseccomp" ,libseccomp)
-      ("libsoup" ,libsoup)
-      ("libxau" ,libxau)
-      ("libxml2" ,libxml2)
-      ("util-linux" ,util-linux)
-      ("xdg-dbus-proxy" ,xdg-dbus-proxy)))
-   (home-page "https://flatpak.org")
-   (synopsis "System for building, distributing, and running sandboxed desktop
+     (list bison
+           dbus ; for dbus-daemon
+           gettext-minimal
+           `(,glib "bin") ; for glib-mkenums + gdbus-codegen
+           glibc-utf8-locales
+           gobject-introspection
+           libcap
+           pkg-config
+           python
+           python-pyparsing
+           socat
+           which))
+    (inputs
+     (list appstream-glib
+           bubblewrap
+           dconf
+           fuse
+           gdk-pixbuf
+           gpgme
+           json-glib
+           libarchive
+           libostree
+           libseccomp
+           libsoup-minimal-2
+           libxau
+           libxml2
+           p11-kit-next
+           util-linux
+           xdg-dbus-proxy))
+    (propagated-inputs (list glib-networking gnupg gsettings-desktop-schemas))
+    (home-page "https://flatpak.org")
+    (synopsis "System for building, distributing, and running sandboxed desktop
 applications")
-   (description "Flatpak is a system for building, distributing, and running
+    (description "Flatpak is a system for building, distributing, and running
 sandboxed desktop applications on GNU/Linux.")
-   (license license:lgpl2.1+)))
+    (license license:lgpl2.1+)))
 
 (define-public akku
   (package
     (name "akku")
-    (version "1.0.1")
+    (version "1.1.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
                     (url "https://gitlab.com/akkuscm/akku.git")
                     (commit (string-append "v" version))))
               (file-name (git-file-name name version))
-              (sha256 (base32 "1dm32ws3nshnnscd7k75zswxxs1pp25y2q4k8j5ms241hz47by3c"))))
+              (sha256 (base32 "1pi18aamg1fd6f9ynfl7zx92052xzf0zwmhi2pwcwjs1kbah19f5"))))
     (build-system gnu-build-system)
     (arguments
      '(#:phases (modify-phases %standard-phases
@@ -1646,13 +2042,9 @@ sandboxed desktop applications on GNU/Linux.")
                           `("LD_LIBRARY_PATH" ":" prefix (,(string-append curl "/lib"))))
                         #t))))))
     (native-inputs
-     `(("which" ,which)
-       ("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("pkg-config" ,pkg-config)))
+     (list which autoconf automake pkg-config))
     (inputs
-     `(("guile" ,guile-3.0)
-       ("curl" ,curl)))
+     (list guile-3.0 curl))
     (home-page "https://akkuscm.org/")
     (synopsis "Language package manager for Scheme")
     (description
@@ -1758,15 +2150,9 @@ from R7RS, which allows most R7RS code to run on R6RS implementations.")
                     "testsuite/install.00-init/005-init_ts.exp"
                     "modulecmd-test.tcl"))))))))
     (native-inputs
-      `(("dejagnu" ,dejagnu)
-        ("autoconf" ,autoconf)
-        ("which" ,which)))
+      (list dejagnu autoconf which))
     (inputs
-      `(("tcl" ,tcl)
-        ("less" ,less)
-        ("procps" ,procps)
-        ("coreutils" ,coreutils)
-        ("python" ,python-3)))
+      (list tcl less procps coreutils python-3))
     (home-page "http://modules.sourceforge.net/")
     (synopsis "Shell environment variables and aliases management")
     (description "Modules simplify shell initialization and let users

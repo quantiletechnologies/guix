@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2020-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -65,10 +65,13 @@
         gnumach)))
 
 (define %base-packages/hurd
-  (list hurd bash coreutils file findutils grep sed
+  ;; Note: the Shepherd comes before the Hurd, not just because its duty is to
+  ;; shepherd the herd, but also because we want its 'halt' and 'reboot'
+  ;; commands to take precedence.
+  (list shepherd hurd bash coreutils file findutils grep sed
         diffutils patch gawk tar gzip bzip2 xz lzip
         guile-3.0-latest guile-colorized guile-readline
-        net-base inetutils less shadow shepherd sudo which
+        net-base inetutils less shadow sudo which
         info-reader))
 
 (define %base-services/hurd
@@ -79,11 +82,13 @@
         (service hurd-getty-service-type (hurd-getty-configuration
                                           (tty "tty2")))
         (service static-networking-service-type
-                 (list (static-networking (interface "lo")
-                                          (ip "127.0.0.1")
-                                          (requirement '())
-                                          (provision '(loopback networking))
-                                          (name-servers '("10.0.2.3")))))
+                 (list %loopback-static-networking
+
+                       ;; QEMU user-mode networking.  To get "eth0", you need
+                       ;; QEMU to emulate a device for which Mach has an
+                       ;; in-kernel driver, for instance with:
+                       ;; --device rtl8139,netdev=net0 --netdev user,id=net0
+                       %qemu-static-networking))
         (syslog-service)
         (service guix-service-type
                  (guix-configuration
@@ -114,7 +119,7 @@
                  (bootloader grub-minimal-bootloader)
                  (targets '("/dev/vda"))))
     (initrd #f)
-    (initrd-modules (lambda _ '()))
+    (initrd-modules '())
     (firmware '())
     (host-name "guixygnu")
     (file-systems '())

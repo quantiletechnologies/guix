@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2016 Chris Marusich <cmmarusich@gmail.com>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2020, 2021 Ricardo Wurmus <rekado@elephly.net>
@@ -183,8 +183,7 @@
                  (default &no-default-value))
 
   ;; Meta-data.
-  (description  service-type-description          ;string
-                (default #f))
+  (description  service-type-description)         ;string
   (location     service-type-location             ;<location>
                 (default (and=> (current-source-location)
                                 source-properties->location))
@@ -292,7 +291,8 @@ for service of type '~a'")
 singleton service type NAME, of which the returned service is an instance."
   (let* ((extension (service-extension target identity))
          (type      (service-type (name name)
-                                  (extensions (list extension)))))
+                                  (extensions (list extension))
+                                  (description "This is a simple service."))))
     (service type value)))
 
 (define-syntax %modify-service
@@ -319,7 +319,13 @@ the resulting list of services.  Each clause must have the form:
 
 where TYPE is a service type, such as 'guix-service-type', and VARIABLE is an
 identifier that is bound within BODY to the value of the service of that
-TYPE.  Consider this example:
+TYPE.
+
+Clauses can also remove services of a given type:
+
+  (delete TYPE)
+
+Consider this example:
 
   (modify-services %base-services
     (guix-service-type config =>
@@ -729,7 +735,9 @@ directory."
   (service-type (name 'startup)
                 (extensions
                  (list (service-extension system-service-type hurd-rc-entry)))
-                (default-value %hurd-rc-script)))
+                (default-value %hurd-rc-script)
+                (description "This service creates an @file{rc} script in the
+system; that script is responsible for booting the Hurd.")))
 
 (define %hurd-startup-service
   ;; The service that produces the RC script.
@@ -838,7 +846,7 @@ FILES must be a list of name/file-like object pairs."
                           (append config extensions)))
                 (description
                  "Populate @file{/run/setuid-programs} with the specified
-executables, making them setuid-root.")))
+executables, making them setuid and/or setgid.")))
 
 (define (packages->profile-entry packages)
   "Return a system entry for the profile containing PACKAGES."

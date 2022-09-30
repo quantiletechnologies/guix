@@ -8,6 +8,8 @@
 ;;; Copyright © 2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2021 Raghav Gururajan <rg@raghavgururajan.name>
 ;;; Copyright © 2021 jgart <jgart@dismail.de>
+;;; Copyright © 2021 Nathan Dehnel <ncdehnel@gmail.com>
+;;; Copyright © 2022 Cameron V Chaparro <cameron@cameronchaparro.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -67,6 +69,7 @@
             wireguard-configuration-interface
             wireguard-configuration-addresses
             wireguard-configuration-port
+            wireguard-configuration-dns
             wireguard-configuration-private-key
             wireguard-configuration-peers
 
@@ -302,7 +305,7 @@ client.  Each file is named after the name of the client."
 (define-split-configuration openvpn-client-configuration
   openvpn-server-configuration
   ((openvpn
-    (package openvpn)
+    (file-like openvpn)
     "The OpenVPN package.")
 
    (pid-file
@@ -360,7 +363,7 @@ poll/epoll/select prior to the write operation.")
 channel to protect against DoS attacks.")
 
    (auth-user-pass
-     (maybe-string 'disabled)
+    maybe-string
      "Authenticate with server using username/password.  The option is a file
 containing username/password on 2 lines.  Do not use a file-like object as it
 would be added to the store and readable by any user.")
@@ -492,7 +495,8 @@ is truncated and rewritten every minute.")
                        (list (string-append #$openvpn "/sbin/openvpn")
                              "--writepid" #$pid-file "--config" #$config-file
                              "--daemon")
-                       #:pid-file #$pid-file))
+                       #:pid-file #$pid-file
+                       #:log-file #$log-file))
              (stop #~(make-kill-destructor)))))))
 
 (define %openvpn-accounts
@@ -518,7 +522,9 @@ is truncated and rewritten every minute.")
                        (service-extension account-service-type
                                           (const %openvpn-accounts))
                        (service-extension activation-service-type
-                                          (const %openvpn-activation))))))
+                                          (const %openvpn-activation))))
+                (description "Run the OpenVPN server, which allows you to
+@emph{host} a @acronym{VPN, virtual private network}.")))
 
 (define openvpn-client-service-type
   (service-type (name 'openvpn-client)
@@ -528,14 +534,15 @@ is truncated and rewritten every minute.")
                        (service-extension account-service-type
                                           (const %openvpn-accounts))
                        (service-extension activation-service-type
-                                          (const %openvpn-activation))))))
+                                          (const %openvpn-activation))))
+                (description
+                 "Run the OpenVPN client service, which allows you to connect
+to an existing @acronym{VPN, virtual private network}.")))
 
 (define* (openvpn-client-service #:key (config (openvpn-client-configuration)))
-  (validate-configuration config openvpn-client-configuration-fields)
   (service openvpn-client-service-type config))
 
 (define* (openvpn-server-service #:key (config (openvpn-server-configuration)))
-  (validate-configuration config openvpn-server-configuration-fields)
   (service openvpn-server-service-type config))
 
 (define (generate-openvpn-server-documentation)
@@ -561,7 +568,7 @@ is truncated and rewritten every minute.")
 (define-record-type* <strongswan-configuration>
   strongswan-configuration make-strongswan-configuration
   strongswan-configuration?
-  (strongswan      strongswan-configuration-strongswan ;<package>
+  (strongswan      strongswan-configuration-strongswan ;file-like
                    (default strongswan))
   (ipsec-conf      strongswan-configuration-ipsec-conf ;string|#f
                    (default #f))
@@ -704,7 +711,7 @@ strongSwan.")))
 (define-record-type* <wireguard-configuration>
   wireguard-configuration make-wireguard-configuration
   wireguard-configuration?
-  (wireguard          wireguard-configuration-wireguard ;<package>
+  (wireguard          wireguard-configuration-wireguard ;file-like
                       (default wireguard-tools))
   (interface          wireguard-configuration-interface ;string
                       (default "wg0"))
@@ -715,7 +722,9 @@ strongSwan.")))
   (private-key        wireguard-configuration-private-key ;string
                       (default "/etc/wireguard/private.key"))
   (peers              wireguard-configuration-peers ;list of <wiregard-peer>
-                      (default '())))
+                      (default '()))
+  (dns                wireguard-configuration-dns ;list of strings
+                      (default #f)))
 
 (define (wireguard-configuration-file config)
   (define (peer->config peer)
@@ -739,7 +748,7 @@ AllowedIPs = ~a
                   "\n"))))
 
   (match-record config <wireguard-configuration>
-    (wireguard interface addresses port private-key peers)
+    (wireguard interface addresses port private-key peers dns)
     (let* ((config-file (string-append interface ".conf"))
            (peers (map peer->config peers))
            (config
@@ -755,12 +764,17 @@ AllowedIPs = ~a
 Address = ~a
 PostUp = ~a set %i private-key ~a
 ~a
+~a
 ~{~a~^~%~}"
                                #$(string-join addresses ",")
                                #$(file-append wireguard "/bin/wg")
                                #$private-key
                                #$(if port
                                      (format #f "ListenPort = ~a" port)
+                                     "")
+                               #$(if dns
+                                     (format #f "DNS = ~a"
+                                             (string-join dns ","))
                                      "")
                                (list #$@peers)))))))))
       (file-append config "/" config-file))))
@@ -798,7 +812,8 @@ PostUp = ~a set %i private-key ~a
              (start #~(lambda _
                        (invoke #$wg-quick "up" #$config)))
              (stop #~(lambda _
-                       (invoke #$wg-quick "down" #$config)))
+                       (invoke #$wg-quick "down" #$config)
+                       #f))                       ;stopped!
              (documentation "Run the Wireguard VPN tunnel"))))))
 
 (define wireguard-service-type
@@ -808,4 +823,6 @@ PostUp = ~a set %i private-key ~a
     (list (service-extension shepherd-root-service-type
                              wireguard-shepherd-service)
           (service-extension activation-service-type
-                             wireguard-activation)))))
+                             wireguard-activation)))
+   (description "Set up Wireguard @acronym{VPN, Virtual Private Network}
+tunnels.")))

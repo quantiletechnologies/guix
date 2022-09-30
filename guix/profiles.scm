@@ -1,13 +1,13 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;; Copyright © 2014, 2016 Alex Kost <alezost@gmail.com>
 ;;; Copyright © 2015 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2015 Sou Bunnbu <iyzsong@gmail.com>
-;;; Copyright © 2016, 2018, 2019, 2021 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2016, 2017, 2018, 2019, 2021, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2016 Chris Marusich <cmmarusich@gmail.com>
 ;;; Copyright © 2017 Huang Ying <huang.ying.caritas@gmail.com>
-;;; Copyright © 2017 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2017, 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2019 Kyle Meyer <kyle@kyleam.com>
 ;;; Copyright © 2019 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2020 Danny Milosavljevic <dannym@scratchpost.org>
@@ -33,7 +33,7 @@
   #:use-module ((guix utils) #:hide (package-name->name+version))
   #:use-module ((guix build utils)
                 #:select (package-name->name+version mkdir-p))
-  #:use-module ((guix diagnostics) #:select (&fix-hint))
+  #:use-module ((guix diagnostics) #:select (&fix-hint formatted-message))
   #:use-module (guix i18n)
   #:use-module (guix records)
   #:use-module (guix packages)
@@ -124,6 +124,7 @@
 
             profile-manifest
             package->manifest-entry
+            package->development-manifest
             packages->manifest
             ca-certificate-bundle
             %default-profile-hooks
@@ -400,6 +401,24 @@ file name."
                      (properties properties))))
     entry))
 
+(define* (package->development-manifest package
+                                        #:optional
+                                        (system (%current-system))
+                                        #:key target)
+  "Return a manifest for the \"development inputs\" of PACKAGE for SYSTEM,
+optionally when cross-compiling to TARGET.  Development inputs include both
+explicit and implicit inputs of PACKAGE."
+  (manifest
+   (filter-map (match-lambda
+                 ((label (? package? package))
+                  (package->manifest-entry package))
+                 ((label (? package? package) output)
+                  (package->manifest-entry package output))
+                 ;; TODO: Support <inferior-package>.
+                 (_
+                  #f))
+               (package-development-inputs package system #:target target))))
+
 (define (packages->manifest packages)
   "Return a list of manifest entries, one for each item listed in PACKAGES.
 Elements of PACKAGES can be either package objects or package/string tuples
@@ -433,59 +452,80 @@ denoting a specific output of a package."
          packages)
     manifest-entry=?)))
 
-(define (manifest->gexp manifest)
-  "Return a representation of MANIFEST as a gexp."
+(define %manifest-format-version
+  ;; The current manifest format version.
+  4)
+
+(define* (manifest->gexp manifest #:optional
+                         (format-version %manifest-format-version))
+  "Return a representation in FORMAT-VERSION of MANIFEST as a gexp."
+  (define (optional name value)
+    (match format-version
+      (4
+       (if (null? value)
+           #~()
+           #~((#$name #$value))))
+      (3
+       (match name
+         ('properties #~((#$name #$@value)))
+         (_           #~((#$name #$value)))))))
+
   (define (entry->gexp entry)
-    (match entry
-      (($ <manifest-entry> name version output (? string? path)
-                           (deps ...) (search-paths ...) _ (properties ...))
-       #~(#$name #$version #$output #$path
-                 (propagated-inputs #$(map entry->gexp deps))
-                 (search-paths #$(map search-path-specification->sexp
-                                      search-paths))
-                 (properties . #$properties)))
-      (($ <manifest-entry> name version output package
-                           (deps ...) (search-paths ...) _ (properties ...))
-       #~(#$name #$version #$output
-                 (ungexp package (or output "out"))
-                 (propagated-inputs #$(map entry->gexp deps))
-                 (search-paths #$(map search-path-specification->sexp
-                                      search-paths))
-                 (properties . #$properties)))))
+    ;; Maintain in state monad a vhash of visited entries, indexed by their
+    ;; item, usually package objects (we cannot use the entry itself as an
+    ;; index since identical entries are usually not 'eq?').  Use that vhash
+    ;; to avoid repeating duplicate entries.  This is particularly useful in
+    ;; the presence of propagated inputs, where we could otherwise end up
+    ;; repeating large trees.
+    (mlet %state-monad ((visited (current-state)))
+      (if (and (= format-version 4)
+               (match (vhash-assq (manifest-entry-item entry) visited)
+                 ((_ . previous-entry)
+                  (manifest-entry=? previous-entry entry))
+                 (#f #f)))
+          (return #~(repeated #$(manifest-entry-name entry)
+                              #$(manifest-entry-version entry)
+                              (ungexp (manifest-entry-item entry)
+                                      (manifest-entry-output entry))))
+          (mbegin %state-monad
+            (set-current-state (vhash-consq (manifest-entry-item entry)
+                                            entry visited))
+            (mlet %state-monad ((deps (mapm %state-monad entry->gexp
+                                            (manifest-entry-dependencies entry))))
+              (return
+               (match entry
+                 (($ <manifest-entry> name version output (? string? path)
+                                      (_ ...) (search-paths ...) _ (properties ...))
+                  #~(#$name #$version #$output #$path
+                            #$@(optional 'propagated-inputs deps)
+                            #$@(optional 'search-paths
+                                         (map search-path-specification->sexp
+                                              search-paths))
+                            #$@(optional 'properties properties)))
+                 (($ <manifest-entry> name version output package
+                                      (_deps ...) (search-paths ...) _ (properties ...))
+                  #~(#$name #$version #$output
+                            (ungexp package (or output "out"))
+                            #$@(optional 'propagated-inputs deps)
+                            #$@(optional 'search-paths
+                                         (map search-path-specification->sexp
+                                              search-paths))
+                            #$@(optional 'properties properties))))))))))
+
+  (unless (memq format-version '(3 4))
+    (raise (formatted-message
+            (G_ "cannot emit manifests formatted as version ~a")
+            format-version)))
 
   (match manifest
     (($ <manifest> (entries ...))
-     #~(manifest (version 3)
-                 (packages #$(map entry->gexp entries))))))
-
-(define (find-package name version)
-  "Return a package from the distro matching NAME and possibly VERSION.  This
-procedure is here for backward-compatibility and will eventually vanish."
-  (define find-best-packages-by-name              ;break abstractions
-    (module-ref (resolve-interface '(gnu packages))
-                'find-best-packages-by-name))
-
-   ;; Use 'find-best-packages-by-name' and not 'find-packages-by-name'; the
-   ;; former traverses the module tree only once and then allows for efficient
-   ;; access via a vhash.
-   (match (find-best-packages-by-name name version)
-     ((p _ ...) p)
-     (_
-      (match (find-best-packages-by-name name #f)
-        ((p _ ...) p)
-        (_ #f)))))
+     #~(manifest (version #$format-version)
+                 (packages #$(run-with-state
+                                 (mapm %state-monad entry->gexp entries)
+                               vlist-null))))))
 
 (define (sexp->manifest sexp)
   "Parse SEXP as a manifest."
-  (define (infer-search-paths name version)
-    ;; Infer the search path specifications for NAME-VERSION by looking up a
-    ;; same-named package in the distro.  Useful for the old manifest formats
-    ;; that did not store search path info.
-    (let ((package (find-package name version)))
-      (if package
-          (package-native-search-paths package)
-          '())))
-
   (define (infer-dependency item parent)
     ;; Return a <manifest-entry> for ITEM.
     (let-values (((name version)
@@ -497,14 +537,15 @@ procedure is here for backward-compatibility and will eventually vanish."
         (item item)
         (parent parent))))
 
-  (define* (sexp->manifest-entry sexp #:optional (parent (delay #f)))
+  (define* (sexp->manifest-entry/v3 sexp #:optional (parent (delay #f)))
+    ;; Read SEXP as a version 3 manifest entry.
     (match sexp
       ((name version output path
              ('propagated-inputs deps)
              ('search-paths search-paths)
              extra-stuff ...)
        ;; For each of DEPS, keep a promise pointing to ENTRY.
-       (letrec* ((deps* (map (cut sexp->manifest-entry <> (delay entry))
+       (letrec* ((deps* (map (cut sexp->manifest-entry/v3 <> (delay entry))
                              deps))
                  (entry (manifest-entry
                           (name name)
@@ -519,45 +560,58 @@ procedure is here for backward-compatibility and will eventually vanish."
                                           '())))))
          entry))))
 
-  (match sexp
-    (('manifest ('version 0)
-                ('packages ((name version output path) ...)))
-     (manifest
-      (map (lambda (name version output path)
-             (manifest-entry
-               (name name)
-               (version version)
-               (output output)
-               (item path)
-               (search-paths (infer-search-paths name version))))
-           name version output path)))
+  (define-syntax let-fields
+    (syntax-rules ()
+      ;; Bind the fields NAME of LST to same-named variables in the lexical
+      ;; scope of BODY.
+      ((_ lst (name rest ...) body ...)
+       (let ((name (match (assq 'name lst)
+                     ((_ value) value)
+                     (#f '()))))
+         (let-fields lst (rest ...) body ...)))
+      ((_ lst () body ...)
+       (begin body ...))))
 
-    ;; Version 1 adds a list of propagated inputs to the
-    ;; name/version/output/path tuples.
-    (('manifest ('version 1)
-                ('packages ((name version output path deps) ...)))
-     (manifest
-      (map (lambda (name version output path deps)
-             ;; Up to Guix 0.7 included, dependencies were listed as ("gmp"
-             ;; "/gnu/store/...-gmp") for instance.  Discard the 'label' in
-             ;; such lists.
-             (let ((deps (match deps
-                           (((labels directories) ...)
-                            directories)
-                           ((directories ...)
-                            directories))))
-               (letrec* ((deps* (map (cute infer-dependency <> (delay entry))
-                                     deps))
-                         (entry (manifest-entry
-                                  (name name)
-                                  (version version)
-                                  (output output)
-                                  (item path)
-                                  (dependencies deps*)
-                                  (search-paths
-                                   (infer-search-paths name version)))))
-                 entry)))
-           name version output path deps)))
+  (define* (sexp->manifest-entry sexp #:optional (parent (delay #f)))
+    (match sexp
+      (('repeated name version path)
+       ;; This entry is the same as another one encountered earlier; look it
+       ;; up and return it.
+       (mlet %state-monad ((visited (current-state))
+                           (key -> (list name version path)))
+         (match (vhash-assoc key visited)
+           (#f
+            (raise (formatted-message
+                    (G_ "invalid repeated entry in profile: ~s")
+                    sexp)))
+           ((_ . entry)
+            (return entry)))))
+      ((name version output path fields ...)
+       (let-fields fields (propagated-inputs search-paths properties)
+         (mlet* %state-monad
+             ((entry -> #f)
+              (deps     (mapm %state-monad
+                              (cut sexp->manifest-entry <> (delay entry))
+                              propagated-inputs))
+              (visited  (current-state))
+              (key ->   (list name version path)))
+           (set! entry                             ;XXX: emulate 'letrec*'
+                 (manifest-entry
+                   (name name)
+                   (version version)
+                   (output output)
+                   (item path)
+                   (dependencies deps)
+                   (search-paths (map sexp->search-path-specification
+                                      search-paths))
+                   (parent parent)
+                   (properties properties)))
+           (mbegin %state-monad
+             (set-current-state (vhash-cons key entry visited))
+             (return entry)))))))
+
+  (match sexp
+    ;; Versions 0 and 1 are no longer produced since 2015.
 
     ;; Version 2 adds search paths and is slightly more verbose.
     (('manifest ('version 2 minor-version ...)
@@ -585,7 +639,15 @@ procedure is here for backward-compatibility and will eventually vanish."
     ;; Version 3 represents DEPS as full-blown manifest entries.
     (('manifest ('version 3 minor-version ...)
                 ('packages (entries ...)))
-     (manifest (map sexp->manifest-entry entries)))
+     (manifest (map sexp->manifest-entry/v3 entries)))
+
+    ;; Version 4 deduplicates repeated entries and makes manifest entry fields
+    ;; such as 'propagated-inputs' and 'search-paths' optional.
+    (('manifest ('version 4 minor-version ...)
+                ('packages (entries ...)))
+     (manifest (run-with-state
+                   (mapm %state-monad sexp->manifest-entry entries)
+                 vlist-null)))
     (_
      (raise (condition
              (&message (message "unsupported manifest format")))))))
@@ -1161,6 +1223,52 @@ MANIFEST.  Single-file bundles are required by programs such as Git and Lynx."
                     `((type . profile-hook)
                       (hook . emacs-subdirs))))
 
+(define (gdk-pixbuf-loaders-cache-file manifest)
+  "Return a derivation that produces a loaders cache file for every gdk-pixbuf
+loaders discovered in MANIFEST."
+  (define gdk-pixbuf                    ;lazy reference
+    (module-ref (resolve-interface '(gnu packages gtk)) 'gdk-pixbuf))
+
+  (mlet* %store-monad
+      ((gdk-pixbuf (manifest-lookup-package manifest "gdk-pixbuf"))
+       (librsvg (manifest-lookup-package manifest "librsvg"))
+       (gdk-pixbuf-bin -> (if (string? gdk-pixbuf)
+                              (string-append gdk-pixbuf "/bin")
+                              (file-append gdk-pixbuf "/bin"))))
+
+    (define build
+      (with-imported-modules (source-module-closure
+                              '((guix build glib-or-gtk-build-system)))
+        #~(begin
+            (use-modules (guix build glib-or-gtk-build-system))
+            (setenv "PATH" (string-append #$gdk-pixbuf-bin ":" (getenv "PATH")))
+
+            (generate-gdk-pixbuf-loaders-cache
+             ;; XXX: MANIFEST-LOOKUP-PACKAGE transitively searches through
+             ;; every input referenced by the manifest, while MANIFEST-INPUTS
+             ;; only retrieves the immediate inputs as well as their
+             ;; propagated inputs; to avoid causing an empty output derivation
+             ;; we must ensure that the inputs contain at least one
+             ;; loaders.cache file.  This is why we include gdk-pixbuf or
+             ;; librsvg when they are transitively found.
+             (list #$@(if gdk-pixbuf
+                          (list gdk-pixbuf)
+                          '())
+                   #$@(if librsvg
+                          (list librsvg)
+                          '())
+                   #$@(manifest-inputs manifest))
+             (list #$output)))))
+
+    (if gdk-pixbuf
+        (gexp->derivation "gdk-pixbuf-loaders-cache-file" build
+                          #:local-build? #t
+                          #:substitutable? #f
+                          #:properties
+                          '((type . profile-hook)
+                            (hook . gdk-pixbuf-loaders-cache-file)))
+        (return #f))))
+
 (define (glib-schemas manifest)
   "Return a derivation that unions all schemas from manifest entries and
 creates the Glib 'gschemas.compiled' file."
@@ -1651,20 +1759,24 @@ the entries in MANIFEST."
               (force-output))))))
 
   (gexp->derivation "manual-database" build
-
-                    ;; Work around GDBM 1.13 issue whereby uninitialized bytes
-                    ;; get written to disk:
-                    ;; <https://debbugs.gnu.org/cgi/bugreport.cgi?bug=29654#23>.
-                    #:env-vars `(("MALLOC_PERTURB_" . "1"))
-
                     #:substitutable? #f
                     #:local-build? #t
                     #:properties
                     `((type . profile-hook)
                       (hook . manual-database))))
 
-(define (texlive-configuration manifest)
-  "Return a derivation that builds a TeXlive configuration for the entries in
+(define (manual-database/optional manifest)
+  "Return a derivation to build the manual database of MANIFEST, but only if
+MANIFEST contains the \"man-db\" package.  Otherwise, return #f."
+  ;; Building the man database (for "man -k") is expensive and rarely used.
+  ;; Build it only if the profile also contains "man-db".
+  (mlet %store-monad ((man-db (manifest-lookup-package manifest "man-db")))
+    (if man-db
+        (manual-database manifest)
+        (return #f))))
+
+(define (texlive-font-maps manifest)
+  "Return a derivation that builds the TeX Live font maps for the entries in
 MANIFEST."
   (define entry->texlive-input
     (match-lambda
@@ -1677,6 +1789,8 @@ MANIFEST."
     (module-ref (resolve-interface '(gnu packages tex)) 'texlive-bin))
   (define coreutils
     (module-ref (resolve-interface '(gnu packages base)) 'coreutils))
+  (define grep
+    (module-ref (resolve-interface '(gnu packages base)) 'grep))
   (define sed
     (module-ref (resolve-interface '(gnu packages base)) 'sed))
   (define updmap.cfg
@@ -1693,87 +1807,88 @@ MANIFEST."
           ;; Build a modifiable union of all texlive inputs.  We do this so
           ;; that TeX live can resolve the parent and grandparent directories
           ;; correctly.  There might be a more elegant way to accomplish this.
-          (union-build #$output
+          (union-build "/tmp/texlive"
                        '#$(append-map entry->texlive-input
                                       (manifest-entries manifest))
                        #:create-all-directories? #t
                        #:log-port (%make-void-port "w"))
-          (let ((texmf.cnf (string-append
-                            #$output
-                            "/share/texmf-dist/web2c/texmf.cnf")))
-            (when (file-exists? texmf.cnf)
-              (substitute* texmf.cnf
-                (("^TEXMFROOT = .*")
-                 (string-append "TEXMFROOT = " #$output "/share\n"))
-                (("^TEXMF = .*")
-                 "TEXMF = $TEXMFROOT/share/texmf-dist\n"))
 
-              ;; XXX: This is annoying, but it's necessary because texlive-bin
-              ;; does not provide wrapped executables.
-              (setenv "PATH"
-                      (string-append #$(file-append coreutils "/bin")
-                                     ":"
-                                     #$(file-append sed "/bin")))
-              (setenv "PERL5LIB" #$(file-append texlive-bin "/share/tlpkg"))
-              (setenv "TEXMF" (string-append #$output "/share/texmf-dist"))
+          ;; XXX: This is annoying, but it's necessary because texlive-bin
+          ;; does not provide wrapped executables.
+          (setenv "PATH"
+                  (string-append #$(file-append coreutils "/bin")
+                                 ":"
+                                 #$(file-append grep "/bin")
+                                 ":"
+                                 #$(file-append sed "/bin")))
+          (setenv "PERL5LIB" #$(file-append texlive-bin "/share/tlpkg"))
+          (setenv "GUIX_TEXMF" "/tmp/texlive/share/texmf-dist")
 
-              ;; Remove invalid maps from config file.
-              (let* ((web2c (string-append #$output "/share/texmf-config/web2c/"))
-                     (maproot (string-append #$output "/share/texmf-dist/fonts/map/"))
-                     (updmap.cfg (string-append web2c "updmap.cfg")))
-                (mkdir-p web2c)
+          ;; Remove invalid maps from config file.
+          (let* ((web2c (string-append #$output "/share/texmf-dist/web2c/"))
+                 (maproot (string-append #$output "/share/texmf-dist/fonts/map/"))
+                 (updmap.cfg (string-append web2c "updmap.cfg")))
+            (mkdir-p web2c)
+            (copy-file #$updmap.cfg updmap.cfg)
+            (make-file-writable updmap.cfg)
+            (let* ((port (open-pipe* OPEN_WRITE
+                                     #$(file-append texlive-bin "/bin/updmap-sys")
+                                     "--syncwithtrees"
+                                     "--nohash"
+                                     "--force"
+                                     (string-append "--cnffile=" updmap.cfg))))
+              (display "Y\n" port)
+              (when (not (zero? (status:exit-val (close-pipe port))))
+                (error "failed to filter updmap.cfg")))
 
-                ;; Some profiles may already have this file, which prevents us
-                ;; from copying it.  Since we need to generate it from scratch
-                ;; anyway, we delete it here.
-                (when (file-exists? updmap.cfg)
-                  (delete-file updmap.cfg))
-                (copy-file #$updmap.cfg updmap.cfg)
-                (make-file-writable updmap.cfg)
-                (let* ((port (open-pipe* OPEN_WRITE
-                                         #$(file-append texlive-bin "/bin/updmap-sys")
-                                         "--syncwithtrees"
-                                         "--nohash"
-                                         "--force"
-                                         (string-append "--cnffile=" web2c "updmap.cfg"))))
-                  (display "Y\n" port)
-                  (when (not (zero? (status:exit-val (close-pipe port))))
-                    (error "failed to filter updmap.cfg")))
+            ;; Generate font maps.
+            (invoke #$(file-append texlive-bin "/bin/updmap-sys")
+                    (string-append "--cnffile=" updmap.cfg)
+                    (string-append "--dvipdfmxoutputdir="
+                                   maproot "dvipdfmx/updmap")
+                    (string-append "--dvipsoutputdir="
+                                   maproot "dvips/updmap")
+                    (string-append "--pdftexoutputdir="
+                                   maproot "pdftex/updmap"))
 
-                ;; Generate font maps.
-                (invoke #$(file-append texlive-bin "/bin/updmap-sys")
-                        (string-append "--cnffile=" web2c "updmap.cfg")
-                        (string-append "--dvipdfmxoutputdir="
-                                       maproot "updmap/dvipdfmx/")
-                        (string-append "--dvipsoutputdir="
-                                       maproot "updmap/dvips/")
-                        (string-append "--pdftexoutputdir="
-                                       maproot "updmap/pdftex/")))))
-          #t)))
+            ;; Create ls-R file.  I know, that's not *just* for font maps, but
+            ;; we've generated new files, so there's no point in running it
+            ;; any earlier.  The ls-R file must act on a full TeX Live tree,
+            ;; but we have two: the one in /tmp containing all packages and
+            ;; the one in #$output containing the generated font maps.  To
+            ;; avoid having to merge ls-R files, we copy the generated stuff
+            ;; to /tmp and run mktexlsr only once.
+            (let ((a (string-append #$output "/share/texmf-dist"))
+                  (b "/tmp/texlive/share/texmf-dist")
+                  (mktexlsr #$(file-append texlive-bin "/bin/mktexlsr")))
+              (copy-recursively a b)
+              (invoke mktexlsr b)
+              (install-file (string-append b "/ls-R") a))))))
 
   (mlet %store-monad ((texlive-base (manifest-lookup-package manifest "texlive-base")))
     (if texlive-base
-        (gexp->derivation "texlive-configuration" build
+        (gexp->derivation "texlive-font-maps" build
                           #:substitutable? #f
                           #:local-build? #t
                           #:properties
                           `((type . profile-hook)
-                            (hook . texlive-configuration)))
+                            (hook . texlive-font-maps)))
         (return #f))))
 
 (define %default-profile-hooks
   ;; This is the list of derivation-returning procedures that are called by
   ;; default when making a non-empty profile.
   (list info-dir-file
-        manual-database
+        manual-database/optional
         fonts-dir-file
         ghc-package-cache-file
         ca-certificate-bundle
         emacs-subdirs
+        gdk-pixbuf-loaders-cache-file
         glib-schemas
         gtk-icon-themes
         gtk-im-modules
-        texlive-configuration
+        texlive-font-maps
         xdg-desktop-database
         xdg-mime-database))
 
@@ -1782,15 +1897,19 @@ MANIFEST."
                              (name "profile")
                              (hooks %default-profile-hooks)
                              (locales? #t)
+                             (allow-unsupported-packages? #f)
                              (allow-collisions? #f)
                              (relative-symlinks? #f)
+                             (format-version %manifest-format-version)
                              system target)
   "Return a derivation that builds a profile (aka. 'user environment') with
 the given MANIFEST.  The profile includes additional derivations returned by
 the monadic procedures listed in HOOKS--such as an Info 'dir' file, etc.
 Unless ALLOW-COLLISIONS? is true, a '&profile-collision-error' is raised if
 entries in MANIFEST collide (for instance if there are two same-name packages
-with a different version number.)
+with a different version number.)  Unless ALLOW-UNSUPPORTED-PACKAGES? is true
+or TARGET is set, raise an error if MANIFEST contains a package that does not
+support SYSTEM.
 
 When LOCALES? is true, the build is performed under a UTF-8 locale; this adds
 a dependency on the 'glibc-utf8-locales' package.
@@ -1800,12 +1919,27 @@ This is one of the things to do for the result to be relocatable.
 
 When TARGET is true, it must be a GNU triplet, and the packages in MANIFEST
 are cross-built for TARGET."
+  (define (check-supported-packages system)
+    ;; Raise an error if a package in MANIFEST does not support SYSTEM.
+    (map-manifest-entries
+     (lambda (entry)
+
+       (match (manifest-entry-item entry)
+         ((? package? package)
+          (unless (supported-package? package system)
+            (raise (formatted-message (G_ "package ~a does not support ~a")
+                                      (package-full-name package) system))))
+         (_ #t)))
+     manifest))
+
   (mlet* %store-monad ((system (if system
                                    (return system)
                                    (current-system)))
                        (target (if target
                                    (return target)
                                    (current-target-system)))
+                       (ok? -> (or allow-unsupported-packages? target
+                                   (check-supported-packages system)))
                        (ok?    (if allow-collisions?
                                    (return #t)
                                    (check-for-collisions manifest system
@@ -1852,7 +1986,7 @@ are cross-built for TARGET."
 
             #+(if locales? set-utf8-locale #t)
 
-            (build-profile #$output '#$(manifest->gexp manifest)
+            (build-profile #$output '#$(manifest->gexp manifest format-version)
                            #:extra-inputs '#$extra-inputs
                            #:symlink #$(if relative-symlinks?
                                            #~symlink-relative
@@ -1891,19 +2025,23 @@ are cross-built for TARGET."
   (allow-collisions?  profile-allow-collisions?   ;Boolean
                       (default #f))
   (relative-symlinks? profile-relative-symlinks?  ;Boolean
-                      (default #f)))
+                      (default #f))
+  (format-version     profile-format-version      ;integer
+                      (default %manifest-format-version)))
 
 (define-gexp-compiler (profile-compiler (profile <profile>) system target)
   "Compile PROFILE to a derivation."
   (match profile
     (($ <profile> name manifest hooks
-                  locales? allow-collisions? relative-symlinks?)
+                  locales? allow-collisions? relative-symlinks?
+                  format-version)
      (profile-derivation manifest
                          #:name name
                          #:hooks hooks
                          #:locales? locales?
                          #:allow-collisions? allow-collisions?
                          #:relative-symlinks? relative-symlinks?
+                         #:format-version format-version
                          #:system system #:target target))))
 
 (define* (profile-search-paths profile
@@ -1962,9 +2100,14 @@ paths."
   (make-regexp (string-append "^" (regexp-quote (basename profile))
                               "-([0-9]+)")))
 
-(define (generation-number profile)
-  "Return PROFILE's number or 0.  An absolute file name must be used."
-  (or (and=> (false-if-exception (regexp-exec (profile-regexp profile)
+(define* (generation-number profile
+                            #:optional (base-profile profile))
+  "Return PROFILE's number or 0.  An absolute file name must be used.
+
+Optionally, if BASE-PROFILE is provided, use it instead of PROFILE to
+construct the regexp matching generations.  This is useful in special cases
+like: (generation-number \"/run/current-system\" %system-profile)."
+  (or (and=> (false-if-exception (regexp-exec (profile-regexp base-profile)
                                               (basename (readlink profile))))
              (compose string->number (cut match:substring <> 1)))
       0))
@@ -2217,5 +2360,9 @@ PROFILE refers to, directly or indirectly, or PROFILE."
                      (and target (string=? target profile)))))
             %known-shorthand-profiles)
       profile))
+
+;;; Local Variables:
+;;; eval: (put 'let-fields 'scheme-indent-function 2)
+;;; End:
 
 ;;; profiles.scm ends here

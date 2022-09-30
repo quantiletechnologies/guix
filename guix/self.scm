@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2017-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2020 Martin Becze <mjbecze@riseup.net>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -64,6 +64,7 @@
       ("guile-gcrypt"  (ref '(gnu packages gnupg) 'guile-gcrypt))
       ("gnutls"     (ref '(gnu packages tls) 'gnutls))
       ("disarchive" (ref '(gnu packages backup) 'disarchive))
+      ("guile-lzma" (ref '(gnu packages guile) 'guile-lzma))
       ("gzip"       (ref '(gnu packages compression) 'gzip))
       ("bzip2"      (ref '(gnu packages compression) 'bzip2))
       ("xz"         (ref '(gnu packages compression) 'xz))
@@ -568,10 +569,12 @@ instead of 'C'."
                               (filter package? packages))))
                    ":"))
           (setenv "LIBRARY_PATH" #$(file-append gcc "/lib"))
+          (setenv "GUIX_LD_WRAPPER_DISABLE_RPATH" "1")
 
           (invoke "gcc" #$(local-file source) "-Wall" "-g0" "-O2"
                   "-I" #$(file-append guile "/include/guile/" effective)
                   "-L" #$(file-append guile "/lib")
+                  "-Wl,-rpath" #$(file-append guile "/lib")
                   #$(string-append "-lguile-" effective)
                   "-o" (string-append #$output "/bin/guile")))))
 
@@ -696,7 +699,8 @@ Info manual."
                         (setenv "NIX_STORE_DIR" #$%storedir))
 
                       (apply execl #$(file-append daemon "/bin/guix-daemon")
-                             "guix-daemon" (cdr (command-line))))))
+                             "guix-daemon" (cdr (command-line))))
+                  #:guile guile))
 
   (computed-file name
                  (with-imported-modules '((guix build utils))
@@ -788,6 +792,9 @@ itself."
 
   (define disarchive
     (specification->package "disarchive"))
+
+  (define guile-lzma
+    (specification->package "guile-lzma"))
 
   (define dependencies
     (append-map transitive-package-dependencies
@@ -883,7 +890,8 @@ itself."
                    ,@(scheme-modules* source "gnu/bootloader")
                    ,@(scheme-modules* source "gnu/system")
                    ,@(scheme-modules* source "gnu/services")
-                   ,@(scheme-modules* source "gnu/machine"))
+                   ,@(scheme-modules* source "gnu/machine")
+                   ,@(scheme-modules* source "guix/platforms/"))
                  (list *core-package-modules* *package-modules*
                        *extra-modules* *core-modules*)
                  #:extensions dependencies
@@ -921,6 +929,7 @@ itself."
                            (('guix 'scripts 'deploy) #t)
                            (('guix 'scripts 'home . _) #t)
                            (('guix 'scripts 'import . _) #t)
+                           (('guix 'scripts 'gc) #t) ;autoloads (gnu home)
                            (('guix 'pack) #t)
                            (_ #f))
                          (scheme-modules* source "guix/scripts"))
@@ -1009,7 +1018,9 @@ itself."
                 (command  (guix-command modules
                                         #:source source
                                         #:dependencies
-                                        (cons disarchive dependencies)
+                                        (cons* disarchive
+                                               guile-lzma
+                                               dependencies)
                                         #:guile guile-for-build
                                         #:guile-version guile-version)))
            (whole-package name modules dependencies

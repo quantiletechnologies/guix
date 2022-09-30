@@ -6,11 +6,12 @@
 ;;; Copyright © 2016 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2016 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2016, 2017, 2018, 2019, 2020 Nikita <nikita@n0.is>
-;;; Copyright © 2016, 2017, 2018, 2019, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2016–2020, 2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018 Alex Vong <alexvong1995@gmail.com>
 ;;; Copyright © 2019 Brett Gilio <brettg@gnu.org>
 ;;; Copyright © 2020 Tanguy Le Carrour <tanguy@bioneland.org>
 ;;; Copyright © 2020 Michael Rohleder <mike@rohleder.de>
+;;; Copyright © 2022 Maxime Devos <maximedevos@telenet.be>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -42,6 +43,7 @@
   #:use-module (gnu packages groff)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages guile)
+  #:use-module (gnu packages guile-xyz)
   #:use-module (gnu packages gstreamer)
   #:use-module (gnu packages libidn)
   #:use-module (gnu packages linux)
@@ -58,13 +60,16 @@
   #:use-module (gnu packages pulseaudio)
   #:use-module (gnu packages python)
   #:use-module (gnu packages sqlite)
+  #:use-module (gnu packages text-editors)
   #:use-module (gnu packages tls)
   #:use-module (gnu packages upnp)
   #:use-module (gnu packages video)
   #:use-module (gnu packages vim)
+  #:use-module (gnu packages xorg)
   #:use-module (gnu packages web)
   #:use-module (gnu packages xiph)
   #:use-module (gnu packages backup)
+  #:use-module (guix gexp)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
   #:use-module (guix download)
@@ -113,7 +118,7 @@
       ("libvorbis" ,libvorbis)
       ("zlib" ,zlib)))
    (native-inputs
-    `(("pkg-config" ,pkg-config)))
+    (list pkg-config))
    (outputs '("out"
               "static")) ; 420 KiB .a files
    (arguments
@@ -157,21 +162,20 @@ tool to extract metadata from a file and print the results.")
 (define-public libmicrohttpd
   (package
    (name "libmicrohttpd")
-   (version "0.9.73")
+   (version "0.9.75")
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnu/libmicrohttpd/libmicrohttpd-"
                                 version ".tar.gz"))
             (sha256
              (base32
-              "0bh39irwzkv48fkw43skfgkk8ka3793bx1lm21sgw6zxi0djyyx3"))))
+              "1fz3ljqfvfyfb5inzihy66bys22id9jgsi4nmcd3j6spdxx90y4j"))))
    (build-system gnu-build-system)
+   (arguments
+    (list #:configure-flags
+          #~(list "--disable-static")))
    (inputs
-    `(("curl" ,curl)
-      ("gnutls" ,gnutls/dane)
-      ("libgcrypt" ,libgcrypt)
-      ("openssl" ,openssl)
-      ("zlib" ,zlib)))
+    (list curl gnutls/dane libgcrypt openssl zlib))
    (synopsis "C library implementing an HTTP 1.1 server")
    (description
     "GNU libmicrohttpd is a small, embeddable HTTP server implemented as a
@@ -200,10 +204,7 @@ authentication and support for SSL3 and TLS.")
              ("libidn2" ,libidn2)
              ("zlib" ,zlib)))
    (native-inputs
-    `(("libtool" ,libtool)
-      ("perl" ,perl)
-      ("pkg-config" ,pkg-config)
-      ("python" ,python)))
+    (list libtool perl pkg-config python))
    (arguments
     `(#:configure-flags
       ;; All of these produce errors during configure.
@@ -256,7 +257,7 @@ supports HTTP, HTTPS and GnuTLS.")
 (define-public gnunet
   (package
    (name "gnunet")
-   (version "0.13.1")
+   (version "0.16.3")
    (source
     (origin
       (method url-fetch)
@@ -264,69 +265,37 @@ supports HTTP, HTTPS and GnuTLS.")
                           ".tar.gz"))
       (sha256
        (base32
-        "15jnca5zxng7r6m3qzq9lr73xxq0v6mvcp0lny3zrlkz5s2nmmq3"))))
+        "12n33r9nnkl5xwx8pwf571l2zvnvfllc8vm6mamrlyjk2cphaf9j"))))
    (build-system gnu-build-system)
    (inputs
-    `(("bluez" ,bluez)
-      ("glpk" ,glpk)
-      ("gnurl" ,gnurl)
-      ("gnutls" ,gnutls/dane)
-      ("gstreamer" ,gstreamer)
-      ("jansson" ,jansson)
-      ("libextractor" ,libextractor)
-      ("libidn" ,libidn2)
-      ("libgcrypt" ,libgcrypt)
-      ("libjpeg" ,libjpeg-turbo)
-      ("libltdl" ,libltdl)
-      ("libmicrohttpd" ,libmicrohttpd)
-      ("libogg" ,libogg)
-      ("libsodium" ,libsodium)
-      ("libunistring" ,libunistring)
-      ("miniupnpc" ,miniupnpc)
-      ("opus" ,opus)
-      ("pulseaudio" ,pulseaudio)
-      ("sqlite" ,sqlite)
-      ("zbar" ,zbar)
-      ("zlib" ,zlib)))
+    (list bluez
+          glpk
+          gnurl
+          gnutls/dane
+          gstreamer
+          jansson
+          libextractor
+          libidn2
+          libgcrypt
+          libjpeg-turbo
+          libltdl
+          libmicrohttpd
+          libogg
+          libsodium
+          libunistring
+          miniupnpc
+          opus
+          pulseaudio
+          sqlite
+          zbar
+          zlib))
    (native-inputs
-    `(("curl" ,curl)
-      ("pkg-config" ,pkg-config)
-      ("python" ,python)
-      ("xxd" ,xxd)
-      ("which" ,(@ (gnu packages base) which))))
+    (list curl openssl pkg-config python xxd
+          (@ (gnu packages base) which)))
    (arguments
     '(#:parallel-tests? #f ; Parallel tests aren't supported.
       #:phases
       (modify-phases %standard-phases
-        (add-after 'configure 'remove-failing-tests
-          ;; These tests fail in Guix's building environment.
-          (lambda _
-            (substitute* "src/transport/Makefile"
-              (("\\$\\(am__EXEEXT_15\\)") "") ; test_transport_api_https
-              (("test_transport_api_manipulation_cfg\\$\\(EXEEXT\\) \\\\\n") "")
-              (("test_transport_api_udp_nat\\$\\(EXEEXT\\) \\\\\n") "")
-              (("test_transport_blacklisting_multiple_plugins\\$\\(EXEEXT\\) \\\\\n") ""))
-            (substitute* "src/testbed/Makefile"
-              (("test_testbed_api_2peers_1controller\\$\\(EXEEXT\\) \\\\\n") "")
-              (("test_testbed_api_statistics\\$\\(EXEEXT\\) \\\\\n") "")
-              (("test_testbed_api_test\\$\\(EXEEXT\\) \\\\\n") "")
-              (("test_testbed_api_test_timeout\\$\\(EXEEXT\\) \\\\\n") "")
-              (("test_testbed_api_topology\\$\\(EXEEXT\\) \\\\\n") "")
-              (("test_testbed_api_topology_clique\\$\\(EXEEXT\\) \\\\\n") ""))
-            (substitute* "src/topology/Makefile"
-              (("^check_PROGRAMS.*") "\n")
-              (("test_gnunet_daemon_topology\\$\\(EXEEXT\\)\n") ""))
-            (substitute* "src/namestore/Makefile"
-              (("\\$\\(am__append_2\\)") ""))
-            (substitute* "src/gns/Makefile"
-              (("\\$\\(am__append_4\\)") ""))
-            (substitute* "contrib/Makefile"
-              (("^check_PROGRAMS.*") "\n"))
-            ;; 'test' from coreutils doesn't behave as the test expects.
-            (substitute* '("src/gns/gnunet-gns-proxy-setup-ca.in"
-                           "src/transport/gnunet-transport-certificate-creation.in")
-              (("gnutls-certtool") "certtool"))
-            #t))
         (add-before 'check 'set-env-var-for-tests
           (lambda _
             (setenv "LANG" "en_US.UTF-8")))
@@ -349,7 +318,7 @@ that sense aims to replace the current internet protocol stack.  Along with
 an application for secure publication of files, it has grown to include all
 kinds of basic applications for the foundation of a GNU internet.")
    (license license:agpl3+)
-   (home-page "https://gnunet.org/")))
+   (home-page "https://gnunet.org/en/")))
 
 (define-public guile-gnunet                       ;GSoC 2015!
   (let ((commit "d12167ab3c8d7d6caffd9c606e389ef043760602")
@@ -367,11 +336,8 @@ kinds of basic applications for the foundation of a GNU internet.")
                  (base32
                   "0nqc18jh9j30y4l6yh6j35byfg6qalq7yr3frv9rk10qa041c2sv"))))
       (build-system gnu-build-system)
-      (native-inputs `(("pkg-config" ,pkg-config)
-                       ("autoconf" ,autoconf)
-                       ("automake" ,automake)))
-      (inputs `(("guile" ,guile-2.0)
-                ("gnunet" ,gnunet)))
+      (native-inputs (list pkg-config autoconf automake))
+      (inputs (list guile-2.0 gnunet))
       (synopsis "Guile bindings for GNUnet services")
       (description
        "This package provides Guile bindings to the client libraries of various
@@ -379,6 +345,60 @@ GNUnet services, including the @dfn{identity} and @dfn{file sharing}
 services.")
       (home-page "https://gnu.org/software/guix")
       (license license:gpl3+))))
+
+(define-public gnunet-scheme
+  (package
+    (name "gnunet-scheme")
+    (version "0.2")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://git.gnunet.org/git/gnunet-scheme.git")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0a11n58m346vs2khns2hfnxv8lbscf8aaqzhmq0d7nwdpn808nrp"))
+              (modules '((guix build utils)))
+              ;; XXX: Work-around
+              ;; <https://debbugs.gnu.org/cgi/bugreport.cgi?bug=49623>,
+              ;; this can be removed once Guile > 3.0.7 is released.
+              (snippet '(substitute* '("gnu/gnunet/config/parser.scm"
+                                       "tests/config-parser.scm")
+                          (("#\\{\\$\\{\\}\\}#") "#{${;};}#")
+                          (("#\\{\\$\\{:-\\}\\}#") "#{${;:-};}#")
+                          (("#\\{\\$\\{\\}\\}# #\\{\\$\\{:-\\}\\}#")
+                           "#{$\\x7b;\\x7d;}# #{$\\x7b;:-\\x7d;}#")
+                          (("'#\\{\\$\\{\\}\\}# '#\\{\\$\\{:-\\}\\}#")
+                           "'#{$\\x7b;\\x7d;}# '#{$\\x7b;:-\\x7d;}#")))))
+    (build-system gnu-build-system)
+    (inputs (list guile-3.0)) ;for pkg-config
+    (propagated-inputs (list guile-bytestructures guile-gcrypt guile-pfds
+                             guile-fibers-1.1))
+    (native-inputs (list guile-3.0 ;as a compiler
+                         ;; for cross-compilation, the guile inputs need to be
+                         ;; native-inputs as well.
+                         guile-bytestructures
+                         guile-gcrypt
+                         guile-pfds
+                         guile-fibers-1.1
+                         automake
+                         autoconf
+                         pkg-config
+                         texmacs
+                         xvfb-run ;for documentation
+                         guile-quickcheck)) ;for tests
+    (synopsis "Guile implementation of GNUnet client libraries")
+    (description
+     "This package provides Guile modules for connecting to the NSE (network
+size estimation) and DHT (distributed hash table) services of GNUnet.  It also
+has infrastructure for writing new GNUnet services and connecting to them and
+can be used from multi-threaded environments.  It is not to be confused with
+@code{guile-gnunet} -- @code{guile-gnunet} supports a different set of services.")
+    ;; Most code is licensed as AGPL and a few modules are licensed as LGPL
+    ;; or GPL.  Documentation is licensed as GFDL.
+    (license (list license:agpl3+ license:gpl3+ license:fdl1.3+ license:lgpl3+))
+    (home-page "https://git.gnunet.org/gnunet-scheme.git")))
 
 ;; FIXME: "gnunet-setup" segfaults under certain conditions and "gnunet-gtk"
 ;; does not seem to be fully functional.  This has been reported upstream:
@@ -410,8 +430,7 @@ services.")
        ("libunique" ,libunique)
        ("qrencode" ,qrencode)))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("libglade" ,libglade)))
+     (list pkg-config libglade))
     (synopsis "Graphical front-end tools for GNUnet")
     (properties '((ftp-server . "ftp.gnu.org")
                   (ftp-directory . "/gnunet")))))

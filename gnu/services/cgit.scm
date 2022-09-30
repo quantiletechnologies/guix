@@ -241,27 +241,27 @@ is no suitable HEAD.")
    (repo-file-object "")
    "Override the default @code{email-filter}.")
   (enable-commit-graph?
-   (maybe-repo-boolean 'disabled)
+   maybe-repo-boolean
    "A flag which can be used to disable the global setting
 @code{enable-commit-graph?}.")
   (enable-log-filecount?
-   (maybe-repo-boolean 'disabled)
+   maybe-repo-boolean
    "A flag which can be used to disable the global setting
 @code{enable-log-filecount?}.")
   (enable-log-linecount?
-   (maybe-repo-boolean 'disabled)
+   maybe-repo-boolean
    "A flag which can be used to disable the global setting
 @code{enable-log-linecount?}.")
   (enable-remote-branches?
-   (maybe-repo-boolean 'disabled)
+   maybe-repo-boolean
    "Flag which, when set to @code{#t}, will make cgit display remote
 branches in the summary and refs views.")
   (enable-subject-links?
-   (maybe-repo-boolean 'disabled)
+   maybe-repo-boolean
    "A flag which can be used to override the global setting
 @code{enable-subject-links?}.")
   (enable-html-serving?
-   (maybe-repo-boolean 'disabled)
+   maybe-repo-boolean
    "A flag which can be used to override the global setting
 @code{enable-html-serving?}.")
   (hide?
@@ -319,7 +319,7 @@ after this option will inherit the current section name.")
 ;; <repository-cgit-configuration>, <nginx-server-configuration>, <package>.
 (define-configuration cgit-configuration
   (package
-   (package cgit)
+   (file-like cgit)
    "The CGIT package.")
   (nginx
    (nginx-server-configuration-list (list %cgit-configuration-nginx))
@@ -673,7 +673,7 @@ for cgit to allow access to that repository.")
 
 (define-configuration opaque-cgit-configuration
   (cgit
-   (package cgit)
+   (file-like cgit)
    "The cgit package.")
   (cgitrc
    (string (configuration-missing-field 'opaque-cgit-configuration 'cgitrc))

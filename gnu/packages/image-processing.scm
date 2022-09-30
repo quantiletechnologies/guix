@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2017 John Darrington <jmd@gnu.org>
-;;; Copyright © 2017, 2019 Ricardo Wurmus <rekado@elephly.net>
-;;; Copyright © 2014, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2017, 2019, 2022 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2014, 2021-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2016 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
@@ -13,11 +13,13 @@
 ;;; Copyright © 2020 Pierre Neidhardt <mail@ambrevar.xyz>
 ;;; Copyright © 2020 Brendan Tildesley <mail@brendan.scot>
 ;;; Copyright © 2021 Oleh Malyi <astroclubzp@gmail.com>
-;;; Copyright © 2021 Felix Gruber <felgru@posteo.net>
+;;; Copyright © 2021, 2022 Felix Gruber <felgru@posteo.net>
 ;;; Copyright © 2021 Andy Tai <atai@atai.org>
 ;;; Copyright © 2021 Ekaitz Zarraga <ekaitz@elenq.tech>
 ;;; Copyright © 2021 Paul Garlick <pgarlick@tourbillion-technology.com>
+;;; Copyright © 2021 Guillaume Le Vaillant <glv@posteo.net>
 ;;; Copyright © 2021 Ivan Gankevich <i.gankevich@spbu.ru>
+;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -37,6 +39,7 @@
 (define-module (gnu packages image-processing)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
+  #:use-module (guix gexp)
   #:use-module (guix utils)
   #:use-module (guix download)
   #:use-module (guix git-download)
@@ -68,6 +71,7 @@
   #:use-module (gnu packages icu4c)
   #:use-module (gnu packages image)
   #:use-module (gnu packages imagemagick)
+  #:use-module (gnu packages linux)
   #:use-module (gnu packages maths)
   #:use-module (gnu packages pdf)
   #:use-module (gnu packages perl)
@@ -90,10 +94,59 @@
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1))
 
+;; TODO: this is not reproducible.
+(define-public bart
+  (package
+    (name "bart")
+    (version "0.7.00")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/mrirecon/bart")
+             (commit "d1b0e576c3f759089915565d5bf57832acf7b03e")))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "159rj3agr9pb9lg38b56rnw3d8wcbkmb2n718z26zpy4c6a6d9rn"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:test-target "utest"
+      #:make-flags #~(list
+                      (string-append "PREFIX=" #$output)
+                      "OPENBLAS=1"
+                      "SCALAPACK=1"
+                      (string-append "BLAS_BASE=" #$(this-package-input "openblas"))
+                      (string-append "FFTW_BASE=" #$(this-package-input "fftw")))
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)
+          (add-after 'unpack 'patch-/bin/bash
+            (lambda _
+              (substitute* "tests/pics.mk"
+                (("/bin/bash") (which "bash"))))))))
+    (inputs
+     (list fftw
+           fftwf
+           libpng
+           openblas
+           python
+           scalapack))
+    (native-inputs
+     (list doxygen
+           util-linux)) ;for flock
+    (home-page "https://mrirecon.github.io/bart/")
+    (synopsis "Toolbox for computational magnetic resonance imaging")
+    (description "The Berkeley Advanced Reconstruction Toolbox (BART) is an
+image-reconstruction framework for Computational Magnetic Resonance Imaging.
+The tools in this software implement various reconstruction algorithms for
+Magnetic Resonance Imaging.")
+    (license license:bsd-3)))
+
 (define-public dcmtk
   (package
     (name "dcmtk")
-    (version "3.6.6")
+    (version "3.6.7")
     (source
      (origin
        (method url-fetch)
@@ -102,18 +155,21 @@
                        "dcmtk" (string-join (string-split version #\.) "")
                        "/dcmtk-" version ".tar.gz"))
        (sha256
-        (base32 "13j5yf3p6qj3mr17d77r3kcqchf055hgvk1w15vmdr8f54mwcnb8"))))
+        (base32 "02kix73qhndgb56cmi5327666i6imp7hi17wwqp26q4d7s72jn3w"))))
     (build-system cmake-build-system)
+    (arguments
+     ;; By default, only static archives are built.
+     (list #:configure-flags #~(list "-DBUILD_SHARED_LIBS=ON")))
     (inputs
-     `(("icu4c" ,icu4c)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libtiff" ,libtiff)
-       ("libxml2" ,libxml2)
-       ("openssl" ,openssl)
-       ("zlib" ,zlib)))
+     (list icu4c
+           libjpeg-turbo
+           libpng
+           libtiff
+           libxml2
+           openssl
+           zlib))
     (native-inputs
-     `(("doxygen" ,doxygen)))           ; for HTML documentation
+     (list doxygen))           ; for HTML documentation
     (home-page "https://dcmtk.org")
     (synopsis "Libraries and programs implementing parts of the DICOM standard")
     (description "DCMTK is a collection of libraries and applications
@@ -129,7 +185,7 @@ licences similar to the Modified BSD licence."))))
 (define-public mia
   (package
     (name "mia")
-    (version "2.4.6")
+    (version "2.4.7")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://sourceforge/mia/mia/"
@@ -137,37 +193,39 @@ licences similar to the Modified BSD licence."))))
                                   "/mia-" version ".tar.xz"))
               (sha256
                (base32
-                "0j4nd5z7i3v199jh7hqqhwd4g7snchizkc7rhzanpvngqg91m1pb"))))
+                "0qpcd3n26q52dpyibm11f5l6cgscdr54p2jish39gc3p1f5h3ws1"))
+              (patches (search-patches "mia-fix-boost-headers.patch"
+                                       "mia-vtk9.patch"))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags
-       (list "-DMIA_CREATE_NIPYPE_INTERFACES=0"
+       (list "-DMIA_CREATE_NIPYPE_INTERFACES=OFF"
              "-DCMAKE_CXX_FLAGS=-fpermissive")))
     (inputs
-     `(("boost" ,boost)
-       ("dcmtk" ,dcmtk)
-       ("doxygen" ,doxygen)
-       ("eigen" ,eigen)
-       ("fftw" ,fftw)
-       ("fftwf" ,fftwf)
-       ("gsl" ,gsl)
-       ("gts" ,gts)
-       ("hdf5" ,hdf5)
-       ("itpp" ,itpp)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libtiff" ,libtiff)
-       ("libxml" ,libxml2)
-       ("libxml++" ,libxml++)
-       ("maxflow" ,maxflow)
-       ("niftilib" ,niftilib)
-       ("nlopt" ,nlopt)
-       ("openexr" ,openexr-2)
-       ("python-lxml" ,python2-lxml)
-       ("vtk" ,vtk)))
+     (list boost
+           dcmtk
+           doxygen
+           eigen
+           fftw
+           fftwf
+           gsl
+           gts
+           hdf5
+           itpp
+           libjpeg-turbo
+           libpng
+           libtiff
+           libxml2
+           libxml++
+           maxflow
+           niftilib
+           nlopt
+           openexr-2
+           python-lxml
+           vtk))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("python" ,python-2)))
+     (list pkg-config
+           python-wrapper))
     (home-page "http://mia.sourceforge.net")
     (synopsis "Toolkit for gray scale medical image analysis")
     (description "MIA provides a combination of command line tools, plug-ins,
@@ -225,15 +283,12 @@ of external libraries that provide additional functionality.")
                (("/bin/sh") (which "bash")))
              #t)))))
     (native-inputs
-     `(("git" ,git)
-       ("pkg-config" ,pkg-config)))
+     (list git pkg-config))
     (inputs
      ;; XXX Adding freeglut, glew, ilmbase, mesa, and openimageio for
      ;; ocioconvert fails: error: conflicting declaration ?typedef void
      ;; (* PFNGLGETFRAGMENTMATERIALFVSGIXPROC)(GLenum, GLenum, GLfloat*)
-     `(("lcms" ,lcms)
-       ("openexr" ,openexr-2)
-       ("tinyxml" ,tinyxml)))
+     (list lcms openexr-2 tinyxml))
     (home-page "https://opencolorio.org")
     (synopsis "Color management for visual effects and animation")
     (description
@@ -303,6 +358,7 @@ many popular formats.")
                            "-DVTK_MODULE_USE_EXTERNAL_VTK_theora=ON"
                            "-DVTK_MODULE_USE_EXTERNAL_VTK_tiff=ON"
                            "-DVTK_MODULE_USE_EXTERNAL_VTK_zlib=ON"
+                           "-DVTK_MODULE_ENABLE_VTK_RenderingExternal=YES" ; For F3D
                            "-DVTK_WRAP_PYTHON=ON"
                            "-DVTK_PYTHON_VERSION:STRING=3"
                            )
@@ -316,35 +372,35 @@ many popular formats.")
                  (("fenv.h") "cfenv")))))
        #:tests? #f))        ;XXX: test data not included
     (inputs
-     `(("double-conversion" ,double-conversion)
-       ("eigen" ,eigen)
-       ("expat" ,expat)
-       ("freetype" ,freetype)
-       ("gl2ps" ,gl2ps)
-       ("glew" ,glew)
-       ("glu" ,glu)
-       ("hdf5" ,hdf5)
-       ("jpeg" ,libjpeg-turbo)
-       ("jsoncpp" ,jsoncpp)
-       ("libtheora" ,libtheora)
-       ("libX11" ,libx11)
-       ("libxml2" ,libxml2)
-       ("libXt" ,libxt)
-       ("lz4" ,lz4)
-       ("mesa" ,mesa)
-       ("netcdf" ,netcdf)
-       ("png" ,libpng)
-       ("proj" ,proj)
-       ("python", python)
-       ;("pugixml" ,pugixml)
-       ("sqlite" ,sqlite)
-       ("tiff" ,libtiff)
-       ("xorgproto" ,xorgproto)
-       ("zlib" ,zlib)))
+     (list double-conversion
+           eigen
+           expat
+           freetype
+           gl2ps
+           glew
+           glu
+           hdf5
+           libjpeg-turbo
+           jsoncpp
+           libtheora
+           libx11
+           libxml2
+           libxt
+           lz4
+           mesa
+           netcdf
+           libpng
+           proj
+           python
+           ;("pugixml" ,pugixml)
+           sqlite
+           libtiff
+           xorgproto
+           zlib))
     (propagated-inputs
      ;; VTK's 'VTK-vtk-module-find-packages.cmake' calls
      ;; 'find_package(THEORA)', which in turns looks for libogg.
-     `(("libogg" ,libogg)))
+     (list libogg))
     (home-page "https://vtk.org/")
     (synopsis "Libraries for 3D computer graphics")
     (description
@@ -358,11 +414,10 @@ a suite of 3D interaction widgets, supports parallel processing, and
 integrates with various databases on GUI toolkits such as Qt and Tk.")
     (license license:bsd-3)))
 
-;; freecad needs an old version of VTK, because VTK's API changed from 8 to 9
-(define-public vtk-8
+(define-public vtk-7
   (package
-    (name "vtk")
-    (version "8.2.0")
+    (inherit vtk)
+    (version "7.1.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://vtk.org/files/release/"
@@ -370,105 +425,30 @@ integrates with various databases on GUI toolkits such as Qt and Tk.")
                                   "/VTK-" version ".tar.gz"))
               (sha256
                (base32
-                "1fspgp8k0myr6p2a6wkc21ldcswb4bvmb484m12mxgk1a9vxrhrl"))
-              (patches
-               (search-patches "vtk-8-fix-freetypetools-build-failure.patch"))
-              (modules '((guix build utils)))
-              (snippet
-               '(begin
-                  (for-each
-                    (lambda (dir)
-                      (delete-file-recursively
-                        (string-append "ThirdParty/" dir "/vtk" dir)))
-                    ;; ogg, pugixml depended upon unconditionally
-                    '("doubleconversion" "eigen" "expat" "freetype" "gl2ps"
-                      "glew" "hdf5" "jpeg" "jsoncpp" "libproj" "libxml2" "lz4"
-                      "netcdf" "png" "sqlite" "theora" "tiff" "zlib"))
-                  #t))))
-    (build-system cmake-build-system)
+                "0nm7xwwj7rnsxjdv2ssviys8nhci4n9iiiqm2y14s520hl2dsp1d"))
+              (patches (search-patches "vtk-7-python-compat.patch"
+                                       "vtk-7-hdf5-compat.patch"
+                                       "vtk-7-gcc-10-compat.patch"))))
     (arguments
-     '(#:build-type "Release"           ;Build without '-g' to save space.
-       #:configure-flags '(;"-DBUILD_TESTING:BOOL=TRUE"
-                           ;"-DVTK_MODULE_USE_EXTERNAL_vtkogg:BOOL=TRUE"    ; not honored
-                           "-DVTK_USE_SYSTEM_DOUBLECONVERSION:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_EIGEN:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_EXPAT:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_FREETYPE:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_GL2PS:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_GLEW:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_HDF5:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_JPEG:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_JSONCPP:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_LIBPROJ:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_LIBXML2:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_LZ4:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_NETCDF:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_PNG:BOOL=TRUE"
-                           ;"-DVTK_USE_SYSTEM_PUGIXML:BOOL=TRUE"    ; breaks IO/CityGML
-                           "-DVTK_USE_SYSTEM_SQLITE:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_THEORA:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_TIFF:BOOL=TRUE"
-                           "-DVTK_USE_SYSTEM_ZLIB:BOOL=TRUE")
-       #:tests? #f))        ;XXX: test data not included
-    (inputs
-     `(("double-conversion" ,double-conversion)
-       ("eigen" ,eigen)
-       ("expat" ,expat)
-       ("freetype" ,freetype)
-       ("gl2ps" ,gl2ps)
-       ("glew" ,glew)
-       ("glu" ,glu)
-       ("hdf5" ,hdf5)
-       ("jpeg" ,libjpeg-turbo)
-       ("jsoncpp" ,jsoncpp)
-       ;("libogg" ,libogg)
-       ("libtheora" ,libtheora)
-       ("libX11" ,libx11)
-       ("libxml2" ,libxml2)
-       ("libXt" ,libxt)
-       ("lz4" ,lz4)
-       ("mesa" ,mesa)
-       ("netcdf" ,netcdf)
-       ("png" ,libpng)
-       ("proj" ,proj.4)
-       ;("pugixml" ,pugixml)
-       ("sqlite" ,sqlite)
-       ("tiff" ,libtiff)
-       ("xorgproto" ,xorgproto)
-       ("zlib" ,zlib)))
-    (home-page "https://vtk.org/")
-    (synopsis "Libraries for 3D computer graphics")
-    (description
-     "The Visualization Toolkit (VTK) is a C++ library for 3D computer graphics,
-image processing and visualization.  It supports a wide variety of
-visualization algorithms including: scalar, vector, tensor, texture, and
-volumetric methods; and advanced modeling techniques such as: implicit
-modeling, polygon reduction, mesh smoothing, cutting, contouring, and Delaunay
-triangulation.  VTK has an extensive information visualization framework, has
-a suite of 3D interaction widgets, supports parallel processing, and
-integrates with various databases on GUI toolkits such as Qt and Tk.")
-    (license license:bsd-3)))
-
-;; itksnap needs an older variant of VTK.
-(define-public vtk-6
-  (package (inherit vtk)
-    (version "6.3.0")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append "https://vtk.org/files/release/"
-                                  (version-major+minor version)
-                                  "/VTK-" version ".tar.gz"))
-              (sha256
-               (base32
-                "0pla1r5mvkgl4sl213gfdhzrypdgai0h3z5mfgm6p9jz9hsr794j"))))
-    (inputs
-     `(("jsoncpp" ,jsoncpp-for-tensorflow)
-       ,@(alist-delete "jsoncpp" (package-inputs vtk))))))
+     (substitute-keyword-arguments (package-arguments vtk)
+       ((#:configure-flags flags)
+        ;; Otherwise, the build would fail with: "error: invalid conversion
+        ;; from ‘const char*’ to ‘char*’ [-fpermissive]".
+        `(cons "-DCMAKE_CXX_FLAGS=-fpermissive" ,flags))
+       ((#:phases phases)
+        #~(modify-phases #$phases
+            (add-after 'unpack 'remove-kernel-version
+              ;; Avoid embedding the kernel version for reproducible builds
+              (lambda _
+                (substitute*
+                    "ThirdParty/hdf5/vtkhdf5/config/cmake/libhdf5.settings.cmake.in"
+                  (("Host system: \\@CMAKE_HOST_SYSTEM\\@")
+                   "Host system: @CMAKE_SYSTEM_NAME@"))))))))))
 
 (define-public opencv
   (package
     (name "opencv")
-    (version "3.4.3")
+    (version "4.5.4")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -477,14 +457,34 @@ integrates with various databases on GUI toolkits such as Qt and Tk.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "06bc61r8myym4s8im10brdjfg4wxkrvsbhhl7vr1msdan2xddzi3"))
-              (patches
-               (search-patches "opencv-fix-build-of-grfmt_jpeg2000.cpp.patch"))
+                "0gf2xs3r4s51m20mpf0wdidpk0xzp3m2w6jx72fwldhn0pshlmcj"))
               (modules '((guix build utils)))
               (snippet
                '(begin
-                  ;; Remove external libraries. We have all available in Guix:
-                  (delete-file-recursively "3rdparty")
+                  ;; Remove external libraries. We have almost all available
+                  ;; in Guix:
+                  (with-directory-excursion "3rdparty"
+                    (for-each delete-file-recursively
+                              '("carotene"
+                                "cpufeatures"
+                                "ffmpeg"
+                                "include"
+                                "ippicv"
+                                "ittnotify"
+                                "libjasper"
+                                "libjpeg"
+                                "libjpeg-turbo"
+                                "libpng"
+                                "libtengine"
+                                "libtiff"
+                                "libwebp"
+                                "openexr"
+                                "openjpeg"
+                                "openvx"
+                                "protobuf"
+                                ;;"quirc"
+                                "tbb"
+                                "zlib")))
 
                   ;; Milky icon set is non-free:
                   (delete-file-recursively "modules/highgui/src/files_Qt/Milky")
@@ -492,15 +492,16 @@ integrates with various databases on GUI toolkits such as Qt and Tk.")
                   ;; Some jars found:
                   (for-each delete-file
                             '("modules/java/test/pure_test/lib/junit-4.11.jar"
-                              "samples/java/sbt/sbt/sbt-launch.jar"))
-                  #t))))
+                              "samples/java/sbt/sbt/sbt-launch.jar"))))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags
-       (list "-DWITH_IPP=OFF"
+       (list "-DWITH_ADE=OFF" ;we don't have a package for ade yet
+             "-DWITH_IPP=OFF"
              "-DWITH_ITT=OFF"
              "-DWITH_CAROTENE=OFF" ; only visible on arm/aarch64
              "-DENABLE_PRECOMPILED_HEADERS=OFF"
+             "-DOPENCV_GENERATE_PKGCONFIG=ON"
 
              ;; CPU-Features:
              ;; See cmake/OpenCVCompilerOptimizations.cmake
@@ -550,60 +551,46 @@ integrates with various databases on GUI toolkits such as Qt and Tk.")
        (modify-phases %standard-phases
          (add-after 'unpack 'disable-broken-tests
            (lambda _
-             ;; These tests fails with:
-             ;; vtkXOpenGLRenderWindow (0x723990): Could not find a decent config
-             ;; I think we have no OpenGL support with the Xvfb.
-             (substitute* '("modules/viz/test/test_tutorial3.cpp"
-                            "modules/viz/test/test_main.cpp"
-                            "modules/viz/test/tests_simple.cpp"
-                            "modules/viz/test/test_viz3d.cpp")
-               (("(TEST\\(Viz, )([a-z].*\\).*)" all pre post)
-                (string-append pre "DISABLED_" post)))
-
-             ;; This one fails with "unknown file: Failure"
+             ;; This test fails with "unknown file: Failure"
              ;; But I couldn't figure out which file was missing:
              (substitute* "../opencv-contrib/modules/face/test/test_face_align.cpp"
                (("(TEST\\(CV_Face_FacemarkKazemi, )(can_detect_landmarks\\).*)"
                  all pre post)
                 (string-append pre "DISABLED_" post)))
 
-             ;; Failure reason: Bad accuracy
-             ;; Incorrect count of accurate poses [2nd case]: 90.000000 / 94.000000
-             (substitute* "../opencv-contrib/modules/rgbd/test/test_odometry.cpp"
-               (("(TEST\\(RGBD_Odometry_Rgbd, )(algorithmic\\).*)" all pre post)
+             ;; This test fails with a comparison between the expected 396 and
+             ;; the actual 440 in file size.
+             (substitute* "modules/imgcodecs/test/test_exr.impl.hpp"
+               (("(TEST\\(Imgcodecs_EXR, )(readWrite_32FC1\\).*)" all pre post)
                 (string-append pre "DISABLED_" post)))
-             #t))
 
+             ;; These fail with protobuf parse errors that come from
+             ;; opencv-extra/testdata.
+             (substitute* "modules/dnn/test/test_layers.cpp"
+               (("(TEST_P\\(Test_Caffe_layers, )\
+(Accum\\).*|DataAugmentation\\).*|Resample\\).*|Correlation\\).*)" all pre post)
+                (string-append pre "DISABLED_" post)))))
          (add-after 'unpack 'unpack-submodule-sources
            (lambda* (#:key inputs #:allow-other-keys)
              (mkdir "../opencv-extra")
              (mkdir "../opencv-contrib")
              (copy-recursively (assoc-ref inputs "opencv-extra")
                                "../opencv-extra")
-             (invoke "tar" "xvf"
-                     (assoc-ref inputs "opencv-contrib")
-                     "--strip-components=1"
-                     "-C" "../opencv-contrib")))
-
-         (add-after 'set-paths 'add-ilmbase-include-path
+             (copy-recursively (assoc-ref inputs "opencv-contrib")
+                               "../opencv-contrib")))
+         (add-after 'build 'do-not-install-3rdparty-file
+           (lambda _
+             (substitute* "cmake_install.cmake"
+               (("file\\(INSTALL .*source/3rdparty/include/opencl/LICENSE.txt.*") "\n"))))
+         (add-before 'check 'start-xserver
            (lambda* (#:key inputs #:allow-other-keys)
-           ;; OpenEXR propagates ilmbase, but its include files do not appear
-           ;; in the CPATH, so we need to add "$ilmbase/include/OpenEXR/" to
-           ;; the CPATH to satisfy the dependency on "ImathVec.h".
-           (setenv "CPATH"
-                   (string-append (assoc-ref inputs "ilmbase")
-                                  "/include/OpenEXR"
-                                  ":" (or (getenv "CPATH") "")))
-           #t))
-       (add-before 'check 'start-xserver
-         (lambda* (#:key inputs #:allow-other-keys)
-           (let ((xorg-server (assoc-ref inputs "xorg-server"))
-                 (disp ":1"))
-             (setenv "HOME" (getcwd))
-             (setenv "DISPLAY" disp)
-             ;; There must be a running X server and make check doesn't start one.
-             ;; Therefore we must do it.
-             (zero? (system (format #f "~a/bin/Xvfb ~a &" xorg-server disp)))))))))
+             (let ((xorg-server (assoc-ref inputs "xorg-server"))
+                   (disp ":1"))
+               (setenv "HOME" (getcwd))
+               (setenv "DISPLAY" disp)
+               ;; There must be a running X server and make check doesn't start one.
+               ;; Therefore we must do it.
+               (zero? (system (format #f "~a/bin/Xvfb ~a &" xorg-server disp)))))))))
     (native-inputs
      `(("pkg-config" ,pkg-config)
        ("xorg-server" ,xorg-server-for-tests) ; For running the tests
@@ -611,48 +598,50 @@ integrates with various databases on GUI toolkits such as Qt and Tk.")
         ,(origin
            (method git-fetch)
            (uri (git-reference
-                  (url "https://github.com/opencv/opencv_extra")
-                  (commit version)))
+                 (url "https://github.com/opencv/opencv_extra")
+                 (commit version)))
            (file-name (git-file-name "opencv_extra" version))
            (sha256
-            (base32 "08p5xnq8n1jw8svvz0fnirfg7q8dm3p4a5dl7527s5xj0f9qn7lp"))))
+            (base32 "1fg2hxdvphdvagc2fkmhqk7qql9mp7pj2bmp8kmd7vicpr72qk82"))))
        ("opencv-contrib"
         ,(origin
            (method git-fetch)
            (uri (git-reference
-                  (url "https://github.com/opencv/opencv_contrib")
-                  (commit version)))
+                 (url "https://github.com/opencv/opencv_contrib")
+                 (commit version)))
            (file-name (git-file-name "opencv_contrib" version))
-           (patches (search-patches "opencv-rgbd-aarch64-test-fix.patch"))
            (sha256
-            (base32 "1f334glf39nk42mpqq6j732h3ql2mpz89jd4mcl678s8n73nfjh2"))))))
-    (inputs `(("libjpeg" ,libjpeg-turbo)
-              ("libpng" ,libpng)
-              ("jasper" ,jasper)
-              ;; ffmpeg 4.0 causes core dumps in tests.
-              ("ffmpeg" ,ffmpeg-3.4)
-              ("libtiff" ,libtiff)
-              ("hdf5" ,hdf5)
-              ("libgphoto2" ,libgphoto2)
-              ("libwebp" ,libwebp)
-              ("zlib" ,zlib)
-              ("gtkglext" ,gtkglext)
-              ("openexr" ,openexr-2)
-              ("ilmbase" ,ilmbase)
-              ("gtk+" ,gtk+-2)
-              ("python-numpy" ,python-numpy)
-              ("protobuf" ,protobuf)
-              ("vtk" ,vtk)
-              ("python" ,python)))
+            (base32 "0ga0l4ranp1834gxgp487ll1amvmssa02l2nk5ja5w0rx4d8hh26"))))))
+    (inputs
+     (list ffmpeg
+           gtk+
+           gtkglext
+           hdf5
+           ilmbase
+           imath ;should be propagated by openexr
+           jasper
+           libgphoto2
+           libjpeg-turbo
+           libpng
+           libtiff
+           libwebp
+           openblas
+           openexr
+           openjpeg
+           protobuf
+           python
+           python-numpy
+           vtk
+           zlib))
     ;; These three CVEs are not a problem of OpenCV, see:
     ;; https://github.com/opencv/opencv/issues/10998
     (properties '((lint-hidden-cve . ("CVE-2018-7712"
                                       "CVE-2018-7713"
                                       "CVE-2018-7714"))))
     (synopsis "Computer vision library")
-    (description "OpenCV is a library aimed at
-real-time computer vision, including several hundred computer
-vision algorithms.  It can be used to do things like:
+    (description "OpenCV is a library aimed at real-time computer vision,
+including several hundred computer vision algorithms.  It can be used to do
+things like:
 
 @itemize
 @item image and video input and output
@@ -683,30 +672,29 @@ vision algorithms.  It can be used to do things like:
         (base32 "0vjsh3i0861f6h9as3bch956cidz824zz499pvhjs3lfjn6hhs14"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("gobject-introspection" ,gobject-introspection)
-       ("pkg-config" ,pkg-config)))
+     (list gobject-introspection pkg-config))
     (inputs
-     `(("expat" ,expat)
-       ("fftw" ,fftw)
-       ("giflib" ,giflib)
-       ("glib" ,glib)
-       ("hdf5" ,hdf5)
-       ("imagemagick" ,imagemagick)
-       ("lcms" ,lcms)
-       ("libexif" ,libexif)
-       ("libgsf" ,libgsf)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("librsvg" ,librsvg)
-       ("libtiff" ,libtiff)
-       ("libxml2" ,libxml2)
-       ("libwebp" ,libwebp)
-       ("matio" ,matio)
-       ("niftilib" ,niftilib)
-       ("openexr" ,openexr-2)
-       ("orc" ,orc)
-       ("pango" ,pango)
-       ("poppler" ,poppler)))
+     (list expat
+           fftw
+           giflib
+           glib
+           hdf5
+           imagemagick
+           lcms
+           libexif
+           libgsf
+           libjpeg-turbo
+           libpng
+           librsvg
+           libtiff
+           libxml2
+           libwebp
+           matio
+           niftilib
+           openexr-2
+           orc
+           pango
+           poppler))
     (home-page "https://libvips.github.io/libvips/")
     (synopsis "Multithreaded image processing system with low memory needs")
     (description
@@ -722,14 +710,14 @@ due to its architecture which automatically parallelises the image workflows.")
 (define-public gmic
   (package
     (name "gmic")
-    (version "2.9.7")
+    (version "3.0.0")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://gmic.eu/files/source/gmic_"
                            version ".tar.gz"))
        (sha256
-        (base32 "05kzaplsl5qvxs7v6g73q0lq8dii8g6v77ap609188m7gr43f9cl"))))
+        (base32 "080inz0wisv3rhvbnzrgcs3j25wq86gybp68yi56gw6vwswnn19z"))))
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #f ;there are no tests
@@ -745,18 +733,19 @@ due to its architecture which automatically parallelises the image workflows.")
                       "-Wl,-rpath="
                       (assoc-ref outputs "out") "/lib")))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("curl" ,curl)
-       ("fftw" ,fftw)
-       ("graphicsmagick" ,graphicsmagick)
-       ("libjpeg-turbo" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libtiff" ,libtiff)
-       ("libx11" ,libx11)
-       ;;("opencv" ,opencv) ;OpenCV is currently broken in the CI
-       ("openexr" ,openexr-2)
-       ("zlib" ,zlib)))
+     (list curl
+           fftw
+           graphicsmagick
+           imath
+           libjpeg-turbo
+           libpng
+           libtiff
+           libx11
+           ;;opencv ;OpenCV is currently broken in the CI
+           openexr
+           zlib))
     (home-page "https://gmic.eu/")
     (synopsis "Full-featured framework for digital image processing")
     (description "G'MIC is a full-featured framework for digital image
@@ -782,12 +771,10 @@ including 2D color images.")
             (add-after 'unpack 'qt-chdir
               (lambda _ (chdir "gmic-qt") #t))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("qttools" ,qttools)))
+     (list pkg-config qttools-5))
     (inputs
-     `(("gmic" ,gmic)
-       ("qtbase" ,qtbase-5)
-       ,@(package-inputs gmic)))
+     (modify-inputs (package-inputs gmic)
+       (prepend gmic qtbase-5)))
     (synopsis "Qt frontend for the G'MIC image processing framework")
     (license license:gpl3+)))
 
@@ -809,11 +796,8 @@ including 2D color images.")
     (name "gmic-qt-gimp")
     (inputs
      ;; GIMP and its dependencies.
-     `(("gimp" ,gimp)
-       ("gdk-pixbuf" ,gdk-pixbuf)
-       ("cairo" ,cairo)
-       ("gegl" ,gegl)
-       ,@(package-inputs gmic-qt)))
+     (modify-inputs (package-inputs gmic-qt)
+       (prepend gimp gdk-pixbuf cairo gegl)))
     (arguments
      (substitute-keyword-arguments (package-arguments gmic-qt)
        ((#:configure-flags flags)
@@ -865,9 +849,7 @@ including 2D color images.")
        ("poppler" ,poppler)
        ("gsl" ,gsl)))
     (native-inputs
-     `(("flex" ,flex)
-       ("bison" ,bison)
-       ("pkg-config" ,pkg-config)))
+     (list flex bison pkg-config))
     (home-page "https://github.com/libvips/nip2")
     (synopsis "Spreadsheet-like GUI for libvips")
     (description "This package provide a graphical user interface (GUI) for
@@ -907,11 +889,7 @@ recalculates.")
            #t))))
     (build-system cmake-build-system)
     (inputs
-     `(("libgeotiff" ,libgeotiff)
-       ("libtiff" ,libtiff)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("zlib" ,zlib)))
+     (list libgeotiff libtiff libjpeg-turbo libpng zlib))
     (home-page "https://github.com/vxl/vxl/")
     (synopsis "Collection of C++ libraries for computer vision")
     (description "VXL (the Vision-something-Libraries) is a collection of C++
@@ -997,8 +975,7 @@ libraries designed for computer vision research and implementation.")
        ("vxl" ,vxl-1)
        ("zlib" ,zlib)))
     (native-inputs
-     `(("googletest" ,googletest)
-       ("pkg-config" ,pkg-config)))
+     (list googletest pkg-config))
     (home-page "https://github.com/InsightSoftwareConsortium/ITK/")
     (synopsis "Scientific image processing, segmentation and registration")
     (description "The Insight Toolkit (ITK) is a toolkit for N-dimensional
@@ -1054,7 +1031,8 @@ combine the information contained in both.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "15i5ixpryfrbf3vrrb5rici8fb585f25k0v1ljds16bp1f1msr4q"))))
+        (base32 "15i5ixpryfrbf3vrrb5rici8fb585f25k0v1ljds16bp1f1msr4q"))
+       (patches (search-patches "itk-snap-alt-glibc-compat.patch"))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags
@@ -1073,22 +1051,19 @@ combine the information contained in both.")
              (substitute* "CMakeLists.txt"
                (("install_qt5_executable\
 \\(\\$\\{SNAP_MAIN_INSTALL_DIR\\}/\\$\\{SNAP_EXE\\}\\)")
-                ""))
-             #t))
+                ""))))
          (add-after 'unpack 'disable-gui-tests
            (lambda _
              ;; The GUI tests just time out.
              (substitute* "CMakeLists.txt"
                (("  (Workspace|DiffSpace|ProbeIntensity|RegionCompetition\
 |RandomForest|RandomForestBailOut)")
-                ""))
-             #t))
+                ""))))
          (add-after 'unpack 'make-reproducible
            (lambda _
              (substitute* "CMakeLists.txt"
                (("TODAY\\(SNAP_VERSION_COMPILE_DATE\\)")
-                "SET(SNAP_VERSION_COMPILE_DATE \"(removed for reproducibility)\")"))
-             #t))
+                "SET(SNAP_VERSION_COMPILE_DATE \"(removed for reproducibility)\")"))))
          (add-after 'unpack 'prepare-submodules
            (lambda* (#:key inputs #:allow-other-keys)
              (rmdir "Submodules/c3d")
@@ -1099,19 +1074,16 @@ combine the information contained in both.")
                (("vcl_") "std::"))
              (rmdir "Submodules/greedy")
              (symlink (assoc-ref inputs "greedy-src")
-                      "Submodules/greedy")
-             #t))
+                      "Submodules/greedy")))
          (add-after 'unpack 'fix-includes
            (lambda _
              (substitute* "GUI/Model/RegistrationModel.cxx"
                (("<vnl_symmetric_eigensystem.h>")
-                "<vnl/algo/vnl_symmetric_eigensystem.h>"))
-             #t))
+                "<vnl/algo/vnl_symmetric_eigensystem.h>"))))
          (add-before 'check 'prepare-tests
            (lambda _
              ;; Needed by at least one test.
-             (setenv "HOME" "/tmp")
-             #t))
+             (setenv "HOME" "/tmp")))
          (add-after 'install 'wrap-executable
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (let ((out (assoc-ref outputs "out")))
@@ -1120,26 +1092,25 @@ combine the information contained in both.")
                    ,(map (lambda (label)
                            (string-append (assoc-ref inputs label)
                                           "/lib/qt5/plugins"))
-                         '("qtbase" "qtdeclarative"))))
-               #t))))))
+                         '("qtbase" "qtdeclarative-5"))))))))))
     (inputs
-     `(("curl" ,curl)
-       ("fftw" ,fftw)
-       ("fftwf" ,fftwf)
-       ("glu" ,glu)
-       ("hdf5" ,hdf5)
-       ("mesa" ,mesa-opencl)
-       ;; This package does not build with either insight-toolkit 5.0.0 and
-       ;; not with 4.13.  It really needs to be 4.12.
-       ("itk" ,insight-toolkit-4.12)
-       ("vtk" ,vtk-6)
-       ("qtbase" ,qtbase-5)
-       ("qtdeclarative" ,qtdeclarative)
-       ("vxl" ,vxl-1)
-       ("zlib" ,zlib)))
+     (list curl
+           fftw
+           fftwf
+           glu
+           hdf5
+           mesa-opencl
+           ;; This package does not build with either insight-toolkit 5.0.0
+           ;; and not with 4.13.  It really needs to be 4.12.
+           insight-toolkit-4.12
+           vtk-7
+           qtbase-5
+           qtdeclarative-5
+           vxl-1
+           zlib))
     (native-inputs
      `(("googletest" ,googletest)
-       ("qttools" ,qttools)
+       ("qttools-5" ,qttools-5)
        ("pkg-config" ,pkg-config)
        ("c3d-src"
         ,(let* ((commit "f521358db26e00002c911cc47bf463b043942ad3")
@@ -1254,14 +1225,14 @@ substituted by matching images.")
            "0kixwjb2x457dq7927hkh34c803p7yh1pmn6n61rk9shqrcg492h"))))
       (build-system qt-build-system)
       (native-inputs
-       `(("qttools" ,qttools)))
+       (list qttools-5))
       (inputs
        `(("boost" ,boost)
          ("libjpeg" ,libjpeg-turbo)
          ("libpng" ,libpng)
          ("libtiff" ,libtiff)
          ("qtbase" ,qtbase-5)
-         ("qtsvg" ,qtsvg)
+         ("qtsvg-5" ,qtsvg-5)
          ("zlib" ,zlib)))
       (arguments
        `(#:phases
@@ -1297,9 +1268,7 @@ and Scan Tailor Enhanced versions as well as including many more bug fixes.")
         (base32 "14m92dskzw7bwsr64ha4p0mj3ndv13gwcbfic3qxrs3zq5353s7l"))))
     (build-system gnu-build-system)
     (inputs
-     `(("libtiff" ,libtiff)
-       ("zlib" ,zlib)
-       ("libjpeg-turbo" ,libjpeg-turbo)))
+     (list libtiff zlib libjpeg-turbo))
     (home-page "https://www.astromatic.net/software/stiff")
     (synopsis "Convert scientific FITS images to TIFF format")
     (description
@@ -1333,11 +1302,8 @@ purposes.")
                (invoke "pytest" "-v" "tests"))
              #t)))))
     (propagated-inputs
-      `(("python-matplotlib" ,python-matplotlib)
-        ("python-numpy" ,python-numpy)
-        ("python-pillow" ,python-pillow)
-        ("python-pyyaml" ,python-pyyaml)))
-    (native-inputs `(("python-pytest" ,python-pytest)))
+      (list python-matplotlib python-numpy python-pillow python-pyyaml))
+    (native-inputs (list python-pytest))
     (home-page "http://github.com/wkentaro/imgviz")
     (synopsis "Image Visualization Tools")
     (description "Python library for object detection, semantic and instance
@@ -1347,7 +1313,7 @@ segmentation.")
 (define-public labelme
   (package
     (name "labelme")
-    (version "4.5.9")
+    (version "4.5.13")
     (source
      (origin
        ;; PyPi tarball lacks tests.
@@ -1357,11 +1323,17 @@ segmentation.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "12wn291516kdv0wqngz4l04j95g3rwc6cvkcb0gw8rrv4wgc7c66"))))
+        (base32 "0cmi2xb4dgh7738l259rgwhn9l134f0vnaaqc2gflc5yr3lqhrv2"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
        (modify-phases %standard-phases
+         (add-after 'unpack 'loosen-requirements
+           (lambda _
+             ;; Don't require an outdated version of matplotlib.
+             (substitute* "setup.py"
+               (("matplotlib<3\\.3")
+                "matplotlib"))))
          (add-before 'check 'start-xserver
            (lambda* (#:key inputs #:allow-other-keys)
              (let ((xorg-server (assoc-ref inputs "xorg-server")))
@@ -1383,17 +1355,15 @@ segmentation.")
                (setenv "MPLBACKEND" "agg")
                (invoke "pytest" "-v" "tests" "-m" "not gpu")))))))
     (propagated-inputs
-      `(("python-imgviz" ,python-imgviz)
-        ("python-matplotlib" ,python-matplotlib)
-        ("python-numpy" ,python-numpy)
-        ("python-pillow" ,python-pillow)
-        ("python-pyyaml" ,python-pyyaml)
-        ("python-qtpy" ,python-qtpy)
-        ("python-termcolor" ,python-termcolor)))
+      (list python-imgviz
+            python-matplotlib
+            python-numpy
+            python-pillow
+            python-pyyaml
+            python-qtpy
+            python-termcolor))
     (native-inputs
-      `(("python-pytest" ,python-pytest)
-        ("python-pytest-qt" ,python-pytest-qt)
-        ("xorg-server" ,xorg-server-for-tests)))
+      (list python-pytest python-pytest-qt xorg-server-for-tests))
     (home-page "https://github.com/wkentaro/labelme")
     (synopsis
       "Image Polygonal Annotation")

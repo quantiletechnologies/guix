@@ -12,8 +12,11 @@
 ;;; Copyright © 2019 Pierre Neidhardt <mail@ambrevar.xyz>
 ;;; Copyright © 2020 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2020 Giacomo Leidi <goodoldpaul@autistici.org>
+;;; Copyright © 2020, 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2020 Kei Kebreau <kkebreau@posteo.net>
 ;;; Copyright © 2021 Ivan Gankevich <i.gankevich@spbu.ru>
+;;; Copyright © 2021 John Kehayias <john.kehayias@protonmail.com>
+;;; Copyright © 2022 Petr Hodina <phodina@protonmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -61,6 +64,7 @@
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system meson)
+  #:use-module (guix build-system python)
   #:use-module (guix build-system waf)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
@@ -81,7 +85,7 @@
                 "1xqhk9bn10nbvffw3r4p4rjslwz1l7gaycc0x2pqkr2irp7q9x7n"))))
     (build-system gnu-build-system)
     (propagated-inputs
-     `(("mesa" ,mesa))) ; according to glu.pc
+     (list mesa)) ; according to glu.pc
     (home-page "http://www.opengl.org/archives/resources/faq/technical/glu.htm")
     (synopsis "Mesa OpenGL Utility library")
     (description
@@ -106,6 +110,7 @@ as ASCII text.")
               (uri (string-append
                     "mirror://sourceforge/freeglut/freeglut/"
                     version "/freeglut-" version ".tar.gz"))
+              (patches (search-patches "freeglut-gcc-compat.patch"))
               (sha256
                (base32
                 "0s6sk49q8ijgbsrrryb7dzqx2fa744jhx1wck5cz5jia2010w06l"))))
@@ -113,14 +118,10 @@ as ASCII text.")
     (arguments
      '(#:tests? #f                      ;no test target
        #:configure-flags '("-DFREEGLUT_BUILD_STATIC_LIBS=OFF")))
-    (inputs `(("libx11" ,libx11)
-              ("libxi" ,libxi)
-              ("libxrandr" ,libxrandr)
-              ("libxxf86vm" ,libxxf86vm)))
+    (inputs (list libx11 libxi libxrandr libxxf86vm))
     (propagated-inputs
      ;; Headers from Mesa and GLU are needed.
-     `(("glu" ,glu)
-       ("mesa" ,mesa)))
+     (list glu mesa))
     (home-page "http://freeglut.sourceforge.net/")
     (synopsis "Alternative to the OpenGL Utility Toolkit (GLUT)")
     (description
@@ -171,21 +172,48 @@ the X-Consortium license.")
     (arguments
      `(#:configure-flags '("--disable-static")))
     ;; The pkg-config file lists "freetype2" as Requires.private.
-    (propagated-inputs `(("freetype" ,freetype)))
-    (inputs `(("libx11" ,libx11)
-              ("mesa" ,mesa)
-              ("glu" ,glu)))
+    (propagated-inputs (list freetype))
+    (inputs (list libx11 mesa glu))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list pkg-config autoconf automake libtool))
     (synopsis "Font rendering library for OpenGL applications")
     (description
      "FTGL is a font rendering library for OpenGL applications.  Supported
 rendering modes are: Bitmaps, Anti-aliased pixmaps, Texture maps, Outlines,
 Polygon meshes, and Extruded polygon meshes.")
     (license license:x11)))
+
+(define-public glad
+  (package
+    (name "glad")
+    (version "0.1.36")
+    (source
+     (origin
+       ;; We fetch the sources from the repository since the PyPI archive
+       ;; doesn't contain the CMakeLists.txt file which is useful for
+       ;; integration with other software, such as the openboardview package.
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/Dav1dde/glad")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "0m55ya1zrmg6n2cljkajy80ilmi5sblln8742fm0k1sw9k7hzn8n"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (add-after 'install 'install-cmakelists.txt
+           (lambda* (#:key outputs #:allow-other-keys)
+             (let* ((out (assoc-ref outputs "out"))
+                    (share (string-append out "/share/" ,name)))
+               (install-file "CMakeLists.txt" share)))))))
+    (home-page "https://github.com/Dav1dde/glad")
+    (synopsis "Multi-language GL/GLES/EGL/GLX/WGL loader generator")
+    (description "Glad uses the official Khronos XML specifications to
+generate a GL/GLES/EGL/GLX/WGL loader tailored for specific requirements.")
+    (license license:expat)))
 
 (define-public s2tc
   (package
@@ -202,11 +230,9 @@ Polygon meshes, and Extruded polygon meshes.")
         (base32 "1fg323fk7wlv2xh6lw66wswgcv6qi8aaadk7c28h2f2lj1s7njnf"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (inputs
-     `(("mesa-headers" ,mesa-headers)))
+     (list mesa-headers))
     (home-page "https://github.com/divVerent/s2tc")
     (synopsis "S3 Texture Compression implementation")
     (description
@@ -235,7 +261,7 @@ also known as DXTn or DXTC) for Mesa.")
 (define-public mesa
   (package
     (name "mesa")
-    (version "20.2.4")
+    (version "21.3.8")
     (source
       (origin
         (method url-fetch)
@@ -247,89 +273,86 @@ also known as DXTn or DXTC) for Mesa.")
                                   version "/mesa-" version ".tar.xz")))
         (sha256
          (base32
-          "14m09bk7akj0k02lg8fhvvzbdsashlbdsgl2cw7wbqfj2mhdqwh5"))
+          "19wx5plk6z0hhi0zdzxjx8ynl3lhlc5mbd8vhwqyk92kvhxjf3g7"))
         (patches
          (search-patches "mesa-skip-tests.patch"))))
     (build-system meson-build-system)
     (propagated-inputs
-      `(;; The following are in the Requires.private field of gl.pc.
-        ("libdrm" ,libdrm)
-        ("libvdpau" ,libvdpau)
-        ("libx11" ,libx11)
-        ("libxdamage" ,libxdamage)
-        ("libxfixes" ,libxfixes)
-        ("libxshmfence" ,libxshmfence)
-        ("libxxf86vm" ,libxxf86vm)
-        ("xorgproto" ,xorgproto)))
+      (list ;; The following are in the Requires.private field of gl.pc.
+            libdrm
+            libvdpau
+            libx11
+            libxdamage
+            libxfixes
+            libxshmfence
+            libxxf86vm
+            xorgproto))
     (inputs
-      `(("expat" ,expat)
-        ("libelf" ,elfutils)  ;required for r600 when using llvm
-        ("libva" ,(force libva-without-mesa))
-        ("libxml2" ,libxml2)
-        ;; TODO: Add 'libxml2-python' for OpenGL ES 1.1 and 2.0 support
-        ("libxrandr" ,libxrandr)
-        ("libxvmc" ,libxvmc)
-        ,@(match (%current-system)
-            ((or "x86_64-linux" "i686-linux" "powerpc64le-linux")
+     (append (list expat
+                   elfutils                 ;libelf required for r600 when using llvm
+                   (force libva-without-mesa)
+                   libxml2
+                   libxrandr
+                   libxvmc
+                   wayland
+                   wayland-protocols)
+             ;; TODO: Resort alphabetically.
              ;; Note: update the 'clang' input of mesa-opencl when bumping this.
-             `(("llvm" ,llvm-11)))
-            (_
-             `()))
-        ("wayland" ,wayland)
-        ("wayland-protocols" ,wayland-protocols)))
+             (list llvm-11)))
     (native-inputs
-      `(("bison" ,bison)
-        ("flex" ,flex)
-        ("gettext" ,gettext-minimal)
-        ,@(match (%current-system)
-            ((or "x86_64-linux" "i686-linux" "powerpc64le-linux")
-             `(("glslang" ,glslang)))
-            (_
-             `()))
-        ("pkg-config" ,pkg-config)
-        ("python" ,python-wrapper)
-        ("python-mako" ,python-mako)
-        ("which" ,(@ (gnu packages base) which))))
+     (append (list bison
+                   flex
+                   gettext-minimal
+                   pkg-config
+                   python-wrapper
+                   python-libxml2                  ;for OpenGL ES 1.1 and 2.0 support
+                   python-mako
+                   (@ (gnu packages base) which))
+             ;; TODO: Resort alphabetically.
+             (list glslang)))
     (outputs '("out" "bin"))
     (arguments
      `(#:configure-flags
        '(,@(match (%current-system)
-             ((or "armhf-linux" "aarch64-linux")
+             ("aarch64-linux"
               ;; TODO: Fix svga driver for non-Intel architectures.
               '("-Dgallium-drivers=etnaviv,freedreno,kmsro,lima,nouveau,panfrost,r300,r600,swrast,tegra,v3d,vc4,virgl"))
-             ("powerpc64le-linux"
+             ("armhf-linux"
+              ;; Freedreno FTBFS when built on a 64-bit machine.
+              '("-Dgallium-drivers=etnaviv,kmsro,lima,nouveau,panfrost,r300,r600,swrast,tegra,v3d,vc4,virgl"))
+             ((or "powerpc64le-linux" "powerpc-linux" "riscv64-linux")
               '("-Dgallium-drivers=nouveau,r300,r600,radeonsi,swrast,virgl"))
              (_
               '("-Dgallium-drivers=iris,nouveau,r300,r600,radeonsi,svga,swrast,virgl")))
          ;; Enable various optional features.  TODO: opencl requires libclc,
          ;; omx requires libomxil-bellagio
-         "-Dplatforms=x11,drm,surfaceless,wayland"
+         "-Dplatforms=x11,wayland"
          "-Dglx=dri"        ;Thread Local Storage, improves performance
          ;; "-Dopencl=true"
          ;; "-Domx=true"
-         "-Dosmesa=gallium"
-         "-Dgallium-xa=true"
+         "-Dosmesa=true"
+         "-Dgallium-xa=enabled"
 
          ;; features required by wayland
-         "-Dgles2=true"
-         "-Dgbm=true"
-         "-Dshared-glapi=true"
+         "-Dgles2=enabled"
+         "-Dgbm=enabled"
+         "-Dshared-glapi=enabled"
 
          ;; Explicitly enable Vulkan on some architectures.
          ,@(match (%current-system)
              ((or "i686-linux" "x86_64-linux")
               '("-Dvulkan-drivers=intel,amd"))
-             ("powerpc64le-linux"
-              '("-Dvulkan-drivers=amd"))
+             ((or "powerpc64le-linux" "powerpc-linux")
+              '("-Dvulkan-drivers=amd,swrast"))
+             ("aarch64-linux"
+              '("-Dvulkan-drivers=freedreno,amd,broadcom,swrast"))
+             ("riscv64-linux"
+              '("-Dvulkan-drivers=amd,swrast"))
              (_
               '("-Dvulkan-drivers=auto")))
 
-         ;; Enable the Vulkan overlay layer on architectures using llvm.
-         ,@(match (%current-system)
-             ((or "x86_64-linux" "i686-linux" "powerpc64le-linux")
-              '("-Dvulkan-overlay-layer=true"))
-             (_
-              '()))
+         ;; Enable the Vulkan overlay layer on all architectures.
+         "-Dvulkan-layers=device-select,overlay"
 
          ;; Also enable the tests.
          "-Dbuild-tests=true"
@@ -338,13 +361,11 @@ also known as DXTn or DXTC) for Mesa.")
          ;; from the default dri drivers
          ,@(match (%current-system)
              ((or "x86_64-linux" "i686-linux")
-              '("-Ddri-drivers=i915,i965,nouveau,r200,r100"
-                "-Dllvm=true"))         ; default is x86/x86_64 only
-             ("powerpc64le-linux"
-              '("-Ddri-drivers=nouveau,r200,r100"
-                "-Dllvm=true"))
+              '("-Ddri-drivers=i915,i965,nouveau,r200,r100"))
              (_
-              '("-Ddri-drivers=nouveau,r200,r100"))))
+              '("-Ddri-drivers=nouveau,r200,r100")))
+
+                "-Dllvm=enabled")       ; default is x86/x86_64 only
 
        ;; XXX: 'debugoptimized' causes LTO link failures on some drivers.  The
        ;; documentation recommends using 'release' for performance anyway.
@@ -356,25 +377,58 @@ also known as DXTn or DXTC) for Mesa.")
                   (guix build meson-build-system))
        #:phases
        (modify-phases %standard-phases
-         ,@(if (string-prefix? "powerpc64le" (or (%current-target-system)
-                                                 (%current-system)))
-               ;; Disable some of the llvmpipe tests.
-               `((add-after 'unpack 'disable-failing-test
-                   (lambda _
-                     (substitute* "src/gallium/drivers/llvmpipe/lp_test_arit.c"
-                       (("0\\.5, ") ""))
-                     #t)))
-               '())
-         ,@(if (string-prefix? "i686" (or (%current-target-system)
-                                          (%current-system)))
-               ;; Disable new test from Mesa 19 that fails on i686.  Upstream
-               ;; report: <https://bugs.freedesktop.org/show_bug.cgi?id=110612>.
-               `((add-after 'unpack 'disable-failing-test
-                   (lambda _
-                     (substitute* "src/util/tests/format/meson.build"
-                       (("'u_format_test',") ""))
-                     #t)))
-               '())
+         (add-after 'unpack 'disable-failing-test
+           (lambda _
+             ;; Disable the intel vulkan (anv_state_pool) tests, as they may
+             ;; fail in a nondeterministic fashion (see:
+             ;; https://gitlab.freedesktop.org/mesa/mesa/-/issues/5446).
+             (substitute* "src/intel/vulkan/meson.build"
+               (("if with_tests")
+                "if false"))
+             ,@(match (%current-system)
+                 ("riscv64-linux"
+                  ;; According to the test logs the llvm JIT is not designed
+                  ;; for this architecture and the llvmpipe tests all segfault.
+                  ;; The same is true for mesa:gallium / osmesa-render.
+                  `((substitute* '("src/gallium/drivers/llvmpipe/meson.build"
+                                   "src/gallium/targets/osmesa/meson.build")
+                      (("if with_tests") "if false"))))
+                 ("powerpc64le-linux"
+                  ;; Disable some of the llvmpipe tests.
+                  `((substitute* "src/gallium/drivers/llvmpipe/lp_test_arit.c"
+                      (("0\\.5, ") ""))))
+                 ("powerpc-linux"
+                  ;; There are some tests which fail specifically on powerpc.
+                  `((substitute* '(;; LLVM ERROR: Relocation type not implemented yet!
+                                   "src/gallium/drivers/llvmpipe/meson.build"
+                                   ;; This is probably a big-endian test failure.
+                                   "src/gallium/targets/osmesa/meson.build")
+                      (("if with_tests") "if not with_tests"))
+                    (substitute* "src/util/tests/format/meson.build"
+                      ;; This is definately an endian-ness test failure.
+                      (("'u_format_test', ") ""))
+                    ;; It is only this portion of the test which fails.
+                    (substitute* "src/mesa/main/tests/meson.build"
+                      ((".*mesa_formats.*") ""))
+                    ;; This test times out and receives SIGTERM.
+                    (substitute* "src/amd/common/meson.build"
+                      (("and not with_platform_windows") "and with_platform_windows"))))
+                 ("i686-linux"
+                  ;; Disable new test from Mesa 19 that fails on i686.  Upstream
+                  ;; report: <https://bugs.freedesktop.org/show_bug.cgi?id=110612>.
+                  `((substitute* "src/util/tests/format/meson.build"
+                      (("'u_format_test',") ""))))
+                 ("aarch64-linux"
+                  ;; The ir3_disasm test segfaults.
+                  ;; The simplest way to skip it is to run a different test instead.
+                  `((substitute* "src/freedreno/ir3/meson.build"
+                      (("disasm\\.c'") "delay.c',\n    link_args: ld_args_build_id"))))
+                 ("armhf-linux"
+                  ;; Disable some of the llvmpipe tests.
+                  `((substitute* "src/gallium/drivers/llvmpipe/meson.build"
+                      (("'lp_test_arit', ") ""))))
+                 (_
+                  '((display "No tests to disable on this architecture.\n"))))))
          (add-before 'configure 'fix-dlopen-libnames
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (let ((out (assoc-ref outputs "out")))
@@ -392,28 +446,18 @@ also known as DXTn or DXTC) for Mesa.")
                  ;; it's never installed since Mesa removed its
                  ;; egl_gallium support.
                  (("\"gbm_dri\\.so")
-                  (string-append "\"" out "/lib/dri/gbm_dri.so")))
-               #t)))
+                  (string-append "\"" out "/lib/dri/gbm_dri.so"))))))
          (add-after 'install 'split-outputs
            (lambda* (#:key outputs #:allow-other-keys)
              (let ((out (assoc-ref outputs "out"))
                    (bin (assoc-ref outputs "bin")))
-               ,@(match (%current-system)
-                   ((or "i686-linux" "x86_64-linux" "powerpc64le-linux")
-                    ;; Install the Vulkan overlay control script to a separate
-                    ;; output to prevent a reference on Python, saving ~70 MiB
-                    ;; on the closure size.
-                    '((copy-recursively (string-append out "/bin")
-                                        (string-append bin "/bin"))
-                      (delete-file-recursively (string-append out "/bin"))))
-                   (_
-                    ;; XXX: On architectures without the Vulkan overlay layer
-                    ;; just create an empty file because outputs can not be
-                    ;; added conditionally.
-                    '((mkdir-p (string-append bin "/bin"))
-                      (call-with-output-file (string-append bin "/bin/.empty")
-                        (const #t)))))
-               #t)))
+               ;; Not all architectures have the Vulkan overlay control script.
+               (mkdir-p (string-append out "/bin"))
+               (call-with-output-file (string-append out "/bin/.empty")
+                 (const #t))
+               (copy-recursively (string-append out "/bin")
+                                 (string-append bin "/bin"))
+               (delete-file-recursively (string-append out "/bin")))))
          (add-after 'install 'symlinks-instead-of-hard-links
            (lambda* (#:key outputs #:allow-other-keys)
              ;; All the drivers and gallium targets create hard links upon
@@ -447,8 +491,7 @@ also known as DXTn or DXTC) for Mesa.")
                                                        file)
                                               (symlink reference file)))
                                         others))))
-                         (delete-duplicates inodes))
-               #t))))))
+                         (delete-duplicates inodes))))))))
     (home-page "https://mesa3d.org/")
     (synopsis "OpenGL and Vulkan implementations")
     (description "Mesa is a free implementation of the OpenGL and Vulkan
@@ -460,16 +503,20 @@ from software emulation to complete hardware acceleration for modern GPUs.")
 (define-public mesa-opencl
   (package/inherit mesa
     (name "mesa-opencl")
+    (source (origin
+              (inherit (package-source mesa))
+              (patches (cons (search-patch "mesa-opencl-all-targets.patch")
+                             (origin-patches (package-source mesa))))))
     (arguments
      (substitute-keyword-arguments (package-arguments mesa)
        ((#:configure-flags flags)
         `(cons "-Dgallium-opencl=standalone" ,flags))))
     (inputs
-     `(("libclc" ,libclc)
-       ,@(package-inputs mesa)))
+     (modify-inputs (package-inputs mesa)
+       (prepend libclc)))
     (native-inputs
-     `(("clang" ,clang-11)
-       ,@(package-native-inputs mesa)))))
+     (modify-inputs (package-native-inputs mesa)
+       (prepend clang-11)))))
 
 (define-public mesa-opencl-icd
   (package/inherit mesa-opencl
@@ -538,7 +585,7 @@ from software emulation to complete hardware acceleration for modern GPUs.")
        ("glut" ,freeglut)
        ("glew" ,glew)))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (arguments
      '(#:phases
        (modify-phases %standard-phases
@@ -588,13 +635,10 @@ glxgears, glxheads, and glxinfo.")
                                          (assoc-ref %outputs "out")))
        #:tests? #f))                              ;no 'check' target
     (inputs
-     `(("libxi" ,libxi)
-       ("libxmu" ,libxmu)
-       ("libx11" ,libx11)
-       ("mesa" ,mesa)))
+     (list libxi libxmu libx11 mesa))
 
     ;; <GL/glew.h> includes <GL/glu.h>.
-    (propagated-inputs `(("glu" ,glu)))
+    (propagated-inputs (list glu))
 
     (home-page "http://glew.sourceforge.net/")
     (synopsis "OpenGL extension loading library for C and C++")
@@ -617,11 +661,8 @@ extension functionality is exposed in a single header file.")
               (base32
                "13qfx4xh8baryxqrv986l848ygd0piqwm6s2s90pxk9c0m9vklim"))))
     (build-system gnu-build-system)
-    (native-inputs `(("pkg-config" ,pkg-config)))
-    (inputs `(("guile" ,guile-2.2)
-              ("mesa" ,mesa)
-              ("glu" ,glu)
-              ("freeglut" ,freeglut)))
+    (native-inputs (list pkg-config))
+    (inputs (list guile-2.2 mesa glu freeglut))
     (arguments
      '(#:phases (modify-phases %standard-phases
                  (add-after 'configure 'patch-makefile
@@ -671,15 +712,12 @@ OpenGL graphics API.")
                   "_guile_versions_to_search=\"3.0 "))
                #t))))))
     (inputs
-     `(("guile" ,guile-3.0)
-       ("mesa" ,mesa)
-       ("glu" ,glu)
-       ("freeglut" ,freeglut)))))
+     (list guile-3.0 mesa glu freeglut))))
 
 (define-public libepoxy
   (package
     (name "libepoxy")
-    (version "1.5.4")
+    (version "1.5.5")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -687,7 +725,7 @@ OpenGL graphics API.")
                     version "/libepoxy-" version ".tar.xz"))
               (sha256
                (base32
-                "1ll9fach4v30dsyd47s5ial4gaiwihzr2afb77vxxzzy3mlcrlhb"))))
+                "0mh5bdgqfd8m4wj6jlvn4ac94sgfa8r6ish75ciwrhdw47dn65i6"))))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -705,12 +743,12 @@ OpenGL graphics API.")
                #t))))))
     (build-system meson-build-system)
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("python" ,python)))
-    (inputs
-     `(("mesa" ,mesa)))
+     (list pkg-config python))
+    (propagated-inputs
+     ;; epoxy.pc: 'Requires.private: gl egl'
+     (list mesa))
     (home-page "https://github.com/anholt/libepoxy/")
-    (synopsis "A library for handling OpenGL function pointer management")
+    (synopsis "Library for handling OpenGL function pointer management")
     (description
      "A library for handling OpenGL function pointer management.")
     (license license:x11)))
@@ -742,11 +780,9 @@ OpenGL graphics API.")
                         (("if with_glx")
                          "if false")))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("libx11" ,libx11)
-       ("libxext" ,libxext)
-       ("xorgproto" ,xorgproto)))
+     (list libx11 libxext xorgproto))
     (synopsis "Vendor-neutral OpenGL dispatch library")
     (description
      "libglvnd is a vendor-neutral dispatch layer for arbitrating OpenGL
@@ -793,9 +829,9 @@ Both GLX and EGL are supported, in any combination with OpenGL and OpenGL ES.")
                           ;; Remove these flags from 'install' commands.
                           (("-o root -g root") ""))))))))
     (native-inputs
-     `(("unzip" ,unzip)))
+     (list unzip))
     (inputs
-     `(("mesa" ,mesa)))
+     (list mesa))
     (home-page "https://www.lonesock.net/soil.html")
     (synopsis "OpenGL texture loading library")
     (description
@@ -820,18 +856,16 @@ OpenGL.")
      '(#:tests? #f ; no test target
        #:configure-flags '("-DBUILD_SHARED_LIBS=ON")))
     (native-inputs
-     `(("doxygen" ,doxygen)
-       ("unzip" ,unzip)))
+     (list doxygen unzip))
     (propagated-inputs
-     `(("mesa" ,mesa)                             ;included in public headers
-
-       ;; These are in 'Requires.private' of 'glfw3.pc'.
-       ("libx11" ,libx11)
-       ("libxrandr" ,libxrandr)
-       ("libxi" ,libxi)
-       ("libxinerama" ,libxinerama)
-       ("libxcursor" ,libxcursor)
-       ("libxxf86vm" ,libxxf86vm)))
+     (list mesa ;included in public headers
+           ;; These are in 'Requires.private' of 'glfw3.pc'.
+           libx11
+           libxrandr
+           libxi
+           libxinerama
+           libxcursor
+           libxxf86vm))
     (home-page "https://www.glfw.org")
     (synopsis "OpenGL application development library")
     (description
@@ -859,7 +893,7 @@ and surfaces, receiving input and events.")
       (build-system cmake-build-system)
       (arguments `(#:tests? #f))        ; no tests included
       (inputs
-       `(("mesa" ,mesa)))
+       (list mesa))
       ;; Extempore refuses to build on architectures other than x86_64
       (supported-systems '("x86_64-linux"))
       (home-page "https://github.com/extemporelang/nanovg")
@@ -884,9 +918,7 @@ and visualizations.")
         (base32 "1sgzv547h7hrskb9qd0x5yp45kmhvibjwj2mfswv95lg070h074d"))))
     (build-system cmake-build-system)
     (inputs
-     `(("libpng" ,libpng)
-       ("mesa" ,mesa)
-       ("zlib" ,zlib)))
+     (list libpng mesa zlib))
     (arguments
      `(#:tests? #f))                    ; no tests
     (home-page "http://www.geuz.org/gl2ps/")
@@ -922,12 +954,8 @@ mixed vector/bitmap output.")
                                          (assoc-ref %outputs "out") "/lib")
                           "-DVGL_USESSL=1"))) ; use OpenSSL
     (build-system cmake-build-system)
-    (inputs `(("glu" ,glu)
-              ("libjpeg-turbo" ,libjpeg-turbo)
-              ("libxtst" ,libxtst)
-              ("mesa" ,mesa)
-              ("openssl" ,openssl)))
-    (native-inputs `(("pkg-config" ,pkg-config)))
+    (inputs (list glu libjpeg-turbo libxtst mesa openssl))
+    (native-inputs (list pkg-config))
     (home-page "https://www.virtualgl.org")
     (synopsis "Redirects 3D commands from an OpenGL application onto a 3D
 graphics card")
@@ -1044,7 +1072,7 @@ the glProgramViewportFlip before it was replaced with glProgramViewportInfo.")
                  (install-file "csharp/bin/MojoShader-CS.dll" (string-append out "/lib"))
                  #t))))))
       (native-inputs
-       `(("mono" ,mono)))
+       (list mono))
       (home-page "https://github.com/FNA-XNA/MojoShader")
       (synopsis "C# wrapper for MojoShader")
       (description
@@ -1056,7 +1084,7 @@ is written in a way that can be used for any general C# application.")
 (define-public glmark2
   (package
     (name "glmark2")
-    (version "2020.04")
+    (version "2021.12")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1065,20 +1093,12 @@ is written in a way that can be used for any general C# application.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0ywpzp0imi3f8iyp7d1739576zx2nsr3db5hp2as4yhflfyq1as2"))
-              (modules '((guix build utils)))
-              ;; Fix Python 3 incompatibility.
-              (snippet
-               '(begin
-                  (substitute* "wscript"
-                    (("(sorted\\()FLAVORS\\.keys\\(\\)(.*)" _ beginning end)
-                     (string-append beginning "list(FLAVORS)" end)))
-                  #t))))
-    (build-system waf-build-system)
+                "1aydqbrg9i74s19rrdrsscx94m885yvc43v3sdqlgyh675ms98jb"))))
+    (build-system meson-build-system)
     (arguments
      '(#:tests? #f                      ; no check target
        #:configure-flags
-       (list (string-append "--with-flavors="
+       (list (string-append "-Dflavors="
                             (string-join '("x11-gl" "x11-glesv2"
                                            "drm-gl" "drm-glesv2"
                                            "wayland-gl" "wayland-glesv2")
@@ -1094,17 +1114,17 @@ is written in a way that can be used for any general C# application.")
                  (("libGLESv2.so") (string-append mesa "/lib/libGLESv2.so")))
                #t))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("eudev" ,eudev)
-       ("libdrm" ,libdrm)
-       ("libjpeg-turbo" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libx11" ,libx11)
-       ("libxcb" ,libxcb)
-       ("mesa" ,mesa)
-       ("wayland" ,wayland)
-       ("wayland-protocols" ,wayland-protocols)))
+     (list eudev
+           libdrm
+           libjpeg-turbo
+           libpng
+           libx11
+           libxcb
+           mesa
+           wayland
+           wayland-protocols))
     (home-page "https://github.com/glmark2/glmark2")
     (synopsis "OpenGL 2.0 and OpenGL ES 2.0 benchmark")
     (description

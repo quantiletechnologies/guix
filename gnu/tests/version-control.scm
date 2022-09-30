@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2017, 2018 Oleg Pykhalov <go.wigust@gmail.com>
-;;; Copyright © 2017, 2018, 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2017-2018, 2020-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2017, 2018 Clément Lassieur <clement@lassieur.org>
 ;;; Copyright © 2018 Christopher Baines <mail@cbaines.net>
 ;;;
@@ -132,9 +132,7 @@ HTTP-PORT."
           (define marionette
             (make-marionette (list #$vm)))
 
-          (mkdir #$output)
-          (chdir #$output)
-
+          (test-runner-current (system-test-runner #$output))
           (test-begin "cgit")
 
           ;; XXX: Shepherd reads the config file *before* binding its control
@@ -156,19 +154,11 @@ HTTP-PORT."
 
           ;; Wait for nginx to be up and running.
           (test-assert "nginx running"
-            (marionette-eval
-             '(begin
-                (use-modules (gnu services herd))
-                (start-service 'nginx))
-             marionette))
+            (wait-for-file "/var/run/nginx/pid" marionette))
 
           ;; Wait for fcgiwrap to be up and running.
           (test-assert "fcgiwrap running"
-            (marionette-eval
-             '(begin
-                (use-modules (gnu services herd))
-                (start-service 'fcgiwrap))
-             marionette))
+            (wait-for-tcp-port 9000 marionette))
 
           ;; Make sure the PID file is created.
           (test-assert "PID file"
@@ -210,8 +200,7 @@ HTTP-PORT."
             (test-url "/test/tree/does-not-exist" 404)
             (test-url "/does-not-exist" 404))
 
-          (test-end)
-          (exit (= (test-runner-fail-count (test-runner-current)) 0)))))
+          (test-end))))
 
   (gexp->derivation "cgit-test" test))
 
@@ -270,18 +259,12 @@ HTTP-PORT."
           (define marionette
             (make-marionette (list #$vm)))
 
-          (mkdir #$output)
-          (chdir #$output)
-
+          (test-runner-current (system-test-runner #$output))
           (test-begin "git-http")
 
           ;; Wait for nginx to be up and running.
           (test-assert "nginx running"
-            (marionette-eval
-             '(begin
-                (use-modules (gnu services herd))
-                (start-service 'nginx))
-             marionette))
+            (wait-for-file "/var/run/nginx/pid" marionette))
 
           ;; Make sure Git test repository is created.
           (test-assert "Git test repository"
@@ -302,8 +285,7 @@ HTTP-PORT."
               (call-with-input-file "/tmp/clone/README"
                 get-string-all)))
 
-          (test-end)
-          (exit (= (test-runner-fail-count (test-runner-current)) 0)))))
+          (test-end))))
 
   (gexp->derivation "git-http" test))
 
@@ -367,9 +349,7 @@ HTTP-PORT."
           (define marionette
             (make-marionette (list #$vm)))
 
-          (mkdir #$output)
-          (chdir #$output)
-
+          (test-runner-current (system-test-runner #$output))
           (test-begin "gitolite")
 
           ;; Wait for sshd to be up and running.
@@ -410,8 +390,7 @@ HTTP-PORT."
             (test-assert "pushing, and the associated hooks"
               (invoke #$(file-append git "/bin/git") "push")))
 
-          (test-end)
-          (exit (= (test-runner-fail-count (test-runner-current)) 0)))))
+          (test-end))))
 
   (gexp->derivation "gitolite" test))
 
@@ -458,7 +437,8 @@ HTTP-PORT."
   (define vm
     (virtual-machine
      (operating-system os)
-     (port-forwardings `((8081 . ,http-port)))))
+     (port-forwardings `((8081 . ,http-port)))
+     (memory-size 1024)))
 
   (define test
     (with-imported-modules '((gnu build marionette))
@@ -472,9 +452,7 @@ HTTP-PORT."
           (define marionette
             (make-marionette (list #$vm)))
 
-          (mkdir #$output)
-          (chdir #$output)
-
+          (test-runner-current (system-test-runner #$output))
           (test-begin "gitile")
 
           ;; XXX: Shepherd reads the config file *before* binding its control
@@ -496,17 +474,7 @@ HTTP-PORT."
 
           ;; Wait for nginx to be up and running.
           (test-assert "nginx running"
-            (marionette-eval
-             '(begin
-                (use-modules (gnu services herd))
-                (start-service 'nginx))
-             marionette))
-
-          ;; Make sure the PID file is created.
-          (test-assert "PID file"
-            (marionette-eval
-             '(file-exists? "/var/run/nginx/pid")
-             marionette))
+            (wait-for-file "/var/run/nginx/pid" marionette))
 
           ;; Make sure Git test repository is created.
           (test-assert "Git test repository"
@@ -540,8 +508,7 @@ HTTP-PORT."
             (test-url "/test/tree/-/does-not-exist" 404)
             (test-url "/does-not-exist" 404))
 
-          (test-end)
-          (exit (= (test-runner-fail-count (test-runner-current)) 0)))))
+          (test-end))))
 
   (gexp->derivation "gitile-test" test))
 

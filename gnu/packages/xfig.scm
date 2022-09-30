@@ -2,6 +2,8 @@
 ;;; Copyright © 2014 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2014 Federico Beffa <beffa@fbengineering.ch>
 ;;; Copyright © 2017, 2018 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2022 Ivan Vilata i Balaguer <ivan@selidor.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -25,6 +27,7 @@
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages)
   #:use-module (gnu packages freedesktop)
+  #:use-module (gnu packages ghostscript)
   #:use-module (gnu packages xorg)
   #:use-module (gnu packages image)
   #:use-module (gnu packages compression))
@@ -32,7 +35,7 @@
 (define-public xfig
   (package
     (name "xfig")
-    (version "3.2.7a")
+    (version "3.2.8b")
     (source
      (origin
        (method url-fetch)
@@ -40,11 +43,11 @@
                            name "-" version ".tar.xz"))
        (sha256
         (base32
-         "096zgp0bqnxhgxbrv2jjylrjz3pr4da0xxznlk2z7ffxr5pri2fa"))))
+         "0fndgbm1mkqb1sn2v2kj3nx9mxj70jbp31y2bjvzcmmkry0q3k5j"))))
     (build-system gnu-build-system)
     (native-inputs
      ;; For tests.
-     `(("desktop-file-utils" ,desktop-file-utils)))
+     (list desktop-file-utils ghostscript))
     (inputs
      `(("libxaw3d" ,libxaw3d)
        ("libjpeg" ,libjpeg-turbo)
@@ -83,11 +86,13 @@ selected in various ways.  For text, 35 fonts are available.")
                            version ".tar.gz"))
        (sha256
         (base32
-         "0i3p7qmg2w8qrad3pn42b0miwarql7yy0gpd49b1bpal6bqsiicf"))))
+         "0i3p7qmg2w8qrad3pn42b0miwarql7yy0gpd49b1bpal6bqsiicf"))
+       (patches
+        (search-patches
+         "transfig-gcc10-fno-common.patch")))) ; fix GCC10 build
     (build-system gnu-build-system)
     (native-inputs
-     `(("imake" ,imake)
-       ("makedepend" ,makedepend)))
+     (list imake makedepend))
     (inputs
      `(("xfig"    ,xfig)
        ("libjpeg" ,libjpeg-turbo)
@@ -122,6 +127,7 @@ selected in various ways.  For text, 35 fonts are available.")
                (invoke "xmkmf" "-a")
                (substitute* '("Makefile"
                               "fig2dev/Makefile"
+                              "fig2dev/dev/Makefile"
                               "transfig/Makefile")
                  ;; These imake variables somehow remain undefined
                  (("DefaultGcc2[[:graph:]]*Opt") "-O2")
@@ -130,7 +136,12 @@ selected in various ways.  For text, 35 fonts are available.")
                  (("(MANPATH = )[[:graph:]]*" _ front)
                   (string-append front out "/share/man"))
                  (("(CONFDIR = )([[:graph:]]*)" _ front default)
-                  (string-append front out default)))
+                  (string-append front out default))
+                 ;; The "l" option was silently ignored until binutils 2.36,
+                 ;; where it got a different purpose.  So remove it to avoid
+                 ;; "ar: libdeps specified more than once".
+                 (("((AR|MODAR) = ar )clq" _ front)
+                  (string-append front "cq")))
                #t)))
          (add-after 'install 'install/doc
            (lambda _

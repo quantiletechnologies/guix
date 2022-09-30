@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2020 Julien Lepiller <julien@lepiller.eu>
+;;; Copyright © 2020, 2021, 2022 Julien Lepiller <julien@lepiller.eu>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -20,6 +20,7 @@
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix utils)
   #:use-module (guix build-system ant)
@@ -83,7 +84,16 @@
   (make-apache-parent-pom
     "21" "0clcbrq1b2b8sbvlqddyw2dg5niq25dhdma9sk4b0i30hqaipx96"))
 
-(define (make-apache-commons-parent-pom version hash parent)
+(define-public apache-parent-pom-23
+  (make-apache-parent-pom
+    "23" "05c8i741f0m4311q264zvq0lc6srsyz2x95ga4d7qfd89swkzg9d"))
+
+(define-public apache-parent-pom-25
+  (make-apache-parent-pom
+    "25" "1vwx2fpgk7cn2pnlnx26df26vndiwwn5l7ngakj0vwal5pmp6115"))
+
+(define* (make-apache-commons-parent-pom version hash parent
+                                         #:key (tag-prefix "commons-parent-"))
   (hidden-package
     (package
       (name "apache-commons-parent-pom")
@@ -92,7 +102,7 @@
                 (method git-fetch)
                 (uri (git-reference
                        (url "https://github.com/apache/commons-parent")
-                       (commit (string-append "commons-parent-" version))))
+                       (commit (string-append tag-prefix version))))
                 (file-name (git-file-name name version))
                 (sha256 (base32 hash))))
       (build-system ant-build-system)
@@ -132,6 +142,17 @@
   (make-apache-commons-parent-pom
     "50" "0ki8px35dan51ashblpw6rdl27c2fq62slazhslhq3lr4fwlpvxs"
     apache-parent-pom-21))
+
+(define-public apache-commons-parent-pom-51
+  (make-apache-commons-parent-pom
+   "51" "05najrpys26jymla2p5jdz4mf4fjp525h6mnr0jfx55lp03xi939"
+   apache-parent-pom-23))
+
+(define-public apache-commons-parent-pom-52
+  (make-apache-commons-parent-pom
+    "52" "0fb6id9cs9944fjlirjc07bf234bwi96i642px09m9nrfj338n5d"
+    apache-parent-pom-23
+    #:tag-prefix "rel/commons-parent-"))
 
 (define-public java-weld-parent-pom
   (hidden-package
@@ -321,14 +342,15 @@ other projects as their parent pom.")
                  (base32
                   "0yl2hbwz2kn1hll1i00ddzn8f89bfdcjwdifz0pj2j15k1gjch7v"))))
       (arguments
-       `(#:tests? #f
+       (list
+         #:tests? #f
          #:phases
-         (modify-phases %standard-phases
-           (delete 'unpack)
-           (delete 'configure)
-           (delete 'build)
-           (replace 'install
-             (install-pom-file (assoc-ref %build-inputs "source")))))))))
+         #~(modify-phases %standard-phases
+             (delete 'unpack)
+             (delete 'configure)
+             (delete 'build)
+             (replace 'install
+               (install-pom-file #$(package-source this-package)))))))))
 
 (define* (make-plexus-parent-pom version hash #:optional parent)
   (hidden-package
@@ -378,7 +400,11 @@ other projects as their parent pom.")
   (make-plexus-parent-pom
     "6.1" "1pisca0fxpgbhf4xdgw5mn86622pg3mc5b8760kf9mk2awazshlj"))
 
-(define (make-maven-parent-pom version hash parent)
+(define-public plexus-parent-pom-8
+  (make-plexus-parent-pom
+    "8" "0ybwdzawa58qg9ag39rxyin24lk9sjcaih6n2yfldfzsbkq6gnww"))
+
+(define* (make-maven-parent-pom version hash parent #:key replacements)
   (hidden-package
     (package
       (name "maven-parent-pom")
@@ -401,6 +427,12 @@ other projects as their parent pom.")
              (install-pom-file "maven-plugins/pom.xml"))
            (add-after 'install 'install-shared
              (install-pom-file "maven-shared-components/pom.xml"))
+           ,@(if replacements
+                 `((add-before 'install 'fix-pom
+                    (lambda _
+                      (use-modules (guix build maven pom))
+                      (fix-pom-dependencies "pom.xml" '() #:local-packages (quote ,(force replacements))))))
+                 '())
            (replace 'install
              (install-pom-file "pom.xml")))))
       (propagated-inputs
@@ -411,15 +443,45 @@ other projects as their parent pom.")
 tool.  This package contains the Maven parent POM.")
       (license license:asl2.0))))
 
+(define-public maven-parent-pom-35
+  (make-maven-parent-pom
+    "35" "0pg9k7l5pcbghmc89i11g900pbzznvf5sfdfzlqfwpihqb2g8iab"
+    apache-parent-pom-25
+    #:replacements
+    (delay
+      `(("org.codehaus.plexus"
+         ("plexus-component-annotations" .
+          ,(package-version java-plexus-component-annotations)))))))
+
+(define-public maven-parent-pom-34
+  (make-maven-parent-pom
+    "34" "1vkmrfwva76k6maf1ljbja5ga4kzav4xc73ymbaf42xaiaknglbc"
+    apache-parent-pom-23
+    #:replacements
+    (delay
+      `(("org.codehaus.plexus"
+         ("plexus-component-annotations" .
+          ,(package-version java-plexus-component-annotations)))))))
+
 (define-public maven-parent-pom-33
   (make-maven-parent-pom
     "33" "1b0z2gsvpccgcssys9jbdfwlwq8b5imdwr508f87ssdbfs29lh65"
-    apache-parent-pom-21))
+    apache-parent-pom-21
+    #:replacements
+    (delay
+      `(("org.codehaus.plexus"
+         ("plexus-component-annotations" .
+          ,(package-version java-plexus-component-annotations)))))))
 
 (define-public maven-parent-pom-31
   (make-maven-parent-pom
     "31" "0skxv669v9ffwbmrmybnn9awkf1g3ylk88bz0hv6g11zpj1a8454"
-    apache-parent-pom-19))
+    apache-parent-pom-19
+    #:replacements
+    (delay
+      `(("org.codehaus.plexus"
+         ("plexus-component-annotations" .
+          ,(package-version java-plexus-component-annotations)))))))
 
 (define-public maven-parent-pom-30
   (make-maven-parent-pom
@@ -455,7 +517,12 @@ tool.  This package contains the Maven parent POM.")
 (define-public maven-parent-pom-22
   (let ((base (make-maven-parent-pom
                 "22" "1kgqbyx7ckashy47n9rgyg4asyrvp933hdiknvnad7msq5d4c2jg"
-                apache-parent-pom-11)))
+                apache-parent-pom-11
+                #:replacements
+                (delay
+                  `(("org.codehaus.plexus"
+                     ("plexus-component-annotations" .
+                      ,(package-version java-plexus-container-default))))))))
     (package
       (inherit base)
       (arguments
@@ -463,13 +530,7 @@ tool.  This package contains the Maven parent POM.")
          ((#:phases phases)
           `(modify-phases ,phases
              (delete 'install-plugins)
-             (delete 'install-shared)
-             (add-before 'install 'fix-versions
-               (lambda _
-                 (substitute* "pom.xml"
-                   (("1.5.5")
-                    ,(package-version java-plexus-component-annotations)))
-                 #t)))))))))
+             (delete 'install-shared))))))))
 
 (define-public maven-plugins-pom-23
   (hidden-package
@@ -495,7 +556,7 @@ tool.  This package contains the Maven parent POM.")
            (replace 'install
              (install-pom-file "pom.xml")))))
       (propagated-inputs
-       `(("maven-parent-pom" ,maven-parent-pom-22)))
+       (list maven-parent-pom-22))
       (home-page "https://github.com/apache/maven-plugins")
       (synopsis "Maven parent pom for maven plugins projects")
       (description "This package contains the parent pom for maven plugins.")
@@ -516,14 +577,15 @@ tool.  This package contains the Maven parent POM.")
                   "11skhrjgrrs6z5rw1w39ap1pzhrc99g0czip10kz7wsavg746ibm"))))
       (build-system ant-build-system)
       (arguments
-       `(#:tests? #f
+       (list
+         #:tests? #f
          #:phases
-         (modify-phases %standard-phases
-           (delete 'unpack)
-           (delete 'build)
-           (delete 'configure)
-           (replace 'install
-             (install-pom-file (assoc-ref %build-inputs "source"))))))
+         #~(modify-phases %standard-phases
+             (delete 'unpack)
+             (delete 'build)
+             (delete 'configure)
+             (replace 'install
+               (install-pom-file #$(package-source this-package))))))
       (propagated-inputs
        `(("maven-parent-pom-27" ,maven-parent-pom-27)))
       (home-page "https://apache.org/maven")
@@ -543,3 +605,32 @@ components.")
               (sha256
                (base32
                 "0cqa072fz55j5xyvixqv8vbd7jsbhb1cd14bzjvm0hbv2wpd9npf"))))))
+
+(define-public java-jvnet-parent-pom-3
+  (hidden-package
+    (package
+      (name "java-jvnet-parent-pom-3")
+      (version "3")
+      (source (origin
+                (method url-fetch)
+                (uri (string-append "https://repo1.maven.org/maven2/net/java/"
+                                    "jvnet-parent/" version "/jvnet-parent-"
+                                    version ".pom"))
+                (sha256
+                 (base32
+                  "0nj7958drckwf634cw9gmwgmdi302bya7bas16bbzp9rzag7ix9h"))))
+      (build-system ant-build-system)
+      (arguments
+       (list
+         #:tests? #f
+         #:phases
+         #~(modify-phases %standard-phases
+             (delete 'unpack)
+             (delete 'configure)
+             (delete 'build)
+             (replace 'install
+               (install-pom-file #$(package-source this-package))))))
+      (home-page "https://mvnrepository.com/artifact/net.java/jvnet-parent")
+      (synopsis "java.net parent pom")
+      (description "This package contains the java.net parent pom file.")
+      (license license:asl2.0))))

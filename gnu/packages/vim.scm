@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Cyril Roelandt <tipecaml@gmail.com>
-;;; Copyright © 2016, 2017, 2018, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016, 2017, 2018, 2019, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016, 2017 Nikita <nikita@n0.is>
 ;;; Copyright © 2017 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2017 Marius Bakke <mbakke@fastmail.com>
@@ -11,6 +11,8 @@
 ;;; Copyright © 2020, 2021 Jack Hill <jackhill@jackhill.us>
 ;;; Copyright © 2021 Simon Tournier <zimon.toutoune@gmail.com>
 ;;; Copyright © 2021 Tissevert <tissevert+guix@marvid.fr>
+;;; Copyright © 2021 Foo Chuan Wei <chuanwei.foo@hotmail.com>
+;;; Copyright © 2022 Luis Henrique Gomes Higino <luishenriquegh2701@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -30,6 +32,7 @@
 (define-module (gnu packages vim)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
+  #:use-module (guix gexp)
   #:use-module (guix utils)
   #:use-module (guix download)
   #:use-module (guix git-download)
@@ -43,6 +46,7 @@
   #:use-module (gnu packages attr)
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages base)
+  #:use-module (gnu packages code)
   #:use-module (gnu packages enlightenment)
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages gawk)
@@ -73,7 +77,7 @@
 (define-public vim
   (package
     (name "vim")
-    (version "8.2.3487")
+    (version "9.0.0235")
     (source (origin
              (method git-fetch)
              (uri (git-reference
@@ -82,50 +86,42 @@
              (file-name (git-file-name name version))
              (sha256
               (base32
-               "1s09jvr1vv9zjk352vbfidfy5fidbf83kz2vk0kk6zv24j1yck24"))))
+               "1fshlggcq1fw4cbsgmagwxkmdiwv2cla0vds383z49ayqgqnamnj"))))
     (build-system gnu-build-system)
     (arguments
      `(#:test-target "test"
        #:parallel-tests? #f
-       ;; Fix test_signals.vim. https://github.com/vim/vim/issues/7402
-       #:make-flags (list "CFLAGS=-D_REENTRANT")
        #:phases
        (modify-phases %standard-phases
          (add-after 'configure 'patch-absolute-paths
            (lambda _
-             (substitute* "runtime/tools/mve.awk"
-               (("/usr/bin/nawk") (which "gawk")))
-             (substitute* '("src/testdir/Makefile"
+             (substitute* '("runtime/autoload/context.vim"
+                            "src/testdir/Makefile"
+                            "src/testdir/test_filetype.vim"
                             "src/testdir/test_normal.vim"
                             "src/testdir/test_popupwin.vim"
+                            "src/testdir/test_prompt_buffer.vim"
                             "src/testdir/test_shell.vim"
-                            "src/testdir/test_system.vim"
+                            "src/testdir/test_suspend.vim"
                             "src/testdir/test_terminal.vim"
                             "src/testdir/test_terminal2.vim")
                (("/bin/sh") (which "sh")))
              (substitute* "src/testdir/test_autocmd.vim"
-               (("/bin/kill") (which "kill")))
-             #t))
+               (("/bin/kill") (which "kill")))))
          (add-before 'check 'set-environment-variables
            (lambda* (#:key inputs #:allow-other-keys)
              ;; One of the tests tests timezone-dependent functions.
              (setenv "TZDIR"
-                     (string-append (assoc-ref inputs "tzdata")
-                                    "/share/zoneinfo"))
+                     (search-input-directory inputs "share/zoneinfo"))
 
              ;; Make sure the TERM environment variable is set for the tests
-             (setenv "TERM" "xterm")
-             #t))
+             (setenv "TERM" "xterm")))
          (add-before 'check 'skip-or-fix-failing-tests
            (lambda _
-             ;; This test assumes that PID 1 is run as root and that the user
-             ;; running the test suite does not have permission to kill(1, 0)
-             ;; it.  This is not true in the build container, where both PID 1
-             ;; and the test suite are run as the same user.  Skip the test.
-             ;; An alternative fix would be to patch the PID used to a random
-             ;; 32-bit value and hope it never shows up in the test environment.
-             (substitute* "src/testdir/test_swap.vim"
-               (("if !IsRoot\\(\\)") "if 0"))
+             ;; This test failure is shared between BSD and Guix.
+             (with-fluids ((%default-port-encoding #f))
+               (substitute* "src/testdir/test_writefile.vim"
+                 (("!has\\('bsd'\\)") "0")))
 
              ;; These tests check how the terminal looks after executing some
              ;; actions.  The path of the bash binary is shown, which results in
@@ -140,8 +136,7 @@
                 (string-append line "return\n")))
              (substitute* "src/testdir/test_popupwin.vim"
                ((".*Test_popup_drag_termwin.*" line)
-                (string-append line "return\n")))
-             #t))
+                (string-append line "return\n")))))
          (add-before 'install 'fix-installman.sh
            (lambda _
              (substitute* "src/installman.sh"
@@ -152,13 +147,9 @@
              (let ((vimdir (string-append (assoc-ref outputs "out") "/share/vim")))
                (mkdir-p vimdir)
                (copy-file (assoc-ref inputs "guix.vim")
-                          (string-append vimdir "/vimrc"))
-               #t))))))
+                          (string-append vimdir "/vimrc"))))))))
     (inputs
-     `(("gawk" ,gawk)
-       ("ncurses" ,ncurses)
-       ("perl" ,perl)
-       ("tcsh" ,tcsh)))                 ; For runtime/tools/vim32
+     (list gawk ncurses perl tcsh))                 ; For runtime/tools/vim32
     (native-inputs
      `(("libtool" ,libtool)
        ("guix.vim" ,(search-auxiliary-file "guix.vim"))
@@ -184,20 +175,19 @@ configuration files.")
   (package (inherit vim)
     (name "xxd")
     (arguments
-     `(#:make-flags (list ,(string-append "CC=" (cc-for-target)))
+     (list
+       #:make-flags #~(list (string-append "CC=" #$(cc-for-target)))
        #:tests? #f ; there are none
        #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)
-         (add-after 'unpack 'chdir
-           (lambda _
-             (chdir "src/xxd")
-             #t))
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((bin (string-append (assoc-ref outputs "out") "/bin")))
-               (install-file "xxd" bin)
-               #t))))))
+       #~(modify-phases %standard-phases
+           (delete 'configure)
+           (add-after 'unpack 'chdir
+             (lambda _
+               (chdir "src/xxd")))
+           (replace 'install
+             (lambda* (#:key outputs #:allow-other-keys)
+               (let ((bin (string-append (assoc-ref outputs "out") "/bin")))
+                 (install-file "xxd" bin)))))))
     (inputs `())
     (native-inputs `())
     (synopsis "Hexdump utility from vim")
@@ -206,9 +196,6 @@ with the editor vim.")))
 
 (define-public vim-full
   (package
-    ;; This package should share its source with Vim, but it doesn't
-    ;; build reliably, and we want to keep Vim up to date due to the
-    ;; frequency of important bug fixes.
     (inherit vim)
     (name "vim-full")
     (arguments
@@ -234,7 +221,7 @@ with the editor vim.")))
            ((#:make-flags flags)
             `(append
               (list "LDFLAGS=-lexpat")
-              (delete "CFLAGS=-D_REENTRANT" ,flags)))
+              ,flags))
            ((#:phases phases)
             `(modify-phases ,phases
                (add-before 'check 'start-xserver
@@ -246,9 +233,8 @@ with the editor vim.")))
                      (zero? (system (string-append xorg-server "/bin/Xvfb "
                                                     display " &")))))))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("xorg-server" ,xorg-server-for-tests)
-       ,@(package-native-inputs vim)))
+     (modify-inputs (package-native-inputs vim)
+       (prepend pkg-config xorg-server-for-tests)))
     (inputs
      `(("acl" ,acl)
        ("atk" ,atk)
@@ -391,8 +377,8 @@ trouble using them, because you do not have to remember each snippet name.")
     (license license:expat))))
 
 (define-public vim-scheme
-  (let ((commit "99af6befee8bc7d289a523064336474ae063cee3")
-        (revision "2"))
+  (let ((commit "e22fc8e199ef52f2efacd08e71c3add90d83b375")
+        (revision "3"))
     (package
       (name "vim-scheme")
       (version (git-version "0.0.0" revision commit))
@@ -400,12 +386,12 @@ trouble using them, because you do not have to remember each snippet name.")
        (origin
          (method git-fetch)
          (uri (git-reference
-               (url "http://git.foldling.org/vim-scheme.git")
+               (url "https://git.foldling.org/vim-scheme.git")
                (commit commit)))
          (file-name (git-file-name name version))
          (sha256
           (base32
-           "0w9hnsxg92f1wd83rra0ss07zla7p2r44whr9rqs70hc0xm8ygd6"))))
+           "04h946vr4f8wxap3wzqs69y2v8n50g2zbk22jsg2kxr4c01z5cbw"))))
       (build-system copy-build-system)
       (arguments
        '(#:install-plan
@@ -416,7 +402,7 @@ trouble using them, because you do not have to remember each snippet name.")
       (description
        "@code{vim-scheme} provides Scheme support for Vim (R7RS and CHICKEN).")
       (home-page "https://foldling.org/git/vim-scheme.git/")
-      (license license:public-domain))))
+      (license license:unlicense))))
 
 (define-public vim-luna
   (let ((commit "633619953dcf8577168e255230f96b05f28d6371")
@@ -475,7 +461,7 @@ trouble using them, because you do not have to remember each snippet name.")
 (define-public vim-fugitive
   (package
     (name "vim-fugitive")
-    (version "3.4")
+    (version "3.7")
     (source
       (origin
         (method git-fetch)
@@ -484,8 +470,7 @@ trouble using them, because you do not have to remember each snippet name.")
                (commit (string-append "v" version))))
         (file-name (git-file-name name version))
         (sha256
-         (base32
-          "0vgyp0rabrxjy9mpdnf221vjk3q38pls7az884gvnjjzdly18xmp"))))
+         (base32 "138290g2aph1jjhaza6biky5qi4ka6435s01bwxivllgb53g3irc"))))
     (build-system copy-build-system)
     (arguments
      '(#:install-plan
@@ -674,74 +659,90 @@ are detected, the user is notified.")))
 (define-public neovim
   (package
     (name "neovim")
-    (version "0.4.4")
-    (source
-     (origin
-       (method git-fetch)
-       (uri (git-reference
-             (url "https://github.com/neovim/neovim")
-             (commit (string-append "v" version))))
-       (file-name (git-file-name name version))
-       (sha256
-        (base32 "11zyj6jvkwas3n6w1ckj3pk6jf81z1g7ngg4smmwm7c27y2a6f2m"))))
+    (version "0.7.2")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/neovim/neovim")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1jn4i4ral79ys06i50bimylm515sfh41z503gj50a74h1ylg0z4w"))))
     (build-system cmake-build-system)
     (arguments
-     `(#:modules ((srfi srfi-26)
-                  (guix build cmake-build-system)
-                  (guix build utils))
-       #:configure-flags '("-DPREFER_LUA:BOOL=YES")
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'set-lua-paths
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let* ((lua-version "5.1")
-                    (lua-cpath-spec
-                     (lambda (prefix)
-                       (let ((path (string-append prefix "/lib/lua/" lua-version)))
-                         (string-append path "/?.so;" path "/?/?.so"))))
-                    (lua-path-spec
-                     (lambda (prefix)
-                       (let ((path (string-append prefix "/share/lua/" lua-version)))
-                         (string-append path "/?.lua;" path "/?/?.lua"))))
-                    (lua-inputs (map (cute assoc-ref inputs <>)
-                                     '("lua"
-                                       "lua-luv"
-                                       "lua-lpeg"
-                                       "lua-bitop"
-                                       "lua-libmpack"))))
-               (setenv "LUA_PATH"
-                       (string-join (map lua-path-spec lua-inputs) ";"))
-               (setenv "LUA_CPATH"
-                       (string-join (map lua-cpath-spec lua-inputs) ";"))
-               #t)))
-         (add-after 'unpack 'prevent-embedding-gcc-store-path
-           (lambda _
-             ;; nvim remembers its build options, including the compiler with
-             ;; its complete path.  This adds gcc to the closure of nvim, which
-             ;; doubles its size.  We remove the refirence here.
-             (substitute* "cmake/GetCompileFlags.cmake"
-               (("\\$\\{CMAKE_C_COMPILER\\}") "/gnu/store/.../bin/gcc"))
-             #t)))))
-    (inputs
-     `(("libuv" ,libuv)
-       ("msgpack" ,msgpack)
-       ("libtermkey" ,libtermkey)
-       ("libvterm" ,libvterm)
-       ("unibilium" ,unibilium)
-       ("jemalloc" ,jemalloc)
-       ("libiconv" ,libiconv)
-       ("lua" ,lua-5.1)
-       ("lua-luv" ,lua5.1-luv)
-       ("lua-lpeg" ,lua5.1-lpeg)
-       ("lua-bitop" ,lua5.1-bitop)
-       ("lua-libmpack" ,lua5.1-libmpack)))
-    (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("gettext" ,gettext-minimal)
-       ("gperf" ,gperf)))
+     (list #:modules
+           '((srfi srfi-26) (guix build cmake-build-system)
+             (guix build utils))
+           #:configure-flags
+           #~(list #$@(if (member (if (%current-target-system)
+                                      (gnu-triplet->nix-system (%current-target-system))
+                                      (%current-system))
+                                  (package-supported-systems luajit))
+                          '()
+                          '("-DPREFER_LUA:BOOL=YES")))
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'set-lua-paths
+                 (lambda* _
+                   (let* ((lua-version "5.1")
+                          (lua-cpath-spec (lambda (prefix)
+                                            (let ((path (string-append
+                                                         prefix
+                                                         "/lib/lua/"
+                                                         lua-version)))
+                                              (string-append
+                                               path
+                                               "/?.so;"
+                                               path
+                                               "/?/?.so"))))
+                          (lua-path-spec (lambda (prefix)
+                                           (let ((path (string-append prefix
+                                                        "/share/lua/"
+                                                        lua-version)))
+                                             (string-append path "/?.lua;"
+                                                            path "/?/?.lua"))))
+                          (lua-inputs (list (or #$(this-package-input "lua")
+                                                #$(this-package-input "luajit"))
+                                            #$lua5.1-luv
+                                            #$lua5.1-lpeg
+                                            #$lua5.1-bitop
+                                            #$lua5.1-libmpack)))
+                     (setenv "LUA_PATH"
+                             (string-join (map lua-path-spec lua-inputs) ";"))
+                     (setenv "LUA_CPATH"
+                             (string-join (map lua-cpath-spec lua-inputs) ";"))
+                     #t)))
+               (add-after 'unpack 'prevent-embedding-gcc-store-path
+                 (lambda _
+                   ;; nvim remembers its build options, including the compiler with
+                   ;; its complete path.  This adds gcc to the closure of nvim, which
+                   ;; doubles its size.  We remove the refirence here.
+                   (substitute* "cmake/GetCompileFlags.cmake"
+                     (("\\$\\{CMAKE_C_COMPILER\\}") "/gnu/store/.../bin/gcc"))
+                   #t)))))
+    (inputs (list libuv-for-luv
+                  msgpack
+                  libtermkey
+                  libvterm
+                  unibilium
+                  jemalloc
+                  (if (member (if (%current-target-system)
+                                  (gnu-triplet->nix-system (%current-target-system))
+                                  (%current-system))
+                              (package-supported-systems luajit))
+                      luajit
+                      lua-5.1)
+                  lua5.1-luv
+                  lua5.1-lpeg
+                  lua5.1-bitop
+                  lua5.1-libmpack
+                  tree-sitter))
+    (native-inputs (list pkg-config gettext-minimal gperf))
     (home-page "https://neovim.io")
     (synopsis "Fork of vim focused on extensibility and agility")
-    (description "Neovim is a project that seeks to aggressively
+    (description
+     "Neovim is a project that seeks to aggressively
 refactor Vim in order to:
 
 @itemize
@@ -749,7 +750,8 @@ refactor Vim in order to:
 @item Split the work between multiple developers
 @item Enable advanced external UIs without modifications to the core
 @item Improve extensibility with a new plugin architecture
-@end itemize\n")
+@end itemize
+")
     ;; Neovim is licensed under the terms of the Apache 2.0 license,
     ;; except for parts that were contributed under the Vim license.
     (license (list license:asl2.0 license:vim))))
@@ -774,8 +776,7 @@ refactor Vim in order to:
        (modify-phases %standard-phases
          (add-after 'configure 'reference-nvim
            (lambda* (#:key inputs #:allow-other-keys)
-             (let ((nvim (string-append (assoc-ref inputs "neovim")
-                                        "/bin/nvim")))
+             (let ((nvim (search-input-file inputs "/bin/nvim")))
                ;; This substitution should change one line, and replaces the default
                ;; value in the struct of options with an absolute store reference.
                (substitute* "../source/src/main.c"
@@ -784,11 +785,9 @@ refactor Vim in order to:
          (add-before 'build 'set-home
            (lambda _ (setenv "HOME" "/tmp"))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("efl" ,efl)
-       ("msgpack" ,msgpack)
-       ("neovim" ,neovim)))
+     (list efl msgpack neovim))
     (home-page "https://github.com/jeanguyomarch/eovim/")
     (synopsis "EFL GUI for Neovim")
     (description "Graphical Neovim interface based on the @acronym{EFL, Enlightenment
@@ -840,11 +839,9 @@ and support for fonts with ligatures.")
                 (delete-file-recursively (string-append vifm "/vim")))
               #t)))))
     (native-inputs
-     `(("groff" ,groff))) ; for the documentation
+     (list groff)) ; for the documentation
     (inputs
-     `(("libx11" ,libx11)
-       ("ncurses" ,ncurses)
-       ("perl" ,perl)))
+     (list libx11 ncurses perl))
     (home-page "https://vifm.info/")
     (synopsis "Flexible vi-like file manager using ncurses")
     (description "Vifm is a file manager providing a @command{vi}-like usage
@@ -889,8 +886,7 @@ With the package comes a plugin to use vifm as a vim file selector.")
                 "13qgwkqbx012j5spis1aw8rb120rw0zphgjy1j58irax8r6j1ikb"))))
     (build-system python-build-system)
     (propagated-inputs
-     `(("python-greenlet" ,python-greenlet)
-       ("python-msgpack" ,python-msgpack)))
+     (list python-greenlet python-msgpack))
     (arguments
      `(#:tests? #f))
     (home-page "https://github.com/neovim/pynvim")
@@ -903,16 +899,16 @@ through its msgpack-rpc API.")
 (define-public vim-guix-vim
   (package
     (name "vim-guix-vim")
-    (version "0.3.0")
+    (version "0.3.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
-                     (url "https://gitlab.com/Efraim/guix.vim.git/")
+                     (url "https://gitlab.com/Efraim/guix.vim")
                      (commit version)))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0bk2mnvbv1rfr0zzx4m8jjdw98wbbmdffx1h9svrjpg25lcvqv1b"))))
+                "080ni4z23qdr8rkrswjqfqfrrcnpn7qdgrg14glwji46wzvwxqyx"))))
     (build-system copy-build-system)
     (arguments
      '(#:install-plan
@@ -1125,6 +1121,36 @@ quotes, XML tags, and more.  The plugin provides mappings to easily delete,
 change and add such surroundings in pairs.")
     (license license:vim)))
 
+(define-public vim-gnupg
+  (package
+    (name "vim-gnupg")
+    (version "2.7.1")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://github.com/jamessan/vim-gnupg/releases/"
+                           "download/v" version
+                           "/vim-gnupg-v" version ".tar.gz"))
+       (sha256
+        (base32 "02w8lgyyh7wgxysvmmcf9ja5c06vrbyh3alzvv97x8cfhrp0skn7"))))
+    (build-system copy-build-system)
+    (arguments
+     '(#:install-plan
+       '(("autoload" "share/vim/vimfiles/")
+         ("doc" "share/vim/vimfiles/")
+         ("plugin" "share/vim/vimfiles/"))))
+    (home-page "https://www.vim.org/scripts/script.php?script_id=3645")
+    (synopsis "Vim plugin for transparent editing of gpg encrypted files")
+    (description
+     "This script implements transparent editing of gpg encrypted files.  The
+filename must have a @code{.gpg}, @code{.pgp} or @code{.asc} suffix.  When
+opening such a file the content is decrypted, and the content will be encrypted
+to all recipients before it is written.  This script turns off viminfo,
+swapfile, and undofile when editing encrypted files to increase security.")
+    (properties
+     '((release-monitoring-url . "https://github.com/jamessan/vim-gnupg/releases")))
+    (license license:gpl2+)))
+
 (define-public vim-ctrlp
   (package
     (name "vim-ctrlp")
@@ -1219,3 +1245,137 @@ text object.  The signs are always up to date and the plugin never saves your
 buffer.")
       (home-page "https://github.com/airblade/vim-gitgutter")
       (license license:expat))))
+
+(define-public vim-characterize
+  (package
+    (name "vim-characterize")
+    (version "1.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+              (url "https://github.com/tpope/vim-characterize")
+              (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "0ppsbsd696ih40d9f76mdl9sd9y7p2pvm65qmvq4b2zhkv4xbpxz"))))
+    (build-system copy-build-system)
+    (arguments
+     '(#:install-plan
+       '(("autoload" "share/vim/vimfiles/")
+         ("doc" "share/vim/vimfiles/")
+         ("plugin" "share/vim/vimfiles/"))))
+    (home-page "https://github.com/tpope/vim-characterize")
+    (synopsis "Vim plugin for showing Unicode character metadata")
+    (description
+     "In Vim, pressing @code{ga} on a character reveals its representation in
+decimal, octal, and hex.  Characterize.vim modernizes this with the following
+additions:
+@itemize
+@item Unicode character names: @code{U+00A9 COPYRIGHT SYMBOL}
+@item Vim digraphs (type after @code{<C-K>} to insert the character):
+@code{Co}, @code{cO}
+@item Emoji codes: @code{:copyright:}
+@item HTML entities: @code{&copy;}
+@end itemize")
+    (license license:vim)))
+
+(define-public vim-tagbar
+  (package
+    (name "vim-tagbar")
+    (version "3.0.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+              (url "https://github.com/preservim/tagbar")
+              (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1fqfs8msmr6d4kpvxqp14sdjvp5fj52q5w5kz71myzcd4kqzmirp"))))
+    (build-system copy-build-system)
+    (arguments
+     '(#:install-plan
+       '(("autoload" "share/vim/vimfiles/")
+         ("doc" "share/vim/vimfiles/")
+         ("plugin" "share/vim/vimfiles/")
+         ("syntax" "share/vim/vimfiles/"))
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'link-universal-ctags
+           (lambda* (#:key inputs #:allow-other-keys)
+             (let ((ctags (assoc-ref inputs "universal-ctags")))
+               (substitute* "autoload/tagbar.vim"
+                 (("(.*)universal-ctags']" all leader)
+                  (string-append all "\n"
+                                 leader ctags "/bin/ctags']")))))))))
+    (inputs
+     (list universal-ctags))
+    (home-page "https://github.com/preservim/tagbar")
+    (synopsis "Vim plugin that displays tags in a window, ordered by scope")
+    (description
+     "Tagbar is a Vim plugin that provides an easy way to browse the tags of
+the current file and get an overview of its structure.  It does this by creating
+a sidebar that displays the ctags-generated tags of the current file, ordered
+by their scope.  This means that for example methods in C++ are displayed under
+the class they are defined in.")
+    (license license:vim)))
+
+(define-public vim-nerdtree
+  (package
+    (name "vim-nerdtree")
+    (version "6.10.16")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/preservim/nerdtree")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1si8qla86ng8cffbmfrk9gss0i3912yw0f1ph4bsiq0kk837lccp"))))
+    (build-system copy-build-system)
+    (arguments
+     '(#:install-plan
+       '(("autoload" "share/vim/vimfiles/")
+         ("doc" "share/vim/vimfiles/")
+         ("lib" "share/vim/vimfiles/")
+         ("nerdtree_plugin" "share/vim/vimfiles/")
+         ("plugin" "share/vim/vimfiles/")
+         ("syntax" "share/vim/vimfiles/"))))
+    (home-page "https://github.com/preservim/nerdtree")
+    (synopsis "Tree explorer plugin for Vim")
+    (description
+     "The NERDTree is a file system explorer for the Vim editor.  Using this
+plugin, users can visually browse complex directory hierarchies, quickly open
+files for reading or editing, and perform basic file system operations.")
+    (license license:wtfpl2)))
+
+(define-public vim-nerdcommenter
+  (let ((commit "a65465d321f2f8a74b2ffa540b9b87563f7e12e8")
+        (revision "1"))
+    (package
+      (name "vim-nerdcommenter")
+      (version (git-version "2.5.2" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+                (url "https://github.com/preservim/nerdcommenter")
+                (commit commit)))
+         (file-name (git-file-name name version))
+         (sha256
+          (base32 "00ir65iv8jfbgzjmj7332fmydh0qhabbhx8zbvd3j6pgfxqpaafw"))))
+      (build-system copy-build-system)
+      (arguments
+       '(#:install-plan
+         '(("autoload" "share/vim/vimfiles/")
+           ("doc" "share/vim/vimfiles/")
+           ("plugin" "share/vim/vimfiles/"))))
+      (home-page "https://github.com/preservim/nerdcommenter")
+      (synopsis "Vim plugin for easy commenting of code")
+      (description
+       "NERD commenter is a Vim plugin that provides many different commenting
+operations and styles which are invoked via key mappings and a menu.  These
+operations are available for most filetypes.")
+      (license license:cc0))))

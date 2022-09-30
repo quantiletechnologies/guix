@@ -5,7 +5,7 @@
 ;;; Copyright © 2015, 2016 Mathieu Lirzin <mthl@gnu.org>
 ;;; Copyright © 2016 Hartmut Goebel <h.goebel@crazy-compilers.com>
 ;;; Copyright © 2017 Alex Kost <alezost@gmail.com>
-;;; Copyright © 2017 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2017, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2018, 2019 Arun Isaac <arunisaac@systemreboot.net>
 ;;; Copyright © 2020 Timothy Sample <samplet@ngyro.com>
 ;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
@@ -35,6 +35,8 @@
   #:use-module (guix tests http)
   #:use-module (guix download)
   #:use-module (guix git-download)
+  #:use-module (guix build-system texlive)
+  #:use-module (guix build-system emacs)
   #:use-module (guix build-system gnu)
   #:use-module (guix packages)
   #:use-module (guix lint)
@@ -107,7 +109,7 @@
   "Texinfo markup in description is invalid"
   (single-lint-warning-message
    (check-description-style
-    (dummy-package "x" (description "f{oo}b@r")))))
+    (dummy-package "x" (description (identity "f{oo}b@r"))))))
 
 (test-equal "description: does not start with an upper-case letter"
   "description should start with an upper-case letter or digit"
@@ -209,7 +211,7 @@
   "Texinfo markup in synopsis is invalid"
   (single-lint-warning-message
    (check-synopsis-style
-    (dummy-package "x" (synopsis "Bad $@ texinfo")))))
+    (dummy-package "x" (synopsis (identity "Bad $@ texinfo"))))))
 
 (test-equal "synopsis: does not start with an upper-case letter"
   "synopsis should start with an upper-case letter or digit"
@@ -338,6 +340,25 @@
                              `(#:tests? ,(not (%current-target-system)))))))
     (check-tests-true pkg)))
 
+;; The emacs-build-system sets #:tests? #f by default.
+(test-equal "tests-true: #:tests? #t acceptable for emacs packages"
+  '()
+  (let ((pkg (dummy-package "x"
+                            (build-system emacs-build-system)
+                            (arguments
+                             `(#:tests? #t)))))
+    (check-tests-true pkg)))
+
+;; Likewise, though the 'check' phase is deleted by default,
+;; so #:tests? #t won't be useful by itself.
+(test-equal "tests-true: #:tests? #t acceptable for texlive packages"
+  '()
+  (let ((pkg (dummy-package "x"
+                            (build-system texlive-build-system)
+                            (arguments
+                             `(#:tests? #t)))))
+    (check-tests-true pkg)))
+
 (test-equal "inputs: pkg-config is probably a native input"
   "'pkg-config' should probably be a native input"
   (single-lint-warning-message
@@ -379,6 +400,20 @@
                              (propagated-inputs
                               `(("python-setuptools" ,python-setuptools))))))
      (check-inputs-should-not-be-an-input-at-all pkg))))
+
+(test-assert "input labels: no warnings"
+  (let ((pkg (dummy-package "x"
+               (inputs `(("glib" ,glib)
+                         ("pkg-config" ,pkg-config))))))
+    (null? (check-input-labels pkg))))
+
+(test-equal "input labels: one warning"
+  "label 'pkgkonfig' does not match package name 'pkg-config'"
+  (single-lint-warning-message
+   (let ((pkg (dummy-package "x"
+                (inputs `(("glib" ,glib)
+                          ("pkgkonfig" ,pkg-config))))))
+     (check-input-labels pkg))))
 
 (test-equal "explicit #:sh argument to 'wrap-program' is acceptable"
   '()
@@ -506,17 +541,17 @@
                                  (file-name "x.patch")))))))))
     (check-patch-file-names pkg)))
 
-(test-equal "patches: file name too long"
+(test-equal "patches: file name too long, which may break 'make dist'"
   (string-append "x-"
-                 (make-string 100 #\a)
-                 ".patch: file name is too long")
+                 (make-string 152 #\a)
+                 ".patch: file name is too long, which may break 'make dist'")
   (single-lint-warning-message
    (let ((pkg (dummy-package
                "x"
                (source
                 (dummy-origin
                  (patches (list (string-append "x-"
-                                               (make-string 100 #\a)
+                                               (make-string 152 #\a)
                                                ".patch"))))))))
      (check-patch-file-names pkg))))
 
@@ -586,7 +621,7 @@
       (single-lint-warning-message (check-patch-headers pkg)))))
 
 (test-equal "derivation: invalid arguments"
-  "failed to create x86_64-linux derivation: (wrong-type-arg \"map\" \"Wrong type argument: ~S\" (invalid-module) ())"
+  "failed to create x86_64-linux derivation: (match-error \"match\" \"no matching pattern\" invalid-module)"
   (match (let ((pkg (dummy-package "x"
                                    (arguments
                                     '(#:imported-modules (invalid-module))))))
@@ -1063,6 +1098,15 @@
   (let ((source (origin
                   (method url-fetch)
                   (uri "http://ftp.gnu.org/pub/gnu/foo/foo.tar.gz")
+                  (sha256 %null-sha256))))
+    (single-lint-warning-message
+     (check-mirror-url (dummy-package "x" (source source))))))
+
+(test-equal "mirror-url: kde suggestion"
+  "URL should be 'mirror://kde/stable/gcompris/qt/src/gcompris-qt-2.3.tar.xz'"
+  (let ((source (origin
+                  (method url-fetch)
+                  (uri "https://download.kde.org/stable/gcompris/qt/src/gcompris-qt-2.3.tar.xz")
                   (sha256 %null-sha256))))
     (single-lint-warning-message
      (check-mirror-url (dummy-package "x" (source source))))))

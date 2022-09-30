@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2018, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2018, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2018, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2020 Marius Bakke <marius@gnu.org>
 ;;;
@@ -22,21 +22,27 @@
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix download)
   #:use-module (guix git-download)
+  #:use-module (guix gexp)
   #:use-module (guix packages)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system trivial)
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages backup)
   #:use-module (gnu packages base)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages crypto)
   #:use-module (gnu packages dbm)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages gnupg)
+  #:use-module (gnu packages guile)
+  #:use-module (gnu packages linux)
+  #:use-module (gnu packages man)
   #:use-module (gnu packages ncurses)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
-  #:use-module (gnu packages wget))
+  #:use-module (gnu packages wget)
+  #:use-module (srfi srfi-26))
 
 (define-public debian-archive-keyring
   (package
@@ -71,8 +77,7 @@
                          (find-files "trusted.gpg" "\\.gpg$")))
              #t)))))
     (native-inputs
-     `(("gnupg" ,gnupg)
-       ("jetring" ,jetring)))
+     (list gnupg jetring))
     (home-page "https://packages.qa.debian.org/d/debian-archive-keyring.html")
     (synopsis "GnuPG archive keys of the Debian archive")
     (description
@@ -84,7 +89,7 @@ contains the archive keys used for that.")
 (define-public debian-ports-archive-keyring
   (package
     (name "debian-ports-archive-keyring")
-    (version "2020.02.02")
+    (version "2022.02.15")
     (source
       (origin
         (method url-fetch)
@@ -93,7 +98,7 @@ contains the archive keys used for that.")
                             "/debian-ports-archive-keyring_" version ".tar.xz"))
         (sha256
          (base32
-          "0746zfc3n4f77wlrd9a9a6r4mahz2cx5wdd9izg65vmn5qwamgza"))))
+          "096m45l7g8vbk67gwc6bmkzpx8mhn6xfglgrzlg9xkgcs5gxqyc0"))))
     (build-system gnu-build-system)
     (arguments
      '(#:tests? #f              ; No test suite.
@@ -136,7 +141,7 @@ contains the archive keys used for that.")
                          (find-files "trusted.gpg" "\\.gpg$")))
              #t)))))
     (native-inputs
-     `(("gnupg" ,gnupg)))
+     (list gnupg))
     (home-page "https://tracker.debian.org/pkg/debian-ports-archive-keyring")
     (synopsis "GnuPG archive keys of the Debian ports archive")
     (description
@@ -177,8 +182,7 @@ contains the archive keys used for that.")
                                (find-files "." "ubuntu-[am].*\\.gpg$")))
                    #t)))
     (native-inputs
-     `(("tar" ,tar)
-       ("gzip" ,gzip)))
+     (list tar gzip))
     (home-page "https://launchpad.net/ubuntu/+source/ubuntu-keyring")
     (synopsis "GnuPG keys of the Ubuntu archive")
     (description
@@ -190,7 +194,7 @@ contains the archive keys used for that.")
 (define-public debootstrap
   (package
     (name "debootstrap")
-    (version "1.0.124")
+    (version "1.0.126")
     (source
       (origin
         (method git-fetch)
@@ -199,67 +203,65 @@ contains the archive keys used for that.")
               (commit version)))
         (file-name (git-file-name name version))
         (sha256
-         (base32 "0pbvrp7gb87pwmjika5hy97342mdfvm0gmy23ag8xz1nnpmn160j"))))
+         (base32 "0hfx6k86kby4xf0xqskpllq00g159j4khh66hfi6dhcdb91dgyd7"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (delete 'configure)
-         (add-after 'unpack 'patch-source
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let ((out    (assoc-ref outputs "out"))
-                   (tzdata (assoc-ref inputs "tzdata"))
-                   (debian (assoc-ref inputs "debian-keyring"))
-                   (ubuntu (assoc-ref inputs "ubuntu-keyring")))
-               (substitute* "Makefile"
-                 (("/usr") "")
-                 (("-o root -g root") "")
-                 (("chown root.*") "\n"))
-               (substitute* '("scripts/etch"
-                              "scripts/potato"
-                              "scripts/sarge"
-                              "scripts/sid"
-                              "scripts/woody"
-                              "scripts/woody.buildd")
-                 (("/usr") debian))
-               (substitute* "scripts/gutsy"
-                 (("/usr") ubuntu))
-               (substitute* "debootstrap"
-                 (("=/usr") (string-append "=" out)))
-               ;; Ensure PATH works both in guix and within the debian chroot
-               ;; workaround for: https://bugs.debian.org/929889
-               (substitute* "functions"
-                 (("PATH=/sbin:/usr/sbin:/bin:/usr/bin")
-                  "PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin"))
-               (substitute* (find-files "scripts" ".")
-                 (("/usr/share/zoneinfo") (string-append tzdata "/share/zoneinfo")))
-               #t)))
-         (add-after 'install 'install-man-file
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
+     (list
+       #:phases
+       #~(modify-phases %standard-phases
+           (delete 'configure)
+           (add-after 'unpack 'patch-source
+             (lambda* (#:key inputs outputs #:allow-other-keys)
+               (let ((debian #$(this-package-input "debian-archive-keyring"))
+                     (ubuntu #$(this-package-input "ubuntu-keyring")))
+                 (substitute* "Makefile"
+                   (("/usr") "")
+                   (("-o root -g root") "")
+                   (("chown root.*") "\n"))
+                 (substitute* '("scripts/etch"
+                                "scripts/potato"
+                                "scripts/sarge"
+                                "scripts/sid"
+                                "scripts/woody"
+                                "scripts/woody.buildd")
+                   (("/usr") debian))
+                 (substitute* "scripts/gutsy"
+                   (("/usr") ubuntu))
+                 (substitute* "debootstrap"
+                   (("=/usr") (string-append "=" #$output))
+                   (("/usr/bin/dpkg") (search-input-file inputs "/bin/dpkg")))
+                 ;; Ensure PATH works both in guix and within the debian chroot
+                 ;; workaround for: https://bugs.debian.org/929889
+                 (substitute* "functions"
+                   (("PATH=/sbin:/usr/sbin:/bin:/usr/bin")
+                    "PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin"))
+                 (substitute* (find-files "scripts")
+                   (("/usr/share/zoneinfo")
+                    (search-input-directory inputs "/share/zoneinfo"))))))
+           (add-after 'install 'install-man-file
+             (lambda* (#:key outputs #:allow-other-keys)
                (install-file "debootstrap.8"
-                             (string-append out "/share/man/man8"))
-               #t)))
-         (add-after 'install 'wrap-executable
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((debootstrap (string-append (assoc-ref outputs "out")
-                                               "/sbin/debootstrap"))
-                   (path        (getenv "PATH")))
-               (wrap-program debootstrap
-                             `("PATH" ":" prefix (,path)))
-               #t))))
-       #:make-flags (list (string-append "DESTDIR=" (assoc-ref %outputs "out")))
-       #:tests? #f)) ; no tests
+                             (string-append #$output "/share/man/man8"))))
+           (add-after 'install 'wrap-executable
+             (lambda* (#:key outputs #:allow-other-keys)
+               (let ((debootstrap (string-append #$output "/sbin/debootstrap"))
+                     (path        (getenv "PATH")))
+                 (wrap-program debootstrap
+                               `("PATH" ":" prefix (,path)))))))
+         #:make-flags #~(list (string-append "DESTDIR=" #$output))
+         #:tests? #f))  ; no tests
     (inputs
-     `(("debian-keyring" ,debian-archive-keyring)
-       ("ubuntu-keyring" ,ubuntu-keyring)
-       ("tzdata" ,tzdata)
+     (list debian-archive-keyring
+           ubuntu-keyring
+           bash-minimal
+           dpkg
+           tzdata
 
-       ;; Called at run-time from various places, needs to be in PATH.
-       ("gnupg" ,gnupg)
-       ("wget" ,wget)))
+           ;; Called at run-time from various places, needs to be in PATH.
+           gnupg
+           wget))
     (native-inputs
-     `(("perl" ,perl)))
+     (list perl))
     (home-page "https://tracker.debian.org/pkg/debootstrap")
     (synopsis "Bootstrap a basic Debian system")
     (description "Debootstrap is used to create a Debian base system from
@@ -271,7 +273,7 @@ unpacking them into a directory which can eventually be chrooted into.")
 (define-public debianutils
   (package
     (name "debianutils")
-    (version "4.11.1")
+    (version "5.5-1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -280,20 +282,10 @@ unpacking them into a directory which can eventually be chrooted into.")
               (file-name (git-file-name "debianutils" version))
               (sha256
                (base32
-                "18ypb7fivch53wwrdf73yhf1fhkwn9kvw1kfdc1m450241d6191w"))))
+                "1sbdjcb44g2s1zxjf9kxrp9drf9mmh6b49a9z3k428gmc6zsci4r"))))
     (build-system gnu-build-system)
-    (arguments
-     '(#:phases (modify-phases %standard-phases
-                  (add-after 'bootstrap 'create-translations
-                    (lambda _
-                      (with-directory-excursion "po4a"
-                        (invoke "po4a" "--no-backups" "po4a.conf"))
-                      #t)))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("gettext" ,gettext-minimal)
-       ("po4a" ,po4a)))
+     (list autoconf automake gettext-minimal po4a))
     (home-page "https://packages.debian.org/unstable/debianutils")
     (synopsis "Miscellaneous shell utilities")
     (description
@@ -335,20 +327,19 @@ debian/copyright for more information.")))))
                             "PREFIX=/")
          #:phases (modify-phases %standard-phases (delete 'configure))))
       (inputs
-       `(("wget" ,wget)
-         ("perl" ,perl)))
+       (list wget perl))
       (home-page "http://apt-mirror.github.io/")
       (synopsis "Script for mirroring a Debian repository")
       (description
-       "apt-mirror is a small tool that provides the ability to
-selectively mirror Debian and Ubuntu GNU/Linux distributions or any
-other apt sources typically provided by open source developers.")
+       "apt-mirror is a small tool that provides the ability to selectively
+mirror @acronym{APT, advanced package tool} sources, including GNU/Linux
+distributions such as Debian and Trisquel.")
       (license license:gpl2))))
 
 (define-public dpkg
   (package
     (name "dpkg")
-    (version "1.20.9")
+    (version "1.21.8")
     (source
       (origin
         (method git-fetch)
@@ -357,18 +348,16 @@ other apt sources typically provided by open source developers.")
                (commit version)))
         (file-name (git-file-name name version))
         (sha256
-         (base32
-          "16wlb8hwbdvxar187bjd4pzdzj95g3l2ryi2khqqmwbyca4sjm1n"))))
+         (base32 "1whb78pywdlm4v1ablgvvplqjn15b6qrwqkj0pihw5j77aakyz2s"))))
     (build-system gnu-build-system)
     (arguments
      `(#:phases
        (modify-phases %standard-phases
          (add-before 'bootstrap 'patch-version
            (lambda _
-             (patch-shebang "get-version")
+             (patch-shebang "build-aux/get-version")
              (with-output-to-file ".dist-version"
-               (lambda () (display ,version)))
-             #t))
+               (lambda () (display ,version)))))
          (add-after 'unpack 'set-perl-libdir
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (let ((out  (assoc-ref outputs "out"))
@@ -376,26 +365,206 @@ other apt sources typically provided by open source developers.")
                (setenv "PERL_LIBDIR"
                        (string-append out
                                       "/lib/perl5/site_perl/"
-                                      ,(package-version perl)))
-               #t))))))
+                                      ,(package-version perl))))))
+         (add-after 'install 'wrap-scripts
+           (lambda* (#:key outputs #:allow-other-keys)
+             (let ((out (assoc-ref outputs "out")))
+               (with-directory-excursion (string-append out "/bin")
+                 (for-each
+                   (lambda (file)
+                     (wrap-script file
+                       ;; Make sure all perl scripts in "bin" find the
+                       ;; required Perl modules at runtime.
+                       `("PERL5LIB" ":" prefix
+                         (,(string-append out
+                                          "/lib/perl5/site_perl")
+                           ,(getenv "PERL5LIB")))
+                       ;; DPKG perl modules always expect dpkg to be installed.
+                       ;; Work around this by adding dpkg to the path of the scripts.
+                       `("PATH" ":" prefix (,(string-append out "/bin")))))
+                   (list "dpkg-architecture"
+                         "dpkg-buildflags"
+                         "dpkg-buildpackage"
+                         "dpkg-checkbuilddeps"
+                         "dpkg-distaddfile"
+                         "dpkg-genbuildinfo"
+                         "dpkg-genchanges"
+                         "dpkg-gencontrol"
+                         "dpkg-gensymbols"
+                         "dpkg-mergechangelogs"
+                         "dpkg-name"
+                         "dpkg-parsechangelog"
+                         "dpkg-scanpackages"
+                         "dpkg-scansources"
+                         "dpkg-shlibdeps"
+                         "dpkg-source"
+                         "dpkg-vendor")))))))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("gettext" ,gettext-minimal)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)
-       ("perl-io-string" ,perl-io-string)))
+     (list autoconf
+           automake
+           gettext-minimal
+           gnupg                        ; to run t/Dpkg_OpenPGP.t
+           libtool
+           pkg-config
+           perl-io-string))
     (inputs
-     `(("bzip2" ,bzip2)
-       ("libmd" ,libmd)
-       ("ncurses" ,ncurses)
-       ("perl" ,perl)
-       ("xz" ,xz)
-       ("zlib" ,zlib)))
+     (list bzip2
+           guile-3.0                    ; for wrap-script
+           libmd
+           ncurses
+           perl
+           xz
+           zlib))
     (home-page "https://wiki.debian.org/Teams/Dpkg")
     (synopsis "Debian package management system")
     (description "This package provides the low-level infrastructure for
 handling the installation and removal of Debian software packages.")
+    (license license:gpl2+)))
+
+(define-public pbuilder
+  (package
+    (name "pbuilder")
+    (version "0.231")
+    (source
+      (origin
+        (method git-fetch)
+        (uri (git-reference
+               (url "https://salsa.debian.org/pbuilder-team/pbuilder.git/")
+               (commit version)))
+        (file-name (git-file-name name version))
+        (sha256
+         (base32 "0z6f1fgcrkfql9ayc3d0nxra2y6cn91xd5lvr0hd8gdlp9xdvxbc"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+       #:modules `((guix build gnu-build-system)
+                   (guix build utils)
+                   (srfi srfi-26))
+       #:phases
+       #~(modify-phases %standard-phases
+           (delete 'configure)          ; no configure script
+           (add-after 'unpack 'patch-source
+             (lambda* (#:key inputs outputs #:allow-other-keys)
+
+               ;; Documentation requires tldp-one-page.xsl
+               (substitute* "Makefile"
+                 ((".*-C Documentation.*") ""))
+
+               ;; Don't create #$output/var/cache/pbuilder/...
+               (substitute* '("Makefile"
+                              "pbuildd/Makefile")
+                 ((".*/var/cache/pbuilder.*") ""))
+
+               ;; Find the correct fallback location.
+               (substitute* '("pbuilder-checkparams"
+                              "pbuilder-loadconfig"
+                              "pbuilder-satisfydepends-apt"
+                              "pbuilder-satisfydepends-aptitude"
+                              "pbuilder-satisfydepends-classic"
+                              "t/test_pbuilder-satisfydepends-classic")
+                 (("\\$PBUILDER_ROOT(/usr)?") #$output))
+
+               ;; Some hardcoded paths
+               (substitute* '("debuild-pbuilder"
+                              "pbuilder"
+                              "pbuilder-buildpackage"
+                              "pbuilderrc"
+                              "pdebuild"
+                              "pdebuild-checkparams"
+                              "pdebuild-internal")
+                 (("/usr/lib/pbuilder")
+                  (string-append #$output "/lib/pbuilder")))
+               (substitute* "pbuildd/buildd-config.sh"
+                 (("/usr/share/doc/pbuilder")
+                  (string-append #$output "/share/doc/pbuilder")))
+               (substitute* "pbuilder-unshare-wrapper"
+                 (("/(s)?bin/ifconfig") "ifconfig")
+                 (("/(s)?bin/ip") (search-input-file inputs "/sbin/ip")))
+               (substitute* "Documentation/Makefile"
+                 (("/usr") ""))
+
+               ;; Ensure PATH works both in Guix and within the Debian chroot.
+               (substitute* "pbuilderrc"
+                 (("PATH=\"/usr/sbin:/usr/bin:/sbin:/bin")
+                  "PATH=\"$PATH:/usr/sbin:/usr/bin:/sbin:/bin"))))
+           (add-after 'install 'create-etc-pbuilderrc
+             (lambda* (#:key outputs #:allow-other-keys)
+               (with-output-to-file (string-append #$output "/etc/pbuilderrc")
+                 (lambda ()
+                   (format #t "# A couple of presets to make this work more smoothly.~@
+                           MIRRORSITE=\"http://deb.debian.org/debian\"~@
+                           if [ -r /run/setuid-programs/sudo ]; then~@
+                               PBUILDERROOTCMD=\"/run/setuid-programs/sudo -E\"~@
+                           fi~@
+                           PBUILDERSATISFYDEPENDSCMD=\"~a/lib/pbuilder/pbuilder-satisfydepends-apt\"~%"
+                           #$output)))))
+           (add-after 'install 'install-manpages
+             (lambda* (#:key outputs #:allow-other-keys)
+               (let ((man (string-append #$output "/share/man/")))
+                 (install-file "debuild-pbuilder.1" (string-append man "man1"))
+                 (install-file "pdebuild.1" (string-append man "man1"))
+                 (install-file "pbuilder.8" (string-append man "man8"))
+                 (install-file "pbuilderrc.5" (string-append man "man5")))))
+           (add-after 'install 'wrap-programs
+             (lambda* (#:key inputs outputs #:allow-other-keys)
+               (for-each
+                 (lambda (file)
+                   (wrap-script file
+                    `("PATH" ":" prefix
+                      ,(map (compose dirname (cut search-input-file inputs <>))
+                            (list "/bin/cut"
+                                  "/bin/dpkg"
+                                  "/bin/grep"
+                                  "/bin/perl"
+                                  "/bin/sed"
+                                  "/bin/which"
+                                  "/sbin/debootstrap")))))
+                 (cons*
+                   (string-append #$output "/bin/pdebuild")
+                   (string-append #$output "/sbin/pbuilder")
+                   (find-files (string-append #$output "/lib/pbuilder"))))))
+           ;; Move the 'check phase to after 'install.
+           (delete 'check)
+           (add-after 'validate-runpath 'check
+             (assoc-ref %standard-phases 'check)))
+         #:make-flags
+         ;; No PREFIX, use DESTDIR instead.
+         #~(list (string-append "DESTDIR=" #$output)
+                 (string-append "SYSCONFDIR=" #$output "/etc")
+                 (string-append "BINDIR=" #$output "/bin")
+                 (string-append "PKGLIBDIR=" #$output "/lib/pbuilder")
+                 (string-append "SBINDIR=" #$output "/sbin")
+                 (string-append "PKGDATADIR=" #$output "/share/pbuilder")
+                 (string-append "EXAMPLEDIR=" #$output "/share/doc/pbuilder/examples")
+                 "PBUILDDDIR=/share/doc/pbuilder/examples/pbuildd/")))
+    (inputs
+     (list dpkg
+           debootstrap
+           grep
+           guile-3.0            ; for wrap-script
+           iproute
+           perl
+           which))
+    (native-inputs
+     (list man-db
+           util-linux))
+    (home-page "https://pbuilder-team.pages.debian.net/pbuilder/")
+    (synopsis "Personal package builder for Debian packages")
+    (description
+     "@code{pbuilder} is a personal package builder for Debian packages.
+@itemize
+@item@code{pbuilder} constructs a chroot system, and builds a package inside the
+chroot.  It is an ideal system to use to check that a package has correct
+build-dependencies.  It uses @code{apt} extensively, and a local mirror, or a
+fast connection to a Debian mirror is ideal, but not necessary.
+@item@code{pbuilder create} uses debootstrap to create a chroot image.
+@item@code{pbuilder update} updates the image to the current state of
+testing/unstable/whatever.
+@item@code{pbuilder build} takes a @code{*.dsc} file and builds a binary in the
+chroot image.
+@item@code{pdebuild} is a wrapper for Debian Developers, to allow running
+@code{pbuilder} just like @code{debuild}, as a normal user.
+@end itemize")
     (license license:gpl2+)))
 
 (define-public reprepro
@@ -436,15 +605,14 @@ handling the installation and removal of Debian software packages.")
                           (string-append zsh "_reprepro"))
                #t))))))
     (inputs
-     `(("bdb" ,bdb)
-       ("bzip2" ,bzip2)
-       ("gpgme" ,gpgme)
-       ("libarchive" ,libarchive)
-       ("xz" ,xz)
-       ("zlib" ,zlib)))
+     (list bdb
+           bzip2
+           gpgme
+           libarchive
+           xz
+           zlib))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)))
+     (list autoconf automake))
     (home-page "https://salsa.debian.org/brlink/reprepro")
     (synopsis "Debian package repository producer")
     (description "Reprepro is a tool to manage a repository of Debian packages

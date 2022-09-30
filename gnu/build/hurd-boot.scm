@@ -185,13 +185,9 @@ set."
       ("servers/crash-suspend"   ("/hurd/crash" "--suspend"))
       ("servers/password"        ("/hurd/password"))
       ("servers/socket/1"        ("/hurd/pflocal"))
-      ("servers/socket/2"        ("/hurd/pfinet"
-                                  "--interface" "eth0"
-                                  "--address"
-                                  "10.0.2.15" ;the default QEMU guest IP
-                                  "--netmask" "255.255.255.0"
-                                  "--gateway" "10.0.2.2"
-                                  "--ipv6" "/servers/socket/26"))
+      ;; /servers/socket/2 and /26 are created by 'static-networking-service'.
+      ;; XXX: Spawn pfinet without arguments on these nodes so that a DHCP
+      ;; client has someone to talk to?
       ("proc"                    ("/hurd/procfs" "--stat-mode=444"))))
 
   (define devices
@@ -258,7 +254,7 @@ set."
   "This procedure is meant to be called from an early RC script.
 
 Install the relevant passive translators on the first boot.  Then, run system
-activation by using the kernel command-line options '--system' and '--load';
+activation by using the kernel command-line options 'gnu.system' and 'gnu.load';
 starting the Shepherd.
 
 XXX TODO: see linux-boot.scm:boot-system.
@@ -269,14 +265,14 @@ XXX TODO: use Linux xattr/setxattr to remove (settrans in) /libexec/RUNSYSTEM
 "
 
   (display "Welcome, this is GNU's early boot Guile.\n")
-  (display "Use '--repl' for an initrd REPL.\n\n")
+  (display "Use 'gnu.repl' for an initrd REPL.\n\n")
 
   (call-with-error-handling
    (lambda ()
 
      (let* ((args    (command-line))
-            (system  (find-long-option "--system" args))
-            (to-load (find-long-option "--load" args)))
+            (system  (find-long-option "gnu.system" args))
+            (to-load (find-long-option "gnu.load" args)))
 
        (format #t "Setting-up essential translators...\n")
        (setenv "PATH" (string-append system "/profile/bin"))
@@ -290,7 +286,7 @@ XXX TODO: use Linux xattr/setxattr to remove (settrans in) /libexec/RUNSYSTEM
        (unless (zero? (system* "/hurd/mach-defpager"))
          (format #t "FAILED...Good luck!\n"))
 
-       (cond ((member "--repl" args)
+       (cond ((member "gnu.repl" args)
               (format #t "Starting repl...\n")
               (start-repl))
              (to-load
@@ -302,7 +298,7 @@ XXX TODO: use Linux xattr/setxattr to remove (settrans in) /libexec/RUNSYSTEM
               (sleep 2)
               (reboot))
              (else
-              (display "no boot file passed via '--load'\n")
+              (display "no boot file passed via 'gnu.load'\n")
               (display "entering a warm and cozy REPL\n")
               (start-repl)))))
    #:on-error on-error))

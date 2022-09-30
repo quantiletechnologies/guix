@@ -69,7 +69,7 @@ only be extended.
 @code{profile} is a list of file-like objects, which will go to
 @file{~/.profile}.  By default @file{~/.profile} contains the
 initialization code, which have to be evaluated by login shell to make
-home-environment's profile avaliable to the user, but other commands
+home-environment's profile available to the user, but other commands
 can be added to the file if it is really necessary.
 
 In most cases shell's configuration files are preferred places for
@@ -77,7 +77,7 @@ user's customizations.  Extend home-shell-profile service only if you
 really know what you do."))
 
 (define (add-shell-profile-file config)
-  `(("profile"
+  `((".profile"
      ,(mixed-text-file
        "shell-profile"
        "\
@@ -111,16 +111,7 @@ service type can be extended with a list of file-like objects.")))
 
 (define (serialize-boolean field-name val) "")
 (define (serialize-posix-env-vars field-name val)
-  #~(string-append
-     #$@(map
-         (match-lambda
-           ((key . #f)
-            "")
-           ((key . #t)
-            #~(string-append "export " #$key "\n"))
-           ((key . value)
-            #~(string-append "export " #$key "=" #$value "\n")))
-         val)))
+  (environment-variable-shell-definitions val))
 
 
 ;;;
@@ -171,69 +162,76 @@ Used for executing user's commands at the exit of login shell.  It
 won't be read in some cases (if the shell terminates by exec'ing
 another process for example)."))
 
-(define (add-zsh-configuration config)
-  (let* ((xdg-flavor? (home-zsh-configuration-xdg-flavor? config)))
+(define (zsh-filter-fields field)
+  (filter-configuration-fields home-zsh-configuration-fields (list field)))
 
-    (define prefix-file
-      (cut string-append
-        (if xdg-flavor?
-            "config/zsh/."
-            "") <>))
+(define (zsh-serialize-field config field)
+  (serialize-configuration config (zsh-filter-fields field)))
 
-    (define (filter-fields field)
-      (filter-configuration-fields home-zsh-configuration-fields
-                                   (list field)))
+(define* (zsh-field-not-empty? config field)
+  (let ((file-name (symbol->string field))
+        (field-obj (car (zsh-filter-fields field))))
+    (not (null? ((configuration-field-getter field-obj) config)))))
 
-    (define (serialize-field field)
-      (serialize-configuration
-       config
-       (filter-fields field)))
+(define (zsh-file-zshenv config)
+  (mixed-text-file
+   "zshenv"
+   (zsh-serialize-field config 'zshenv)
+   (zsh-serialize-field config 'environment-variables)))
 
-    (define (file-if-not-empty field)
-      (let ((file-name (symbol->string field))
-            (field-obj (car (filter-fields field))))
-        (if (not (null? ((configuration-field-getter field-obj) config)))
-            `(,(prefix-file file-name)
-              ,(mixed-text-file
-                file-name
-                (serialize-field field)))
-            '())))
-
-    (filter
-     (compose not null?)
-     `(,(if xdg-flavor?
-            `("zshenv"
-              ,(mixed-text-file
-                "auxiliary-zshenv"
-                (if xdg-flavor?
-                    "source ${XDG_CONFIG_HOME:-$HOME/.config}/zsh/.zshenv\n"
-                    "")))
-            '())
-       (,(prefix-file "zshenv")
-        ,(mixed-text-file
-          "zshenv"
-          (if xdg-flavor?
-              "export ZDOTDIR=${XDG_CONFIG_HOME:-$HOME/.config}/zsh\n"
-              "")
-          (serialize-field 'zshenv)
-          (serialize-field 'environment-variables)))
-       (,(prefix-file "zprofile")
-        ,(mixed-text-file
-          "zprofile"
-          "\
-# Setups system and user profiles and related variables
+(define (zsh-file-zprofile config)
+  (mixed-text-file
+   "zprofile"
+   "\
+# Set up the system, user profile, and related variables.
 source /etc/profile
-# Setups home environment profile
+# Set up the home environment profile.
 source ~/.profile
 
 # It's only necessary if zsh is a login shell, otherwise profiles will
 # be already sourced by bash
 "
-          (serialize-field 'zprofile)))
+   (zsh-serialize-field config 'zprofile)))
 
-       ,@(list (file-if-not-empty 'zshrc)
-               (file-if-not-empty 'zlogin)
-               (file-if-not-empty 'zlogout))))))
+(define (zsh-file-by-field config field)
+  (match field
+    ('zshenv (zsh-file-zshenv config))
+    ('zprofile (zsh-file-zprofile config))
+    (e (mixed-text-file
+        (symbol->string field)
+        (zsh-serialize-field config field)))))
+
+(define (zsh-get-configuration-files config)
+  `((".zprofile" ,(zsh-file-by-field config 'zprofile)) ;; Always non-empty
+    ,@(if (or (zsh-field-not-empty? config 'zshenv)
+              (zsh-field-not-empty? config 'environment-variables))
+          `((".zshenv" ,(zsh-file-by-field config 'zshenv))) '())
+    ,@(if (zsh-field-not-empty? config 'zshrc)
+          `((".zshrc" ,(zsh-file-by-field config 'zshrc))) '())
+    ,@(if (zsh-field-not-empty? config 'zlogin)
+          `((".zlogin" ,(zsh-file-by-field config 'zlogin))) '())
+    ,@(if (zsh-field-not-empty? config 'zlogout)
+          `((".zlogout" ,(zsh-file-by-field config 'zlogout))) '())))
+
+(define (add-zsh-dot-configuration config)
+  (define zshenv-auxiliary-file
+    (mixed-text-file
+     "zshenv-auxiliary"
+     "export ZDOTDIR=${XDG_CONFIG_HOME:-$HOME/.config}/zsh\n"
+     "[[ -f $ZDOTDIR/.zshenv ]] && source $ZDOTDIR/.zshenv\n"))
+
+  (if (home-zsh-configuration-xdg-flavor? config)
+      `((".zshenv" ,zshenv-auxiliary-file))
+      (zsh-get-configuration-files config)))
+
+(define (add-zsh-xdg-configuration config)
+  (if (home-zsh-configuration-xdg-flavor? config)
+      (map
+       (lambda (lst)
+         (cons (string-append "zsh/" (car lst))
+               (cdr lst)))
+       (zsh-get-configuration-files config))
+      '()))
 
 (define (add-zsh-packages config)
   (list (home-zsh-configuration-package config)))
@@ -291,7 +289,10 @@ source ~/.profile
                 (extensions
                  (list (service-extension
                         home-files-service-type
-                        add-zsh-configuration)
+                        add-zsh-dot-configuration)
+                       (service-extension
+                        home-xdg-configuration-files-service-type
+                        add-zsh-xdg-configuration)
                        (service-extension
                         home-profile-service-type
                         add-zsh-packages)))
@@ -305,18 +306,50 @@ source ~/.profile
 ;;; Bash.
 ;;;
 
+(define (bash-serialize-aliases field-name val)
+  #~(string-append
+     #$@(map
+         (match-lambda
+           ((key . #f)
+            "")
+           ((key . #t)
+            #~(string-append "alias " #$key "\n"))
+           ((key . value)
+            #~(string-append "alias " #$key "=\"" #$value "\"\n")))
+         val)))
+
 (define-configuration home-bash-configuration
   (package
    (package bash)
    "The Bash package to use.")
   (guix-defaults?
    (boolean #t)
-   "Add sane defaults like reading @file{/etc/bashrc}, coloring output
-for @code{ls} provided by guix to @file{.bashrc}.")
+   "Add sane defaults like reading @file{/etc/bashrc} and coloring the output of
+@command{ls} to the top of the @file{.bashrc} file.")
   (environment-variables
    (alist '())
-   "Association list of environment variables to set for the Bash session."
+   "Association list of environment variables to set for the Bash session.  The
+rules for the @code{home-environment-variables-service-type} apply
+here (@pxref{Essential Home Services}).  The contents of this field will be
+added after the contents of the @code{bash-profile} field."
    serialize-posix-env-vars)
+  (aliases
+   (alist '())
+   "Association list of aliases to set for the Bash session.  The aliases will be
+defined after the contents of the @code{bashrc} field has been put in the
+@file{.bashrc} file.  The alias will automatically be quoted, so something line
+this:
+
+@lisp
+'((\"ls\" . \"ls -alF\"))
+@end lisp
+
+turns into
+
+@example
+alias ls=\"ls -alF\"
+@end example"
+   bash-serialize-aliases)
   (bash-profile
    (text-config '())
    "List of file-like objects, which will be added to @file{.bash_profile}.
@@ -358,7 +391,9 @@ then
 fi
 
 # Source the system-wide file.
-source /etc/bashrc
+if [[ -e /etc/bashrc ]]; then
+    source /etc/bashrc
+fi
 
 # Adjust the prompt depending on whether we're in 'guix environment'.
 if [ -n \"$GUIX_ENVIRONMENT\" ]
@@ -386,22 +421,22 @@ alias grep='grep --color=auto'\n")
           (field-obj (car (filter-fields field))))
       (if (or extra-content
               (not (null? ((configuration-field-getter field-obj) config))))
-          `(,(object->snake-case-string file-name)
-            ,(mixed-text-file
-              (object->snake-case-string file-name)
-              (if extra-content extra-content "")
-              (serialize-field field)))
+          `(,(string-append "." (object->snake-case-string file-name))
+            ,(apply mixed-text-file
+                    (object->snake-case-string file-name)
+                    (append (or extra-content '())
+                        (list (serialize-field field)))))
           '())))
 
   (filter
    (compose not null?)
-   `(("bash_profile"
+   `((".bash_profile"
       ,(mixed-text-file
         "bash_profile"
         "\
-# Setups system and user profiles and related variables
+# Set up the system, user profile, and related variables.
 # /etc/profile will be sourced by bash automatically
-# Setups home environment profile
+# Set up the home environment profile.
 if [ -f ~/.profile ]; then source ~/.profile; fi
 
 # Honor per-interactive-shell startup file
@@ -413,8 +448,8 @@ if [ -f ~/.bashrc ]; then source ~/.bashrc; fi
      ,@(list (file-if-not-empty
               'bashrc
               (if (home-bash-configuration-guix-defaults? config)
-                  guix-bashrc
-                  #f))
+                  (list (serialize-field 'aliases) guix-bashrc)
+                  (list (serialize-field 'aliases))))
              (file-if-not-empty 'bash-logout)))))
 
 (define (add-bash-packages config)
@@ -423,36 +458,52 @@ if [ -f ~/.bashrc ]; then source ~/.bashrc; fi
 (define-configuration/no-serialization home-bash-extension
   (environment-variables
    (alist '())
-   "Association list of environment variables to set.")
+   "Additional environment variables to set.  These will be combined with the
+environment variables from other extensions and the base service to form one
+coherent block of environment variables.")
+  (aliases
+   (alist '())
+   "Additional aliases to set.  These will be combined with the aliases from
+other extensions and the base service.")
   (bash-profile
    (text-config '())
-   "List of file-like objects.")
+   "Additional text blocks to add to @file{.bash_profile}, which will be combined
+with text blocks from other extensions and the base service.")
   (bashrc
    (text-config '())
-   "List of file-like objects.")
+   "Additional text blocks to add to @file{.bashrc}, which will be combined
+with text blocks from other extensions and the base service.")
   (bash-logout
    (text-config '())
-   "List of file-like objects."))
+   "Additional text blocks to add to @file{.bash_logout}, which will be combined
+with text blocks from other extensions and the base service."))
 
 (define (home-bash-extensions original-config extension-configs)
-  (home-bash-configuration
-   (inherit original-config)
-   (environment-variables
-    (append (home-bash-configuration-environment-variables original-config)
-            (append-map
-             home-bash-extension-environment-variables extension-configs)))
-   (bash-profile
-    (append (home-bash-configuration-bash-profile original-config)
-            (append-map
-             home-bash-extension-bash-profile extension-configs)))
-   (bashrc
-    (append (home-bash-configuration-bashrc original-config)
-            (append-map
-             home-bash-extension-bashrc extension-configs)))
-   (bash-logout
-    (append (home-bash-configuration-bash-logout original-config)
-            (append-map
-             home-bash-extension-bash-logout extension-configs)))))
+  (match original-config
+    (($ <home-bash-configuration> _ _ _ environment-variables aliases
+                                  bash-profile bashrc bash-logout)
+     (home-bash-configuration
+      (inherit original-config)
+      (environment-variables
+       (append environment-variables
+               (append-map
+                home-bash-extension-environment-variables extension-configs)))
+      (aliases
+       (append aliases
+               (append-map
+                home-bash-extension-aliases extension-configs)))
+      (bash-profile
+       (append bash-profile
+               (append-map
+                home-bash-extension-bash-profile extension-configs)))
+      (bashrc
+       (append bashrc
+               (append-map
+                home-bash-extension-bashrc extension-configs)))
+      (bash-logout
+       (append bash-logout
+               (append-map
+                home-bash-extension-bash-logout extension-configs)))))))
 
 (define home-bash-service-type
   (service-type (name 'home-bash)
@@ -495,9 +546,9 @@ if [ -f ~/.bashrc ]; then source ~/.bashrc; fi
                ((key . #f)
                 "")
                ((key . #t)
-                #~(string-append "set " #$key "\n"))
+                #~(string-append "set -x " #$key "\n"))
                ((key . value)
-                #~(string-append "set " #$key " "  #$value "\n")))
+                #~(string-append "set -x " #$key " "  #$value "\n")))
              val)))
 
 (define-configuration home-fish-configuration
@@ -526,7 +577,7 @@ when typed in the shell, will automatically expand to the full text."
    serialize-fish-abbreviations))
 
 (define (fish-files-service config)
-  `(("config/fish/config.fish"
+  `(("fish/config.fish"
      ,(mixed-text-file
        "fish-config.fish"
        #~(string-append "\
@@ -590,7 +641,7 @@ end\n\n")
   (service-type (name 'home-fish)
                 (extensions
                  (list (service-extension
-                        home-files-service-type
+                        home-xdg-configuration-files-service-type
                         fish-files-service)
                        (service-extension
                         home-profile-service-type
@@ -609,10 +660,16 @@ Install and configure Fish, the friendly interactive shell.")))
    'home-shell-profile-configuration))
 
 (define (generate-home-bash-documentation)
-  (generate-documentation
-   `((home-bash-configuration
-      ,home-bash-configuration-fields))
-   'home-bash-configuration))
+  (string-append
+   (generate-documentation
+    `((home-bash-configuration
+       ,home-bash-configuration-fields))
+    'home-bash-configuration)
+   "\n\n"
+   (generate-documentation
+    `((home-bash-extension
+       ,home-bash-extension-fields))
+    'home-bash-extension)))
 
 (define (generate-home-zsh-documentation)
   (generate-documentation

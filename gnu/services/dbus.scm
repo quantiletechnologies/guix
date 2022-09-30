@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015 Sou Bunnbu <iyzsong@gmail.com>
 ;;; Copyright © 2021 Maxime Devos <maximedevos@telenet.be>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
@@ -50,10 +50,12 @@
 (define-record-type* <dbus-configuration>
   dbus-configuration make-dbus-configuration
   dbus-configuration?
-  (dbus      dbus-configuration-dbus              ;<package>
+  (dbus      dbus-configuration-dbus              ;file-like
              (default dbus))
   (services  dbus-configuration-services          ;list of <package>
-             (default '())))
+             (default '()))
+  (verbose?  dbus-configuration-verbose?          ;boolean
+             (default #f)))
 
 (define (system-service-directory services)
   "Return the system service directory, containing @code{.service} files for
@@ -106,6 +108,10 @@ includes the @code{etc/dbus-1/system.d} directories of each package listed in
         (define (services->sxml services)
           ;; Return the SXML 'includedir' clauses for DIRS.
           `(busconfig
+             ;; Increase this timeout to 300 seconds to work around race-y
+             ;; failures such as <https://issues.guix.gnu.org/52051> on slow
+             ;; computers with slow I/O.
+            (limit (@ (name "auth_timeout")) "300000")
             (servicehelper "/run/setuid-programs/dbus-daemon-launch-helper")
 
             ;; First, the '.service' files of services subject to activation.
@@ -187,7 +193,7 @@ includes the @code{etc/dbus-1/system.d} directories of each package listed in
 
 (define dbus-shepherd-service
   (match-lambda
-    (($ <dbus-configuration> dbus)
+    (($ <dbus-configuration> dbus _ verbose?)
      (list (shepherd-service
             (documentation "Run the D-Bus system daemon.")
             (provision '(dbus-system))
@@ -195,6 +201,12 @@ includes the @code{etc/dbus-1/system.d} directories of each package listed in
             (start #~(make-forkexec-constructor
                       (list (string-append #$dbus "/bin/dbus-daemon")
                             "--nofork" "--system" "--syslog-only")
+                      #$@(if verbose?
+                             ;; Since the verbose output goes to the console,
+                             ;; not syslog, add a log file to capture it.
+                             '(#:environment-variables '("DBUS_VERBOSE=1")
+                               #:log-file "/var/log/dbus-daemon.log")
+                             '())
                       #:pid-file "/var/run/dbus/pid"))
             (stop #~(make-kill-destructor)))))))
 
@@ -230,9 +242,12 @@ includes the @code{etc/dbus-1/system.d} directories of each package listed in
 bus.  It allows programs and daemons to communicate and is also responsible
 for spawning (@dfn{activating}) D-Bus services on demand.")))
 
-(define* (dbus-service #:key (dbus dbus) (services '()))
+(define* (dbus-service #:key (dbus dbus) (services '()) verbose?)
   "Return a service that runs the \"system bus\", using @var{dbus}, with
-support for @var{services}.
+support for @var{services}.  When @var{verbose?} is true, it causes the
+@samp{DBUS_VERBOSE} environment variable to be set to @samp{1}; a
+verbose-enabled D-Bus package such as @code{dbus-verbose} should be provided
+as @var{dbus} in this scenario.
 
 @uref{http://dbus.freedesktop.org/, D-Bus} is an inter-process communication
 facility.  Its system bus is used to allow system services to communicate and
@@ -244,7 +259,8 @@ and policy files.  For example, to allow avahi-daemon to use the system bus,
 @var{services} must be equal to @code{(list avahi)}."
   (service dbus-root-service-type
            (dbus-configuration (dbus dbus)
-                               (services services))))
+                               (services services)
+                               (verbose? verbose?))))
 
 (define (wrapped-dbus-service service program variables)
   "Return a wrapper for @var{service}, a package containing a D-Bus service,
@@ -300,10 +316,19 @@ tuples, are all set as environment variables when the bus daemon launches it."
 (define-record-type* <polkit-configuration>
   polkit-configuration make-polkit-configuration
   polkit-configuration?
-  (polkit   polkit-configuration-polkit           ;<package>
-            (default polkit))
-  (actions  polkit-configuration-actions          ;list of <package>
+  (polkit   polkit-configuration-polkit           ;file-like
+            (default %default-polkit))
+  (actions  polkit-configuration-actions          ;list of file-like
             (default '())))
+
+(define %default-polkit
+  ;; The default polkit package.
+  (let-system (system target)
+    ;; Since mozjs depends on Rust, which is currently x86_64-only, use
+    ;; polkit-duktape on other systems.
+    (if (string-prefix? "x86_64-" (or target system))
+        polkit-mozjs
+        polkit-duktape)))
 
 (define %polkit-accounts
   (list (user-group (name "polkitd") (system? #t))

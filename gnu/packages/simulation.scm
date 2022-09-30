@@ -1,5 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2017, 2018, 2019, 2020, 2021 Paul Garlick <pgarlick@tourbillion-technology.com>
+;;; Copyright © 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Eric Bavier <bavier@posteo.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -50,6 +52,7 @@
   #:use-module (gnu packages xml)
   #:use-module (gnu packages xorg)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix svn-download)
   #:use-module (guix build-system cmake)
@@ -100,11 +103,9 @@
        ("scotch" ,pt-scotch32)
        ("zlib" ,zlib)))
     (native-inputs
-     `(("bison" ,bison)))
+     (list bison))
     (propagated-inputs
-     `(("gzip" ,gzip)
-       ("gnuplot" ,gnuplot)
-       ("openmpi" ,openmpi)))
+     (list gzip gnuplot openmpi))
     (outputs '("debug"                  ;~60MB
                "out"))
     (arguments
@@ -256,12 +257,11 @@ problems for efficient solution on parallel systems.")
             "0lhqsq8ypdak0ahr2jnyvg07yrqp6wicjxi6k56zx24wp3qg60sc"))))
     (build-system python-build-system)
     (inputs
-     `(("openmpi" ,openmpi)
-       ("python-numpy" ,python-numpy)))
+     (list openmpi python-numpy))
     (native-inputs
-     `(("python-pytest-cov" ,python-pytest-cov)))
+     (list python-pytest-cov))
     (propagated-inputs
-     `(("python-mpi4py" ,python-mpi4py)))
+     (list python-mpi4py))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -270,16 +270,13 @@ problems for efficient solution on parallel systems.")
          (replace 'check
            (lambda _
              (setenv "HOME" "/tmp")
-             (setenv "PYTHONPATH"
-                     (string-append (getcwd) ":" (getenv "PYTHONPATH")))
              (with-directory-excursion "test"
                ;; Disable parallel tests to avoid race condition.  See
                ;; https://github.com/pytest-dev/pytest-cov/issues/237.
                (substitute* "runtests.sh"
                  (("for p in 1 4 8 16; do")
                   "for p in 1; do"))
-               (invoke "./runtests.sh"))
-             #t)))))
+               (invoke "./runtests.sh")))))))
     (home-page "https://bitbucket.org/fenics-project/dijitso/")
     (synopsis "Distributed just-in-time building of shared libraries")
     (description
@@ -307,19 +304,15 @@ the complexity of that interface.  Parallel support depends on the
             "10dz8x3lm68x2w3kkqcjask38h0zkhhak26jdbkppr8g9y8wny7p"))))
     (build-system python-build-system)
     (inputs
-     `(("python-numpy" ,python-numpy)))
+     (list python-numpy))
     (native-inputs
-     `(("python-pytest" ,python-pytest)))
+     (list python-pytest))
     (arguments
      '(#:phases
        (modify-phases %standard-phases
          (replace 'check
            (lambda _
-             (setenv "PYTHONPATH"
-                     (string-append (getcwd) ":" (getenv "PYTHONPATH")))
-             (with-directory-excursion "test"
-               (invoke "py.test"))
-             #t)))))
+             (invoke "py.test" "test"))))))
     (home-page "https://bitbucket.org/fenics-project/ufl/")
     (synopsis "Unified language for form-compilers")
     (description "The Unified Form Language (UFL) is a domain specific
@@ -344,17 +337,14 @@ UFL is part of the FEniCS Project.")
             "13sc7lma3d2mh43an7i4kkdbbk4cmvxjk45wi43xnjd7qc38zg4b"))))
     (build-system python-build-system)
     (native-inputs
-     `(("python-pytest" ,python-pytest)))
+     (list python-pytest))
     (propagated-inputs
-     `(("python-numpy" ,python-numpy)
-       ("python-sympy" ,python-sympy)))
+     (list python-numpy python-sympy))
     (arguments
      '(#:phases
        (modify-phases %standard-phases
          (replace 'check
            (lambda _
-             (setenv "PYTHONPATH"
-                     (string-append (getcwd) ":" (getenv "PYTHONPATH")))
              (with-directory-excursion "test"
                ;; FIXME: three FIAT test modules are known to fail
                ;; with recent versions of pytest (>= 4).  These are
@@ -364,8 +354,7 @@ UFL is part of the FEniCS Project.")
                (invoke "py.test" "unit/"
                        "--ignore=unit/test_fiat.py"
                        "--ignore=unit/test_quadrature.py"
-                       "--ignore=unit/test_reference_element.py"))
-             #t)))))
+                       "--ignore=unit/test_reference_element.py")))))))
     (home-page "https://bitbucket.org/fenics-project/fiat/")
     (synopsis "Tabulation of finite element function spaces")
     (description
@@ -394,19 +383,15 @@ FIAT is part of the FEniCS Project.")
             "1f2a44ha65fg3a1prrbrsz4dgvibsv0j5c3pi2m52zi93bhwwgg9"))))
     (build-system python-build-system)
     (native-inputs
-     `(("python-pytest" ,python-pytest)))
+     (list python-pytest))
     (propagated-inputs
-     `(("python-fenics-dijitso" ,python-fenics-dijitso)
-       ("python-fenics-fiat" ,python-fenics-fiat)
-       ("python-fenics-ufl" ,python-fenics-ufl)))
+     (list python-fenics-dijitso python-fenics-fiat python-fenics-ufl))
     (arguments
      '(#:phases
        (modify-phases %standard-phases
          (replace 'check
            (lambda _
              (setenv "HOME" (getcwd))
-             (setenv "PYTHONPATH"
-                     (string-append (getcwd) ":" (getenv "PYTHONPATH")))
              (with-directory-excursion "test"
                ;; FIXME: the tests in subdirectory
                ;; 'unit/ufc/finite_element' require the ffc_factory
@@ -447,6 +432,10 @@ FFC is part of the FEniCS Project.")
         (sha256
           (base32
            "1m91hwcq5gfj4qqswp8l8kj58nia48f0n4kq13w0xqj4biq7rla0"))
+        (patches (search-patches "fenics-dolfin-algorithm.patch"
+                                 "fenics-dolfin-demo-init.patch"
+                                 "fenics-dolfin-boost.patch"
+                                 "fenics-dolfin-config-slepc.patch"))
         (modules '((guix build utils)))
         (snippet
          '(begin
@@ -460,8 +449,7 @@ FFC is part of the FEniCS Project.")
               ;; Specify directory to find the header file.
               (("(^set\\(CATCH_INCLUDE_DIR ).*(/catch\\))" _ front back)
                (string-append front
-                              "$ENV{CATCH_DIR}/include" back "\n")))
-            #t))))
+                              "$ENV{CATCH_DIR}/include" back "\n")))))))
     (build-system cmake-build-system)
     (inputs
      `(("blas" ,openblas)
@@ -506,8 +494,7 @@ FFC is part of the FEniCS Project.")
              (setenv "SLEPC_DIR" (assoc-ref %build-inputs "slepc"))
              (setenv "SCOTCH_DIR" (assoc-ref %build-inputs "scotch"))
              (setenv "SUNDIALS_DIR" (assoc-ref %build-inputs "sundials"))
-             (setenv "UMFPACK_DIR" (assoc-ref %build-inputs "suitesparse"))
-             #t))
+             (setenv "UMFPACK_DIR" (assoc-ref %build-inputs "suitesparse"))))
          (add-before 'check 'pre-check
            (lambda _
              ;; The Dolfin repository uses git-lfs, whereby web links are
@@ -515,11 +502,8 @@ FFC is part of the FEniCS Project.")
              ;; git-lfs, so only the links are downloaded.  The tests that
              ;; require the absent meshes cannot run and are skipped.
              ;;
-             ;; Two other serial tests fail and are skipped.
-             ;; i) demo_stokes-iterative_serial,
-             ;;   The MPI_Comm_rank() function was called before MPI_INIT was
-             ;;   invoked
-             ;; ii) demo_multimesh-stokes_serial:
+             ;; One serial test fails and is skipped.
+             ;; i) demo_multimesh-stokes_serial:
              ;;   Warning: Found no facets matching domain for boundary
              ;;   condition.
              ;;
@@ -561,17 +545,15 @@ FFC is part of the FEniCS Project.")
                     "demo_mesh-quality_serial "
                     "demo_mesh-quality_mpi "
                     "demo_multimesh-stokes_serial "
-                    "demo_stokes-iterative_serial "
-                    "demo_stokes-iterative_mpi "
-                    ")\n") port)))
-             #t))
+                    ")\n") port)))))
          (replace 'check
-           (lambda _
-             (and (invoke "make" "unittests")
-                  (invoke "make" "demos")
-                  (invoke "ctest" "-R" "unittests")
-                  (invoke "ctest" "-R" "demo" "-R" "serial")
-                  (invoke "ctest" "-R" "demo" "-R" "mpi")))))))
+           (lambda* (#:key tests? #:allow-other-keys)
+             (when tests?
+               (invoke "make" "unittests")
+               (invoke "make" "demos")
+               (invoke "ctest" "-R" "unittests")
+               (invoke "ctest" "-R" "demo" "-R" "serial")
+               (invoke "ctest" "-R" "demo" "-R" "mpi")))))))
     (home-page "https://bitbucket.org/fenics-project/dolfin/")
     (synopsis "Problem solving environment for differential equations")
     (description
@@ -626,13 +608,16 @@ user interface to the FEniCS core components and external libraries.")
     (arguments
      `(#:phases
        (modify-phases %standard-phases
+         (add-after 'unpack 'relax-requirements
+           (lambda _
+             (substitute* "python/setup.py"
+               (("pybind11==") "pybind11>="))))
          (add-after 'patch-source-shebangs 'set-paths
            (lambda _
              ;; Define paths to store locations.
              (setenv "PYBIND11_DIR" (assoc-ref %build-inputs "pybind11"))
              ;; Move to python sub-directory.
-             (chdir "python")
-             #t))
+             (chdir "python")))
          (add-after 'build 'mpi-setup
            ,%openmpi-setup)
          (add-before 'check 'pre-check
@@ -674,27 +659,19 @@ user interface to the FEniCS core components and external libraries.")
                  "d for d in demos if d[0].stem not in "
                  "excludeList]\n")))
              (setenv "HOME" (getcwd))
-             (setenv "PYTHONPATH"
-                     (string-append
-                      (getcwd) "/build/lib.linux-x86_64-"
-                      ,(version-major+minor (package-version python)) ":"
-                      (getenv "PYTHONPATH")))
              ;; Restrict OpenBLAS to MPI-only in preference to MPI+OpenMP.
-             (setenv "OPENBLAS_NUM_THREADS" "1")
-             #t))
+             (setenv "OPENBLAS_NUM_THREADS" "1")))
          (replace 'check
-           (lambda _
-             (with-directory-excursion "test"
-               ;; Note: The test test_snes_set_from_options() in the file
-               ;; unit/nls/test_PETScSNES_solver.py fails and is ignored.
-               ;; Limit the number of jobs to 3 as 500 MiB of memory is used
-               ;; per process.
-               (invoke "mpirun" "-np" (number->string
-                                       (min 3 (parallel-job-count)))
-                       "python" "-B" "-m"
-                       "pytest" "unit" "--ignore"
-                       "unit/nls/test_PETScSNES_solver.py"))
-             #t))
+           (lambda* (#:key tests? #:allow-other-keys)
+             (when tests?
+               (with-directory-excursion "test"
+                 (invoke
+                  "pytest" "unit"
+                  ;; The test test_snes_set_from_options() in the file
+                  ;; unit/nls/test_PETScSNES_solver.py fails and is ignored.
+                  "--ignore" "unit/nls/test_PETScSNES_solver.py"
+                  ;; Fails with a segfault.
+                  "--ignore" "unit/io/test_XDMF.py")))))
          (add-after 'install 'install-demo-files
            (lambda* (#:key outputs #:allow-other-keys)
              (let* ((demos (string-append
@@ -708,8 +685,7 @@ user interface to the FEniCS core components and external libraries.")
                                (unless (equal? "." dir)
                                  (mkdir-p tgt-dir)
                                  (install-file file tgt-dir))))
-                           (find-files "." ".*\\.(py|gz|xdmf)$"))))
-             #t)))))
+                           (find-files "." ".*\\.(py|gz|xdmf)$")))))))))
     (home-page "https://fenicsproject.org/")
     (synopsis "High-level environment for solving differential equations")
     (description
@@ -745,7 +721,7 @@ FEniCS core components and external libraries.")
                  "16v08dx7h7n4wyddzbwimazwyj74ynis12mpjfkay4243npy44b8"))))
       (build-system gnu-build-system)
       (native-inputs
-       `(("inetutils" ,inetutils))) ; for 'hostname', used in the check phase
+       (list inetutils)) ; for 'hostname', used in the check phase
       (arguments
        `(#:phases
          (modify-phases %standard-phases
@@ -799,37 +775,35 @@ river flooding.")
 (define-public python-meshio
   (package
     (name "python-meshio")
-    (version "4.4.6")
+    (version "5.3.4")
     (source
-      (origin
-        (method url-fetch)
-        (uri (pypi-uri "meshio" version))
-        (sha256
-          (base32
-           "0kv832s2vyff30zz8yqypw5jifwdanvh5x56d2bzkvy94h4jlddy"))
-        (snippet
-         '(begin
-            (let ((file (open-file "setup.py" "a")))
-              (display "from setuptools import setup\nsetup()" file)
-              (close-port file))
-            #t))))
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "meshio" version))
+       (sha256
+        (base32
+         "1w39qcg0rw5kb04j7sa45fnqd6k20fsdgrf62cmw2ygjgwnnjh72"))
+       (snippet
+        '(let ((file (open-file "setup.py" "a")))
+           (display "from setuptools import setup\nsetup()" file)
+           (close-port file)))))
     (build-system python-build-system)
     (inputs
-     `(("h5py" ,python-h5py)
-       ("netcdf4" ,python-netcdf4)))
+     (list python-h5py
+           python-netcdf4))
     (native-inputs
-     `(("pytest" ,python-pytest)))
+     (list python-pytest))
     (propagated-inputs
-     `(("importlib-metadata" ,python-importlib-metadata)
-       ("numpy" ,python-numpy)))
+     (list python-importlib-metadata
+           python-numpy
+           python-rich))
     (arguments
-     `(#:phases
+     '(#:phases
        (modify-phases %standard-phases
          (replace 'check
-           (lambda* (#:key outputs inputs #:allow-other-keys)
-             (add-installed-pythonpath inputs outputs)
-             (invoke "python" "-m" "pytest" "-v" "tests")
-             #t)))))
+           (lambda* (#:key tests? #:allow-other-keys)
+             (when tests?
+               (invoke "python" "-m" "pytest" "-v" "tests")))))))
     (home-page "https://github.com/nschloe/meshio")
     (synopsis "I/O for mesh files")
     (description "There are various file formats available for
@@ -843,48 +817,43 @@ tools and a collection of Python modules for programmatic use.")
 (define-public python-pygmsh
   (package
     (name "python-pygmsh")
-    (version "7.1.11")
+    (version "7.1.17")
     (source
-      (origin
-        (method git-fetch)
-        (uri (git-reference
-              (url "https://github.com/nschloe/pygmsh")
-              (commit version)))
-        (file-name (git-file-name name version))
-        (sha256
-          (base32
-           "0g4yllmxks7yb50vild5xi1cma0yl16vsq6rfvdwmqaj4hwxcabk"))
-        (modules '((guix build utils)))
-        (snippet
-         '(begin
-            (let ((file (open-file "setup.py" "a")))
-              (display "from setuptools import setup\nsetup()" file)
-              (close-port file))
-            ;; A reference to setuptools in the configuration file
-            ;; triggers an attempt to download the package from pypi.
-            ;; The reference is not needed since the package is
-            ;; provided by the build system.
-            (substitute* "setup.cfg"
-              (("^[[:blank:]]+setuptools>=42\n") ""))
-            #t))))
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/nschloe/pygmsh")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "11flp2c4ynk1fhanf4mqyzrpd0gjbnv6afrwwc7xi3mb6ms69lr0"))))
     (build-system python-build-system)
-    (native-inputs
-     `(("pytest" ,python-pytest)
-       ("wheel" ,python-wheel)))
-    (propagated-inputs
-     `(("importlib-metadata" ,python-importlib-metadata)
-       ("gmsh" ,gmsh)
-       ("meshio" ,python-meshio)
-       ("numpy" ,python-numpy)))
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (replace 'check
-           (lambda* (#:key inputs outputs tests? #:allow-other-keys)
-             (when tests?
-               (add-installed-pythonpath inputs outputs)
-               (invoke "python" "-m" "pytest" "-v" "tests"))
-             #t)))))
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'workaround-gmsh-detection-failure
+            (lambda _
+              ;; Due to lack of metadata, the gmsh Python package is not
+              ;; detected although importable.
+              (substitute* "pyproject.toml"
+                (("\"gmsh\",") ""))))
+          ;; XXX: PEP 517 manual build copied from python-isort.
+          (replace 'build
+            (lambda _
+              (invoke "python" "-m" "build" "--wheel" "--no-isolation" ".")))
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                (invoke "pytest" "-v" "tests"))))
+          (replace 'install
+            (lambda _
+              (let ((whl (car (find-files "dist" "\\.whl$"))))
+                (invoke "pip" "--no-cache-dir" "--no-input"
+                        "install" "--no-deps" "--prefix" #$output whl)))))))
+    (native-inputs (list python-pypa-build python-flit-core python-pytest))
+    (propagated-inputs (list gmsh python-meshio python-numpy))
     (home-page "https://github.com/nschloe/pygmsh")
     (synopsis "Python frontend for Gmsh")
     (description "The goal of @code{pygmsh} is to combine the power of
@@ -893,7 +862,7 @@ the methods and functions that comprise the Gmsh Python API.  In this
 way the meshing of complex geometries using high-level abstractions is
 made possible.  The package provides a Python library together with a
 command-line utility for mesh optimisation.")
-    (license license:lgpl3)))
+    (license license:gpl3+)))
 
 (define-public python-dolfin-adjoint
   (package
@@ -925,16 +894,14 @@ command-line utility for mesh optimisation.")
             #t))))
     (build-system python-build-system)
     (inputs
-     `(("fenics" ,fenics)
-       ("openmpi" ,openmpi)
-       ("pybind11" ,pybind11)))
+     (list fenics openmpi pybind11))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("python-coverage" ,python-coverage)
-       ("python-decorator" ,python-decorator)
-       ("python-flake8" ,python-flake8)
-       ("python-pkgconfig" ,python-pkgconfig)
-       ("python-pytest" ,python-pytest)))
+     (list pkg-config
+           python-coverage
+           python-decorator
+           python-flake8
+           python-pkgconfig
+           python-pytest))
     (propagated-inputs
      `(("scipy" ,python-scipy)))
     (arguments

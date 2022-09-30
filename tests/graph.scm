@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015-2022 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -36,6 +36,7 @@
   #:use-module (gnu packages libunistring)
   #:use-module (gnu packages bootstrap)
   #:use-module (ice-9 match)
+  #:use-module (ice-9 sandbox)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-26)
@@ -112,6 +113,33 @@ edges."
                      (map edge->tuple
                           (list p4 p4)
                           (list p2 p3))))))))
+
+(test-assert "package DAG, oops it was a cycle"
+  (let-values (((backend nodes+edges) (make-recording-backend)))
+    (letrec ((p1 (dummy-package "p1" (inputs `(("p3" ,p3)))))
+             (p2 (dummy-package "p2" (inputs `(("p1" ,p1)))))
+             (p3 (dummy-package "p3" (inputs `(("p2" ,p2) ("p1", p1))))))
+      (call-with-time-limit
+       600 ;; If ever this test should fail, we still want it to terminate
+       (lambda ()
+         (run-with-store %store
+           (export-graph (list p3) 'port
+                         #:node-type %package-node-type
+                         #:backend backend)))
+       (lambda ()
+         (run-with-store %store
+           (export-graph
+            (list (dummy-package "timeout-reached"))
+            'port
+            #:node-type %package-node-type
+            #:backend backend))))
+      ;; We should see nothing more than these 3 packages.
+      (let-values (((nodes edges) (nodes+edges)))
+        (and (equal? nodes (map package->tuple (list p3 p2 p1)))
+             (equal? edges
+                     (map edge->tuple
+                          (list p3 p3 p2 p1)
+                          (list p2 p1 p1 p3))))))))
 
 (test-assert "reverse package DAG"
   (let-values (((backend nodes+edges) (make-recording-backend)))
@@ -216,10 +244,10 @@ edges."
                         edges)))))))))
 
 (test-assert "reverse bag DAG"
-  (let-values (((dune bap ocaml-base)
-                (values (specification->package "ocaml4.07-dune")
-                        (specification->package "bap")
-                        (specification->package "ocaml4.07-base")))
+  (let-values (((dune camomile utop)
+                (values (specification->package "dune")
+                        (specification->package "ocaml-camomile")
+                        (specification->package "ocaml-utop")))
                ((backend nodes+edges) (make-recording-backend)))
     (run-with-store %store
       (export-graph (list dune) 'port
@@ -228,17 +256,17 @@ edges."
 
     (run-with-store %store
       (mlet %store-monad ((dune-drv       (package->derivation dune))
-                          (bap-drv        (package->derivation bap))
-                          (ocaml-base-drv (package->derivation ocaml-base)))
-        ;; OCAML-BASE uses 'dune-build-system' so DUNE is a direct dependency.
-        ;; BAP is much higher in the stack but it should be there.
+                          (camomile-drv   (package->derivation camomile))
+                          (utop-drv       (package->derivation utop)))
+        ;; CAMOMILE uses 'dune-build-system' so DUNE is a direct dependency.
+        ;; UTOP is much higher in the stack but it should be there.
         (let-values (((nodes edges) (nodes+edges)))
           (return
-           (and (member `(,(derivation-file-name bap-drv)
-                          ,(package-full-name bap))
+           (and (member `(,(derivation-file-name camomile-drv)
+                          ,(package-full-name camomile))
                         nodes)
                 (->bool (member (map derivation-file-name
-                                     (list dune-drv ocaml-base-drv))
+                                     (list dune-drv utop-drv))
                                 edges)))))))))
 
 (test-assert "derivation DAG"

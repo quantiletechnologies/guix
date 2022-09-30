@@ -5,7 +5,7 @@
 ;;; Copyright © 2016 David Craven <david@craven.ch>
 ;;; Copyright © 2016, 2017, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2016, 2017 José Miguel Sánchez García <jmi2k@openmailbox.org>
-;;; Copyright © 2017–2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2017–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2017 Kei Kebreau <kkebreau@posteo.net>
 ;;; Copyright © 2017, 2018, 2019 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2017 Petter <petter@mykolab.ch>
@@ -13,7 +13,7 @@
 ;;; Copyright © 2018 Arun Isaac <arunisaac@systemreboot.net>
 ;;; Copyright © 2018 Gabriel Hondet <gabrielhondet@gmail.com>
 ;;; Copyright © 2019 Rutger Helling <rhelling@mykolab.com>
-;;; Copyright © 2018, 2019 Eric Bavier <bavier@member.fsf.org>
+;;; Copyright © 2018, 2019, 2021 Eric Bavier <bavier@posteo.net>
 ;;; Copyright © 2019 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2019, 2021 Pierre Langlois <pierre.langlois@gmx.com>
 ;;; Copyright © 2019, 2020 Brett Gilio <brettg@gnu.org>
@@ -23,11 +23,15 @@
 ;;; Copyright © 2020, 2021 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2020, 2021 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2020 Leo Famulari <leo@famulari.name>
+;;; Copyright @ 2020 luhux <luhux@outlook.com>
 ;;; Copyright © 2021 Ekaitz Zarraga <ekaitz@elenq.tech>
-;;; Copyright © 2021 Raphaël Mélotte <raphael.melotte@mind.be>
+;;; Copyright © 2021, 2022 Raphaël Mélotte <raphael.melotte@mind.be>
 ;;; Copyright © 2021 ikasero <ahmed@ikasero.com>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
 ;;; Copyright © 2021 Solene Rapenne <solene@perso.pw>
+;;; Copyright © 2021 Petr Hodina <phodina@protonmail.com>
+;;; Copyright © 2022 Felipe Balbi <balbi@kernel.org>
+;;; Copyright © 2022 ( <paren@disroot.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -55,11 +59,13 @@
   #:use-module (guix build-system python)
   #:use-module (guix download)
   #:use-module (guix git-download)
+  #:use-module (guix gexp)
   #:use-module (guix packages)
   #:use-module (guix utils)
   #:use-module (gnu packages)
   #:use-module (gnu packages autotools)
-  #:use-module (gnu packages build-tools)   ;for meson-0.55
+  #:use-module (gnu packages base)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages check)
   #:use-module (gnu packages cmake)
   #:use-module (gnu packages compression)
@@ -101,6 +107,40 @@
   #:use-module (gnu packages xorg)
   #:use-module (srfi srfi-26))
 
+(define-public libptytty
+  (package
+    (name "libptytty")
+    (version "2.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/yusiwen/libptytty")
+             (commit "b9694ea18e0dbd78213f55233a430325c13ad63e")))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1g8by1m6ya4r47p137mw4ddml40js0zh6mdb9n6ib49ayngv8ak3"))))
+    (build-system cmake-build-system)
+    (arguments
+     `(#:tests? #f))                    ; no test suite
+    (home-page "https://github.com/yusiwen/libptytty")
+    (synopsis
+     "Portable, secure PTY/TTY and @file{utmp}/@file{wtmp}/@file{lastlog} handling")
+    (description
+     "Libptytty is a small C/C++ library to manage pseudo-ttys in a uniform way,
+created out of frustration over the many differences of PTY/TTY handling in
+different operating systems.
+
+In addition to mere PTY/TTY management, it supports updating the session
+database at @file{utmp}, and @file{wtmp}/@file{lastlog} for login shells.
+
+It also supports @code{fork}ing after start-up and dropping privileges in the
+calling process.  This reduces the potential attack surface: if the calling
+process were to be compromised by the user starting the program, there would be
+less to gain, as only the helper process is running with privileges (e.g.,
+@code{setuid}/@code{setgid}).")
+    (license license:gpl2+)))
+
 (define-public tilda
   (package
     (name "tilda")
@@ -128,8 +168,7 @@
        ("gettext" ,gettext-minimal)
        ("pkg-config" ,pkg-config)))
     (inputs
-     `(("libconfuse" ,libconfuse)
-       ("vte" ,vte)))
+     (list libconfuse vte))
     (synopsis "GTK+-based drop-down terminal")
     (description "Tilda is a terminal emulator similar to normal terminals like
 gnome-terminal (GNOME) or Konsole (KDE), with the difference that it drops down
@@ -179,7 +218,7 @@ configurable through a graphical wizard.")
        ("xdg-utils" ,xdg-utils)
        ("ncurses" ,ncurses)))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
 
     ;; FIXME: This should only be located in 'ncurses'.  Nonetheless it is
     ;; provided for usability reasons.  See <https://bugs.gnu.org/22138>.
@@ -189,9 +228,12 @@ configurable through a graphical wizard.")
               (files '("share/terminfo")))))
     (home-page "https://github.com/thestinger/termite/")
     (synopsis "Keyboard-centric, VTE-based terminal")
-    (description "Termite is a minimal terminal emulator designed for use with
-tiling window managers.  It is a modal application, similar to Vim, with an
-insert mode and command mode where keybindings have different functions.")
+    (description "Termite is a minimal terminal emulator.  It is no longer
+maintained as the author considers it obsoleted by Alacritty.
+
+It was designed for use with tiling window managers.  It is a modal
+application, similar to Vim, with an insert mode and command mode where
+keybindings have different functions.")
 
     ;; Files under util/ are under the Expat license; the rest is LGPLv2+.
     (license license:lgpl2.0+)))
@@ -217,7 +259,7 @@ insert mode and command mode where keybindings have different functions.")
            (lambda _ (invoke "nosetests" "-v"))))))
     (native-inputs
      ;; For tests.
-     `(("python-nose" ,python-nose)))
+     (list python-nose))
     (home-page "https://asciinema.org")
     (synopsis "Terminal session recorder")
     (description
@@ -252,9 +294,8 @@ text-based approach to terminal recording.")
       (arguments
        `(#:configure-flags '("-DBUILD_TESTING=ON")))
       (native-inputs
-       `(("check" ,check)
-         ("libxkbcommon" ,libxkbcommon) ; for xkbcommon-keysyms.h
-         ("pkg-config" ,pkg-config)))
+       (list check libxkbcommon ; for xkbcommon-keysyms.h
+             pkg-config))
       (synopsis "Xterm state machine library")
       (description "TSM is a state machine for DEC VT100-VT520 compatible
 terminal emulators.  It tries to support all common standards while keeping
@@ -308,13 +349,13 @@ compatibility to existing emulators like xterm, gnome-terminal, konsole, etc.")
                           (("sd_booted\\(\\)")
                            "1")))))))
       (native-inputs
-       `(("pkg-config" ,pkg-config)
-         ("autoconf" ,autoconf)
-         ("automake" ,automake)
-         ("libtool" ,libtool)
-         ("libxslt" ,libxslt)                       ;to build the man page
-         ("libxml2" ,libxml2)                       ;for XML_CATALOG_FILES
-         ("docbook-xsl" ,docbook-xsl)))
+       (list pkg-config
+             autoconf
+             automake
+             libtool
+             libxslt ;to build the man page
+             libxml2 ;for XML_CATALOG_FILES
+             docbook-xsl))
       (inputs
        `(("libdrm" ,libdrm)
          ("libtsm" ,libtsm)
@@ -372,10 +413,8 @@ multi-seat support, a replacement for @command{mingetty}, and more.")
              (substitute* "t/40ti-override.c"
                (("vt750") "vt100")))))
        #:test-target "test"))
-    (inputs `(("ncurses" ,ncurses)))
-    (native-inputs `(("libtool" ,libtool)
-                     ("perl-test-harness" ,perl-test-harness)
-                     ("pkg-config" ,pkg-config)))
+    (inputs (list ncurses))
+    (native-inputs (list libtool perl-test-harness pkg-config))
     (synopsis "Keyboard entry processing library for terminal-based programs")
     (description
      "Libtermkey handles all the necessary logic to recognise special keys, UTF-8
@@ -386,35 +425,32 @@ combining, and so on, with a simple interface.")
 (define-public mlterm
   (package
     (name "mlterm")
-    (version "3.9.1")
+    (version "3.9.2")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://sourceforge/mlterm/01release/mlterm-"
                            version "/mlterm-" version ".tar.gz"))
        (sha256
-        (base32 "03fnynwv7d1aicwk2rp31sgncv5m65agvygqvsgn59v9di40gnnb"))))
+        (base32 "0br1sdpxw3r7qv814b3qjb8mpigljr9wd5c5422ah76f09zh0h5r"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f                      ; no tests
        #:configure-flags
-       (list (string-append "--prefix=" (assoc-ref %outputs "out"))
-             "--disable-static"
+       (list "--disable-static"
              "--enable-optimize-redrawing"
              "--with-imagelib=gdk-pixbuf")))
-    (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("pkg-config" ,pkg-config)))
+    (native-inputs (list gettext-minimal pkg-config))
     (inputs
-     `(("cairo" ,cairo)
-       ("fontconfig" ,fontconfig)
-       ("freetype" ,freetype)
-       ("fribidi" ,fribidi)
-       ("gdk-pixbuf" ,gdk-pixbuf)
-       ("gtk+" ,gtk+)
-       ("libx11" ,libx11)
-       ("libxext" ,libxext)
-       ("libxft" ,libxft)))
+     (list cairo
+           fontconfig
+           freetype
+           fribidi
+           gdk-pixbuf
+           gtk+
+           libx11
+           libxext
+           libxft))
     (home-page "http://mlterm.sourceforge.net/")
     (synopsis "Multi-Lingual TERMinal emulator")
     (description
@@ -423,6 +459,64 @@ character sets and encodings from around the world.  It can display double-width
 (e.g.  East Asian) glyphs, combining characters used for, e.g., Thai and
 Vietnamese, and bi-directional scripts like Arabic and Hebrew.")
     (license license:bsd-3)))
+
+(define-public mtm
+  (package
+    (name "mtm")
+    (version "1.2.1")
+    (source
+     (origin
+       (uri (git-reference
+             (url "https://github.com/deadpixi/mtm")
+             (commit version)))
+       (method git-fetch)
+       (sha256
+        (base32 "0gibrvah059z37jvn1qs4b6kvd4ivk2mfihmcpgx1vz6yg70zghv"))
+       (file-name (git-file-name name version))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:tests? #f                      ; no tests
+       #:make-flags
+       (list (string-append "CC=" ,(cc-for-target))
+             (string-append "DESTDIR=" (assoc-ref %outputs "out")))
+       #:phases
+       (modify-phases %standard-phases
+         (delete 'configure)            ;no configure script
+         (add-before 'build 'fix-headers
+           (lambda _
+             (substitute* "config.def.h"
+               (("ncursesw/curses.h") "curses.h"))))
+         (replace 'install
+           (lambda* (#:key inputs outputs #:allow-other-keys)
+             (let* ((out (assoc-ref outputs "out")))
+               ;; install binary
+               (mkdir-p (string-append out "bin/"))
+               (install-file "mtm" (string-append out "/bin"))
+               ;; install manpage
+               (mkdir-p (string-append out "share/man/man1"))
+               (install-file "mtm.1" (string-append out "/share/man/man1"))
+               ;; install terminfo
+               (mkdir-p (string-append out "share/terminfo"))
+               (invoke (string-append (assoc-ref inputs "ncurses") "/bin/tic")
+                       "-x" "-s" "-o"
+                       (string-append
+                        out "/share/terminfo")
+                       "mtm.ti")))))))
+    (inputs
+     (list ncurses))
+    ;; FIXME: This should only be located in 'ncurses'.  Nonetheless it is
+    ;; provided for usability reasons.  See <https://bugs.gnu.org/22138>.
+    (native-search-paths
+     (list (search-path-specification
+            (variable "TERMINFO_DIRS")
+            (files '("share/terminfo")))))
+    (home-page "https://github.com/deadpixi/mtm")
+    (synopsis "Micro Terminal Multiplexer")
+    (description
+     "This package provides multiplexer for the terminal focused on simplicity,
+compatibility, size and stability.")
+    (license (list license:gpl3+
+                   license:bsd-3))))    ;vtparser.c
 
 (define-public picocom
   (package
@@ -464,7 +558,7 @@ to all types of devices that provide serial consoles.")
 (define-public beep
   (package
     (name "beep")
-    (version "1.4.9")
+    (version "1.4.12")
     (source
      (origin
        (method git-fetch)
@@ -477,16 +571,29 @@ to all types of devices that provide serial consoles.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0jmvqk6g5n0wzj9znw42njxq3mzw1769f4db99b83927hf4aidi4"))))
+        (base32 "0dgrb5yg4ys1fa4hs95iz3m2yhryfzzw0j6g6yf6vhbys4ihcf40"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:tests? #f                      ; no tests
-       #:make-flags
-       (list (string-append "prefix=" (assoc-ref %outputs "out"))
-             (string-append "pkgdocdir=$(docdir)/" ,name "-" ,version))
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure))))         ; no configure script
+     (list #:make-flags
+           #~(list (string-append "CC=" #$(cc-for-target))
+                   (string-append "prefix=" #$output))
+           #:phases
+           #~(modify-phases %standard-phases
+               (delete 'configure)      ; no configure script
+               (add-before 'check 'patch-tests
+                 (lambda _
+                   (substitute* "GNUmakefile"
+                     (("/bin/bash")
+                      (which "bash"))
+                     ;; XXX In the build environment, $(PWD) is the *parent* directory
+                     ;; /tmp/guix-build-beep-x.y.drv-0!  A pure guix shell works fine.
+                     (("\\$\\(PWD\\)" pwd)
+                      (string-append pwd "/source")))
+                   (substitute* (find-files "tests" "\\.expected")
+                     ;; The build environment lacks /dev/{console,tty*}.
+                     ;; In fact, even nckx's regular Guix System lacks ttyS1…
+                     ((": Permission denied")
+                      ": No such file or directory")))))))
     (synopsis "Linux command-line utility to control the PC speaker")
     (description "beep allows the user to control the PC speaker with precision,
 allowing different sounds to indicate different events.  While it can be run
@@ -522,8 +629,7 @@ has no notion of what's interesting, but it's very good at that notifying part."
        (modify-phases %standard-phases
          (delete 'configure))))
     (native-inputs
-     `(("libtool" ,libtool)
-       ("perl" ,perl)))
+     (list libtool perl))
     (home-page "https://github.com/mauke/unibilium")
     (synopsis "Terminfo parsing library")
     (description "Unibilium is a basic C terminfo library.  It doesn't depend
@@ -553,8 +659,7 @@ should be thread-safe.")
        (modify-phases %standard-phases
          (delete 'configure))))
     (native-inputs
-     `(("libtool" ,libtool)
-       ("perl" ,perl)))
+     (list libtool perl))
     (home-page "http://www.leonerd.org.uk/code/libvterm/")
     (synopsis "VT220/xterm/ECMA-48 terminal emulator library")
     (description "Libvterm is an abstract C99 library which implements a VT220
@@ -566,25 +671,24 @@ embedded kernel situations.")
     (license license:expat)))
 
 (define-public cool-retro-term
-  (let ((commit "1.1.1")
-        (revision "0"))                 ;not used currently
     (package
       (name "cool-retro-term")
-      (version "1.1.1")
+      (version "1.2.0")
       (source (origin
                 (method git-fetch)
                 (file-name (string-append name "-" version "-checkout"))
                 (uri (git-reference
                       (url (string-append "https://github.com/Swordfish90/" name))
-                      (commit commit)
+                      (commit version)
                       (recursive? #t)))
                 (sha256
-                 (base32 "0wb6anchxa5jpn9c73kr4byrf2xlj8x8qzc5x7ny6saj7kbbvp75"))
+                 (base32 "02mj70gcpx9fvrhsy6iqwp399dya9iyakx940b6ws952d23xn337"))
                 (modules '((guix build utils)
                            (srfi srfi-1)
                            (srfi srfi-26)
                            (ice-9 rdelim)
                            (ice-9 regex)))
+                (patches (search-patches "cool-retro-term-wctype.patch"))
                 (snippet
                  '(let* ((fonts '(;"1971-ibm-3278"     ; BSD 3-clause
                                   "1977-apple2"        ; Non-Free
@@ -677,14 +781,11 @@ embedded kernel situations.")
                        "app/qml/ApplicationSettings.qml"))
                     ;; Final substitution for default scanline and pixel fonts
                     (substitute* "app/qml/ApplicationSettings.qml"
-                      (("COMMODORE_PET") "PROGGY_TINY"))
-                    #t))))
+                      (("COMMODORE_PET") "PROGGY_TINY"))))))
       (build-system gnu-build-system)
       (inputs
-       `(("qtbase" ,qtbase-5)
-         ("qtdeclarative" ,qtdeclarative)
-         ("qtgraphicaleffects" ,qtgraphicaleffects)
-         ("qtquickcontrols" ,qtquickcontrols)))
+       (list qtbase-5 qtdeclarative-5 qtgraphicaleffects
+             qtquickcontrols-5 qtquickcontrols2-5 bash-minimal))
       (arguments
        `(#:phases
          (modify-phases %standard-phases
@@ -708,20 +809,18 @@ embedded kernel situations.")
                                (string-append (assoc-ref inputs i) qml))
                              '("qtdeclarative"
                                "qtgraphicaleffects"
-                               "qtquickcontrols")))))
-                 #t)))
+                               "qtquickcontrols"
+                               "qtquickcontrols2"))))))))
            (add-after 'install 'add-alternate-name
              (lambda* (#:key outputs #:allow-other-keys)
                (let ((bin (string-append (assoc-ref outputs "out") "/bin")))
                  (symlink (string-append bin "/cool-retro-term")
-                          (string-append bin "/crt"))
-                 #t)))
+                          (string-append bin "/crt")))))
            (add-after 'install 'install-man
              (lambda* (#:key outputs #:allow-other-keys)
                (let ((mandir (string-append (assoc-ref outputs "out")
                                             "/share/man/man1")))
-                 (install-file "packaging/debian/cool-retro-term.1" mandir)
-                 #t))))))
+                 (install-file "packaging/debian/cool-retro-term.1" mandir)))))))
       (synopsis "Terminal emulator")
       (description
        "Cool-retro-term (crt) is a terminal emulator which mimics the look and
@@ -734,12 +833,12 @@ eye-candy, customizable, and reasonably lightweight.")
                 ;; Fonts
                 license:silofl1.1
                 license:x11
-                license:bsd-3)))))
+                license:bsd-3))))
 
 (define-public foot
   (package
     (name "foot")
-    (version "1.6.3")
+    (version "1.12.1")
     (home-page "https://codeberg.org/dnkl/foot")
     (source (origin
               (method git-fetch)
@@ -747,24 +846,19 @@ eye-candy, customizable, and reasonably lightweight.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0rm7w29wf3gipf69qf7s42qw8857z74gsigrpz9g6vvd1x58f03m"))))
+                "14jqs4sarxbrgi5pxz0afqa9jxq90cb5ayqd21qj2n65whqa5bpk"))))
     (build-system meson-build-system)
     (arguments
-     `(#:meson ,meson-0.55
-       ;; Using a "release" build is recommended both for performance, and
+     `(;; Using a "release" build is recommended both for performance, and
        ;; also to address a GCC 10 issue when doing PGO builds.
        #:build-type "release"
        ;; Enable LTO as recommended by INSTALL.md.
        #:configure-flags '("-Db_lto=true")))
     (native-inputs
-     `(("ncurses" ,ncurses)             ;for 'tic'
-       ("pkg-config" ,pkg-config)
-       ("scdoc" ,scdoc)
-       ("wayland-protocols" ,wayland-protocols)))
+     (list ncurses ;for 'tic'
+           pkg-config scdoc wayland-protocols))
     (inputs
-     `(("fcft" ,fcft)
-       ("libxkbcommon" ,libxkbcommon)
-       ("wayland" ,wayland)))
+     (list fcft libxkbcommon wayland))
     (synopsis "Wayland-native terminal emulator")
     (description
      "@command{foot} is a terminal emulator for systems using the Wayland
@@ -776,7 +870,7 @@ a server/client mode.")
 (define-public sakura
   (package
     (name "sakura")
-    (version "3.8.3")
+    (version "3.8.4")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://launchpad.net/sakura/trunk/"
@@ -784,7 +878,7 @@ a server/client mode.")
                                   ".tar.bz2"))
               (sha256
                (base32
-                "1r2kpvxx21r407s07m5p5x0dam6x863991nmcv6k5ap873fxqh2h"))))
+                "1d8n32xnj21q2xx13xs2r9cfjaq31mxiyhx6d57x9cwnhwb11xn3"))))
     (build-system cmake-build-system)
     (arguments
      '(#:tests? #f))                    ; no check phase
@@ -793,10 +887,9 @@ a server/client mode.")
        ("perl" ,perl)                   ; for pod2man
        ("pkg-config" ,pkg-config)))
     (inputs
-     `(("libxft" ,libxft)
-       ("vte" ,vte)))
+     (list libxft vte))
     (home-page "https://launchpad.net/sakura")
-    (synopsis "A simple but powerful libvte-based terminal emulator")
+    (synopsis "Simple but powerful libvte-based terminal emulator")
     (description "@code{Sakura} is a terminal emulator based on GTK+ and VTE.
 It's a terminal emulator with few dependencies, so you don't need a full GNOME
 desktop installed to have a decent terminal emulator.")
@@ -821,8 +914,7 @@ desktop installed to have a decent terminal emulator.")
       (arguments
        '(#:import-path "github.com/nsf/termbox-go"))
       (propagated-inputs
-       `(("go-github.com-mattn-go-runewidth"
-          ,go-github.com-mattn-go-runewidth)))
+       (list go-github.com-mattn-go-runewidth))
       (synopsis "@code{termbox} provides a minimal API for text-based user
 interfaces")
       (description
@@ -849,13 +941,13 @@ programmer to write text-based user interfaces.")
     (arguments
      `(#:import-path "github.com/junegunn/fzf"))
     (inputs
-     `(("go-github.com-mattn-go-runewidth" ,go-github.com-mattn-go-runewidth)
-       ("go-github-com-mattn-go-shellwords" ,go-github-com-mattn-go-shellwords)
-       ("go-github-com-mattn-go-isatty" ,go-github-com-mattn-go-isatty)
-       ("go-github-com-gdamore-tcell" ,go-github-com-gdamore-tcell)
-       ("go-github-com-saracen-walker" ,go-github-com-saracen-walker)
-       ("go-golang.org-x-sync-errgroup" ,go-golang.org-x-sync-errgroup)
-       ("go-golang-org-x-crypto" ,go-golang-org-x-crypto)))
+     (list go-github.com-mattn-go-runewidth
+           go-github-com-mattn-go-shellwords
+           go-github-com-mattn-go-isatty
+           go-github-com-gdamore-tcell
+           go-github-com-saracen-walker
+           go-golang.org-x-sync-errgroup
+           go-golang-org-x-crypto))
     (home-page "https://github.com/junegunn/fzf")
     (synopsis "Command-line fuzzy-finder")
     (description "This package provides an interactive command-line filter
@@ -880,9 +972,13 @@ usable with any list--including files, command history, processes and more.")
                                 (string-append out "/bin"))))))
           (add-after 'copy-binaries 'wrap-programs
             (lambda* (#:key outputs inputs #:allow-other-keys)
-              (let ((out (assoc-ref outputs "out"))
-                    (ncurses (assoc-ref inputs "ncurses")))
-                (wrap-program (string-append out "/bin/fzf-tmux")
+              (let* ((out (assoc-ref outputs "out"))
+                     (bin (string-append out "/bin"))
+                     (findutils (assoc-ref inputs "findutils"))
+                     (ncurses (assoc-ref inputs "ncurses")))
+                (wrap-program (string-append bin "/fzf")
+                  `("PATH" ":" prefix (,(string-append findutils "/bin"))))
+                (wrap-program (string-append bin "/fzf-tmux")
                   `("PATH" ":" prefix (,(string-append ncurses "/bin")))))))
           (add-after 'install 'install-completions
             (lambda* (#:key outputs #:allow-other-keys)
@@ -903,6 +999,7 @@ usable with any list--including files, command history, processes and more.")
                              (string-append zsh-completion "/_fzf"))))))))))
     (inputs
      `(,@(package-inputs go-github-com-junegunn-fzf)
+       ("findutils" ,findutils)
        ("ncurses" ,ncurses)))))
 
 (define-public go-github.com-howeyc-gopass
@@ -924,8 +1021,7 @@ usable with any list--including files, command history, processes and more.")
       (arguments
        '(#:import-path "github.com/howeyc/gopass"))
       (propagated-inputs
-       `(("go-golang-org-x-crypto"
-          ,go-golang-org-x-crypto)))
+       (list go-golang-org-x-crypto))
       (synopsis "Retrieve password from a terminal or piped input in Go")
       (description
        "@code{gopass} is a Go package for retrieving a password from user
@@ -955,10 +1051,9 @@ terminal or piped input.")
              (delete-file "tests/test_input_output.py")
              #t)))))
     (propagated-inputs
-     `(("python-wcwidth" ,python-wcwidth)))
+     (list python-wcwidth))
     (native-inputs
-     `(("python-pytest-runner" ,python-pytest-runner)
-       ("python-pytest" ,python-pytest)))
+     (list python-pytest-runner python-pytest))
     (home-page "https://pyte.readthedocs.io/")
     (synopsis "Simple VTXXX-compatible terminal emulator")
     (description "@code{pyte} is an in-memory VTxxx-compatible terminal
@@ -970,9 +1065,6 @@ emulators.
 pyte is a fork of vt102, which was an incomplete pure Python implementation
 of VT100 terminal.")
     (license license:lgpl3+)))
-
-(define-public python2-pyte
-  (package-with-python2 python-pyte))
 
 (define-public python-blessings
   (package
@@ -990,8 +1082,7 @@ of VT100 terminal.")
      ;; FIXME: Test suite is unable to detect TTY conditions.
      `(#:tests? #f))
     (native-inputs
-     `(("python-nose" ,python-nose)
-       ("python-six" ,python-six)))
+     (list python-nose python-six))
     (home-page "https://github.com/erikrose/blessings")
     (synopsis "Python module to manage terminal color, styling, and
 positioning")
@@ -1003,20 +1094,17 @@ avoids styling altogether when the output is redirected to something other
 than a terminal.")
     (license license:expat)))
 
-(define-public python2-blessings
-  (package-with-python2 python-blessings))
-
 (define-public python-curtsies
   (package
     (name "python-curtsies")
-    (version "0.3.4")
+    (version "0.3.5")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "curtsies" version))
        (sha256
         (base32
-         "019bpf5wmng4f6ic2ykg893ypfihpfvzi6dhblcagfwbincl79ac"))))
+         "1g8dwafx4vx06isjkn28r3cwb0hw1bv67lgygaz34yk66lrzz1x5"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
@@ -1025,12 +1113,9 @@ than a terminal.")
            (lambda _
              (invoke "nosetests" "-v"))))))
     (propagated-inputs
-     `(("python-blessings" ,python-blessings)
-       ("python-wcwidth" ,python-wcwidth)))
+     (list python-blessings python-cwcwidth))
     (native-inputs
-     `(("python-mock" ,python-mock)
-       ("python-pyte" ,python-pyte)
-       ("python-nose" ,python-nose)))
+     (list python-mock python-pyte python-nose))
     (home-page "https://github.com/bpython/curtsies")
     (synopsis "Library for curses-like terminal interaction with colored
 strings")
@@ -1055,14 +1140,9 @@ per-line fullscreen terminal rendering, and keyboard input event reporting.")
          "0x5c31yq7ansmiy20a0qf59wagba9v3pq97mlkxrqxn4n1gcc6vi"))))
     (build-system gnu-build-system)
     (inputs
-     `(("libevent" ,libevent)
-       ("libssh" ,libssh)
-       ("msgpack" ,msgpack)
-       ("ncurses" ,ncurses)))
+     (list libevent libssh msgpack ncurses))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake pkg-config))
     (home-page "https://tmate.io/")
     (synopsis "Terminal sharing application")
     (description "tmate is a terminal sharing application that allows you to
@@ -1209,9 +1289,7 @@ comfortably in a pager or editor.
                (copy-recursively tests "external/googletest"))
              #t)))))
     (inputs
-     `(("gflags" ,gflags)
-       ("libsodium" ,libsodium)
-       ("protobuf" ,protobuf)))
+     (list gflags libsodium protobuf))
     (native-inputs
      `(("googletest" ,(package-source googletest))))
     (home-page "https://mistertea.github.io/EternalTerminal/")
@@ -1225,69 +1303,13 @@ while also supporting native scrolling and @command{tmux} control mode
 (@code{tmux -CC}).")
     (license license:asl2.0)))
 
-(define-public et
-  (deprecated-package "et" eternalterminal))
-
 (define-public wterm
-  (package
-    (name "wterm")
-    (version "0.7")
-    (source
-     (origin
-       (method git-fetch)
-       (uri (git-reference
-             (url "https://github.com/majestrate/wterm")
-             (commit "0ae42717c08a85a6509214e881422c7fbe7ecc45")))
-       (sha256
-         (base32
-          "0g4lzmc1w6na81i6hny32xds4xfig4xzswzfijyi6p93a1226dv0"))
-       (file-name (git-file-name name version))))
-    (build-system gnu-build-system)
-    (native-inputs
-     `(("pkg-config" ,pkg-config)))
-    (inputs
-     `(("fontconfig" ,fontconfig)
-       ("freetype" ,freetype)
-       ("libdrm" ,libdrm)
-       ("libxkbcommon" ,libxkbcommon)
-       ("ncurses" ,ncurses)
-       ("pixman" ,pixman)
-       ("wayland" ,wayland)))
-    (arguments
-     '(#:tests? #f
-
-       ;; Without -j1 it fails to find file libwld.a.
-       #:parallel-build? #f
-
-       #:make-flags (list "CC=gcc"
-                          (string-append "PREFIX=" %output)
-                          (string-append "TERMINFO="
-                                         (assoc-ref %outputs "out")
-                                         "/share/terminfo"))
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)
-         (add-after 'unpack 'terminfo-fix
-           (lambda _
-             (substitute* "Makefile"
-               (("\ttic .*") "\tmkdir -p $(SHARE_PREFIX)/share/terminfo
-\ttic -o $(SHARE_PREFIX)/share/terminfo -s wterm.info\n"))
-             #t)))))
-    (native-search-paths
-      (list (search-path-specification
-              (variable "TERMINFO_DIRS")
-              (files '("share/terminfo")))))
-    (home-page "https://github.com/majestrate/wterm")
-    (synopsis "Terminal emulator for Wayland")
-    (description "wterm is a native Wayland terminal emulator based on
-an st fork using wld. st is a simple terminal emulator for X originally
-made by suckless.")
-    (license license:x11)))
+  (deprecated-package "wterm" foot))
 
 (define-public tio
   (package
     (name "tio")
-    (version "1.32")
+    (version "1.36")
     (source
      (origin
        (method url-fetch)
@@ -1295,8 +1317,10 @@ made by suckless.")
              "https://github.com/tio/tio/releases/download/v"
              version "/tio-" version ".tar.xz"))
        (sha256
-        (base32 "0i5fhi4xdk4yznj8wahniizddmx6wlcnnhda1dw9djyajilyvxd8"))))
-    (build-system gnu-build-system)
+        (base32 "0z27ghxjiw7y587l49jsb0anylm08m7imqjiwr21k1frxvydswsa"))))
+    (build-system meson-build-system)
+    (native-inputs (list pkg-config))
+    (inputs (list libinih))
     (home-page "https://tio.github.io/")
     (synopsis "Simple TTY terminal I/O application")
     (description "tio is a simple TTY terminal application which features a
@@ -1351,6 +1375,10 @@ basic input/output.")
         ("rust-xdg" ,rust-xdg-2))
        #:phases
        (modify-phases %standard-phases
+         (add-after 'unpack 'use-new-nix
+           (lambda* (#:key inputs outputs #:allow-other-keys)
+             (substitute* "alacritty_terminal/Cargo.toml"
+               (("0.22.0") "^0.23.0"))))
          (add-after 'configure 'add-absolute-library-references
            (lambda* (#:key inputs cargo-inputs vendor-dir #:allow-other-keys)
              (let* ((glutin-name ,(package-name rust-glutin-0.26))
@@ -1393,7 +1421,7 @@ basic input/output.")
                     (bin   (string-append out "/bin"))
                     (share (string-append out "/share"))
                     (icons (string-append share "/icons/hicolor/scalable/apps"))
-                    (tic   (string-append (assoc-ref inputs "ncurses") "/bin/tic"))
+                    (tic   (search-input-file inputs "/bin/tic"))
                     (man   (string-append share "/man/man1"))
                     (alacritty-bin "target/release/alacritty"))
                ;; Install the executable.

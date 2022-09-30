@@ -2,7 +2,7 @@
 ;;; Copyright © 2013, 2015, 2018, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013, 2015 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2015, 2018 Ricardo Wurmus <rekado@elephly.net>
-;;; Copyright © 2016, 2017, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016, 2017, 2019, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2017, 2018, 2019, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2017, 2018 Clément Lassieur <clement@lassieur.org>
 ;;; Copyright © 2017 Andy Wingo <wingo@igalia.com>
@@ -11,11 +11,11 @@
 ;;; Copyright © 2014 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2019 Hartmut Goebel <h.goebel@goebel-consult.de>
-;;; Copyright © 2020 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2020, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2020, 2021 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2020 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2021 lu hui <luhuins@163.com>
-;;; Copyright © 2021 Foo Chuan Wei <chuanwei.foo@hotmail.com>
+;;; Copyright © 2021, 2022 Foo Chuan Wei <chuanwei.foo@hotmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -33,6 +33,7 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages code)
+  #:use-module (guix gexp)
   #:use-module (guix packages)
   #:use-module (guix utils)
   #:use-module (guix download)
@@ -47,12 +48,14 @@
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
+  #:use-module (gnu packages bison)
   #:use-module (gnu packages c)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages cpp)
   #:use-module (gnu packages curl)
   #:use-module (gnu packages elf)
   #:use-module (gnu packages emacs)
+  #:use-module (gnu packages flex)
   #:use-module (gnu packages gcc)
   #:use-module (gnu packages graphviz)
   #:use-module (gnu packages llvm)
@@ -64,10 +67,13 @@
   #:use-module (gnu packages perl-compression)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
+  #:use-module (gnu packages readline)
   #:use-module (gnu packages serialization)
   #:use-module (gnu packages sqlite)
   #:use-module (gnu packages texinfo)
+  #:use-module (gnu packages tls)
   #:use-module (gnu packages web)
   #:use-module (gnu packages xml))
 
@@ -76,18 +82,19 @@
 (define-public cflow
   (package
     (name "cflow")
-    (version "1.6")
+    (version "1.7")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://gnu/cflow/cflow-"
                                   version ".tar.bz2"))
               (sha256
                (base32
-                "1mzd3yf0dfv8h2av5vsxxlhpk21nw064h91b2kgfrdz92r0pnj1l"))))
+                "11khr78090jjyqa2l26bdz0myjx6b212lz216dhjc7h0z754c4fh"))))
     (build-system gnu-build-system)
 
     ;; Needed to have cflow-mode.el installed.
-    (native-inputs `(("emacs" ,emacs-minimal)))
+    (native-inputs
+     (list emacs-minimal))
     (arguments
      '(#:configure-flags (list (string-append "CPPFLAGS="
                                               "-D" "CFLOW_PREPROC=\\\""
@@ -114,9 +121,15 @@ a major mode for Emacs for examining the flowcharts that it produces.")
                (base32
                 "0lr0l9kj2w3jilz9h9y4np9pf9i9ccpy6331lanki2fnz4z8ldvd"))))
     (build-system gnu-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-before 'build 'set-man-page-date
+                 ;; Avoid embedding the current date for reproducible builds
+                 (lambda _
+                   (setenv "MAN_PAGE_DATE" "2012-04-18"))))))
     (native-inputs
-     `(("texinfo" ,texinfo)
-       ("autogen" ,autogen)))
+     (list texinfo autogen))
     (home-page "https://www.gnu.org/software/complexity/")
     (synopsis "Analyze complexity of C functions")
     (description
@@ -129,77 +142,78 @@ highlighting your own code that seemed comprehensible when you wrote it.")
 (define-public global                             ; a global variable
   (package
     (name "global")
-    (version "6.6.7")
+    (version "6.6.8")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnu/global/global-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "0g4aslm2zajq605py11s4rs1wdnzcqhkh7bc2xl5az42adzzg839"))))
+               "1kaphc3gml89p8dpdgh2is8hj46wj05689kxj0bmh5q759rxk4vg"))))
     (build-system gnu-build-system)
-    (inputs
-      `(("bash" ,bash-minimal)                    ; for wrap-program
-        ("coreutils" ,coreutils)
-        ("ctags" ,universal-ctags)
-        ("libltdl" ,libltdl)
-        ("ncurses" ,ncurses)
-        ("python-pygments" ,python-pygments)
-        ("python-wrapper" ,python-wrapper)
-        ("sqlite" ,sqlite)))
     (arguments
-     `(#:configure-flags
-       (list (string-append "--with-ncurses="
-                            (assoc-ref %build-inputs "ncurses"))
-             (string-append "--with-sqlite3="
-                            (assoc-ref %build-inputs "sqlite"))
-             (string-append "--with-universal-ctags="
-                            (assoc-ref %build-inputs "ctags") "/bin/ctags")
-             (string-append "--sysconfdir="
-                            (assoc-ref %outputs "out") "/share/gtags")
-             "--localstatedir=/var"         ; This needs to be a writable location.
-             "--disable-static")
+     (list #:configure-flags
+           #~(list (string-append "--with-ncurses="
+                                  #$(this-package-input "ncurses"))
+                   (string-append "--with-sqlite3="
+                                  #$(this-package-input "sqlite"))
+                   (string-append "--with-universal-ctags="
+                                  #$(this-package-input "universal-ctags")
+                                  "/bin/ctags")
+                   (string-append "--sysconfdir="
+                                  #$output "/share/gtags")
+                   "--localstatedir=/var" ; This needs to be a writable location.
+                   "--disable-static")
 
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'fix-globash
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let* ((echo (string-append
-                           (assoc-ref inputs "coreutils") "/bin/echo")))
-               (substitute* "globash/globash.in"
-                 (("/bin/echo") echo)))))
-         (add-after 'post-install 'install-plugins
-           (lambda _
-             (with-directory-excursion "plugin-factory"
-               (invoke "make" "install"))))
-         (add-before 'install 'dont-install-to-/var
-           (lambda _
-             (substitute* "gozilla/Makefile"
-               (("DESTDIR\\)\\$\\{localstatedir\\}") "TMPDIR)"))))
-         (add-after 'install-plugins 'wrap-program
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (wrap-program
-               (string-append (assoc-ref outputs "out")
-                              "/share/gtags/script/pygments_parser.py")
-               `("PYTHONPATH" ":" prefix (,(getenv "PYTHONPATH"))))))
-        (add-after 'install 'post-install
-          (lambda* (#:key outputs #:allow-other-keys)
-            ;; Install the plugin files in the right place.
-            (let* ((out  (assoc-ref outputs "out"))
-                   (data (string-append out "/share/gtags"))
-                   (vim  (string-append out "/share/vim/vimfiles/plugin"))
-                   (lisp (string-append out "/share/emacs/site-lisp/"
-                                        ,(package-name this-package) "-"
-                                        ,(package-version this-package))))
-              (mkdir-p lisp)
-              (mkdir-p vim)
-              (rename-file (string-append data "/gtags.el")
-                           (string-append lisp "/gtags.el"))
-              (rename-file (string-append data "/gtags.vim")
-                           (string-append vim "/gtags.vim"))
-              (rename-file (string-append data "/gtags-cscope.vim")
-                           (string-append vim "/gtags-cscope.vim"))
-              #t))))))
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'fix-globash
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (substitute* "globash/globash.in"
+                     (("/bin/echo")
+                      (search-input-file inputs "bin/echo")))))
+               (add-after 'post-install 'install-plugins
+                 (lambda _
+                   (with-directory-excursion "plugin-factory"
+                     (invoke "make" "install"))))
+               (add-before 'install 'dont-install-to-/var
+                 (lambda _
+                   (substitute* "gozilla/Makefile"
+                     (("DESTDIR\\)\\$\\{localstatedir\\}")
+                      "TMPDIR)"))))
+               (add-after 'install-plugins 'wrap-program
+                 (lambda _
+                   (wrap-program
+                       (string-append #$output
+                                      "/share/gtags/script/pygments_parser.py")
+                     `("GUIX_PYTHONPATH" ":" prefix
+                       (,(getenv "GUIX_PYTHONPATH"))))))
+               (add-after 'install 'post-install
+                 (lambda _
+                   ;; Install the plugin files in the right place.
+                   (let* ((data (string-append #$output "/share/gtags"))
+                          (vim  (string-append #$output
+                                               "/share/vim/vimfiles/plugin"))
+                          (lisp (string-append #$output "/share/emacs/site-lisp/"
+                                               #$(package-name this-package) "-"
+                                               #$(package-version this-package))))
+                     (mkdir-p lisp)
+                     (mkdir-p vim)
+                     (rename-file (string-append data "/gtags.el")
+                                  (string-append lisp "/gtags.el"))
+                     (rename-file (string-append data "/gtags.vim")
+                                  (string-append vim  "/gtags.vim"))
+                     (rename-file (string-append data "/gtags-cscope.vim")
+                                  (string-append vim  "/gtags-cscope.vim"))))))))
+    (inputs
+      (list bash-minimal                ; for wrap-program
+            coreutils
+            universal-ctags
+            libltdl
+            ncurses
+            python-pygments
+            python-wrapper
+            sqlite))
     (home-page "https://www.gnu.org/software/global/")
     (synopsis "Cross-environment source code tag system")
     (description
@@ -255,7 +269,7 @@ around in a large, deeply nested project.")
 
         #:make-flags (list (string-append "PREFIX="
                                           (assoc-ref %outputs "out")))))
-    (inputs `(("perl" ,perl)))
+    (inputs (list perl))
     (home-page "https://dwheeler.com/sloccount/")
     (synopsis "Count physical source lines of code (SLOC)")
     (description
@@ -269,7 +283,7 @@ COCOMO model or user-provided parameters.")
 (define-public cloc
   (package
     (name "cloc")
-    (version "1.90")
+    (version "1.92")
     (source
      (origin
        (method git-fetch)
@@ -278,15 +292,15 @@ COCOMO model or user-provided parameters.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0ic9q6qqw5f1wafp9lpmhr0miasbdb9zr59c0jlymnzffdmnliyc"))))
+        (base32 "1hy1hskiw02b7xaxn2qz0v7znj14l49w1anx20z6rkcps7212l5l"))))
     (build-system gnu-build-system)
     (inputs
-     `(("coreutils" ,coreutils)
-       ("perl" ,perl)
-       ("perl-algorithm-diff" ,perl-algorithm-diff)
-       ("perl-digest-md5" ,perl-digest-md5)
-       ("perl-parallel-forkmanager" ,perl-parallel-forkmanager)
-       ("perl-regexp-common" ,perl-regexp-common)))
+     (list coreutils
+           perl
+           perl-algorithm-diff
+           perl-digest-md5
+           perl-parallel-forkmanager
+           perl-regexp-common))
     (arguments
      `(#:phases (modify-phases %standard-phases
                   (delete 'configure)   ; nothing to configure
@@ -299,15 +313,13 @@ COCOMO model or user-provided parameters.")
                                 (string-append "INSTALL="
                                                (assoc-ref inputs "coreutils")
                                                "/bin/install")
-                                "install")
-                        #t)))
+                                "install"))))
                   (add-after 'install 'wrap-program
                     (lambda* (#:key inputs outputs #:allow-other-keys)
                       (let ((out (assoc-ref outputs "out")))
                         (wrap-program (string-append out "/bin/cloc")
                           `("PERL5LIB" ":" =
-                            ,(string-split (getenv "PERL5LIB") #\:)))
-                        #t))))
+                            ,(string-split (getenv "PERL5LIB") #\:)))))))
        #:out-of-source? #t
        ;; Tests require some other packages.
        #:tests? #f))
@@ -334,12 +346,14 @@ cloc can handle a greater variety of programming languages.")
                (base32
                 "0w1icjqd8hd45rn1y6nbfznk1a6ip54whwbfbhxp7ws2hn3ilqnr"))))
     (build-system gnu-build-system)
+    (arguments
+     ;; Required since GCC 10, see:
+     ;; https://gcc.gnu.org/gcc-10/porting_to.html.
+     `(#:configure-flags (list "CFLAGS=-fcommon")))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("pcre" ,pcre)
-       ("xz" ,xz)
-       ("zlib" ,zlib)))
+     (list pcre xz zlib))
     (home-page "https://geoff.greer.fm/ag/")
     (synopsis "Fast code searching tool")
     (description
@@ -376,7 +390,7 @@ features that are not supported by the standard @code{stdio} implementation.")
 (define-public universal-ctags
   (package
     (name "universal-ctags")
-    (version "5.9.20210509.0")
+    (version "5.9.20220807.0")
     (source
      (origin
        (method git-fetch)
@@ -386,14 +400,14 @@ features that are not supported by the standard @code{stdio} implementation.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "1sq94bnbzr40zwihfnsna759bbak0lw27j0yn12iwpg4xgb4hhwp"))
+         "1wjj6hlda7xyjm8yrl2zz74ks7azymm9yyrpz36zxxpx2scf6lsk"))
        (modules '((guix build utils)))
        (snippet
         '(begin
            ;; Remove the bundled PackCC and associated build rules.
            (substitute* "Makefile.am"
              (("^PACKCC = .*")
-              "PACKCC = packcc")
+              "PACKCC = packcc\n")
              (("\\$\\(PACKCC_FILES\\)")
               "")
              (("\\$\\(PEG_SRCS\\) \\$\\(PEG_HEADS\\): \\$\\(PACKCC\\)")
@@ -421,16 +435,9 @@ features that are not supported by the standard @code{stdio} implementation.")
                       (substitute* "Tmain/utils.sh"
                         (("/bin/echo") (which "echo"))))))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("packcc" ,packcc)
-       ("perl" ,perl)
-       ("pkg-config" ,pkg-config)))
+     (list autoconf automake packcc perl pkg-config))
     (inputs
-     `(("jansson" ,jansson)
-       ("libseccomp" ,libseccomp)
-       ("libxml2" ,libxml2)
-       ("libyaml" ,libyaml)))
+     (list jansson libseccomp libxml2 libyaml pcre2))
     (home-page "https://ctags.io/")
     (synopsis "Generate tag files for source code")
     (description
@@ -486,9 +493,8 @@ expressions, and its ability to generate emacs-style TAGS files.")
             #t)))))
     (home-page "https://github.com/cameronwhite/withershins")
     (inputs
-     `(("libiberty" ,libiberty)
-       ("binutils" ,binutils) ;for libbfd
-       ("zlib" ,zlib)))
+     (list libiberty binutils ;for libbfd
+           zlib))
     (synopsis "C++11 library for generating stack traces")
     (description
      "Withershins is a simple cross-platform C++11 library for generating
@@ -533,9 +539,7 @@ stack traces.")
                (wrap-program (string-append out "/bin/geninfo")
                  `("PERL5LIB" ":" prefix (,(getenv "PERL5LIB")))))
              #t)))))
-    (inputs `(("perl" ,perl)
-              ("perl-io-compress" ,perl-io-compress)
-              ("perl-json" ,perl-json)))
+    (inputs (list perl perl-io-compress perl-json))
     (home-page "http://ltp.sourceforge.net/coverage/lcov.php")
     (synopsis "Code coverage tool that enhances GNU gcov")
     (description "LCOV is an extension of @command{gcov}, a tool part of the
@@ -571,39 +575,36 @@ results and determine build stability.")
 (define-public kcov
   (package
     (name "kcov")
-    (version "38")
+    (version "40")
     (source (origin
               (method git-fetch)
               (uri (git-reference
                     (url "https://github.com/SimonKagstrom/kcov")
-                    (commit version)))
+                    (commit (string-append "v" version))))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0zqg21xwivi16csl6a5wby6679ny01bjaw4am3y4qcgjdyihifp8"))))
+                "0zayhmx6s377bxmkmvl9d9vjzfbpvh1k9ba6np4zdjvjjq327xag"))))
     (build-system cmake-build-system)
     (arguments
-     `(#:tests? #f ;no test target
+     `(#:tests? #f                      ; no test target
        #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'fix-/bin/bash-references
-           (lambda _
+           (lambda* (#:key inputs #:allow-other-keys)
+             (let ((bash (assoc-ref inputs "bash")))
              (substitute* (find-files "src" ".*\\.cc?$")
-               (("/bin/bash") (which "bash"))
-               (("/bin/sh") (which "sh")))
-             #t)))))
+               (("/bin/(bash|sh)" shell)
+                (string-append (assoc-ref inputs "bash") shell)))))))))
     (inputs
-     `(("curl" ,curl)
-       ("elfutils" ,elfutils)
-       ("libelf" ,libelf)
-       ("zlib" ,zlib)))
+     (list curl elfutils libelf openssl zlib))
     (native-inputs
-     `(("python" ,python)))
+     (list python))
     (home-page "https://github.com/SimonKagstrom/kcov")
     (synopsis "Code coverage tester for compiled languages, Python and Bash")
-    (description "Kcov is a FreeBSD/Linux/OSX code coverage tester for compiled
-languages, Python and Bash.  Kcov was originally a fork of Bcov, but has since
-evolved to support a large feature set in addition to that of Bcov.
+    (description "Kcov is a code coverage tester for compiled languages,
+Python and Bash.  It was originally a fork of Bcov, but has since evolved to
+support a large feature set in addition to that of Bcov.
 
 Kcov uses DWARF debugging information for compiled programs to make it
 possible to collect coverage information without special compiler switches.")
@@ -643,14 +644,14 @@ possible to collect coverage information without special compiler switches.")
          "-DBUILD_TESTING=FALSE")
        #:tests? #f))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("bash-completion" ,bash-completion)
-       ("clang" ,clang)
-       ("llvm" ,llvm)
-       ("lua" ,lua)
-       ("rct" ,rct)
-       ("selene" ,selene)))
+     (list bash-completion
+           clang
+           llvm
+           lua
+           rct
+           selene))
     (home-page "https://github.com/Andersbakken/rtags")
     (synopsis "Indexer for the C language family with Emacs integration")
     (description
@@ -676,8 +677,7 @@ importantly we give you proper follow-symbol and find-references support.")
         (base32 "1f9v5s0viq4yc9iv6701h3pv7j21zz1ckl37lpp9hsnliiizv03p"))))
     (build-system trivial-build-system)
     (native-inputs
-     `(("bash" ,bash)
-       ("perl" ,perl)))
+     (list bash perl))
     (arguments
      `(#:modules ((guix build utils))
        #:builder
@@ -698,7 +698,7 @@ importantly we give you proper follow-symbol and find-references support.")
            (substitute* "colormake"
              (("colormake\\.pl") (string-append bin "/colormake.pl"))
              (("/bin/bash")
-              (string-append (assoc-ref %build-inputs "bash") "/bin/sh")))
+              (search-input-file %build-inputs "/bin/sh")))
            (install-file "colormake.1" (string-append doc "/man/man1"))
            (install-files '("AUTHORS" "BUGS" "ChangeLog" "README") doc)
            (install-files '("colormake" "colormake-short" "clmake"
@@ -732,7 +732,7 @@ produce colored output.")
        (modify-phases %standard-phases
          (delete 'configure))))
     (native-inputs
-     `(("graphviz" ,graphviz)))
+     (list graphviz))
     (home-page "https://github.com/lindenb/makefile2graph")
     (synopsis "Creates a graph of dependencies from GNU Make")
     (description
@@ -744,7 +744,7 @@ independent targets.")
 (define-public uncrustify
   (package
     (name "uncrustify")
-    (version "0.69.0")
+    (version "0.74.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -753,11 +753,10 @@ independent targets.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0sqrg13kp8fwymq40976bq380bzw40g4ss7ihlbq45d0f90ifa1k"))))
+                "0v48vhmzxjzysbf0vhxzayl2pkassvbabvwg84xd6b8n5i74ijxd"))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("unzip" ,unzip)
-       ("python" ,python-wrapper)))
+     `(("python" ,python-wrapper)))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -880,8 +879,7 @@ the C, C++, C++/CLI, Objective‑C, C#, and Java programming languages.")
                         '("config.sub" "config.guess")))
             #t)))))
    (native-inputs
-    `(("texinfo" ,texinfo)
-      ("automake" ,automake))) ; For up to date 'config.guess' and 'config.sub'.
+    (list texinfo automake)) ; For up to date 'config.guess' and 'config.sub'.
    (synopsis "Code reformatter")
    (description
     "Indent is a program that makes source code easier to read by
@@ -916,8 +914,7 @@ extensions over the standard utility.")
              (("test_command \"cc -Wall -Wextra -o source.out source.c\"" all)
               "test_command \"gcc -Wall -Wextra -o source.out source.c\"")))))
       (build-system gnu-build-system)
-      (inputs
-       `(("python" ,python-wrapper)))
+      (inputs (list python-wrapper))
       (arguments
        `(#:phases
          (modify-phases %standard-phases
@@ -938,6 +935,88 @@ extensions over the standard utility.")
 source and header amalgamation in projects.")
       (license license:bsd-3))))
 
+(define-public cdecl
+  (package
+    (name "cdecl")
+    (version "2.5")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://www.ibiblio.org/pub/linux/devel/lang/c/cdecl-"
+                           version ".tar.gz"))
+       (sha256
+        (base32 "0dm98bp186r4cihli6fmcwzjaadgwl1z3b0zdxfik8h7hkqawk5p"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:make-flags
+       ,#~(list "LIBS=-lreadline"
+                (string-append "BINDIR=" #$output "/bin")
+                (string-append "MANDIR=" #$output "/share/man/man1"))
+       #:phases
+       (modify-phases %standard-phases
+         (delete 'configure)  ; No configure script.
+         (add-after 'unpack 'fix-build
+           (lambda _
+             (substitute* "Makefile"
+               (("lex cdlex.l")
+                "flex cdlex.l"))
+             (substitute* "cdecl.c"
+               ;; Fix "error: conflicting types for ‘getline’".
+               (("char \\* getline\\(\\)")
+                "char * our_getline(void)")
+               (("char \\* getline \\(\\)")
+                "char * our_getline(void)")
+               (("line = getline\\(\\)")
+                "line = our_getline()")
+               ;; Fix "error: conflicting types for ‘getopt’".
+               (("int getopt\\(int,char \\*\\*,char \\*\\);")
+                "")
+               ;; Fix invalid use of "restrict" as a variable name.
+               (("i, j, restrict")
+                "i, j, restriction")
+               (("restrict =")
+                "restriction =")
+               ;; Fix "warning: implicit declaration of function ‘add_history’".
+               (("# include <readline/readline.h>" all)
+                (string-append all "\n# include <readline/history.h>"))
+               ;; Fix "warning: implicit declaration of function ‘dotmpfile_from_string’".
+               (("void setprogname\\(char \\*\\);" all)
+                (string-append all "\nint dotmpfile_from_string(char *);"))
+               ;; Fix "warning: implicit declaration of function ‘completion_matches’".
+               (("matches = completion_matches\\(text, command_completion\\);")
+                "matches = rl_completion_matches(text, command_completion);")
+               (("char \\* command_completion\\(char \\*, int\\);")
+                "char * command_completion(const char *, int);")
+               (("char \\* command_completion\\(char \\*text, int flag\\)")
+                "char * command_completion(const char *text, int flag)")
+               ;; Fix "warning: ‘CPPFunction’ is deprecated".
+               (("rl_attempted_completion_function = \\(CPPFunction \\*\\)attempt_completion;")
+                "rl_attempted_completion_function = (rl_completion_func_t *)attempt_completion;")
+               ;; Fix "warning: ‘Function’ is deprecated".
+               (("rl_completion_entry_function = \\(Function \\*\\)keyword_completion;")
+                "rl_completion_entry_function = (rl_compentry_func_t *)keyword_completion;"))
+             ;; Fix typo in man page.
+             (substitute* "cdecl.1"
+               (("<storage>\t::= auto \\| extern \\| register \\| auto")
+                "<storage>\t::= auto | extern | register | static"))))
+         (add-before 'install 'create-directories
+           (lambda* (#:key outputs #:allow-other-keys)
+             (let* ((out (assoc-ref outputs "out"))
+                    (bin (string-append out "/bin"))
+                    (man (string-append out "/share/man/man1")))
+               (mkdir-p bin)
+               (mkdir-p man)))))
+       #:tests? #f))  ; No "check" target.
+    (native-inputs (list bison flex))
+    (inputs (list readline))
+    (home-page "https://www.ibiblio.org/pub/linux/devel/lang/c/")
+    (synopsis "Turn English phrases into C or C++ declarations and vice versa")
+    (description "@code{cdecl} is a program that turns English-like phrases into C
+declarations.  It can also translate C into pseudo-English.  It also handles
+type casts and C++.  It has command-line editing and history with the GNU
+Readline library.")
+    (license license:public-domain)))
+
 (define-public cscope
   (package
     (name "cscope")
@@ -950,7 +1029,7 @@ source and header amalgamation in projects.")
        (sha256
         (base32 "0ngiv4aj3rr35k3q3wjx0y19gh7i1ydqa0cqip6sjwd8fph5ll65"))))
     (build-system gnu-build-system)
-    (inputs `(("ncurses" ,ncurses)))
+    (inputs (list ncurses))
     (arguments
      `(#:configure-flags
        ;; Specify the correct ncurses directory to prevent incorrect fallback
@@ -966,3 +1045,30 @@ also be used for C++ code.
 
 Using cscope, you can easily search for where symbols are used and defined.")
     (license license:bsd-3)))
+
+(define-public xenon
+  (package
+    (name "xenon")
+    (version "0.9.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "xenon" version))
+       (sha256
+        (base32
+         "1f4gynjzfckm3rjfywwgz1c7icfx3zjqirf16aj73xv0c9ncpffj"))))
+    (build-system python-build-system)
+    (arguments (list #:tests? #f)) ;test suite not shipped with the PyPI archive
+    (inputs (list python-pyyaml python-radon python-requests))
+    (home-page "https://xenon.readthedocs.org/")
+    (synopsis "Monitor code metrics for Python on your CI server")
+    (description
+     "Xenon is a monitoring tool based on Radon.  It monitors code complexity.
+Ideally, @code{xenon} is run every time code is committed.  Through command
+line options, various thresholds can be set for the complexity of code.  It
+will fail (i.e., it will exit with a non-zero exit code) when any of these
+requirements is not met.")
+    (license license:expat)))
+
+(define-public python-xenon
+  (deprecated-package "python-xenon" xenon))

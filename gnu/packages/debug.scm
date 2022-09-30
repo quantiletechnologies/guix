@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2014, 2015, 2016, 2017, 2019, 2020, 2021 Eric Bavier <bavier@posteo.net>
+;;; Copyright © 2014, 2015, 2016, 2017, 2019-2022 Eric Bavier <bavier@posteo.net>
 ;;; Copyright © 2016, 2017, 2018, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2018, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018, 2019 Rutger Helling <rhelling@mykolab.com>
@@ -7,6 +7,9 @@
 ;;; Copyright © 2020 Vincent Legoll <vincent.legoll@gmail.com>
 ;;; Copyright © 2020, 2021 Morgan Smith <Morgan.J.Smith@outlook.com>
 ;;; Copyright © 2020 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2021 Felix Gruber <felgru@posteo.net>
+;;; Copyright © 2021 Foo Chuan Wei <chuanwei.foo@hotmail.com>
+;;; Copyright © 2022 Michael Rohleder <mike@rohleder.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -60,6 +63,7 @@
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages serialization)
+  #:use-module (gnu packages texinfo)
   #:use-module (gnu packages virtualization)
   #:use-module (gnu packages xdisorg)
   #:use-module (ice-9 match)
@@ -83,7 +87,7 @@
         "184wh35pf2ddx97319s6sgkzpz48xxkbwzcjpycv009bm53lh61q"))))
     (build-system gnu-build-system)
     (inputs                             ;Installed programs are perl scripts
-     `(("perl" ,perl)))
+     (list perl))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -126,11 +130,11 @@ program to exhibit a bug.")
       (sha256
        (base32 "0qx0zq8jxzx2as2zf0740g7kvgq163ayn3041di4vwk77490y76v"))))
     (build-system gnu-build-system)
-    (native-inputs `(("flex" ,flex)))
+    (native-inputs (list flex))
     (inputs
      `(("astyle"          ,astyle)
-       ("llvm"            ,llvm)
-       ("clang"           ,clang)
+       ("llvm"            ,llvm-9)
+       ("clang"           ,clang-9)
        ("indent"          ,indent)
        ("perl"            ,perl)
        ("exporter-lite"   ,perl-exporter-lite)
@@ -176,7 +180,7 @@ tools that process C/C++ code.")
 (define-public c-vise
   (package
     (name "c-vise")
-    (version "2.3.0")
+    (version "2.4.0")
     (source
      (origin
        (method git-fetch)
@@ -184,24 +188,22 @@ tools that process C/C++ code.")
              (url "https://github.com/marxin/cvise")
              (commit (string-append "v" version))))
        (sha256
-        (base32 "0f6m58rak87gvcvxxcgp1bzbsv1q618h0iipmv0dx9jv1bn0qv43"))
+        (base32 "1i2z5q2pcwh1gpdqc24x1a2q5vzwhblzzq021nzwf304di7m18vl"))
        (file-name (git-file-name name version))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("flex" ,flex)
-       ("python-pytest" ,python-pytest)
-       ("python-pytest-flake8" ,python-pytest-flake8)))
+     (list flex python-pytest python-pytest-flake8))
     (inputs
-     `(("bash" ,bash-minimal)           ; For wrap-program
-       ("clang" ,clang)
-       ("llvm" ,llvm)
-       ("python" ,python)
-       ("python-pebble" ,python-pebble)
-       ("python-psutil" ,python-psutil)
-       ("unifdef" ,unifdef)))
+     (list bash-minimal clang llvm unifdef
+           python python-pebble python-psutil python-chardet))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
+         (add-after 'unpack 'fix-linkage
+           (lambda _
+            (substitute* "clang_delta/CMakeLists.txt"
+              (("\\$\\{LLVM_LINK_LLVM_DYLIB\\}") "True")
+              (("  LLVM") "  LLVMSupport"))))
          (add-before 'build 'hardcode-paths
            (lambda _
             (substitute* "cvise.py"
@@ -213,7 +215,7 @@ tools that process C/C++ code.")
          (add-after 'install 'wrap
            (lambda* (#:key outputs #:allow-other-keys)
              (let ((out (assoc-ref outputs "out"))
-                   (python-path (getenv "PYTHONPATH")))
+                   (python-path (getenv "GUIX_PYTHONPATH")))
                (wrap-program (string-append out "/bin/cvise")
                  `("PYTHONPATH" ":" prefix (,python-path)))
                #t))))))
@@ -251,7 +253,7 @@ tool.")
          (file-name (git-file-name name version))))
       (build-system gnu-build-system)
       (inputs
-       `(("qemu" ,qemu-for-american-fuzzy-lop)))
+       (list qemu-for-american-fuzzy-lop))
       (arguments
        `(#:make-flags (list (string-append "PREFIX=" (assoc-ref %outputs "out"))
                             (string-append "DOC_PATH=$(PREFIX)/share/doc/"
@@ -469,9 +471,7 @@ server and embedded PowerPC, and S390 guests.")
            "0k55cy7x0hlc6rgpascl6ibhcfxaash3p9r9r8kwvbm3zag1rmac"))))
       (build-system gnu-build-system)
       (native-inputs
-       `(("autoconf" ,autoconf)
-         ("automake" ,automake)
-         ("go" ,go)))
+       (list autoconf automake go))
       (inputs
        `(("make-source" ,(package-source gnu-make))))
       (arguments
@@ -560,30 +560,28 @@ input.  Zzuf's behaviour is deterministic, making it easy to reproduce bugs.")
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (substitute* "gui/GameConqueror.py"
                (("/usr/bin/env python")
-                (string-append (assoc-ref %build-inputs
-                                          "python-wrapper") "/bin/python")))
-             #t))
+                (search-input-file inputs "/bin/python")))))
          (add-after 'install 'wrap-gameconqueror
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (let ((out               (assoc-ref outputs "out"))
                    (gi-typelib-path   (getenv "GI_TYPELIB_PATH"))
-                   (python-path       (getenv "PYTHONPATH")))
+                   (python-path       (getenv "GUIX_PYTHONPATH")))
                (wrap-program (string-append out "/share/gameconqueror/GameConqueror.py")
                  `("GI_TYPELIB_PATH"        ":" prefix (,gi-typelib-path))
-                 `("PYTHONPATH"             ":" prefix (,python-path))))
+                 `("GUIX_PYTHONPATH"             ":" prefix (,python-path))))
              #t)))))
     (native-inputs
-     `(("libtool" ,libtool)
-       ("python-wrapper" ,python-wrapper)
-       ("gobject-introspection" ,gobject-introspection)
-       ("gtk+" ,gtk+)
-       ("intltool" ,intltool)
-       ("automake" ,automake)
-       ("autoconf" ,autoconf)))
+     (list libtool
+           python-wrapper
+           gobject-introspection
+           gtk+
+           intltool
+           automake
+           autoconf))
     (inputs
-     `(("readline" ,readline)))
+     (list readline))
     (propagated-inputs
-     `(("python-pygobject" ,python-pygobject)))
+     (list python-pygobject))
     (home-page "https://github.com/scanmem/scanmem")
     (synopsis "Memory scanner")
     (description "Scanmem is a debugging utility designed to isolate the
@@ -613,8 +611,8 @@ the position of the variable and allows you to modify its value.")
                 "0xlx2485y0israv2pfghmv74lxcv9i5y65agy69mif76yc4vfvif"))
               (patches (search-patches "remake-impure-dirs.patch"))))
     (inputs
-     `(("readline" ,readline)
-       ,@(package-inputs gnu-make)))
+     (modify-inputs (package-inputs gnu-make)
+       (prepend readline)))
     (home-page "http://bashdb.sourceforge.net/remake/")
     (description "Remake is an enhanced version of GNU Make that adds improved
 error reporting, better tracing, profiling, and a debugger.")
@@ -623,7 +621,7 @@ error reporting, better tracing, profiling, and a debugger.")
 (define-public rr
   (package
     (name "rr")
-    (version "5.4.0")
+    (version "5.5.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -631,7 +629,7 @@ error reporting, better tracing, profiling, and a debugger.")
                     (commit version)))
               (sha256
                (base32
-                "1sfldgkkmsdyaqa28i5agcykc63gwm3zjihd64g86i852w8al2w6"))
+                "079x891axkiy8qbvjar9vbaldlx7pm9p0i3nq6infdc66nc69635"))
               (file-name (git-file-name name version))))
     (build-system cmake-build-system)
     (arguments
@@ -666,14 +664,9 @@ error reporting, better tracing, profiling, and a debugger.")
                       (setenv "HOME" (getcwd))
                       #t)))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("ninja" ,ninja)
-       ("which" ,which)))
+     (list pkg-config ninja which))
     (inputs
-     `(("gdb" ,gdb)
-       ("capnproto" ,capnproto)
-       ("python" ,python)
-       ("python-pexpect" ,python-pexpect)))
+     (list gdb capnproto python python-pexpect))
     (home-page "https://rr-project.org/")
     (synopsis "Record and reply debugging framework")
     (description
@@ -742,8 +735,7 @@ program to produce symbolic backtraces.")
                       (let* ((out (assoc-ref outputs "out")))
                         (install-file "libleak.so" (string-append out "/lib"))
                         #t))))))
-    (inputs `(("libbacktrace" ,libbacktrace)
-              ("libwuya" ,libwuya)))
+    (inputs (list libbacktrace libwuya))
     (home-page "https://github.com/WuBingzheng/libleak")
     (synopsis "Memory leaks detection tool")
     (description "The libleak tool detects memory leaks by hooking memory
@@ -754,6 +746,47 @@ program is not required, and the detection can be enabled or disabled while
 the target application is running.  The overhead incurred by libleak is
 smaller than that of other tools such as Valgrind, and it aims to be easier to
 use than similar tools like @command{mtrace}.")
+    (license license:gpl2+)))
+
+(define-public cgdb
+  (package
+    (name "cgdb")
+    (version "0.8.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://cgdb.me/files/cgdb-" version ".tar.gz"))
+       (sha256
+        (base32 "1w8ib2vg3pg68d9hh97fw5042c73i9nqavdddc87n9bpscjbaf0d"))))
+    (build-system gnu-build-system)
+    (inputs
+     (list bash-minimal ncurses readline gdb))
+    (native-inputs
+     (list flex texinfo))
+    (arguments
+     `(#:configure-flags
+        (list
+          (string-append "ac_cv_rl_version=" ,(package-version readline))
+          "ac_cv_file__dev_ptmx=no"
+          "ac_cv_file__proc_self_status=no"
+          "ac_cv_func_setpgrp_void=no")
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'fix-paths
+           (lambda* (#:key inputs #:allow-other-keys)
+             (let ((gdb (search-input-file inputs "bin/gdb"))
+                   (sh (search-input-file inputs "bin/sh")))
+               (substitute* "lib/util/fork_util.cpp"
+                 (("GDB = \"gdb\"") (string-append "GDB = \"" gdb "\"")))
+               (substitute* "cgdb/cgdb.cpp" (("/bin/sh") sh))))))))
+    (home-page "https://cgdb.github.io")
+    (synopsis "Console front-end to the GNU debugger")
+    (description
+     "@code{cgdb} is a lightweight curses (terminal-based) interface to the
+GNU Debugger (GDB).  In addition to the standard gdb console, cgdb provides
+a split screen view that displays the source code as it executes.  The
+keyboard interface is modeled after vim, so vim users should feel at home
+using cgdb.")
     (license license:gpl2+)))
 
 (define-public mspdebug
@@ -773,17 +806,16 @@ use than similar tools like @command{mtrace}.")
                  (base32 "1lgw1dsc1aglyja610ichadvgs5b0df3wlarinczb0ykf431gjln"))))
       (build-system gnu-build-system)
       (arguments
-       `(#:tests? #f                         ; no test suite
+       `(#:tests? #f                    ; no test suite
          #:phases
          (modify-phases %standard-phases
-           (delete 'configure))              ; no configure script
+           (delete 'configure))         ; no configure script
          #:make-flags
          (list (string-append "CC=" ,(cc-for-target))
                "INSTALL=install"
                (string-append "PREFIX=" %output))))
       (inputs
-       `(("libusb-compat" ,libusb-compat)
-         ("readline" ,readline)))
+       (list libusb-compat readline))
       (synopsis "Debugging tool for MSP430 MCUs")
       (description "MspDebug supports FET430UIF, eZ430, RF2500 and Olimex
 MSP430-JTAG-TINY programmers, as well as many other compatible

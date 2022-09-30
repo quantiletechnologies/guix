@@ -39,6 +39,7 @@
             source-properties->location
             location->source-properties
             location->string
+            location->hyperlink
 
             &error-location
             error-location?
@@ -54,7 +55,9 @@
             condition-fix-hint
 
             guix-warning-port
-            program-name))
+            program-name
+
+            define-with-syntax-properties))
 
 ;;; Commentary:
 ;;;
@@ -201,7 +204,10 @@ macro-expansion time."
                     (gettext prefix %gettext-domain))))
     (if location
         (format (guix-warning-port) "~a: ~a"
-                (location-color (location->string location))
+                (location-color
+                 (if (supports-hyperlinks? (guix-warning-port))
+                     (location->hyperlink location)
+                     (location->string location)))
                 (prefix-color prefix))
         (format (guix-warning-port) "~:[~*~;guix ~a: ~]~a"
                 (program-name) (program-name)
@@ -226,7 +232,7 @@ macro-expansion time."
 by Guile's `source-properties', `frame-source', `current-source-location',
 etc."
   ;; In accordance with the GCS, start line and column numbers at 1.  Note
-  ;; that unlike LINE and `port-column', COL is actually 1-indexed here...
+  ;; that unlike LINE and `port-column', COL is actually 0-indexed here...
   (match loc
     ((('line . line) ('column . col) ('filename . file)) ;common case
      (and file line col
@@ -256,6 +262,16 @@ a location object."
     (#f (G_ "<unknown location>"))
     (($ <location> file line column)
      (format #f "~a:~a:~a" file line column))))
+
+(define (location->hyperlink location)
+  "Return a string corresponding to LOCATION, with escapes for a hyperlink."
+  (let ((str  (location->string location))
+        (file (if (string-prefix? "/" (location-file location))
+                  (location-file location)
+                  (search-path %load-path (location-file location)))))
+    (if file
+        (file-hyperlink file str)
+        str)))
 
 (define-condition-type &error-location &error
   error-location?
@@ -331,3 +347,37 @@ number of arguments in ARGS matches the escapes in FORMAT."
 (define program-name
   ;; Name of the command-line program currently executing, or #f.
   (make-parameter #f))
+
+
+(define-syntax define-with-syntax-properties
+  (lambda (x)
+    "Define BINDING to be a syntax form replacing each VALUE-IDENTIFIER and
+SYNTAX-PROPERTIES-IDENTIFIER in body by the syntax and syntax-properties,
+respectively, of each ensuing syntax object."
+    (syntax-case x ()
+      ((_ (binding (value-identifier syntax-properties-identifier)
+                   ...)
+          body ...)
+       (and (and-map identifier? #'(value-identifier ...))
+            (and-map identifier? #'(syntax-properties-identifier ...)))
+       #'(define-syntax binding
+           (lambda (y)
+             (with-ellipsis :::
+               (syntax-case y ()
+                 ((_ value-identifier ...)
+                  (with-syntax ((syntax-properties-identifier
+                                 #`'#,(datum->syntax y
+                                                     (syntax-source
+                                                      #'value-identifier)))
+                                ...)
+                    #'(begin body ...)))
+                 (_
+                  (syntax-violation #f (format #f
+                                               "Expected (~a~{ ~a~})"
+                                               'binding
+                                               '(value-identifier ...))
+                                    y)))))))
+      (_
+       (syntax-violation #f "Expected a definition of the form \
+(define-with-syntax-properties (binding (value syntax-properties) \
+...) body ...)" x)))))

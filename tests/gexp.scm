@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
-;;; Copyright © 2021 Maxime Devos <maximedevos@telenet.be>
+;;; Copyright © 2014-2022 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2021-2022 Maxime Devos <maximedevos@telenet.be>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -28,6 +28,7 @@
   #:use-module (guix tests)
   #:use-module ((guix build utils) #:select (with-directory-excursion))
   #:use-module ((guix utils) #:select (call-with-temporary-directory))
+  #:use-module ((guix ui) #:select (load*))
   #:use-module (gnu packages)
   #:use-module (gnu packages base)
   #:use-module (gnu packages bootstrap)
@@ -120,12 +121,37 @@
   (let ((inside (file-append coreutils "/bin/hello")))
     (gexp->approximate-sexp #~(display '#$inside))))
 
+;; See <https://issues.guix.gnu.org/54236>.
+(test-equal "unquoted sexp (not a gexp!)"
+  '(list #(foo) (foo) () "foo" foo #xf00)
+  (let ((inside/vector #(foo))
+        (inside/list '(foo))
+        (inside/empty '())
+        (inside/string "foo")
+        (inside/symbol 'foo)
+        (inside/number #xf00))
+    (gexp->approximate-sexp
+     #~(list #$inside/vector #$inside/list #$inside/empty #$inside/string
+             #$inside/symbol #$inside/number))))
+
 (test-equal "no refs"
   '(display "hello!")
   (let ((exp (gexp (display "hello!"))))
     (and (gexp? exp)
          (null? (gexp-inputs exp))
          (gexp->sexp* exp))))
+
+(test-equal "sexp->gexp"
+  '(a b (c d) e)
+  (let ((exp (sexp->gexp '(a b (c d) e))))
+    (and (gexp? exp)
+         (null? (gexp-inputs exp))
+         (gexp->sexp* exp))))
+
+(test-equal "gexp->approximate-sexp, outputs"
+  '(list 'out:foo (*approximate*) 'out:bar (*approximate*))
+  (gexp->approximate-sexp
+   #~(list 'out:foo #$output:foo 'out:bar #$output:bar)))
 
 (test-equal "unquote"
   '(display `(foo ,(+ 2 3)))
@@ -214,6 +240,32 @@
     (with-directory-excursion directory
       (let ((file (local-file (string-copy "../base32.scm"))))
         (local-file-absolute-file-name file)))))
+
+(test-assert "local-file, relative file name, within gexp"
+  (let* ((file     (search-path %load-path "guix/base32.scm"))
+         (interned (add-to-store %store "base32.scm" #f "sha256" file)))
+    (equal? `(the file is ,interned)
+            (gexp->sexp*
+             #~(the file is #$(local-file "../guix/base32.scm"))))))
+
+(test-assert "local-file, relative file name, within gexp, compiled"
+  ;; In Guile 3.0.8, everything read by the #~ and #$ read hash extensions
+  ;; would lack source location info, which in turn would lead
+  ;; (current-source-directory), called by 'local-file', to return #f, thereby
+  ;; breaking 'local-file' resolution.  See
+  ;; <https://issues.guix.gnu.org/54003>.
+  (let ((file (tmpnam)))
+    (call-with-output-file file
+      (lambda (port)
+        (display (string-append "#~(this file is #$(local-file \""
+                                (basename file) "\" \"t.scm\"))")
+                 port)))
+
+    (let* ((interned (add-to-store %store "t.scm" #f "sha256" file))
+           (module   (make-fresh-user-module)))
+      (module-use! module (resolve-interface '(guix gexp)))
+      (equal? `(this file is ,interned)
+              (gexp->sexp* (load* file module))))))
 
 (test-assertm "local-file, #:select?"
   (mlet* %store-monad ((select? -> (lambda (file stat)
@@ -434,12 +486,23 @@
                   '(system-binding)))
             (x x)))))
 
+(test-assert "let-system in file-append"
+  (let ((mixed (file-append (let-system (system target)
+                              (if (not target) grep sed))
+                            "/bin"))
+        (grep  (file-append grep "/bin"))
+        (sed   (file-append sed "/bin")))
+    (and (equal? (gexp->sexp* #~(list #$mixed))
+                 (gexp->sexp* #~(list #$grep)))
+         (equal? (gexp->sexp* #~(list #$mixed) "powerpc64le-linux-gnu")
+                 (gexp->sexp* #~(list #$sed) "powerpc64le-linux-gnu")))))
+
 (test-assert "ungexp + ungexp-native"
   (let* ((exp    (gexp (list (ungexp-native %bootstrap-guile)
                              (ungexp coreutils)
                              (ungexp-native glibc)
                              (ungexp binutils))))
-         (target "mips64el-linux")
+         (target "mips64el-linux-gnu")
          (guile  (derivation->output-path
                   (package-derivation %store %bootstrap-guile)))
          (cu     (derivation->output-path
@@ -484,7 +547,7 @@
                  (gexp->sexp* exp)))))
 
 (test-assert "input list + ungexp-native"
-  (let* ((target "mips64el-linux")
+  (let* ((target "mips64el-linux-gnu")
          (exp   (gexp (display
                        (cons '(ungexp-native (list %bootstrap-guile coreutils))
                              '(ungexp (list glibc binutils))))))
@@ -701,7 +764,7 @@
                         intd)))))
 
 (test-assertm "gexp->derivation, cross-compilation"
-  (mlet* %store-monad ((target -> "mips64el-linux")
+  (mlet* %store-monad ((target -> "mips64el-linux-gnu")
                        (exp    -> (gexp (list (ungexp coreutils)
                                               (ungexp output))))
                        (xdrv      (gexp->derivation "foo" exp
@@ -715,7 +778,7 @@
                  (not (member (derivation-file-name cu) refs))))))
 
 (test-assertm "gexp->derivation, ungexp-native"
-  (mlet* %store-monad ((target -> "mips64el-linux")
+  (mlet* %store-monad ((target -> "mips64el-linux-gnu")
                        (exp    -> (gexp (list (ungexp-native coreutils)
                                               (ungexp output))))
                        (xdrv      (gexp->derivation "foo" exp
@@ -725,7 +788,7 @@
                       (derivation-file-name xdrv)))))
 
 (test-assertm "gexp->derivation, ungexp + ungexp-native"
-  (mlet* %store-monad ((target -> "mips64el-linux")
+  (mlet* %store-monad ((target -> "mips64el-linux-gnu")
                        (exp    -> (gexp (list (ungexp-native coreutils)
                                               (ungexp glibc)
                                               (ungexp output))))
@@ -739,7 +802,7 @@
                  (member (derivation-file-name xglibc) refs)))))
 
 (test-assertm "gexp->derivation, ungexp-native + composed gexps"
-  (mlet* %store-monad ((target -> "mips64el-linux")
+  (mlet* %store-monad ((target -> "mips64el-linux-gnu")
                        (exp0   -> (gexp (list 1 2
                                               (ungexp coreutils))))
                        (exp    -> (gexp (list 0 (ungexp-native exp0))))
@@ -827,19 +890,14 @@
                        (files -> `(("a/b/c" . ,q-scm)
                                    ("p/q"   . ,plain)))
                        (drv      (imported-files files)))
-    (define (file=? file1 file2)
-      ;; Assume deduplication is in place.
-      (= (stat:ino (stat file1))
-         (stat:ino (stat file2))))
-
     (mbegin %store-monad
       (built-derivations (list (pk 'drv drv)))
       (mlet %store-monad ((dir -> (derivation->output-path drv))
                           (plain* (text-file "foo" "bar!"))
                           (q-scm* (interned-file q-scm "c")))
         (return
-         (and (file=? (string-append dir "/a/b/c") q-scm*)
-              (file=? (string-append dir "/p/q") plain*)))))))
+         (and (file=? (string-append dir "/a/b/c") q-scm* stat)
+              (file=? (string-append dir "/p/q") plain* stat)))))))
 
 (test-equal "gexp-modules & ungexp"
   '((bar) (foo))
@@ -1400,6 +1458,7 @@ importing.* \\(guix config\\) from the host"
 
 (test-assertm "mixed-text-file"
   (mlet* %store-monad ((file ->   (mixed-text-file "mixed"
+                                                   #:guile %bootstrap-guile
                                                    "export PATH="
                                                    %bootstrap-guile "/bin"))
                        (drv       (lower-object file))
@@ -1417,7 +1476,8 @@ importing.* \\(guix config\\) from the host"
   (mlet* %store-monad ((union -> (file-union "union"
                                              `(("a" ,(plain-file "a" "1"))
                                                ("b/c/d" ,(plain-file "d" "2"))
-                                               ("e" ,(plain-file "e" "3")))))
+                                               ("e" ,(plain-file "e" "3")))
+                                             #:guile %bootstrap-guile))
                        (drv      (lower-object union))
                        (out ->   (derivation->output-path drv)))
     (define (contents=? file str)
@@ -1456,7 +1516,8 @@ importing.* \\(guix config\\) from the host"
                        (symlink #$%bootstrap-guile
                                 (string-append #$output "/guile"))
                        (symlink #$text (string-append #$output "/text"))))
-         (computed (computed-file "computed" exp)))
+         (computed (computed-file "computed" exp
+                                  #:guile %bootstrap-guile)))
     (mlet* %store-monad ((text      (lower-object text))
                          (guile-drv (lower-object %bootstrap-guile))
                          (comp-drv  (lower-object computed))
@@ -1467,6 +1528,43 @@ importing.* \\(guix config\\) from the host"
                                (derivation->output-path guile-drv))
                      (string=? (readlink (string-append comp "/text"))
                                text)))))))
+
+(test-assert "lower-object, computed-file + grafts"
+  ;; The reference graph should refer to grafted packages when grafts are
+  ;; enabled.  See <https://issues.guix.gnu.org/50676>.
+  (let* ((base    (package
+                    (inherit (dummy-package "trivial"))
+                    (build-system trivial-build-system)
+                    (arguments
+                     `(#:guile ,%bootstrap-guile
+                       #:builder (mkdir %output)))))
+         (pkg     (package
+                    (inherit base)
+                    (version "1.1")
+                    (replacement (package
+                                   (inherit base)
+                                   (version "9.9")))))
+         (exp      #~(begin
+                       (use-modules (ice-9 rdelim))
+                       (let ((item (call-with-input-file "graph" read-line)))
+                         (call-with-output-file #$output
+                           (lambda (port)
+                             (display item port))))))
+         (computed (computed-file "computed" exp
+                                  #:options
+                                  `(#:references-graphs (("graph" ,pkg)))
+                                  #:guile %bootstrap-guile))
+         (drv0     (package-derivation %store pkg #:graft? #t))
+         (drv1     (parameterize ((%graft? #t))
+                     (run-with-store %store
+                       (lower-object computed)))))
+    (build-derivations %store (list drv1))
+
+    ;; The graph obtained in COMPUTED should refer to the grafted version of
+    ;; PKG, not to PKG itself.
+    (string=? (call-with-input-file (derivation->output-path drv1)
+                get-string-all)
+              (derivation->output-path drv0))))
 
 (test-equal "lower-object, computed-file, #:system"
   '("mips64el-linux")
@@ -1485,6 +1583,46 @@ importing.* \\(guix config\\) from the host"
                                       (derivation-system drv))))
                              (cons (derivation-file-name drv)
                                    refs))))))))
+
+(test-assertm "lower-object, computed-file, #:target"
+  (let* ((target   "i586-pc-gnu")
+         (computed (computed-file "computed-cross"
+                                  #~(symlink #$coreutils output)
+                                  #:guile (default-guile))))
+    ;; When lowered to TARGET, the derivation of COMPUTED should run natively,
+    ;; using a native Guile, but it should refer to the target COREUTILS.
+    (mlet* %store-monad ((drv    (lower-object computed (%current-system)
+                                               #:target target))
+                         (refs   (references* (derivation-file-name drv)))
+                         (guile  (lower-object (default-guile)
+                                               (%current-system)
+                                               #:target #f))
+                         (cross  (lower-object coreutils #:target target))
+                         (native (lower-object coreutils #:target #f)))
+      (return (and (string=? (derivation-system (pk 'drv drv)) (%current-system))
+                   (string=? (derivation-builder drv)
+                             (string-append (derivation->output-path guile)
+                                            "/bin/guile"))
+                   (not (member (derivation-file-name native) refs))
+                   (member (derivation-file-name cross) refs))))))
+
+(test-assertm "references-file"
+  (let* ((exp      #~(symlink #$%bootstrap-guile #$output))
+         (computed (computed-file "computed" exp
+                                  #:guile %bootstrap-guile))
+         (refs     (references-file computed "refs"
+                                    #:guile %bootstrap-guile)))
+    (mlet* %store-monad ((drv0 (lower-object %bootstrap-guile))
+                         (drv1 (lower-object computed))
+                         (drv2 (lower-object refs)))
+      (mbegin %store-monad
+        (built-derivations (list drv2))
+        (mlet %store-monad ((refs ((store-lift requisites)
+                                   (list (derivation->output-path drv1)))))
+          (return (lset= string=?
+                         (call-with-input-file (derivation->output-path drv2)
+                           read)
+                         refs)))))))
 
 (test-assert "lower-object & gexp-input-error?"
   (guard (c ((gexp-input-error? c)

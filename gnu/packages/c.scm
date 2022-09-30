@@ -1,17 +1,22 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2016, 2018 Ludovic Courtès <ludo@gnu.org>
-;;; Copyright © 2016, 2017, 2018, 2019 Ricardo Wurmus <rekado@elephly.net>
-;;; Copyright © 2018, 2020, 2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2016, 2017, 2018, 2019, 2021 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2018, 2020–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018, 2019 Pierre Neidhardt <mail@ambrevar.xyz>
-;;; Copyright © 2019, 2020 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2019, 2020, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2019, 2021 Guillaume Le Vaillant <glv@posteo.net>
 ;;; Copyright © 2019 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2020, 2021 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2020 Katherine Cox-Buday <cox.katherine.e@gmail.com>
-;;; Copyright © 2020 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2020, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2020, 2021 Greg Hogan <code@greghogan.com>
 ;;; Copyright © 2021 David Dashyan <mail@davie.li>
+;;; Copyright © 2021 Foo Chuan Wei <chuanwei.foo@hotmail.com>
+;;; Copyright © 2022 (unmatched parenthesis <paren@disroot.org>
+;;; Copyright © 2022 Artyom V. Poptsov <poptsov.artyom@gmail.com>
+;;; Copyright © 2022 Ekaitz Zarraga <ekaitz@elenq.tech>
+;;; Copyright © 2022 ( <paren@disroot.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -30,19 +35,23 @@
 
 (define-module (gnu packages c)
   #:use-module ((guix licenses) #:prefix license:)
+  #:use-module (guix gexp)
   #:use-module (guix utils)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system gnu)
+  #:use-module (guix build-system python)
   #:use-module (guix build-system trivial)
+  #:use-module (guix store)
   #:use-module (gnu packages)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages bootstrap)
   #:use-module (gnu packages bison)
   #:use-module (gnu packages check)
   #:use-module (gnu packages flex)
+  #:use-module (gnu packages gcc)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages texinfo)
   #:use-module (gnu packages guile)
@@ -55,62 +64,114 @@
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages tls)
+  #:use-module (gnu packages web)
   #:use-module (gnu packages xml))
 
+(define-public cproc
+  (let ((commit "70fe9ef1810cc6c05bde9eb0970363c35fa7e802")
+        (revision "1"))
+    (package
+      (name "cproc")
+      (version (git-version "0.0" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://git.sr.ht/~mcf/cproc")
+               (commit commit)))
+         (file-name (git-file-name name version))
+         (sha256
+          (base32 "1qmgzll7z7mn587azkj4cizyyd8ii6iznfxpc66ja08140sbn9yx"))))
+      (build-system gnu-build-system)
+      (arguments
+       (list
+        #:make-flags
+        #~(list (string-append "CC=" #$(cc-for-target))
+                (string-append "PREFIX=" #$output))
+        #:phases
+        #~(modify-phases %standard-phases
+            (replace 'configure
+              (lambda* (#:key inputs #:allow-other-keys)
+                (let ((gcc-lib (assoc-ref inputs "gcc:lib"))
+                      (host-system #$(nix-system->gnu-triplet
+                                      (%current-system)))
+                      (target-system #$(nix-system->gnu-triplet
+                                        (or (%current-target-system)
+                                            (%current-system)))))
+                  (invoke "./configure"
+                          (string-append "--prefix=" #$output)
+                          (string-append "--host=" host-system)
+                          (string-append "--target=" target-system)
+                          (string-append "--with-ld=" #$(ld-for-target))
+                          (string-append "--with-gcc-libdir=" gcc-lib))))))))
+      (inputs `(("qbe" ,qbe)
+                ("gcc:lib" ,gcc "lib")))
+      (supported-systems (list "x86_64-linux" "aarch64-linux"))
+      (synopsis "Simple C11 compiler backed by QBE")
+      (description "@code{cproc} is a C compiler using QBE as a backend,
+ supporting most of C11 along with some GCC and C2x extensions.")
+      (home-page "https://sr.ht/~mcf/cproc")
+      (license license:expat))))
+
 (define-public tcc
-  (package
-    (name "tcc")                                  ;aka. "tinycc"
-    (version "0.9.27")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append "mirror://savannah/tinycc/tcc-"
-                                  version ".tar.bz2"))
-              (sha256
-               (base32
-                "177bdhwzrnqgyrdv1dwvpd04fcxj68s5pm1dzwny6359ziway8yy"))))
-    (build-system gnu-build-system)
-    (native-inputs `(("perl" ,perl)
-                     ("texinfo" ,texinfo)))
-    (arguments
-     `(#:configure-flags (list (string-append "--elfinterp="
-                                              (assoc-ref %build-inputs "libc")
-                                              ,(glibc-dynamic-linker))
-                               (string-append "--crtprefix="
-                                              (assoc-ref %build-inputs "libc")
-                                              "/lib")
-                               (string-append "--sysincludepaths="
-                                              (assoc-ref %build-inputs "libc")
-                                              "/include:"
-                                              (assoc-ref %build-inputs
-                                                         "kernel-headers")
-                                              "/include:{B}/include")
-                               (string-append "--libpaths="
-                                              (assoc-ref %build-inputs "libc")
-                                              "/lib")
-                               ,@(if (string-prefix? "armhf-linux"
-                                                     (or (%current-target-system)
-                                                         (%current-system)))
-                                     `("--triplet=arm-linux-gnueabihf")
-                                     '()))
-       #:test-target "test"))
-    (native-search-paths
-     (list (search-path-specification
-            (variable "CPATH")
-            (files '("include")))
-           (search-path-specification
-            (variable "LIBRARY_PATH")
-            (files '("lib" "lib64")))))
-    ;; Fails to build on MIPS: "Unsupported CPU"
-    (supported-systems (delete "mips64el-linux" %supported-systems))
-    (synopsis "Tiny and fast C compiler")
-    (description
-     "TCC, also referred to as \"TinyCC\", is a small and fast C compiler
+  ;; There's currently no release fixing <https://issues.guix.gnu.org/52140>.
+  (let ((revision "1")
+        (commit "a83b28568596afd8792fd58d1a5bd157fc6b6634"))
+    (package
+      (name "tcc")                                ;aka. "tinycc"
+      (version (git-version "0.9.27" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "git://repo.or.cz/tinycc.git")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "01znw86fg73x3k0clafica4b6glbhz69p588kvp766i0zgvs68dh"))))
+      (build-system gnu-build-system)
+      (native-inputs (list perl texinfo))
+      (arguments
+       `(#:configure-flags (list (string-append "--elfinterp="
+                                                (assoc-ref %build-inputs
+                                                           "libc")
+                                                ,(glibc-dynamic-linker))
+                                 (string-append "--crtprefix="
+                                                (assoc-ref %build-inputs
+                                                           "libc") "/lib")
+                                 (string-append "--sysincludepaths="
+                                                (assoc-ref %build-inputs
+                                                           "libc") "/include:"
+                                                (assoc-ref %build-inputs
+                                                           "kernel-headers")
+                                                "/include:{B}/include")
+                                 (string-append "--libpaths="
+                                                (assoc-ref %build-inputs
+                                                           "libc") "/lib")
+                                 ,@(if (string-prefix? "armhf-linux"
+                                                       (or (%current-target-system)
+                                                           (%current-system)))
+                                       `("--triplet=arm-linux-gnueabihf")
+                                       '()))
+         #:test-target "test"))
+      (native-search-paths
+       (list (search-path-specification
+              (variable "CPATH")
+              (files '("include")))
+             (search-path-specification
+              (variable "LIBRARY_PATH")
+              (files '("lib" "lib64")))))
+      ;; Fails to build on MIPS: "Unsupported CPU"
+      (supported-systems (delete "mips64el-linux" %supported-systems))
+      (synopsis "Tiny and fast C compiler")
+      (description
+       "TCC, also referred to as \"TinyCC\", is a small and fast C compiler
 written in C.  It supports ANSI C with GNU and extensions and most of the C99
 standard.")
-    (home-page "http://www.tinycc.org/")
-    ;; An attempt to re-licence tcc under the Expat licence is underway but not
-    ;; (if ever) complete.  See the RELICENSING file for more information.
-    (license license:lgpl2.1+)))
+      (home-page "http://www.tinycc.org/")
+      ;; An attempt to re-licence tcc under the Expat licence is underway but not
+      ;; (if ever) complete.  See the RELICENSING file for more information.
+      (license license:lgpl2.1+))))
 
 (define-public pcc
   (package
@@ -125,13 +186,21 @@ standard.")
                 "1p34w496095mi0473f815w6wbi57zxil106mg7pj6sg6gzpjcgww"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (replace 'check
-           (lambda _ (invoke "make" "-C" "cc/cpp" "test") #t)))))
-    (native-inputs
-     `(("bison" ,bison)
-       ("flex" ,flex)))
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'fix-multiple-definitions
+                 (lambda _
+                   ;; Certain variables are defined multiple times. This
+                   ;; upsets the linker and causes a build failure.
+                   (substitute* "cc/ccom/pass1.h"
+                     (("FLT flt_zero;") "extern FLT flt_zero;"))
+                   (substitute* (list "cc/ccom/scan.l" "cc/cxxcom/scan.l")
+                     (("lineno, ") ""))))
+               (replace 'check
+                 (lambda* (#:key tests? #:allow-other-keys)
+                   (when tests?
+                     (invoke "make" "-C" "cc/cpp" "test")))))))
+    (native-inputs (list bison flex))
     (synopsis "Portable C compiler")
     (description
      "PCC is a portable C compiler.  The project goal is to write a C99
@@ -142,10 +211,75 @@ compiler while still keeping it small, simple, fast and understandable.")
     ;; preferred.  See http://pcc.ludd.ltu.se/licenses/ for more details.
     (license (list license:bsd-2 license:bsd-3))))
 
+(define-public qbe
+  (package
+    (name "qbe")
+    (version "1.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "git://c9x.me/qbe")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0qx4a3fjjrp2m4dsn19rpbjf89k9w7w7l09s96jx8vv15vzsdgis"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list #:make-flags
+           #~(list (string-append "CC=" #$(cc-for-target))
+                   (string-append "PREFIX=" #$output))
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'allow-cross-compilation
+                 (lambda _
+                   (substitute* "Makefile"
+                     (("`uname -m`") #$(or (%current-target-system)
+                                           (%current-system))))))
+               (delete 'configure))))
+    (supported-systems (list "x86_64-linux" "aarch64-linux" "riscv64-linux"))
+    (synopsis "Simple compiler backend")
+    (description
+     "QBE is a small compiler backend using an SSA-based intermediate
+language as input.")
+    (home-page "https://c9x.me/compile/")
+    (license license:expat)))
+
+(define-public python-pcpp
+  (package
+    (name "python-pcpp")
+    (version "1.30")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/ned14/pcpp")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "1rihvlg11nzk70kfzz4i3gi5izcy46w05ismcx04p5j1hlim0brb"))))
+    (build-system python-build-system)
+    (arguments
+     (list
+      #:phases #~(modify-phases %standard-phases
+                   (add-after 'unpack 'unbundle-ply
+                     (lambda _
+                       (rmdir "pcpp/ply")
+                       (substitute* "setup.py"
+                         (("'pcpp/ply/ply'") "")))))))
+    (native-inputs (list python-pytest))
+    (propagated-inputs (list python-ply))
+    (home-page "https://github.com/ned14/pcpp")
+    (synopsis "C99 preprocessor written in Python")
+    (description "This package provides a C99 preprocessor written in pure
+Python.")
+    (license license:bsd-3)))
+
 (define-public libbytesize
   (package
     (name "libbytesize")
-    (version "2.2")
+    (version "2.6")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -153,17 +287,14 @@ compiler while still keeping it small, simple, fast and understandable.")
                     "download/" version "/libbytesize-" version ".tar.gz"))
               (sha256
                (base32
-                "1aivwypmnqcaj2230pifvf3jcgl5chja8rspkxf0j3480asm8g5r"))))
+                "0h87ryi0mp8msq43h1cna453cqaw5knx1xaggfzm4fxvn8sjpapg"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f))
     (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("pkg-config" ,pkg-config)
-       ("python" ,python)))
+     (list gettext-minimal pkg-config python))
     (inputs
-     `(("mpfr" ,mpfr)
-       ("pcre2" ,pcre2)))
+     (list mpfr pcre2))
     (home-page "https://github.com/storaged-project/libbytesize")
     (synopsis "Tiny C library for working with arbitrary big sizes in bytes")
     (description
@@ -205,7 +336,7 @@ language with thin bindings for other languages.")
      `(#:configure-flags
        (list "--disable-static")))
     (inputs
-     `(("expat" ,expat)))
+     (list expat))
     (home-page "https://www.unidata.ucar.edu/software/udunits/")
     (synopsis "C library for units of physical quantities and value-conversion utils")
     (description
@@ -238,11 +369,12 @@ Its three main components are:
          "1x4q6yspi5g2s98vq4qszw4z3zjgk9l5zs8471w4d4cs6l97w08j"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)
-       ("check" ,check)))
+     (list autoconf automake libtool pkg-config check))
+    (native-search-paths
+     (list
+      (search-path-specification
+       (variable "C_INCLUDE_PATH")
+       (files '("include")))))
     (synopsis "Thin wrapper over POSIX syscalls")
     (description
      "The purpose of libfixposix is to offer replacements for parts of POSIX
@@ -252,14 +384,14 @@ whose behaviour is inconsistent across *NIX flavours.")
 (define-public libhx
   (package
     (name "libhx")
-    (version "4.1")
+    (version "4.3")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://inai.de/files/libhx/"
                            "libHX-" version ".tar.xz"))
        (sha256
-        (base32 "1mifpzxr5kma7gawhv1vbga8j5qi8jgka0axr48v08bdpb83pya2"))))
+        (base32 "06zkzaya6j3vaafz80qcgn5qcri047003bhmjisv5sbikcw97jqy"))))
     (build-system gnu-build-system)
     (home-page "https://inai.de/projects/libhx/")
     (synopsis "C library with common data structures and functions")
@@ -317,7 +449,7 @@ checking casts and more.")
                                     headers)
                           (install-file "libwuya.a" (string-append out "/lib"))
                           #t))))))
-      (inputs `(("lua" ,lua)))
+      (inputs (list lua))
       (home-page "https://github.com/WuBingzheng/libwuya/")
       (synopsis "C library implementing various data structures")
       (description "The @code{libwuya} library implements data structures such
@@ -331,7 +463,7 @@ as dictionaries, skip lists, and memory pools.")
 (define-public packcc
   (package
     (name "packcc")
-    (version "1.5.0")
+    (version "1.8.0")
     (home-page "https://github.com/arithy/packcc")
     (source (origin
               (method git-fetch)
@@ -341,7 +473,7 @@ as dictionaries, skip lists, and memory pools.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1n9ivsa6b9ps2jbh34bycjqjpbwbk85l4jjg46pfhqxzz96793wy"))))
+                "0b25p7ri1l2l20awyknljfnj7r4rg7cf2x3bljijx5q6j8rxdcsg"))))
     (build-system gnu-build-system)
     (arguments
      '(#:phases (modify-phases %standard-phases
@@ -365,10 +497,9 @@ as dictionaries, skip lists, and memory pools.")
                         (install-file "release/bin/packcc"
                                       (string-append out "/bin"))
                         (install-file "../../README.md"
-                                      (string-append out "/share/doc/packcc"))
-                        #t))))))
+                                      (string-append out "/share/doc/packcc"))))))))
     (native-inputs
-     `(("bats" ,bats)))
+     (list bats))
     (synopsis "Packrat parser generator for C")
     (description
      "PackCC is a packrat parser generator for the C programming language.
@@ -398,7 +529,7 @@ any other grammar rules.")
                (base32
                 "0z1qds52144nvsdnl82r3zs3vax618v920jmffyyssmwj54qpcka"))))
     (build-system gnu-build-system)
-    (inputs `(("perl" ,perl)))
+    (inputs (list perl))
     (arguments
      '(#:make-flags `(,(string-append "PREFIX=" (assoc-ref %outputs "out")))
        #:phases (modify-phases %standard-phases
@@ -441,10 +572,7 @@ releases.")
          (replace 'bootstrap
            (lambda _ (invoke "autoreconf" "-vfi"))))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("pkg-config" ,pkg-config)
-       ("libtool" ,libtool)))
+     (list autoconf automake pkg-config libtool))
     (home-page "https://github.com/rsyslog/libestr")
     (synopsis "Helper functions for handling strings")
     (description
@@ -467,9 +595,7 @@ more, like escaping special characters.")
         (base32 "12rqcdqxazw8czzxbivdapdgj19pcswpw1jp2915sxbljis83g6q"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list autoconf automake libtool))
     (home-page "https://github.com/rsyslog/libfastjson")
     (synopsis "Fast JSON library for C")
     (description
@@ -500,18 +626,58 @@ with essential JSON handling functions, sufficiently good JSON support (not
          (replace 'bootstrap
            (lambda _ (invoke "autoreconf" "-vfi"))))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("pkg-config" ,pkg-config)
-       ("libtool" ,libtool)
-       ;; For rst2man.py
-       ("python-docutils" ,python-docutils)))
+     (list autoconf
+           automake
+           pkg-config
+           libtool
+           ;; For rst2man.py
+           python-docutils))
     (home-page "https://github.com/rsyslog/liblogging")
     (synopsis "Easy to use and lightweight signal-safe logging library")
     (description
      "Liblogging is an easy to use library for logging.  It offers an enhanced
 replacement for the syslog() call, but retains its ease of use.")
     (license license:bsd-2)))
+
+(define-public liblognorm
+  (package
+    (name "liblognorm")
+    (version "2.0.6")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/rsyslog/liblognorm.git")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "1pyy1swvq6jj12aqma42jimv71z8m66zy6ydd5v19cp2azm4krml"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:parallel-tests? #false ;not supported
+      #:phases
+      '(modify-phases %standard-phases
+         ;; These tests fail because tmp.rulebase is never created.  This
+         ;; looks rather harmless.
+         (add-after 'unpack 'delete-failing-tests
+           (lambda _
+             (substitute* "tests/Makefile.am"
+               (("string_rb_simple.sh ") "")
+               (("string_rb_simple_2_lines.sh ") "")))))))
+    (inputs
+     (list json-c libestr libfastjson))
+    (native-inputs
+     (list autoconf automake libtool pkg-config))
+    (home-page "https://www.liblognorm.com")
+    (synopsis "Fast samples-based log normalization library")
+    (description
+     "Liblognorm normalizes event data into well-defined name-value pairs and
+a set of tags describing the message.")
+    ;; liblognorm is very slowly transitioning to ASL2.0
+    ;; See https://github.com/rsyslog/liblognorm/issues/329
+    (license license:lgpl2.1+)))
 
 (define-public unifdef
   (package
@@ -538,7 +704,7 @@ replacement for the syslog() call, but retains its ease of use.")
                           (string-append "prefix=" %output))
        #:tests? #f))                    ;no test suite
     (native-inputs
-     `(("perl" ,perl)))
+     (list perl))
     (home-page "https://dotat.at/prog/unifdef/")
     (synopsis "Utility to selectively processes conditional C preprocessor")
     (description "The @command{unifdef} utility selectively processes
@@ -550,10 +716,33 @@ portability.")
     (license (list license:bsd-2        ;all files except...
                    license:bsd-3))))    ;...the unidef.1 manual page
 
+(define-public byacc
+  (package
+    (name "byacc")
+    (version "20220128")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "https://invisible-mirror.net/archives/byacc/byacc-"
+                   version ".tgz"))
+             (sha256
+              (base32
+               "173l5pdzgqk2ld6lf0ablii0iiw07sry2vrjfrm4wc99qmf81ha2"))))
+    (build-system gnu-build-system)
+    (home-page "https://invisible-island.net/byacc/byacc.html")
+    (synopsis "Berkeley Yacc LALR parser generator")
+    (description
+     "Berkeley Yacc is an LALR(1) parser generator.  Yacc reads the grammar
+specification from a file and generates an LALR(1) parser for it.  The parsers
+consist of a set of LALR(1) parsing tables and a driver routine written in the
+C programming language.")
+    (license license:public-domain)))
+
 (define-public aws-c-common
   (package
     (name "aws-c-common")
-    (version "0.6.2")
+    ;; Update only when updating aws-crt-cpp.
+    (version "0.6.20")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -562,12 +751,13 @@ portability.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "17iknzqs6dl0ixajplc47ylkyynwpi3x2dxh56wa8ylhgy53d09x"))))
+                "089grcj58n4xs41kmnpaqpwsalcisjbqqb5yqahxxyfx2lf1j9c9"))))
     (build-system cmake-build-system)
     (arguments
      '(#:configure-flags
        '("-DBUILD_SHARED_LIBS=ON")))
     (synopsis "Amazon Web Services core C library")
+    (supported-systems '("i686-linux" "x86_64-linux"))
     (description
      "This library provides common C99 primitives, configuration, data
  structures, and error handling for the @acronym{AWS,Amazon Web Services} SDK.")
@@ -577,6 +767,7 @@ portability.")
 (define-public aws-checksums
   (package
     (name "aws-checksums")
+    ;; Update only when updating aws-crt-cpp.
     (version "0.1.12")
     (source (origin
               (method git-fetch)
@@ -586,14 +777,15 @@ portability.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "054f2hkmkxhw83q7zsz349k82xk6bkrvlsab088pf7kn9wd4hy4k"))
-              (patches (search-patches "aws-checksums-cmake-prefix.patch"))))
+                "054f2hkmkxhw83q7zsz349k82xk6bkrvlsab088pf7kn9wd4hy4k"))))
     (build-system cmake-build-system)
     (arguments
      '(#:configure-flags
-       '("-DBUILD_SHARED_LIBS=ON")))
+       (list "-DBUILD_SHARED_LIBS=ON"
+             (string-append "-DCMAKE_PREFIX_PATH="
+                            (assoc-ref %build-inputs "aws-c-common")))))
     (inputs
-     `(("aws-c-common" ,aws-c-common)))
+     (list aws-c-common))
     (synopsis "Amazon Web Services checksum library")
     (description
      "This library provides cross-Platform hardware accelerated CRC32c and CRC32
@@ -604,6 +796,7 @@ with fallback to efficient C99 software implementations.")
 (define-public aws-c-event-stream
   (package
     (name "aws-c-event-stream")
+    ;; Update only when updating aws-crt-cpp.
     (version "0.2.7")
     (source (origin
               (method git-fetch)
@@ -613,19 +806,17 @@ with fallback to efficient C99 software implementations.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0xwwr7gdgfrphk6j7vk12rgimfim6m4qnj6hg8hgg16cplhvsfzh"))
-              (patches (search-patches "aws-c-event-stream-cmake-prefix.patch"))))
+                "0xwwr7gdgfrphk6j7vk12rgimfim6m4qnj6hg8hgg16cplhvsfzh"))))
     (build-system cmake-build-system)
     (arguments
      '(#:configure-flags
-       '("-DBUILD_SHARED_LIBS=ON")))
+       (list "-DBUILD_SHARED_LIBS=ON"
+             (string-append "-DCMAKE_PREFIX_PATH="
+                            (assoc-ref %build-inputs "aws-c-common")))))
     (propagated-inputs
-     `(("aws-c-common" ,aws-c-common)
-       ("aws-c-io" ,aws-c-io)
-       ("aws-checksums" ,aws-checksums)))
+     (list aws-c-common aws-c-io aws-checksums))
     (inputs
-     `(("aws-c-cal" ,aws-c-cal)
-       ("s2n" ,s2n)))
+     (list aws-c-cal s2n))
     (synopsis "Amazon Web Services client-server message format library")
     (description
      "This library is a C99 implementation for @acronym{AWS,Amazon Web Services}
@@ -637,7 +828,8 @@ communication.")
 (define-public aws-c-io
   (package
     (name "aws-c-io")
-    (version "0.10.5")
+    ;; Update only when updating aws-crt-cpp.
+    (version "0.10.20")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -646,19 +838,16 @@ communication.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1jrnzs803jqprnvbw6rqr834qld5sd7flaqzgssp3099m189szpq"))
-              (patches
-               (search-patches
-                "aws-c-io-cmake-prefix.patch"
-                "aws-c-io-disable-networking-tests.patch"))))
+                "07l5rfbm1irkigfv51sfygs992af8rxicmay97frbx6z21khdjnr"))))
     (build-system cmake-build-system)
     (arguments
      '(#:configure-flags
-       '("-DBUILD_SHARED_LIBS=ON")))
+       (list "-DBUILD_SHARED_LIBS=ON"
+             (string-append "-DCMAKE_PREFIX_PATH="
+                            (assoc-ref %build-inputs "aws-c-common"))
+             "-DENABLE_NET_TESTS=OFF")))
     (propagated-inputs
-     `(("aws-c-cal" ,aws-c-cal)
-       ("aws-c-common" ,aws-c-common)
-       ("s2n" ,s2n)))
+     (list aws-c-cal aws-c-common s2n))
     (synopsis "Event driven framework for implementing application protocols")
     (description "This library provides a C99 framework for constructing
 event-driven, asynchronous network application protocols.")
@@ -668,7 +857,8 @@ event-driven, asynchronous network application protocols.")
 (define-public aws-c-cal
   (package
     (name "aws-c-cal")
-    (version "0.5.11")
+    ;; Update only when updating aws-crt-cpp.
+    (version "0.5.17")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -677,14 +867,15 @@ event-driven, asynchronous network application protocols.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0rqqk4n56h8sf4q070rhgjwas04j8h0vq4wl1alq5l1rqq72qqdf"))
-              (patches (search-patches "aws-c-cal-cmake-prefix.patch"))))
+                "0gd7xfzv509vcysifzfa8j2rykkc1prhiry7953snblkzm7airm5"))))
     (build-system cmake-build-system)
     (arguments
      '(#:configure-flags
-       '("-DBUILD_SHARED_LIBS=ON")))
+       (list "-DBUILD_SHARED_LIBS=ON"
+             (string-append "-DCMAKE_PREFIX_PATH="
+                            (assoc-ref %build-inputs "aws-c-common")))))
     (propagated-inputs
-     `(("aws-c-common" ,aws-c-common)))
+     (list aws-c-common))
     (inputs
      `(("openssl" ,openssl)
        ("openssl:static" ,openssl "static")))
@@ -692,6 +883,34 @@ event-driven, asynchronous network application protocols.")
     (description "This library provides a C99 wrapper for hash, HMAC, and ECC
 cryptographic primitives for the @acronym{AWS,Amazon Web Services} SDK.")
     (home-page "https://github.com/awslabs/aws-c-cal")
+    (license license:asl2.0)))
+
+(define-public aws-c-sdkutils
+  (package
+    (name "aws-c-sdkutils")
+    ;; Update only when updating aws-crt-cpp.
+    (version "0.1.2")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url (string-append "https://github.com/awslabs/" name))
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "14wpl3dxwjbbzas44v6m6m3ll89rgz34x9gb140qz624gwzs9v0v"))))
+    (build-system cmake-build-system)
+    (arguments
+     '(#:configure-flags
+       (list "-DBUILD_SHARED_LIBS=ON"
+             (string-append "-DCMAKE_PREFIX_PATH="
+                            (assoc-ref %build-inputs "aws-c-common")))))
+    (propagated-inputs
+     (list aws-c-common))
+    (synopsis "Amazon Web Service utility library")
+    (description "This library provides for parsing and management of profiles
+for the @acronym{AWS,Amazon Web Services} SDK.")
+    (home-page "https://github.com/awslabs/aws-c-sdkutils")
     (license license:asl2.0)))
 
 (define-public pcl
@@ -716,7 +935,8 @@ low level functionality for coroutines.")
 (define-public aws-c-http
   (package
     (name "aws-c-http")
-    (version "0.6.4")
+    ;; Update only when updating aws-crt-cpp.
+    (version "0.6.13")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -725,18 +945,16 @@ low level functionality for coroutines.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "18xlgz68zizkcp784bs6hkyx0gvp0f1p076i46z653bcd3qa87b4"))
-              (patches
-               (search-patches
-                "aws-c-http-cmake-prefix.patch"
-                "aws-c-http-disable-networking-tests.patch"))))
+                "125glc9b3906r95519zqfbzzz6wj5ib4im2n45yxrigwkkpffbq9"))))
     (build-system cmake-build-system)
     (arguments
      '(#:configure-flags
-       '("-DBUILD_SHARED_LIBS=ON")))
+       (list "-DBUILD_SHARED_LIBS=ON"
+             (string-append "-DCMAKE_PREFIX_PATH="
+                            (assoc-ref %build-inputs "aws-c-common"))
+             "-DENABLE_NET_TESTS=OFF")))
     (propagated-inputs
-     `(("aws-c-compression" ,aws-c-compression)
-       ("aws-c-io" ,aws-c-io)))
+     (list aws-c-compression aws-c-io))
     (synopsis "Amazon Web Services HTTP library")
     (description
      "This library provides a C99 implementation of the HTTP/1.1 and HTTP/2
@@ -747,7 +965,8 @@ specifications.")
 (define-public aws-c-compression
   (package
     (name "aws-c-compression")
-    (version "0.2.13")
+    ;; Update only when updating aws-crt-cpp.
+    (version "0.2.14")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -756,14 +975,15 @@ specifications.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0zqfxi0fdgapfsfgvsindv63pq7vyl1s376qkpv4jgflyb1v6gp5"))
-              (patches (search-patches "aws-c-compression-cmake-prefix.patch"))))
+                "0fs3zhhzxsb9nfcjpvfbcq79hal7si2ia1c09scab9a8m264f4vd"))))
     (build-system cmake-build-system)
     (arguments
      '(#:configure-flags
-       '("-DBUILD_SHARED_LIBS=ON")))
+       (list "-DBUILD_SHARED_LIBS=ON"
+             (string-append "-DCMAKE_PREFIX_PATH="
+                            (assoc-ref %build-inputs "aws-c-common")))))
     (propagated-inputs
-     `(("aws-c-common" ,aws-c-common)))
+     (list aws-c-common))
     (synopsis "Amazon Web Services compression library")
     (description
      "This library provides a C99 implementation of compression algorithms,
@@ -774,7 +994,8 @@ currently limited to Huffman encoding and decoding.")
 (define-public aws-c-auth
   (package
     (name "aws-c-auth")
-    (version "0.6.0")
+    ;; Update only when updating aws-crt-cpp.
+    (version "0.6.11")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -783,20 +1004,19 @@ currently limited to Huffman encoding and decoding.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0yh9s6q3ahq39xgvihp2a5cn9h39qlq8wfjc32m0ayi9x739rbqg"))
+                "0frfnbifkrib9l68mj92a3g1x8xc8hpdlzbga2a801zgf2flx4fy"))
               (patches
                (search-patches
-                "aws-c-auth-cmake-prefix.patch"
-                "aws-c-auth-disable-networking-tests.patch"))))
+                "aws-c-auth-install-private-headers.patch"))))
     (build-system cmake-build-system)
     (arguments
      '(#:configure-flags
-       '("-DBUILD_SHARED_LIBS=ON")))
+       (list "-DBUILD_SHARED_LIBS=ON"
+             (string-append "-DCMAKE_PREFIX_PATH="
+                            (assoc-ref %build-inputs "aws-c-common"))
+             "-DENABLE_NET_TESTS=OFF")))
     (propagated-inputs
-     `(("aws-c-cal" ,aws-c-cal)
-       ("aws-c-common" ,aws-c-common)
-       ("aws-c-http" ,aws-c-http)
-       ("aws-c-io" ,aws-c-io)))
+     (list aws-c-cal aws-c-common aws-c-http aws-c-io aws-c-sdkutils))
     (synopsis "Amazon Web Services client-side authentication library")
     (description
      "This library provides a C99 implementation for AWS client-side
@@ -807,7 +1027,8 @@ authentication.")
 (define-public aws-c-s3
   (package
     (name "aws-c-s3")
-    (version "0.1.19")
+    ;; Update only when updating aws-crt-cpp.
+    (version "0.1.38")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -816,18 +1037,16 @@ authentication.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1vkjd8dh99d8qsl7irnbkcdf9vjmcznx0jz186la0472z4h48wjj"))
-              (patches
-               (search-patches
-                "aws-c-s3-cmake-prefix.patch"
-                "aws-c-s3-disable-networking-tests.patch"))))
+                "0n2y8hzb1bx3vnzlpb5hsav18dg33pwav0mpji6krz98y2l8msya"))))
     (build-system cmake-build-system)
     (arguments
      '(#:configure-flags
-       '("-DBUILD_SHARED_LIBS=ON")))
+       (list "-DBUILD_SHARED_LIBS=ON"
+             (string-append "-DCMAKE_PREFIX_PATH="
+                            (assoc-ref %build-inputs "aws-c-common"))
+             "-DENABLE_NET_TESTS=OFF")))
     (propagated-inputs
-     `(("aws-c-auth" ,aws-c-auth)
-       ("aws-c-http" ,aws-c-http)))
+     (list aws-c-auth aws-c-http aws-checksums))
     (synopsis "Amazon Web Services client library for Amazon S3")
     (description
      "This library provides a C99 client implementation of the Simple Storage
@@ -838,7 +1057,8 @@ Service (S3) protocol for object storage.")
 (define-public aws-c-mqtt
   (package
     (name "aws-c-mqtt")
-    (version "0.7.6")
+    ;; Update only when updating aws-crt-cpp.
+    (version "0.7.10")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -847,18 +1067,172 @@ Service (S3) protocol for object storage.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0qgblakp9n281z5w1kmmy9sjiz6s44kg487l76w7p43p1dp7s401"))
-              (patches (search-patches "aws-c-mqtt-cmake-prefix.patch"))))
+                "0qmzx8b4wcsq9s99q2zrhx1s3jdmfy8zs16qys9bqv45gspi3ybr"))))
     (build-system cmake-build-system)
     (arguments
      '(#:configure-flags
-       '("-DBUILD_SHARED_LIBS=ON")))
+       (list "-DBUILD_SHARED_LIBS=ON"
+             (string-append "-DCMAKE_PREFIX_PATH="
+                            (assoc-ref %build-inputs "aws-c-common")))))
     (propagated-inputs
-     `(("aws-c-http" ,aws-c-http)
-       ("aws-c-io" ,aws-c-io)))
+     (list aws-c-http aws-c-io))
     (synopsis "Amazon Web Services MQTT library")
     (description
      "This library provides a C99 implementation of the Message Queuing
 Telemetry Transport (MQTT) publish-subscribe messaging protocol.")
     (home-page "https://github.com/awslabs/aws-c-mqtt")
     (license license:asl2.0)))
+
+;;; Factored out of the ck package so that it can be adjusted and called on
+;;; the host side easily, without impacting the package definition.
+(define (gnu-triplet->ck-machine target)
+  (letrec-syntax
+      ((matches (syntax-rules (=>)
+                  ((_ (target-prefix => machine) rest ...)
+                   (if (string-prefix? target-prefix target)
+                       machine
+                       (matches rest ...)))
+                  ((_)
+                   (error "unsupported target" target)))))
+    ;; This basically reproduces the logic handling the
+    ;; PLATFORM variable in the configure script of ck.
+    (matches ("x86_64"      => "x86_64")
+             ("i586"        => "x86")
+             ("i686"        => "x86")
+             ("aarch64"     => "aarch64")
+             ("arm"         => "arm")
+             ("ppc64"       => "ppc64")
+             ("ppc"         => "ppc")
+             ("s390x"       => "s390x")
+             ("sparc64"     => "sparcv9"))))
+
+(define-public ck
+  (package
+    (name "ck")
+    (version "0.7.1")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/concurrencykit/ck")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "020yzfpvymdc8lc44znlnxmxb8mvp42g4nb4p8k814klazqvwh0x"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'configure
+            ;; ck uses a custom configure script that stumbles on
+            ;; '--enable-fast-install', among other things.
+            (lambda* (#:key parallel-build? #:allow-other-keys)
+              (define target-machine #$(and=> (%current-target-system)
+                                              gnu-triplet->ck-machine))
+              (when target-machine
+                ;; The configure script doesn't currently work for
+                ;; cross-compiling (see:
+                ;; https://github.com/concurrencykit/ck/issues/191).
+                (error "ck cannot currently be cross-compiled"))
+              ;; The custom configure script doesn't make cross-compilation
+              ;; adjustments itself, so manually set the archiver, compiler
+              ;; and linker.
+              (setenv "AR" #$(ar-for-target))
+              (setenv "CC" #$(cc-for-target))
+              (setenv "LD" #$(ld-for-target))
+              (apply invoke "./configure"
+                     `(,@(if target-machine
+                             (list (string-append "--profile=" target-machine))
+                             '())
+                       ,(string-append "--prefix=" #$output)
+                       ,(string-append "--mandir=" #$output "/share/man")
+                       ,(string-append "--cores="
+                                       (if parallel-build?
+                                           (number->string (parallel-job-count))
+                                           "1")))))))))
+    (home-page "https://github.com/concurrencykit/ck")
+    (synopsis "C library for concurrent systems")
+    (description "Concurrency Kit (@code{ck}) provides concurrency primitives,
+safe memory reclamation mechanisms and non-blocking (including lock-free) data
+structures designed to aid in the research, design and implementation of high
+performance concurrent systems developed in C99+.")
+    (license (list license:bsd-2        ;everything except...
+                   license:asl2.0))))   ;src/ck_hp.c
+
+(define-public utf8-h
+  ;; The latest tag is used as there is no release.
+  (let ((commit "500d4ea9f4c3449e5243c088d8af8700f7189734")
+        (revision "0"))
+    (package
+      (name "utf8-h")
+      (version (git-version "0.0.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/sheredom/utf8.h")
+                      (commit commit)))
+                (file-name (git-file-name "utf8.h" version))
+                (sha256
+                 (base32
+                  "0x9f7ivww8c7cigf4ck0hfx2bm79qgx6q4ccwzqbzkrmcrl9shfb"))))
+      (build-system cmake-build-system)
+      (arguments
+       `(#:phases
+         (modify-phases %standard-phases
+           (delete 'build)
+           (delete 'configure)
+           (replace 'check
+             (lambda* (#:key tests? #:allow-other-keys)
+               (when tests?
+                 (with-directory-excursion "test"
+                   (invoke "cmake" ".")
+                   (invoke "make")))))
+           (replace 'install
+             (lambda* (#:key outputs #:allow-other-keys)
+               (let ((out (assoc-ref outputs "out")))
+                 (install-file "utf8.h" (string-append out "/include"))))))))
+      (home-page "https://github.com/sheredom/utf8.h")
+      (synopsis "Single header UTF-8 string functions for C and C++")
+      (description "A simple one header solution to supporting UTF-8 strings in
+C and C++.  The functions it provides are like those from the C header
+string.h, but with a utf8* prefix instead of the str* prefix.")
+      (license license:unlicense))))
+
+(define-public utest-h
+  ;; The latest commit is used as there is no release.
+  (let ((commit   "54458e248f875f1a51f0af8bec8ca6ae7761b9d1")
+        (revision "0"))
+    (package
+      (name "utest-h")
+      (version (git-version "0.0.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/sheredom/utest.h")
+                      (commit commit)))
+                (file-name (git-file-name "utest.h" version))
+                (sha256
+                 (base32
+                  "1ikl5jwmjdw1mblqyl2kvnqwkjgaz78c1h7mjcfmzjc0d3h8kh44"))))
+      (build-system cmake-build-system)
+      (arguments
+       `(#:phases (modify-phases %standard-phases
+                    (delete 'build)
+                    (delete 'configure)
+                    (replace 'check
+                      (lambda* (#:key tests? #:allow-other-keys)
+                        (when tests?
+                          (with-directory-excursion "test"
+                                                    (invoke "cmake" ".")
+                                                    (invoke "make")))))
+                    (replace 'install
+                      (lambda* (#:key outputs #:allow-other-keys)
+                        (let ((out (assoc-ref outputs "out")))
+                          (install-file "utest.h"
+                                        (string-append out "/include"))))))))
+      (home-page "https://www.duskborn.com/utest_h/")
+      (synopsis "Single-header unit testing framework for C and C++")
+      (description
+       "This package provides a header-only unit testing library for C/C++.")
+      (license license:unlicense))))

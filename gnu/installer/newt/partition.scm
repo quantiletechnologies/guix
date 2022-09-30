@@ -36,10 +36,8 @@
   #:export (run-partitioning-page))
 
 (define (button-exit-action)
-  "Raise the &installer-step-abort condition."
-  (raise
-   (condition
-    (&installer-step-abort))))
+  "Abort the installer step."
+  (abort-to-prompt 'installer-step 'abort))
 
 (define (run-scheme-page)
   "Run a page asking the user for a partitioning scheme."
@@ -83,7 +81,8 @@ DEVICES list."
          devices))
 
   (let* ((result (run-listbox-selection-page
-                  #:info-text (G_ "Please select a disk.")
+                  #:info-text (G_ "Please select a \
+disk.  The installation device as well as the small devices are filtered.")
                   #:title (G_ "Disk")
                   #:listbox-items (device-items)
                   #:listbox-item->text cdr
@@ -792,17 +791,17 @@ by pressing the Exit button.~%~%")))
            result-user-partitions)))))
 
   (init-parted)
-  (let* ((non-install-devices (non-install-devices))
-         (user-partitions (run-page non-install-devices))
+  (let* ((eligible-devices (eligible-devices))
+         (user-partitions (run-page eligible-devices))
          (user-partitions-with-pass (prompt-luks-passwords
                                      user-partitions))
          (form (draw-formatting-page user-partitions)))
     ;; Make sure the disks are not in use before proceeding to formatting.
-    (free-parted non-install-devices)
+    (free-parted eligible-devices)
     (format-user-partitions user-partitions-with-pass)
-    (syslog "formatted ~a user partitions~%"
+    (installer-log-line "formatted ~a user partitions"
             (length user-partitions-with-pass))
-    (syslog "user-partitions: ~a~%" user-partitions)
+    (installer-log-line "user-partitions: ~a" user-partitions)
 
     (destroy-form-and-pop form)
     user-partitions))

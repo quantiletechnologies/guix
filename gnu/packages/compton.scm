@@ -3,6 +3,7 @@
 ;;; Copyright © 2018 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 Alexandru-Sergiu Marton <brown121407@member.fsf.org>
 ;;; Copyright © 2019 Brett Gilio <brettg@gnu.org>
+;;; Copyright © 2022 Jai Vetrivelan <jaivetrivelan@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -58,25 +59,21 @@
          (file-name (git-file-name name version))))
       (build-system gnu-build-system)
       (inputs
-       `(("dbus" ,dbus)
-         ("libconfig" ,libconfig)
-         ("libx11" ,libx11)
-         ("libxcomposite" ,libxcomposite)
-         ("libxdamage" ,libxdamage)
-         ("libxext" ,libxext)
-         ("libxfixes" ,libxfixes)
-         ("libxinerama" ,libxinerama)
-         ("libxrandr" ,libxrandr)
-         ("libxrender" ,libxrender)
-         ("mesa" ,mesa)
-         ("xprop" ,xprop)
-         ("xwininfo" ,xwininfo)))
+       (list dbus
+             libconfig
+             libx11
+             libxcomposite
+             libxdamage
+             libxext
+             libxfixes
+             libxinerama
+             libxrandr
+             libxrender
+             mesa
+             xprop
+             xwininfo))
       (native-inputs
-       `(("asciidoc" ,asciidoc)
-         ("libdrm" ,libdrm)
-         ("pkg-config" ,pkg-config)
-         ("python" ,python)
-         ("xorgproto" ,xorgproto)))
+       (list asciidoc libdrm pkg-config python xorgproto))
       (arguments
        `(#:make-flags (list
                        "CC=gcc"
@@ -114,7 +111,7 @@ performance).
 (define-public picom
   (package
     (name "picom")
-    (version "8.2")
+    (version "9.1")
     (source
      (origin
        (method git-fetch)
@@ -123,27 +120,25 @@ performance).
              (commit (string-append "v" version))))
        (sha256
         (base32
-         "0gjksayz2xpmgglvw17ppsan2imrd1fijs579kbf27xwp503xgfl"))
+         "0q7j6kh9k7i201cwhnfc3bmp0hqrx7ngk3v4qsp8k0qfy1n3ma8n"))
        (file-name (string-append "picom-" version))))
     (build-system meson-build-system)
     (inputs
-     `(("dbus" ,dbus)
-       ("libconfig" ,libconfig)
-       ("libx11" ,libx11)
-       ("libxext" ,libxext)
-       ("libev" ,libev)
-       ("mesa" ,mesa)
-       ("xprop" ,xprop)
-       ("xcb-util-renderutil" ,xcb-util-renderutil)
-       ("xcb-util-image" ,xcb-util-image)
-       ("pixman" ,pixman)
-       ("uthash" ,uthash)
-       ("libxdg-basedir" ,libxdg-basedir)
-       ("pcre" ,pcre)))
+     (list dbus
+           libconfig
+           libx11
+           libxext
+           libev
+           mesa
+           xprop
+           xcb-util-renderutil
+           xcb-util-image
+           pixman
+           uthash
+           libxdg-basedir
+           pcre))
     (native-inputs
-     `(("asciidoc" ,asciidoc)
-       ("pkg-config" ,pkg-config)
-       ("xorgproto" ,xorgproto)))
+     (list asciidoc pkg-config xorgproto))
     (arguments
      `(#:build-type "release"
        #:configure-flags '("-Dwith_docs=true")))

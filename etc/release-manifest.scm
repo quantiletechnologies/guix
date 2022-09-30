@@ -23,7 +23,7 @@
 (use-modules (gnu packages)
              (guix packages)
              (guix profiles)
-             ((gnu ci) #:select (%cross-targets))
+             ((guix platform) #:select (targets))
              ((gnu services xorg) #:select (%default-xorg-modules))
              (guix utils)
              (srfi srfi-1)
@@ -125,8 +125,13 @@ TARGET."
 (define %system-manifest
   (manifest
    (append-map (lambda (system)
-                 (map (cut package->manifest-entry* <> system)
-                      %system-packages))
+                 ;; Some of %SYSTEM-PACKAGES are currently unsupported on some
+                 ;; systems--e.g., GNOME on non-x86_64, due to Rust.  Filter
+                 ;; them out.
+                 (filter-map (lambda (package)
+                               (and (supported-package? package system)
+                                    (package->manifest-entry* package system)))
+                             %system-packages))
                '("x86_64-linux" "i686-linux"))))  ;Guix System
 
 (define %cross-manifest
@@ -139,7 +144,7 @@ TARGET."
                           %packages-to-cross-build)))
                ;; XXX: Important bits like libsigsegv and libffi don't support
                ;; RISCV at the moment, so don't require RISCV support.
-               (delete "riscv64-linux-gnu" %cross-targets))))
+               (delete "riscv64-linux-gnu" (targets)))))
 
 (define %cross-bootstrap-manifest
   (manifest

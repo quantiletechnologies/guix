@@ -3,11 +3,12 @@
 ;;; Copyright © 2014, 2015 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2015 Taylan Ulrich Bayırlı/Kammer <taylanbayirli@gmail.com>
 ;;; Copyright © 2015, 2018 Ludovic Courtès <ludo@gnu.org>
-;;; Copyright © 2016, 2017, 2018 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016, 2017, 2018, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
+;;; Copyright © 2022 Petr Hodina <phodina@protonmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -45,14 +46,14 @@
 (define-public chrony
   (package
     (name "chrony")
-    (version "4.1")
+    (version "4.2")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://download.tuxfamily.org/chrony/"
                            "chrony-" version ".tar.gz"))
        (sha256
-        (base32 "0k0nf5qqzl01106lkmwc32n6a1fxagalpbci38iccyilz79z4xpd"))))
+        (base32 "16nv90h73c99adh2bdrvlws1lhjsqfp6pfpnlprxd3ijbk8rygr7"))))
     (build-system gnu-build-system)
     (arguments
      `(#:modules ((srfi srfi-26)
@@ -69,23 +70,18 @@
            ;; time would result in nonsense file names in man pages.
            (lambda _
              (substitute* "Makefile.in"
-               (("mkdir -p \\$\\(DESTDIR\\)\\$\\(CHRONYVARDIR\\)") ":"))
-             #t))
+               (("mkdir -p \\$\\(DESTDIR\\)\\$\\(CHRONYVARDIR\\)") ":"))))
          (add-after 'install 'install-more-documentation
            (lambda* (#:key outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
                     (doc (string-append out "/share/doc/" ,name "-" ,version)))
                (for-each (cut install-file <> doc)
                          (list "README" "FAQ"))
-               (copy-recursively "examples" (string-append doc "/examples"))
-               #t))))))
+               (copy-recursively "examples" (string-append doc "/examples"))))))))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (inputs
-     `(("gnutls" ,gnutls)
-       ("libcap" ,libcap)
-       ("libseccomp" ,libseccomp)
-       ("nettle" ,nettle)))
+     (list gnutls libcap libseccomp nettle))
     (home-page "https://chrony.tuxfamily.org/")
     (synopsis "System clock synchronisation service that speaks NTP")
     (description
@@ -147,8 +143,7 @@ time-stamping or reference clock, sub-microsecond accuracy is possible.")
            (rename-file "sntp/libevent:build-aux"
                         "sntp/libevent/build-aux")
            #t))))
-   (native-inputs `(("which" ,which)
-                    ("pkg-config" ,pkg-config)))
+   (native-inputs (list which pkg-config))
    (inputs
     `(("openssl" ,openssl)
       ("libevent" ,libevent)
@@ -159,7 +154,10 @@ time-stamping or reference clock, sub-microsecond accuracy is possible.")
             `(("libcap" ,libcap))
             '())))
    (arguments
-    `(#:phases
+    `(;; Pass "--with-yielding-select=yes" so that 'configure' knows whether
+      ;; 'select' yields when using pthreads in a cross-compilation context.
+      #:configure-flags (list "--with-yielding-select=yes")
+      #:phases
       (modify-phases %standard-phases
         (add-after 'unpack 'disable-network-test
                    (lambda _
@@ -207,12 +205,14 @@ computers over a network.")
                (("DESTDIR\\)\\$\\(localstatedir") "TMPDIR"))
              #t)))))
     (inputs
-     `(("libressl" ,libressl))) ; enable TLS time constraints. See ntpd.conf(5).
+     (list libressl)) ; enable TLS time constraints. See ntpd.conf(5).
     (home-page "http://www.openntpd.org/")
     (synopsis "NTP client and server by the OpenBSD Project")
     (description "OpenNTPD is the OpenBSD Project's implementation of a client
 and server for the Network Time Protocol.  Its design goals include being
 secure, easy to configure, and accurate enough for most purposes, so it's more
 minimalist than ntpd.")
+    (properties
+     '((release-monitoring-url . "https://cdn.openbsd.org/pub/OpenBSD/OpenNTPD")))
     ;; A few of the source files are under bsd-3.
     (license (list l:isc l:bsd-3))))

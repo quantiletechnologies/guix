@@ -131,8 +131,7 @@
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (substitute* "configure.ac"
                (("/usr/share/anthy/anthy.dic")
-                (string-append (assoc-ref inputs "anthy")
-                               "/share/anthy/anthy.dic")))
+                (search-input-file inputs "/share/anthy/anthy.dic")))
              (substitute* "configure.ac"
                (("/usr/bin:\\$GTK3_LIBDIR/libgtk-3-0")
                 (string-append (assoc-ref inputs "gtk+:bin")
@@ -195,7 +194,7 @@
        ("xkbcommon" ,libxkbcommon)
        ("xklavier" ,libxklavier)))
     (propagated-inputs
-     `(("glib" ,glib)))
+     (list glib))
     (synopsis "Lightweight input method framework")
     (description "Nimf is a lightweight, fast and extensible input method
 framework.  This package provides a fork of the original nimf project, that
@@ -322,8 +321,7 @@ Random Cage Fighting Birds, Cool Music etc.")
        ("python" ,python-wrapper)
        ("texinfo" ,texinfo)))
     (inputs
-     `(("ncurses" ,ncurses)
-       ("sqlite" ,sqlite)))
+     (list ncurses sqlite))
     (synopsis "Chinese phonetic input method")
     (description "Chewing is an intelligent phonetic (Zhuyin/Bopomofo) input
 method, one of the most popular choices for Traditional Chinese users.")
@@ -411,7 +409,7 @@ Marburg.")
        ("makeinfo" ,texinfo)
        ("pkg-config" ,pkg-config)))
     (inputs
-     `(("libxml2" ,libxml2)))
+     (list libxml2))
     (propagated-inputs
      `(("liblouis" ,liblouis)
        ("liblouis:bin" ,liblouis "bin")))
@@ -475,9 +473,9 @@ languages.")
          "015ximzdp42v824llwlg2pd77vd0d172lb4xs55q9f9zhqf6s5qx"))))
     (build-system perl-build-system)
     (propagated-inputs
-     `(("perl-lingua-en-words2nums" ,perl-lingua-en-words2nums)))
+     (list perl-lingua-en-words2nums))
     (home-page "https://metacpan.org/release/Lingua-EN-FindNumber")
-    (synopsis "Locate (written) numbers in English text ")
+    (synopsis "Locate (written) numbers in English text")
     (description "This module provides a regular expression for finding
 numbers in English text.  It also provides functions for extracting and
 manipulating such numbers.")
@@ -496,7 +494,7 @@ manipulating such numbers.")
         (base32
          "0j8d1f1wvmgc11d71pc8xp8fv5a1nb2yfw1dgd19xhscn1klpvzw"))))
     (build-system perl-build-system)
-    (native-inputs `(("perl-module-build" ,perl-module-build)))
+    (native-inputs (list perl-module-build))
     (home-page "https://metacpan.org/release/Lingua-EN-Inflect")
     (synopsis "Convert singular to plural")
     (description "Lingua::EN::Inflect provides plural inflections,
@@ -520,7 +518,7 @@ provided.  Where appropriate, \"classical\" variants (for example: \"brother\"
          "1gxccynkaqav43ww43jp4rzkyr36x97jd03yb5f6yx0jhn1k7yv6"))))
     (build-system perl-build-system)
     (propagated-inputs
-     `(("perl-lingua-en-inflect" ,perl-lingua-en-inflect)))
+     (list perl-lingua-en-inflect))
     (home-page "https://metacpan.org/release/Lingua-EN-Inflect-Number")
     (synopsis "Force number of words to singular or plural")
     (description "This module extends the functionality of Lingua::EN::Inflect
@@ -542,13 +540,11 @@ converting a word to singular or plural.")
          "1a6y1l2pjim2242wcpgz066di4pbzfgsjjdl7vg5a5wzm48qj1am"))))
     (build-system perl-build-system)
     (native-inputs
-     `(("perl-test-nowarnings" ,perl-test-nowarnings)))
+     (list perl-test-nowarnings))
     (propagated-inputs
-     `(("perl-lingua-en-findnumber" ,perl-lingua-en-findnumber)
-       ("perl-lingua-en-inflect" ,perl-lingua-en-inflect)
-       ("perl-lingua-en-inflect-number" ,perl-lingua-en-inflect-number)
-       ("perl-lingua-en-number-isordinal" ,perl-lingua-en-number-isordinal)
-       ("perl-lingua-en-tagger" ,perl-lingua-en-tagger)))
+     (list perl-lingua-en-findnumber perl-lingua-en-inflect
+           perl-lingua-en-inflect-number perl-lingua-en-number-isordinal
+           perl-lingua-en-tagger))
     (home-page "https://metacpan.org/release/Lingua-EN-Inflect-Phrase")
     (synopsis "Inflect short English phrases")
     (description "This module attempts to pluralize or singularize short
@@ -569,10 +565,9 @@ English phrases.")
          "1mhqjvh2ad30gjab5b3a6mbr4aysyrscp4wp42yy5x6001a6km98"))))
     (build-system perl-build-system)
     (native-inputs
-     `(("perl-try-tiny" ,perl-try-tiny)
-       ("perl-test-fatal" ,perl-test-fatal)))
+     (list perl-try-tiny perl-test-fatal))
     (propagated-inputs
-     `(("perl-lingua-en-findnumber" ,perl-lingua-en-findnumber)))
+     (list perl-lingua-en-findnumber))
     (home-page "https://metacpan.org/release/Lingua-EN-Number-IsOrdinal")
     (synopsis "Detect if English number is ordinal or cardinal")
     (description "This module will tell you if a number, either in words or as
@@ -593,10 +588,8 @@ digits, is a cardinal or ordinal number.")
          "0nrnkvsf9f0a7lp82sanmy89ms2nqq1lvjqicvsagsvzp513bl5b"))))
     (build-system perl-build-system)
     (propagated-inputs
-     `(("perl-memoize-expirelru" ,perl-memoize-expirelru)
-       ("perl-lingua-stem" ,perl-lingua-stem)
-       ("perl-html-parser" ,perl-html-parser)
-       ("perl-html-tagset" ,perl-html-tagset)))
+     (list perl-memoize-expirelru perl-lingua-stem perl-html-parser
+           perl-html-tagset))
     (home-page "https://metacpan.org/release/Lingua-EN-Tagger")
     (synopsis "Part-of-speech tagger for English natural language processing")
     (description "This module is a probability based, corpus-trained tagger
@@ -662,16 +655,16 @@ Moreira, V. and Huyck, C.")
          "12avh2mnnc7llmmshrr5bgb473fvydxnlqrqbl2815mf2dp4pxcg"))))
     (build-system perl-build-system)
     (native-inputs
-     `(("perl-module-build" ,perl-module-build)))
+     (list perl-module-build))
     (propagated-inputs
-     `(("perl-lingua-pt-stemmer" ,perl-lingua-pt-stemmer)
-       ("perl-lingua-stem-fr" ,perl-lingua-stem-fr)
-       ("perl-lingua-stem-it" ,perl-lingua-stem-it)
-       ("perl-lingua-stem-ru" ,perl-lingua-stem-ru)
-       ("perl-lingua-stem-snowball-da" ,perl-lingua-stem-snowball-da)
-       ("perl-snowball-norwegian" ,perl-snowball-norwegian)
-       ("perl-snowball-swedish" ,perl-snowball-swedish)
-       ("perl-text-german" ,perl-text-german)))
+     (list perl-lingua-pt-stemmer
+           perl-lingua-stem-fr
+           perl-lingua-stem-it
+           perl-lingua-stem-ru
+           perl-lingua-stem-snowball-da
+           perl-snowball-norwegian
+           perl-snowball-swedish
+           perl-text-german))
     (home-page "https://metacpan.org/release/Lingua-Stem")
     (synopsis "Stemming of words in various languages")
     (description "This routine applies stemming algorithms to its parameters,
@@ -768,7 +761,7 @@ Lingua::Stem::Snowball::Se.")
         (base32
          "0675v45bbsh7vr7kpf36xs2q79g02iq1kmfw22h20xdk4rzqvkqx"))))
     (build-system perl-build-system)
-    (native-inputs `(("perl-module-build" ,perl-module-build)))
+    (native-inputs (list perl-module-build))
     (home-page "https://metacpan.org/release/Snowball-Norwegian")
     (synopsis "Porters stemming algorithm for Norwegian")
     (description "Lingua::Stem::Snowball::No is a perl port of the norwegian
@@ -788,7 +781,7 @@ stemmer at http://snowball.tartarus.org.")
         (base32
          "0agwc12jk5kmabnpsplw3wf4ii5w1zb159cpin44x3srb0sr5apg"))))
     (build-system perl-build-system)
-    (native-inputs `(("perl-module-build" ,perl-module-build)))
+    (native-inputs (list perl-module-build))
     (home-page "https://metacpan.org/release/Snowball-Swedish")
     (synopsis "Porters stemming algorithm for Swedish")
     (description "Lingua::Stem::Snowball::Se is a perl port of the swedish
@@ -809,9 +802,8 @@ stemmer at http://snowball.sourceforge.net.")
          "12nw7h2yiybhdw0vnnpc7bif8ylhsn6kqf6s39dsrf9h54iq9yrs"))))
     (build-system perl-build-system)
     (propagated-inputs
-     `(("perl-lingua-en-inflect-phrase" ,perl-lingua-en-inflect-phrase)
-       ("perl-text-unidecode" ,perl-text-unidecode)
-       ("perl-namespace-clean" ,perl-namespace-clean)))
+     (list perl-lingua-en-inflect-phrase perl-text-unidecode
+           perl-namespace-clean))
     (home-page "https://metacpan.org/release/String-ToIdentifier-EN")
     (synopsis "Convert strings to English program identifiers")
     (description "This module provides a utility method, \"to_identifier\" for
@@ -862,446 +854,6 @@ extensions in EXTS."
   '((guix build utils)
     (srfi srfi-1)
     (srfi srfi-26)))
-
-(define-public python2-tegaki-wagomu
-  (package
-    (name "python2-tegaki-wagomu")
-    (version "0.3.1")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri "tegaki-wagomu" version))
-       (sha256
-        (base32
-         "1pzdiq4zy1nyylaj9i6v2h4h0r05klahskzpafpp367p4rysi1x9"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "pyc"))))
-    (build-system python-build-system)
-    (arguments
-     `(#:python ,python-2 ; only Python 2 is supported
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'fix-recognizer
-           (lambda* (#:key inputs #:allow-other-keys)
-             ;; fix missing module and function
-             (substitute* "tegakiwagomu.py"
-               (("import Results,")
-                "import ")
-               (("def _recognize")
-                "def recognize")
-               (("Results\\(candidates\\)")
-                "candidates"))
-             #t)))))
-    (inputs
-     `(("glib" ,glib)))
-    (native-inputs
-     `(("pkg-config" ,pkg-config)
-       ("swig" ,swig)))
-    (home-page "https://tegaki.github.io/")
-    (synopsis
-     "Chinese and Japanese Handwriting Recognition (Recognition engine)")
-    (description
-     "Tegaki is an ongoing project which aims to develop a free and open-source
-modern implementation of handwriting recognition software, specifically
-designed for Chinese (simplified and traditional) and Japanese, and that is
-suitable for both the desktop and mobile devices.")
-    (license license:gpl2+))) ; all files
-
-(define-public python2-tegaki-python
-  (package
-    (inherit python2-tegaki-wagomu)
-    (name "python2-tegaki-python")
-    (version "0.3.1")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri "tegaki-python" version))
-       (sha256
-        (base32
-         "0x93k7pw9nh0ywd97pr8pm7jv3f94nw044i5k0zvzhdpsjqvak7p"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "pyc"))))
-    (arguments
-     (substitute-keyword-arguments (package-arguments python2-tegaki-wagomu)
-       ((#:phases _)
-        `(modify-phases %standard-phases
-           (add-after 'unpack 'pre-configure
-             (lambda* (#:key inputs #:allow-other-keys)
-               ;; Always convert string to unicode to avoid the following error
-               ;; when running "tegaki-build" in python2-tegaki-tools:
-               ;;
-               ;; sqlite3.ProgrammingError: You must not use 8-bit bytestrings
-               ;; unless you use a text_factory that can interpret 8-bit
-               ;; bytestrings (like text_factory = str).
-               ;; It is highly recommended that you instead just switch your
-               ;; application to Unicode strings.
-               (substitute* "tegaki/charcol.py"
-                 (("sqlite3.OptimizedUnicode")
-                  "lambda s: unicode(s, 'utf-8')"))
-               (substitute* "tegaki/engine.py"
-                 (("/usr(/local)?")
-                  (assoc-ref inputs "python2-tegaki-wagomu")))
-               #t))))))
-    ;; override inherited inputs
-    (inputs '())
-    (native-inputs '())
-    (propagated-inputs
-     `(("python2-tegaki-wagomu" ,python2-tegaki-wagomu)
-       ("python2-zinnia" ,python2-zinnia)))
-    (synopsis
-     "Chinese and Japanese Handwriting Recognition (Base python library)")
-    (license (list license:gpl2+        ; all files except...
-                   license:bsd-3        ; dictutils.py
-                   license:zpl2.1))))   ; minjson.py
-
-(define-public python2-tegaki-pygtk
-  (package
-    (inherit python2-tegaki-wagomu)
-    (name "python2-tegaki-pygtk")
-    (version "0.3.1")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri "tegaki-pygtk" version))
-       (sha256
-        (base32
-         "1cip0azxhjdj2dg2z85cp1z3lz4qwx3w1j7z4xmcm7npapmsaqs2"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "pyc"))))
-    (arguments
-     (substitute-keyword-arguments (package-arguments python2-tegaki-wagomu)
-       ((#:phases _)
-        `(modify-phases %standard-phases
-           (add-after 'unpack 'fix-paths
-             (lambda* (#:key inputs #:allow-other-keys)
-               (substitute* "tegakigtk/fakekey.py"
-                 (("libX11.so.6" so)
-                  (string-append (assoc-ref inputs "libx11") "/lib/" so))
-                 (("libXtst.so.6" so)
-                  (string-append (assoc-ref inputs "libxtst") "/lib/" so)))
-               #t))))))
-    (inputs ; required for sending key strokes
-     `(("libx11" ,libx11)
-       ("libxtst" ,libxtst)))
-    (native-inputs '()) ; override inherited inputs
-    (propagated-inputs
-     `(("python2-pygtk" ,python2-pygtk)
-       ("python2-tegaki-python" ,python2-tegaki-python)))
-    (synopsis "Chinese and Japanese Handwriting Recognition (Base UI library)")
-    (license license:gpl2+)))
-
-(define-public python2-tegaki-tools
-  (package
-    (inherit python2-tegaki-wagomu)
-    (name "python2-tegaki-tools")
-    (version "0.3.1")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri "tegaki-tools" version))
-       (sha256
-        (base32
-         "0xxv97ggh2jgldw3r7y59lv3fhz733r6l7mdn6nh4m0gvb0ja971"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "pyc"))))
-    (arguments
-     (substitute-keyword-arguments (package-arguments python2-tegaki-wagomu)
-       ((#:phases _) '%standard-phases)))
-    (inputs
-     `(("python2-tegaki-pygtk" ,python2-tegaki-pygtk)))
-    ;; override inherited inputs
-    (native-inputs '())
-    (propagated-inputs '())
-    (synopsis "Chinese and Japanese Handwriting Recognition (Advanced tools)")
-    ;; Files in gifenc/ are licensed under gpl3+ while other files are licensed
-    ;; under gpl2+. Therefore, the combined work is licensed under gpl3+.
-    (license license:gpl3+)))
-
-(define-public python2-tegaki-recognize
-  (let ((commit "eceec69fe651d0733c8c8752dae569d2283d0f3c")
-        (revision "1"))
-    (package
-      (inherit python2-tegaki-tools)
-      (name "python2-tegaki-recognize")
-      ;; version copied from <https://github.com/tegaki/tegaki/releases>
-      (version (git-version "0.3.1" revision commit))
-      (source
-       (origin
-         ;; We use GIT-FETCH because 'tegaki-recognize.desktop.in' and
-         ;; 'tegaki-recognize.in' are missing in the tarball.
-         (method git-fetch)
-         (uri (git-reference
-               (url "https://github.com/tegaki/tegaki")
-               (commit commit)))
-         (sha256
-          (base32
-           "09mw2if9p885phbgah5f95q3fwy7s5b46qlmpxqyzfcnj6g7afr5"))
-         (file-name (git-file-name name version))
-         (modules `((guix build utils)
-                    (ice-9 ftw)
-                    (srfi srfi-26)
-                    ,@remove-pre-compiled-files-modules))
-         (snippet
-          `(begin
-             ;; remove unnecessary files with potentially different license
-             (for-each delete-file-recursively
-                       (scandir "."
-                                (negate (cut member <> '("tegaki-recognize"
-                                                         "." "..")))))
-             ,(remove-pre-compiled-files "pyc")
-             #t))))
-      (arguments
-       (substitute-keyword-arguments (package-arguments python2-tegaki-tools)
-         ((#:phases _)
-          `(modify-phases %standard-phases
-             (add-after 'unpack 'chdir
-               (lambda _
-                 (chdir "tegaki-recognize")
-                 #t))
-             ;; 'setup.py' script does not support one of the Python build
-             ;; system's default flags, "--single-version-externally-managed"
-             (replace 'install
-               (lambda* (#:key outputs #:allow-other-keys)
-                 (invoke "python" "setup.py" "install"
-                         (string-append "--prefix=" (assoc-ref outputs "out"))
-                         "--root=/")
-                 #t))))))
-      (synopsis "Chinese and Japanese Handwriting Recognition (Main program)")
-      (license license:gpl2+))))
-
-(define-public tegaki-zinnia-japanese
-  (package
-    (inherit python2-tegaki-wagomu)
-    (name "tegaki-zinnia-japanese")
-    (version "0.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri name version "zip"))
-       (sha256
-        (base32
-         "1nmg9acxhcqly9gwkyb9m0hpy76fll91ywk4b1q4xms0ajxip1h7"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "model"))))
-    (build-system gnu-build-system)
-    (arguments
-     `(#:tests? #f ; no tests
-       #:phases
-       (modify-phases %standard-phases
-         (replace 'configure
-           (lambda* (#:key outputs #:allow-other-keys)
-             (substitute* "Makefile"
-               (("/usr/local")
-                (assoc-ref outputs "out")))
-             #t)))))
-    ;; override inherited inputs
-    (inputs '())
-    (native-inputs
-     `(("python2-tegaki-tools" ,python2-tegaki-tools)))
-    (propagated-inputs '())
-    (native-search-paths
-     (list (search-path-specification
-            (variable "TEGAKI_MODEL_PATH")
-            (files '("share/tegaki/models")))))
-    (synopsis "Chinese and Japanese Handwriting Recognition (Model)")
-    (license license:lgpl2.1)))
-
-(define-public tegaki-zinnia-japanese-light
-  (package
-    (inherit tegaki-zinnia-japanese)
-    (name "tegaki-zinnia-japanese-light")
-    (version "0.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri name version "zip"))
-       (sha256
-        (base32
-         "0x0fs29ylqzxd6xvg51h7rigpbisd7q8v11df425ib2j792yfyf8"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "model"))))
-    (license license:lgpl2.1)))
-
-(define-public tegaki-zinnia-japanese-kyoiku
-  (package
-    (inherit tegaki-zinnia-japanese)
-    (name "tegaki-zinnia-japanese-kyoiku")
-    (version "0.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri name version "zip"))
-       (sha256
-        (base32
-         "0am94bcpmbzplxdnwn9gk15sgaizvcfhmv13mk14jjvx3419cvvx"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "model"))))
-    (license license:lgpl2.1)))
-
-(define-public tegaki-zinnia-japanese-joyo
-  (package
-    (inherit tegaki-zinnia-japanese)
-    (name "tegaki-zinnia-japanese-joyo")
-    (version "0.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri name version "zip"))
-       (sha256
-        (base32
-         "1v0j40lzdyiz01ayws0b8r7fsdy2mr32658382kz4wyk883wzx2z"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "model"))))
-    (license license:lgpl2.1)))
-
-(define-public tegaki-zinnia-simplified-chinese
-  (package
-    (inherit tegaki-zinnia-japanese)
-    (name "tegaki-zinnia-simplified-chinese")
-    (version "0.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri name version "zip"))
-       (sha256
-        (base32
-         "18wq0jccv7lpnrfnzspyc110d6pj2v1i21xcx4fmgzz1lnln3fs5"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "model"))))
-    (license license:lgpl2.1)))
-
-(define-public tegaki-zinnia-simplified-chinese-light
-  (package
-    (inherit tegaki-zinnia-japanese)
-    (name "tegaki-zinnia-simplified-chinese-light")
-    (version "0.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri name version "zip"))
-       (sha256
-        (base32
-         "0v24yf0w0p03lb7fyx128a75mwzad166bigvlbrzqnad789qg1sr"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "model"))))
-    (license license:lgpl2.1)))
-
-(define-public tegaki-zinnia-traditional-chinese
-  (package
-    (inherit tegaki-zinnia-japanese)
-    (name "tegaki-zinnia-traditional-chinese")
-    (version "0.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri name version "zip"))
-       (sha256
-        (base32
-         "140nlp6hynrai2svs5670jjfw1za6ayflhyj2dl0bzsfgbk3447l"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "model"))))
-    (license license:lgpl2.1)))
-
-(define-public tegaki-zinnia-traditional-chinese-light
-  (package
-    (inherit tegaki-zinnia-japanese)
-    (name "tegaki-zinnia-traditional-chinese-light")
-    (version "0.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri name version "zip"))
-       (sha256
-        (base32
-         "1m6yk6a57vs9wg5y50qciwi1ahhmklp2mgsjysbj4mnyzv6yhcr2"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "model"))))
-    (license license:lgpl2.1)))
-
-(define-public tegaki-wagomu-japanese
-  (package
-    (inherit tegaki-zinnia-japanese)
-    (name "tegaki-wagomu-japanese")
-    (version "0.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri name version "zip"))
-       (sha256
-        (base32
-         "0flj5id8xwsn7csrrzqz9prdikswnwm2wms0as2vzdpxzph1az4k"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "model"))))
-    (license license:lgpl2.1)))
-
-(define-public tegaki-wagomu-japanese-kyoiku
-  (package
-    (inherit tegaki-zinnia-japanese)
-    (name "tegaki-wagomu-japanese-kyoiku")
-    (version "0.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri name version "zip"))
-       (sha256
-        (base32
-         "0v8crfh8rdf6ndp16g52s5jlrrlwh73xp38zjn5i9dlacx8kfqg1"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "model"))))
-    (license license:lgpl2.1)))
-
-(define-public tegaki-wagomu-japanese-joyo
-  (package
-    (inherit tegaki-zinnia-japanese)
-    (name "tegaki-wagomu-japanese-joyo")
-    (version "0.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri name version "zip"))
-       (sha256
-        (base32
-         "0wk8shpr963zp328g991qs6abpnacq4242003m687z2d6yp7nph2"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "model"))))
-    (license license:lgpl2.1)))
-
-(define-public tegaki-wagomu-simplified-chinese
-  (package
-    (inherit tegaki-zinnia-japanese)
-    (name "tegaki-wagomu-simplified-chinese")
-    (version "0.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (tegaki-release-uri name version "zip"))
-       (sha256
-        (base32
-         "0wqprynigqxqxv128i1smh81gxvmjj056d9qpznxa3n9f5ymlbj6"))
-       (modules remove-pre-compiled-files-modules)
-       (snippet (remove-pre-compiled-files "model"))))
-    (license license:lgpl2.1)))
-
-;;; Upstream does not provide the source for tegaki-wagomu-traditional-chinese.
-;;; Therefore, we use the source for tegaki-zinnia-traditional-chinese and
-;;; patch the Makefile accordingly.
-(define-public tegaki-wagomu-traditional-chinese
-  (package
-    (inherit tegaki-zinnia-traditional-chinese)
-    (name "tegaki-wagomu-traditional-chinese")
-    (arguments
-     (substitute-keyword-arguments
-         (package-arguments tegaki-zinnia-traditional-chinese)
-       ((#:phases phases '%standard-phases)
-        `(modify-phases ,phases
-           (replace 'configure
-             (lambda args
-               (let ((configure (assq-ref ,phases 'configure)))
-                 (apply configure args))
-               (substitute* "Makefile"
-                 (("zinnia") "wagomu"))
-               #t))))))
-    (license license:lgpl2.1)))
 
 (define-public link-grammar
   (package
@@ -1362,7 +914,7 @@ noun phrases, verb phrases, etc.).")
        ("jack" ,jack-1)
        ("publesaudio" ,pulseaudio)))
     (native-inputs
-     `(("pkg-config" ,pkg-config)))
+     (list pkg-config))
     (home-page "https://www.fon.hum.uva.nl/praat/")
     (synopsis "Doing phonetics by computer")
     (description "Praat is a tool to perform phonetics tasks.  It can do speech

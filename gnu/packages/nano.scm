@@ -1,8 +1,9 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2012 Nikita Karetnikov <nikita@karetnikov.org>
-;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2015-2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016 Rene Saavedra <rennes@openmailbox.org>
 ;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2022 Jai Vetrivelan <jaivetrivelan@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -30,17 +31,16 @@
 (define-public nano
   (package
     (name "nano")
-    (version "5.9")
+    (version "6.4")
     (source
      (origin
       (method url-fetch)
       (uri (string-append "mirror://gnu/nano/nano-" version ".tar.xz"))
       (sha256
-       (base32 "0ds9qas1zxvvx8qbpjmh4yk4gdg3cgs3ly27krcp6a5vlk6vhzbm"))))
+       (base32 "1h318vrpscfcarmq3s870cn92iyw46w426nyavg9cxwaly6ax6a1"))))
     (build-system gnu-build-system)
     (inputs
-     `(("gettext" ,gettext-minimal)
-       ("ncurses" ,ncurses)))
+     (list gettext-minimal ncurses))
     (home-page "https://www.nano-editor.org/")
     (synopsis "Small, user-friendly console text editor")
     (description

@@ -2,7 +2,7 @@
 ;;; Copyright © 2013, 2014, 2015, 2017, 2018, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015, 2016 Alex Kost <alezost@gmail.com>
 ;;; Copyright © 2016 John Darrington <jmd@gnu.org>
-;;; Copyright © 2016, 2017, 2019, 2020 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016, 2017, 2019, 2020, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016 Christopher Andersson <christopher@8bits.nu>
 ;;; Copyright © 2016 Theodoros Foradis <theodoros@foradis.org>
 ;;; Copyright © 2016, 2017, 2019, 2021 Tobias Geerinckx-Rice <me@tobias.gr>
@@ -47,6 +47,7 @@
   (package
     (name "aspell")
     (version "0.60.8")
+    (replacement aspell/replacement)
     (source
      (origin
       (method url-fetch)
@@ -73,7 +74,7 @@
                   (string-append "\"filter-path" middle
                                  "\"" libdir "\"")))
                #t))))))
-    (inputs `(("perl" ,perl)))
+    (inputs (list perl))
 
     (native-search-paths
      ;; This is a Guix-specific environment variable that takes a single
@@ -91,6 +92,16 @@ a standalone program.  Notable features of Aspell include its full support of
 documents written in the UTF-8 encoding and its ability to use multiple
 dictionaries, including personal ones.")
     (license lgpl2.1+)))
+
+;; Replacement package with security fixes.
+(define aspell/replacement
+  (package
+    (inherit aspell)
+    (source
+     (origin
+       (inherit (package-source aspell))
+       (patches (append (origin-patches (package-source aspell))
+                        (search-patches "aspell-CVE-2019-25051.patch")))))))
 
 ;;;
 ;;; Dictionaries.
@@ -131,12 +142,16 @@ dictionaries, including personal ones.")
          (list (string-append "dictdir=" out "/lib/aspell")
                (string-append "datadir=" out "/lib/aspell")))
        #:tests? #f))
-    (native-inputs `(("aspell" ,aspell)
-                     ("which" ,which)))
+    (native-inputs (list aspell which))
     (synopsis (string-append full-name " dictionary for GNU Aspell")) ; XXX: i18n
     (description
      "This package provides a dictionary for the GNU Aspell spell checker.")
     (license gpl2+)
+    (properties
+      ;; Unfortunately any versions with a trailing 'dash and digit' (eg.: '-0')
+      ;; will fail to register as a version.
+      `((upstream-name . ,(string-append prefix dict-name))
+        (ftp-directory . ,(string-append "/aspell/dict/" dict-name))))
     (home-page "http://aspell.net/")))
 
 
@@ -389,10 +404,7 @@ dictionaries, including personal ones.")
                (base32
                 "11lkrnhwrf5mvrrq45k4mads3n9aswgac8dc25ba61c75alxb5rs"))))
     (native-inputs
-     `(("tar" ,tar)
-       ("gzip" ,gzip)
-       ("perl" ,perl)
-       ("aspell" ,aspell)))
+     (list tar gzip perl aspell))
     (build-system gnu-build-system)
     (arguments
      `(#:phases
@@ -489,14 +501,14 @@ under permissive licensing terms.  See the 'Copyright' file."))))
 (define-public ispell
   (package
     (name "ispell")
-    (version "3.4.04")
+    (version "3.4.05")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://www.cs.hmc.edu/~geoff/tars/ispell-"
                            version ".tar.gz"))
        (sha256
-        (base32 "0gp1rwn8grkvz28wgisc2j9w9svldnaiahl3lyis118xabqddg47"))))
+        (base32 "00jni7gvdswjd9sdwip5ixnvjg2qzv56mn3m8gdgl9gxwgnns36g"))))
     (build-system gnu-build-system)
     (arguments
      `(#:parallel-build? #f
@@ -519,13 +531,11 @@ under permissive licensing terms.  See the 'Copyright' file."))))
                    (format port "#define BINDIR \"~a/bin\"~%" out)
                    (format port "#define LIBDIR \"~a/lib/ispell\"~%" out)
                    (format port "#define MAN1DIR \"~a/share/man/man1\"~%" out)
-                   (format port "#define MAN45DIR \"~a/share/man/man5\"~%" out))))
-             #t)))))
+                   (format port "#define MAN45DIR \"~a/share/man/man5\"~%" out)))))))))
     (inputs
-     `(("grep" ,grep)
-       ("ncurses" ,ncurses)))
+     (list grep ncurses))
     (native-inputs
-     `(("bison" ,bison)))
+     (list bison))
     (synopsis "Interactive spell-checking tool for Unix")
     (description "Ispell is an interactive spell-checking tool supporting many
 European languages.")

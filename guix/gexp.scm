@@ -1,10 +1,10 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2018 Clément Lassieur <clement@lassieur.org>
 ;;; Copyright © 2018 Jan Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2019, 2020 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2020 Maxim Cournoyer <maxim.cournoyer@gmail.com>
-;;; Copyright © 2021 Maxime Devos <maximedevos@telenet.be>
+;;; Copyright © 2021, 2022 Maxime Devos <maximedevos@telenet.be>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -40,6 +40,7 @@
   #:use-module (ice-9 match)
   #:export (gexp
             gexp?
+            sexp->gexp
             with-imported-modules
             with-extensions
             let-system
@@ -106,6 +107,10 @@
             lowered-gexp-load-path
             lowered-gexp-load-compiled-path
 
+            with-build-variables
+            input-tuples->gexp
+            outputs->gexp
+
             gexp->derivation
             gexp->file
             gexp->script
@@ -113,6 +118,8 @@
             mixed-text-file
             file-union
             directory-union
+            references-file
+
             imported-files
             imported-modules
             compiled-modules
@@ -168,12 +175,15 @@ As a result, the S-expression will be approximate if GEXP has references."
          (map (lambda (reference)
                 (match reference
                   (($ <gexp-input> thing output native)
-                   (if (gexp-like? thing)
-                       (gexp->approximate-sexp thing)
-                       ;; Simply returning 'thing' won't work in some
-                       ;; situations; see 'write-gexp' below.
-                       '(*approximate*)))
-                  (_ '(*approximate*))))
+                   (cond ((gexp-like? thing)
+                          (gexp->approximate-sexp thing))
+                         ((not (record? thing)) ; a S-exp
+                          thing)
+                         (#true
+                          ;; Simply returning 'thing' won't work in some
+                          ;; situations; see 'write-gexp' below.
+                          '(*approximate*))))
+                  (($ <gexp-output>) '(*approximate*))))
               (gexp-references gexp))))
 
 (define (write-gexp gexp port)
@@ -196,6 +206,18 @@ As a result, the S-expression will be approximate if GEXP has references."
           (number->string (object-address gexp) 16)))
 
 (set-record-type-printer! <gexp> write-gexp)
+
+(define (gexp-with-hidden-inputs gexp inputs)
+  "Add INPUTS, a list of <gexp-input>, to the references of GEXP.  These are
+\"hidden inputs\" because they do not actually appear in the expansion of GEXP
+returned by 'gexp->sexp'."
+  (make-gexp (append inputs (gexp-references gexp))
+             (gexp-self-modules gexp)
+             (gexp-self-extensions gexp)
+             (let ((extra (length inputs)))
+               (lambda args
+                 (apply (gexp-proc gexp) (drop args extra))))
+             (gexp-location gexp)))
 
 
 ;;;
@@ -271,14 +293,17 @@ OBJ must be an object that has an associated gexp compiler, such as a
         (#f
          (raise (condition (&gexp-input-error (input obj)))))
         (lower
-         ;; Cache in STORE the result of lowering OBJ.
-         (mcached (mlet %store-monad ((lowered (lower obj system target)))
-                    (if (and (struct? lowered)
-                             (not (derivation? lowered)))
-                        (loop lowered)
-                        (return lowered)))
-                  obj
-                  system target graft?))))))
+         ;; Cache in STORE the result of lowering OBJ.  If OBJ is a
+         ;; derivation, bypass the cache.
+         (if (derivation? obj)
+             (return obj)
+             (mcached (mlet %store-monad ((lowered (lower obj system target)))
+                        (if (and (struct? lowered)
+                                 (not (derivation? lowered)))
+                            (loop lowered)
+                            (return lowered)))
+                      obj
+                      system target graft?)))))))
 
 (define* (lower+expand-object obj
                               #:optional (system (%current-system))
@@ -293,9 +318,11 @@ expand to file names, but it's possible to expand to a plain data type."
        (raise (condition (&gexp-input-error (input obj)))))
       (lower
        (mlet* %store-monad ((graft?  (grafting?))
-                            (lowered (mcached (lower obj system target)
-                                              obj
-                                              system target graft?)))
+                            (lowered (if (derivation? obj)
+                                         (return obj)
+                                         (mcached (lower obj system target)
+                                                  obj
+                                                  system target graft?))))
          ;; LOWER might return something that needs to be further
          ;; lowered.
          (if (struct? lowered)
@@ -574,13 +601,10 @@ This is the declarative counterpart of 'gexp->derivation'."
   ;; gexp.
   (match file
     (($ <computed-file> name gexp guile options)
-     (if guile
-         (mlet %store-monad ((guile (lower-object guile system
-                                                  #:target target)))
-           (apply gexp->derivation name gexp #:guile-for-build guile
-                  #:system system #:target target options))
-         (apply gexp->derivation name gexp
-                #:system system #:target target options)))))
+     (mlet %store-monad ((guile (lower-object (or guile (default-guile))
+                                              system #:target #f)))
+       (apply gexp->derivation name gexp #:guile-for-build guile
+              #:system system #:target target options)))))
 
 (define-record-type <program-file>
   (%program-file name gexp guile path)
@@ -662,7 +686,8 @@ SUFFIX."
   expander => (lambda (obj lowered output)
                 (match obj
                   (($ <file-append> base suffix)
-                   (let* ((expand (lookup-expander base))
+                   (let* ((expand (or (lookup-expander base)
+                                      (lookup-expander lowered)))
                           (base   (expand base lowered output)))
                      (string-append base (string-concatenate suffix)))))))
 
@@ -1607,7 +1632,8 @@ last one is created from the given <scheme-file> object."
                            (guile (%guile-for-build))
                            (module-path %load-path)
                            (extensions '())
-                           (deprecation-warnings #f))
+                           (deprecation-warnings #f)
+                           (optimization-level 1))
   "Return a derivation that builds a tree containing the `.go' files
 corresponding to MODULES.  All the MODULES are built in a context where
 they can refer to each other.  When TARGET is true, cross-compile MODULES for
@@ -1618,127 +1644,178 @@ TARGET, a GNU triplet."
                                                  #:system system
                                                  #:guile guile
                                                  #:module-path
-                                                 module-path)))
+                                                 module-path))
+                      (extensions (mapm %store-monad
+                                        (lambda (extension)
+                                          (lower-object extension system
+                                                        #:target #f))
+                                        extensions)))
     (define build
-      (gexp
-       (begin
-         (primitive-load (ungexp %utils-module))  ;for 'mkdir-p'
+      (gexp-with-hidden-inputs
+       (gexp
+        (begin
+          (primitive-load (ungexp %utils-module)) ;for 'mkdir-p'
 
-         (use-modules (ice-9 ftw)
-                      (ice-9 format)
-                      (srfi srfi-1)
-                      (srfi srfi-26)
-                      (system base target)
-                      (system base compile))
+          (use-modules (ice-9 ftw)
+                       (ice-9 format)
+                       (srfi srfi-1)
+                       (srfi srfi-26)
+                       (system base target)
+                       (system base compile))
 
-         (define (regular? file)
-           (not (member file '("." ".."))))
+          (define modules
+            (getenv "modules"))
 
-         (define (process-entry entry output processed)
-           (if (file-is-directory? entry)
-               (let ((output (string-append output "/" (basename entry))))
-                 (mkdir-p output)
-                 (process-directory entry output processed))
-               (let* ((base   (basename entry ".scm"))
-                      (output (string-append output "/" base ".go")))
-                 (format #t "[~2@a/~2@a] Compiling '~a'...~%"
-                         (+ 1 processed (ungexp total))
-                         (ungexp (* total 2))
-                         entry)
+          (define total
+            (string->number (getenv "module count")))
 
-                 (ungexp-splicing
-                  (if target
-                      (gexp ((with-target (ungexp target)
+          (define extensions
+            (string-split (getenv "extensions") #\space))
+
+          (define target
+            (getenv "target"))
+
+          (define optimization-level
+            (string->number (getenv "optimization level")))
+
+          (define optimizations-for-level
+            (or (and=> (false-if-exception
+                        (resolve-interface '(system base optimize)))
+                       (lambda (iface)
+                         (module-ref iface 'optimizations-for-level))) ;Guile 3.0
+                (const '())))
+
+          (define (regular? file)
+            (not (member file '("." ".."))))
+
+          (define (process-entry entry output processed)
+            (if (file-is-directory? entry)
+                (let ((output (string-append output "/" (basename entry))))
+                  (mkdir-p output)
+                  (process-directory entry output processed))
+                (let* ((base   (basename entry ".scm"))
+                       (output (string-append output "/" base ".go")))
+                  (format #t "[~2@a/~2@a] Compiling '~a'...~%"
+                          (+ 1 processed total)
+                          (* total 2)
+                          entry)
+
+                  (with-target (or target %host-type)
                                (lambda ()
                                  (compile-file entry
                                                #:output-file output
                                                #:opts
-                                               %auto-compilation-options)))))
-                      (gexp ((compile-file entry
-                                           #:output-file output
-                                           #:opts %auto-compilation-options)))))
+                                               `(,@%auto-compilation-options
+                                                 ,@(optimizations-for-level
+                                                    optimization-level)))))
 
-                 (+ 1 processed))))
+                  (+ 1 processed))))
 
-         (define (process-directory directory output processed)
-           (let ((entries (map (cut string-append directory "/" <>)
-                               (scandir directory regular?))))
-             (fold (cut process-entry <> output <>)
-                   processed
-                   entries)))
+          (define (process-directory directory output processed)
+            (let ((entries (map (cut string-append directory "/" <>)
+                                (scandir directory regular?))))
+              (fold (cut process-entry <> output <>)
+                    processed
+                    entries)))
 
-         (define* (load-from-directory directory
-                                       #:optional (loaded 0))
-           "Load all the source files found in DIRECTORY."
-           ;; XXX: This works around <https://bugs.gnu.org/15602>.
-           (let ((entries (map (cut string-append directory "/" <>)
-                               (scandir directory regular?))))
-             (fold (lambda (file loaded)
-                     (if (file-is-directory? file)
-                         (load-from-directory file loaded)
-                         (begin
-                           (format #t "[~2@a/~2@a] Loading '~a'...~%"
-                                   (+ 1 loaded) (ungexp (* 2 total))
-                                   file)
-                           (save-module-excursion
-                            (lambda ()
-                              (primitive-load file)))
-                           (+ 1 loaded))))
-                   loaded
-                   entries)))
+          (define* (load-from-directory directory
+                                        #:optional (loaded 0))
+            "Load all the source files found in DIRECTORY."
+            ;; XXX: This works around <https://bugs.gnu.org/15602>.
+            (let ((entries (map (cut string-append directory "/" <>)
+                                (scandir directory regular?))))
+              (fold (lambda (file loaded)
+                      (if (file-is-directory? file)
+                          (load-from-directory file loaded)
+                          (begin
+                            (format #t "[~2@a/~2@a] Loading '~a'...~%"
+                                    (+ 1 loaded) (* 2 total)
+                                    file)
+                            (save-module-excursion
+                             (lambda ()
+                               (primitive-load file)))
+                            (+ 1 loaded))))
+                    loaded
+                    entries)))
 
-         (setvbuf (current-output-port)
-                  (cond-expand (guile-2.2 'line) (else _IOLBF)))
+          (setvbuf (current-output-port)
+                   (cond-expand (guile-2.2 'line) (else _IOLBF)))
 
-         (define mkdir-p
-           ;; Capture 'mkdir-p'.
-           (@ (guix build utils) mkdir-p))
+          (define mkdir-p
+            ;; Capture 'mkdir-p'.
+            (@ (guix build utils) mkdir-p))
 
-         ;; Add EXTENSIONS to the search path.
-         (set! %load-path
-           (append (map (lambda (extension)
-                          (string-append extension
-                                         "/share/guile/site/"
-                                         (effective-version)))
-                        '((ungexp-native-splicing extensions)))
-                   %load-path))
-         (set! %load-compiled-path
-           (append (map (lambda (extension)
-                          (string-append extension "/lib/guile/"
-                                         (effective-version)
-                                         "/site-ccache"))
-                        '((ungexp-native-splicing extensions)))
-                   %load-compiled-path))
+          ;; Remove environment variables for internal consumption.
+          (unsetenv "modules")
+          (unsetenv "module count")
+          (unsetenv "extensions")
+          (unsetenv "target")
+          (unsetenv "optimization level")
 
-         (set! %load-path (cons (ungexp modules) %load-path))
+          ;; Add EXTENSIONS to the search path.
+          (set! %load-path
+            (append (map (lambda (extension)
+                           (string-append extension
+                                          "/share/guile/site/"
+                                          (effective-version)))
+                         extensions)
+                    %load-path))
+          (set! %load-compiled-path
+            (append (map (lambda (extension)
+                           (string-append extension "/lib/guile/"
+                                          (effective-version)
+                                          "/site-ccache"))
+                         extensions)
+                    %load-compiled-path))
 
-         ;; Above we loaded our own (guix build utils) but now we may need to
-         ;; load a compile a different one.  Thus, force a reload.
-         (let ((utils (string-append (ungexp modules)
-                                     "/guix/build/utils.scm")))
-           (when (file-exists? utils)
-             (load utils)))
+          (set! %load-path (cons modules %load-path))
 
-         (mkdir (ungexp output))
-         (chdir (ungexp modules))
+          ;; Above we loaded our own (guix build utils) but now we may need to
+          ;; load a compile a different one.  Thus, force a reload.
+          (let ((utils (string-append modules
+                                      "/guix/build/utils.scm")))
+            (when (file-exists? utils)
+              (load utils)))
 
-         (load-from-directory ".")
-         (process-directory "." (ungexp output) 0))))
+          (mkdir (ungexp output))
+          (chdir modules)
 
-    ;; TODO: Pass MODULES as an environment variable.
+          (load-from-directory ".")
+          (process-directory "." (ungexp output) 0)))
+       (append (map gexp-input extensions)
+               (list (gexp-input modules)))))
+
     (gexp->derivation name build
+                      #:script-name "compile-modules"
                       #:system system
                       #:target target
                       #:guile-for-build guile
                       #:local-build? #t
                       #:env-vars
-                      (case deprecation-warnings
-                        ((#f)
-                         '(("GUILE_WARN_DEPRECATED" . "no")))
-                        ((detailed)
-                         '(("GUILE_WARN_DEPRECATED" . "detailed")))
-                        (else
-                         '())))))
+                      `(("modules"
+                         . ,(if (derivation? modules)
+                                (derivation->output-path modules)
+                                modules))
+                        ("module count" . ,(number->string total))
+                        ("extensions"
+                         . ,(string-join
+                             (map (match-lambda
+                                    ((? derivation? drv)
+                                     (derivation->output-path drv))
+                                    ((? string? str) str))
+                                  extensions)))
+                        ("optimization level"
+                         . ,(number->string optimization-level))
+                        ,@(if target
+                              `(("target" . ,target))
+                              '())
+                        ,@(case deprecation-warnings
+                            ((#f)
+                             '(("GUILE_WARN_DEPRECATED" . "no")))
+                            ((detailed)
+                             '(("GUILE_WARN_DEPRECATED" . "detailed")))
+                            (else
+                             '()))))))
 
 
 ;;;
@@ -1805,6 +1882,72 @@ Assume MODULES are compiled with GUILE."
                                                           "/site-ccache"))
                                          extensions))
                               %load-compiled-path)))))))))
+
+(define* (input-tuples->gexp inputs #:key native?)
+  "Given INPUTS, a list of label/gexp-input tuples, return a gexp that expands
+to an input alist."
+  (define references
+    (map (match-lambda
+           ((label input) input))
+         inputs))
+
+  (define labels
+    (match inputs
+      (((labels . _) ...)
+       labels)))
+
+  (define (proc . args)
+    (cons 'quote (list (map cons labels args))))
+
+  ;; This gexp is more efficient than an equivalent hand-written gexp: fewer
+  ;; allocations, no need to scan long list-valued <gexp-input> records in
+  ;; search of file-like objects, etc.
+  (make-gexp references '() '() proc
+             (source-properties inputs)))
+
+(define (outputs->gexp outputs)
+  "Given OUTPUTS, a list of output names, return a gexp that expands to an
+output alist."
+  (define references
+    (map gexp-output outputs))
+
+  (define (proc . args)
+    `(list ,@(map (lambda (name)
+                    `(cons ,name ((@ (guile) getenv) ,name)))
+                  outputs)))
+
+  ;; This gexp is more efficient than an equivalent hand-written gexp.
+  (make-gexp references '() '() proc
+             (source-properties outputs)))
+
+(define (with-build-variables inputs outputs body)
+  "Return a gexp that surrounds BODY with a definition of the legacy
+'%build-inputs', '%outputs', and '%output' variables based on INPUTS, a list
+of name/gexp-input tuples, and OUTPUTS, a list of strings."
+
+  ;; These two variables are defined for backward compatibility.  They are
+  ;; used by package expressions.  These must be top-level defines so that
+  ;; 'use-modules' form in BODY that are required for macro expansion work as
+  ;; expected.
+  (gexp (begin
+          (define %build-inputs
+            (ungexp (input-tuples->gexp inputs)))
+          (define %outputs
+            (ungexp (outputs->gexp outputs)))
+          (define %output
+            (assoc-ref %outputs "out"))
+
+          (ungexp body))))
+
+(define (sexp->gexp sexp)
+  "Turn SEXP into a gexp without any references.
+
+Using this is a way for the caller to tell that SEXP doesn't need to be
+scanned for file-like objects, thereby reducing processing costs.  This is
+particularly useful if SEXP is a long list or a deep tree."
+  (make-gexp '() '() '()
+             (lambda () sexp)
+             (source-properties sexp)))
 
 (define* (gexp->script name exp
                        #:key (guile (default-guile))
@@ -1929,7 +2072,7 @@ resulting store file holds references to all these."
                     #:local-build? #t
                     #:substitutable? #f))
 
-(define* (mixed-text-file name #:rest text)
+(define* (mixed-text-file name #:key guile #:rest text)
   "Return an object representing store file NAME containing TEXT.  TEXT is a
 sequence of strings and file-like objects, as in:
 
@@ -1938,14 +2081,15 @@ sequence of strings and file-like objects, as in:
 
 This is the declarative counterpart of 'text-file*'."
   (define build
-    (gexp (call-with-output-file (ungexp output "out")
-            (lambda (port)
-              (set-port-encoding! port "UTF-8")
-              (display (string-append (ungexp-splicing text)) port)))))
+    (let ((text (if guile (drop text 2) text)))
+      (gexp (call-with-output-file (ungexp output "out")
+              (lambda (port)
+                (set-port-encoding! port "UTF-8")
+                (display (string-append (ungexp-splicing text)) port))))))
 
-  (computed-file name build))
+  (computed-file name build #:guile guile))
 
-(define (file-union name files)
+(define* (file-union name files #:key guile)
   "Return a <computed-file> that builds a directory containing all of FILES.
 Each item in FILES must be a two-element list where the first element is the
 file name to use in the new directory, and the second element is a gexp
@@ -1979,7 +2123,8 @@ This yields an 'etc' directory containing these two files."
                                   (mkdir-p (dirname (ungexp target)))
                                   (symlink (ungexp source)
                                            (ungexp target))))))
-                            files)))))))
+                            files)))))
+                 #:guile guile))
 
 (define* (directory-union name things
                           #:key (copy? #f) (quiet? #f)
@@ -2029,12 +2174,78 @@ is true, the derivation will not print anything."
                                            #:resolve-collision
                                            (ungexp resolve-collision)))))))))
 
+(define* (references-file item #:optional (name "references")
+                          #:key guile)
+  "Return a file that contains the list of direct and indirect references (the
+closure) of ITEM."
+  (if (struct? item)                              ;lowerable object
+      (computed-file name
+                     (gexp (begin
+                             (use-modules (srfi srfi-1)
+                                          (ice-9 rdelim)
+                                          (ice-9 match))
+
+                             (define (drop-lines port n)
+                               ;; Drop N lines read from PORT.
+                               (let loop ((n n))
+                                 (unless (zero? n)
+                                   (read-line port)
+                                   (loop (- n 1)))))
+
+                             (define (read-graph port)
+                               ;; Return the list of references read from
+                               ;; PORT.  This is a stripped-down version of
+                               ;; 'read-reference-graph'.
+                               (let loop ((items '()))
+                                 (match (read-line port)
+                                   ((? eof-object?)
+                                    (delete-duplicates items))
+                                   ((? string? item)
+                                    (let ((deriver (read-line port))
+                                          (count
+                                           (string->number (read-line port))))
+                                      (drop-lines port count)
+                                      (loop (cons item items)))))))
+
+                             (call-with-output-file (ungexp output)
+                               (lambda (port)
+                                 (write (call-with-input-file "graph"
+                                          read-graph)
+                                        port)))))
+                     #:guile guile
+                     #:options `(#:local-build? #t
+                                 #:references-graphs (("graph" ,item))))
+      (plain-file name "()")))
+
 
 ;;;
 ;;; Syntactic sugar.
 ;;;
 
 (eval-when (expand load eval)
+  (define-once read-syntax-redefined?
+    ;; Have we already redefined 'read-syntax'?  This needs to be done on
+    ;; 3.0.8 only to work around <https://issues.guix.gnu.org/54003>.
+    (or (not (module-variable the-scm-module 'read-syntax))
+        (not (guile-version>? "3.0.7"))))
+
+  (define read-procedure
+    ;; The current read procedure being called: either 'read' or
+    ;; 'read-syntax'.
+    (make-parameter read))
+
+  (define read-syntax*
+    ;; Replacement for 'read-syntax'.
+    (let ((read-syntax (and=> (module-variable the-scm-module 'read-syntax)
+                              variable-ref)))
+      (lambda (port . rest)
+        (parameterize ((read-procedure read-syntax))
+          (apply read-syntax port rest)))))
+
+  (unless read-syntax-redefined?
+    (set! (@ (guile) read-syntax) read-syntax*)
+    (set! read-syntax-redefined? #t))
+
   (define* (read-ungexp chr port #:optional native?)
     "Read an 'ungexp' or 'ungexp-splicing' form from PORT.  When NATIVE? is
 true, use 'ungexp-native' and 'ungexp-native-splicing' instead."
@@ -2050,22 +2261,39 @@ true, use 'ungexp-native' and 'ungexp-native-splicing' instead."
              'ungexp-native
              'ungexp))))
 
-    (match (read port)
-      ((? symbol? symbol)
-       (let ((str (symbol->string symbol)))
+    (define symbolic?
+      ;; Depending on whether (read-procedure) is 'read' or 'read-syntax', we
+      ;; might get either sexps or syntax objects.  Adjust accordingly.
+      (if (eq? (read-procedure) read)
+          symbol?
+          (compose symbol? syntax->datum)))
+
+    (define symbolic->string
+      (if (eq? (read-procedure) read)
+          symbol->string
+          (compose symbol->string syntax->datum)))
+
+    (define wrapped-symbol
+      (if (eq? (read-procedure) read)
+          (lambda (_ symbol) symbol)
+          datum->syntax))
+
+    (match ((read-procedure) port)
+      ((? symbolic? symbol)
+       (let ((str (symbolic->string symbol)))
          (match (string-index-right str #\:)
            (#f
             `(,unquote-symbol ,symbol))
            (colon
             (let ((name   (string->symbol (substring str 0 colon)))
                   (output (substring str (+ colon 1))))
-              `(,unquote-symbol ,name ,output))))))
+              `(,unquote-symbol ,(wrapped-symbol symbol name) ,output))))))
       (x
        `(,unquote-symbol ,x))))
 
   (define (read-gexp chr port)
     "Read a 'gexp' form from PORT."
-    `(gexp ,(read port)))
+    `(gexp ,((read-procedure) port)))
 
   ;; Extend the reader
   (read-hash-extend #\~ read-gexp)

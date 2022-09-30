@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012-2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2016, 2017 Mathieu Lirzin <mthl@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -245,11 +245,19 @@ Nix itself keeps only one of them."
     (make-hash-table 25))
 
   (for-each (lambda (input)
-              (let* ((drv (derivation-input-path input))
+              ;; If DRV1 and DRV2 are fixed-output derivations with the same
+              ;; output path, they must be coalesced.  Thus, TABLE is keyed by
+              ;; output paths.
+              (let* ((drv (derivation-input-derivation input))
+                     (key (string-join
+                           (map (match-lambda
+                                  ((_ . output)
+                                   (derivation-output-path output)))
+                                (derivation-outputs drv))))
                      (sub-drvs (derivation-input-sub-derivations input)))
-                (match (hash-get-handle table drv)
+                (match (hash-get-handle table key)
                   (#f
-                   (hash-set! table drv input))
+                   (hash-set! table key input))
                   ((and handle (key . ($ <derivation-input> drv sub-drvs2)))
                    ;; Merge DUP with INPUT.
                    (let* ((sub-drvs (delete-duplicates
@@ -1243,20 +1251,21 @@ MODULES are compiled."
         (hash-set! %module-cache key result)
         result)))
 
-(define* (build-expression->derivation store name exp ;deprecated
-                                       #:key
-                                       (system (%current-system))
-                                       (inputs '())
-                                       (outputs '("out"))
-                                       hash hash-algo recursive?
-                                       (env-vars '())
-                                       (modules '())
-                                       guile-for-build
-                                       references-graphs
-                                       allowed-references
-                                       disallowed-references
-                                       local-build? (substitutable? #t)
-                                       (properties '()))
+(define-deprecated (build-expression->derivation store name exp
+                                                 #:key
+                                                 (system (%current-system))
+                                                 (inputs '())
+                                                 (outputs '("out"))
+                                                 hash hash-algo recursive?
+                                                 (env-vars '())
+                                                 (modules '())
+                                                 guile-for-build
+                                                 references-graphs
+                                                 allowed-references
+                                                 disallowed-references
+                                                 local-build? (substitutable? #t)
+                                                 (properties '()))
+  gexp->derivation                                ;unbound, but that's okay
   "Return a derivation that executes Scheme expression EXP as a builder
 for derivation NAME.  INPUTS must be a list of (NAME DRV-PATH SUB-DRV)
 tuples; when SUB-DRV is omitted, \"out\" is assumed.  MODULES is a list

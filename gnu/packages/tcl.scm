@@ -5,7 +5,7 @@
 ;;; Copyright © 2016, 2018 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016 Jan Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2017 Kei Kebreau <kkebreau@posteo.net>
-;;; Copyright © 2018 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2018, 2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2019 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;;
@@ -25,6 +25,7 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages tcl)
+  #:use-module (guix gexp)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
@@ -37,6 +38,7 @@
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages tls)
   #:use-module (gnu packages xml)
   #:use-module (gnu packages xorg)
   #:use-module ((guix licenses) #:prefix license:))
@@ -44,20 +46,19 @@
 (define-public tcl
   (package
     (name "tcl")
-    (version "8.6.10")
+    (version "8.6.11")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://sourceforge/tcl/Tcl/"
                                   version "/tcl" version "-src.tar.gz"))
               (sha256
                (base32
-                "1vc7imilx6kcb5319r7hnrp4jn5pqb41an3vr3azhgcfcgvdp5ji"))
-              (patches (search-patches "tcl-fix-cross-compilation.patch"))))
+                "0n4211j80mxr6ql0xx52rig8r885rcbminfpjdb2qrw6hmk8c14c"))))
     (build-system gnu-build-system)
     (arguments
      `(#:phases (modify-phases %standard-phases
                   (add-before 'configure 'pre-configure
-                    (lambda _ (chdir "unix") #t))
+                    (lambda _ (chdir "unix")))
                  (add-after 'install 'install-private-headers
                    (lambda* (#:key outputs #:allow-other-keys)
                      ;; Private headers are needed by Expect.
@@ -68,8 +69,7 @@
                        ;; Programs such as Ghostscript rely on it.
                        (with-directory-excursion bin
                          (symlink (car (find-files "." "tclsh"))
-                                  "tclsh"))
-                       #t))))
+                                  "tclsh"))))))
 
        ;; By default, man pages are put in PREFIX/man, but we want them in
        ;; PREFIX/share/man.  The 'validate-documentation-location' phase is
@@ -98,7 +98,7 @@
 (define-public itcl
   (package
     (name "itcl")
-    (version "4.2.0")
+    (version "4.2.2")
     (source
      (origin
        (method url-fetch)
@@ -107,37 +107,33 @@
              version "/itcl" version ".tar.gz"))
        (file-name (string-append "incrtcl-" version ".tar.gz"))
        (sha256
-        (base32 "0w28v0zaraxcq1s9pa6cihqqwqvvwfgz275lks7w4gl7hxjxmasw"))))
+        (base32 "0v0m1s3rlsbg7p366i6m5zcvnmixnch87jmczidjanqvmw76fk5c"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:configure-flags
-       (list
-        (string-append
-         "--exec-prefix=" (assoc-ref %outputs "out"))
-        (string-append
-         "--with-tclinclude=" (assoc-ref %build-inputs "tcl") "/include")
-        (string-append
-         "--with-tcl=" (assoc-ref %build-inputs "tcl") "/lib"))
-       #:test-target "test"
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'install 'cleanup-bin-and-lib
-           (lambda* (#:key outputs #:allow-other-keys)
-             ;; NOTE: (Sharlatan-20210213T204336+0000): libraries appearer in
-             ;; "out/lib/itcl{{version}}" and there are no binaries, some extra
-             ;; rename and remove spells are to be applied.
-             (let ((out (assoc-ref outputs "out")))
-               (rmdir
-                (string-append out "/bin"))
-               (rename-file
-                (string-append out "/lib/itcl" ,version) (string-append out "/libtmp"))
-               (rename-file
-                (string-append out "/libtmp") (string-append out "/lib")))
-             #t)))))
+     (list #:configure-flags
+           #~(list
+              (string-append "--exec-prefix=" #$output)
+              (string-append "--with-tclinclude="
+                             (assoc-ref %build-inputs "tcl") "/include")
+              (string-append "--with-tcl="
+                             (assoc-ref %build-inputs "tcl") "/lib"))
+           #:test-target "test"
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'install 'clean-up-bin-and-lib
+                 (lambda _
+                   ;; NOTE: (Sharlatan-20210213T204336+0000): libraries appearer in
+                   ;; "out/lib/itcl{{version}}" and there are no binaries, some extra
+                   ;; rename and remove spells are to be applied.
+                   (rmdir (string-append #$output "/bin"))
+                   (rename-file (string-append #$output "/lib/itcl" #$version)
+                                (string-append #$output "/libtmp"))
+                   (rename-file (string-append #$output "/libtmp")
+                                (string-append #$output "/lib")))))))
     (native-inputs
-     `(("tcl" ,tcl)))
+     (list tcl))
     (inputs
-     `(("tcllib" ,tcllib)))
+     (list tcllib))
     (home-page "http://incrtcl.sourceforge.net/")
     (synopsis "Object Oriented programming (OOP) extension for Tcl")
     (description
@@ -160,11 +156,11 @@ multiple inheritance and public and private classes and variables.")
         "0d1cp5hggjl93xwc8h1y6adbnrvpkk0ywkd00inz9ndxn21xm9s9"))))
     (build-system gnu-build-system)
     (inputs
-     `(;; TODO: Add these optional dependencies.
-       ;; ("libX11" ,libX11)
-       ;; ("xorgproto" ,xorgproto)
-       ;; ("tk" ,tk)
-       ("tcl" ,tcl)))
+     (list ;; TODO: Add these optional dependencies.
+           ;; ("libX11" ,libX11)
+           ;; ("xorgproto" ,xorgproto)
+           ;; ("tk" ,tk)
+           tcl))
     (arguments
      '(#:configure-flags
        (let ((out (assoc-ref %outputs "out"))
@@ -197,7 +193,7 @@ X11 GUIs.")
 (define-public tk
   (package
     (name "tk")
-    (version "8.6.10")
+    (version "8.6.11.1")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://sourceforge/tcl/Tcl/"
@@ -205,38 +201,31 @@ X11 GUIs.")
                                  version "-src.tar.gz"))
              (sha256
               (base32
-               "11p3ycqbr5116vpaxv6fl6md6gcav1ffspgr8wrlc2lxhn543pv3"))
+               "1gh9k7l76qg9l0sb78ijw9xz4xl1af47aqbdifb6mjpf3cbsnv00"))
              (patches (search-patches "tk-find-library.patch"))))
     (build-system gnu-build-system)
     (arguments
      `(#:phases (modify-phases %standard-phases
-                  (add-before
-                   'configure 'pre-configure
-                   (lambda _
-                     (chdir "unix")
-                     #t))
-                  (add-after
-                   'install 'create-wish-symlink
-                   (lambda* (#:key outputs #:allow-other-keys)
-                     (let ((out (assoc-ref outputs "out")))
-                       (symlink (string-append out "/bin/wish"
-                                               ,(version-major+minor
+                  (add-before 'configure 'pre-configure
+                    (lambda _ (chdir "unix")))
+                  (add-after 'install 'create-wish-symlink
+                    (lambda* (#:key outputs #:allow-other-keys)
+                      (let ((out (assoc-ref outputs "out")))
+                        (symlink (string-append out "/bin/wish"
+                                                ,(version-major+minor
                                                   (package-version tk)))
-                                (string-append out "/bin/wish")))
-                     #t))
-                  (add-after
-                   'install 'add-fontconfig-flag
-                   (lambda* (#:key inputs outputs #:allow-other-keys)
-                     ;; Add the missing -L flag for Fontconfig in 'tk.pc' and
-                     ;; 'tkConfig.sh'.
-                     (let ((out        (assoc-ref outputs "out"))
-                           (fontconfig (assoc-ref inputs "fontconfig")))
-                       (substitute* (find-files out
-                                                "^(tkConfig\\.sh|tk\\.pc)$")
-                         (("-lfontconfig")
-                          (string-append "-L" fontconfig
-                                         "/lib -lfontconfig")))
-                       #t))))
+                                 (string-append out "/bin/wish")))))
+                  (add-after 'install 'add-fontconfig-flag
+                    (lambda* (#:key inputs outputs #:allow-other-keys)
+                      ;; Add the missing -L flag for Fontconfig in 'tk.pc' and
+                      ;; 'tkConfig.sh'.
+                      (let ((out        (assoc-ref outputs "out"))
+                            (fontconfig (assoc-ref inputs "fontconfig")))
+                        (substitute* (find-files out
+                                                 "^(tkConfig\\.sh|tk\\.pc)$")
+                          (("-lfontconfig")
+                           (string-append "-L" fontconfig
+                                          "/lib -lfontconfig")))))))
 
        #:configure-flags
        (list (string-append "--with-tcl="
@@ -251,13 +240,12 @@ X11 GUIs.")
 
        ;; The tests require a running X server, so we just skip them.
        #:tests? #f))
-    (native-inputs `(("pkg-config" ,pkg-config)))
+    (native-inputs (list pkg-config))
     (inputs `(("libxft" ,libxft)
               ("fontconfig" ,fontconfig)
               ("tcl" ,tcl)))
     ;; tk.h refers to X11 headers, hence the propagation.
-    (propagated-inputs `(("libx11" ,libx11)
-                         ("libxext" ,libxext)))
+    (propagated-inputs (list libx11 libxext))
 
     (home-page "https://www.tcl.tk/")
     (synopsis "Graphical user interface toolkit for Tcl")
@@ -279,7 +267,7 @@ interfaces (GUIs) in the Tcl language.")
               (base32
                "0pha40m97fzafjnq8vwkbi5sml6xv8jki6qi60rxrzmxlrqp5aij"))))
     (build-system perl-build-system)
-    (native-inputs `(("pkg-config" ,pkg-config)))
+    (native-inputs (list pkg-config))
     (inputs `(("libx11" ,libx11)
               ("libpng" ,libpng)
               ("libjpeg" ,libjpeg-turbo)))
@@ -314,7 +302,7 @@ interfaces (GUIs) in the Tcl language.")
                 "173abxaazdmf210v651708ab6h7xhskvd52krxk6ifam337qgzh1"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("tcl" ,tcl)))
+     (list tcl))
     (native-search-paths
      (list (search-path-specification
             (variable "TCLLIBPATH")
@@ -339,10 +327,9 @@ utility functions and modules all written in high-level Tcl.")
                 "03y0bzgwbh7nnyqkh8n00bbkq2fyblq39s3bdb6mawna0bbn0wwg"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("tcl" ,tcl)))
+     (list tcl))
     (propagated-inputs
-     `(("tcllib" ,tcllib)
-       ("tk" ,tk))) ; for "wish"
+     (list tcllib tk)) ; for "wish"
     (native-search-paths
      (list (search-path-specification
             (variable "TCLLIBPATH")
@@ -385,11 +372,9 @@ modules for Tk, all written in high-level Tcl.  Examples of provided widgets:
               (patches (search-patches "tclxml-3.2-install.patch"))))
     (build-system gnu-build-system)
     (native-inputs
-     `(("tcl" ,tcl)
-       ("libxml2" ,libxml2)
-       ("libxslt" ,libxslt)))
+     (list tcl libxml2 libxslt))
     (propagated-inputs
-     `(("tcllib" ,tcllib))) ; uri
+     (list tcllib)) ; uri
     (native-search-paths
      (list (search-path-specification
             (variable "TCLLIBPATH")
@@ -438,8 +423,7 @@ callback is evaluated.")
                                               (assoc-ref %outputs "out")
                                               "/lib"))))
     (inputs
-     `(("tcl" ,tcl)
-       ("tk" ,tk)))
+     (list tcl tk))
     (home-page "http://tclx.sourceforge.net/")
     (synopsis "System programming extensions for Tcl")
     (description
@@ -448,6 +432,51 @@ application development.  TclX provides additional interfaces to the operating
 system, and adds many new programming constructs, text manipulation tools, and
 debugging tools.")
     (license license:tcl/tk)))
+
+(define-public tcl-tls
+  (package
+    (name "tcl-tls")
+    (version "1.7.22")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://core.tcl-lang.org/tcltls/uv/tcltls-"
+                           version ".tar.gz"))
+       (sha256
+        (base32
+         "1d639gzngxp7zwwpb4ayh663br6vhsbiy6wxm952rj2y4xx2nkp8"))))
+    (build-system gnu-build-system)
+    (inputs (list tcl))
+    (propagated-inputs (list openssl))
+    (arguments
+     (list #:configure-flags
+           #~(let ((tcl #$(this-package-input "tcl")))
+               (list "--with-ssl=libressl"
+                     (string-append "-with-ssl-dir="
+                                    #$(this-package-input "openssl"))
+                     (string-append "--with-tcl=" tcl "/lib")
+                     (string-append "--with-tclinclude=" tcl "/include")
+                     (string-append "--exec-prefix=" #$output)
+                     (string-append "--mandir=" #$output "/share/man")))
+
+           #:test-target "test"))
+    (search-paths
+     (list (search-path-specification
+            (variable "TCLLIBPATH")
+            (separator " ")
+            (files (list (string-append "lib/tcltls" version))))))
+    (home-page "https://core.tcl-lang.org/tcltls/index")
+    (synopsis "Tcl binding to OpenSSL toolkit")
+    (description
+     "This extension provides a generic binding to OpenSSL, utilizing the
+@code{Tcl_StackChannel} API for Tcl 8.2 and higher.  The sockets behave
+exactly the same as channels created using Tcl's built-in socket command with
+additional options for controlling the SSL session.")
+    (properties
+     '((release-monitoring-url
+        . "https://core.tcl-lang.org/tcltls/wiki/Download")
+       (upstream-name . "tcltls")))
+    (license license:public-domain)))
 
 (define-public go-github.com-nsf-gothic
   (let ((commit "97dfcc195b9de36c911a69a6ec2b5b2659c05652")
@@ -468,8 +497,7 @@ debugging tools.")
     (arguments
      `(#:import-path "github.com/nsf/gothic"))
     (propagated-inputs
-     `(("tk" ,tk)
-       ("tcl" ,tcl)))
+     (list tk tcl))
     (home-page "https://github.com/nsf/gothic")
     (synopsis "Tcl/Tk Go bindings")
     (description "Gothic contains Go bindings for Tcl/Tk.  The package contains

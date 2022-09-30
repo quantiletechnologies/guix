@@ -3,10 +3,11 @@
 ;;; Copyright © 2016, 2017, 2018 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2017 Stefan Reichör <stefan@xsteve.at>
 ;;; Copyright © 2017 Eric Bavier <bavier@member.fsf.org>
-;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2018–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 Gábor Boskovits <boskovits@gmail.com>
 ;;; Copyright © 2019 Meiyo Peng <meiyo@riseup.net>
 ;;; Copyright © 2020 Marius Bakke <mbakke@fastmail.com>
+;;; Copyright © 2021 Guillaume Le Vaillant <glv@posteo.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -33,12 +34,28 @@
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system python)
   #:use-module (gnu packages)
+  #:use-module (gnu packages autotools)
+  #:use-module (gnu packages bison)
+  #:use-module (gnu packages c)
+  #:use-module (gnu packages compression)
+  #:use-module (gnu packages curl)
+  #:use-module (gnu packages cyrus-sasl)
+  #:use-module (gnu packages databases)
+  #:use-module (gnu packages flex)
+  #:use-module (gnu packages geo)
+  #:use-module (gnu packages gnupg)
+  #:use-module (gnu packages kerberos)
+  #:use-module (gnu packages linux)
   #:use-module (gnu packages ncurses)
+  #:use-module (gnu packages networking)
   #:use-module (gnu packages perl)
+  #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
-  #:use-module (gnu packages autotools))
+  #:use-module (gnu packages tcl)
+  #:use-module (gnu packages tls))
 
 (define-public log4cpp
   (package
@@ -76,7 +93,7 @@ staying as close to their API as is reasonable.")
 (define-public glog
   (package
     (name "glog")
-    (version "0.4.0")
+    (version "0.5.0")
     (home-page "https://github.com/google/glog")
     (source (origin
               (method git-fetch)
@@ -84,24 +101,12 @@ staying as close to their API as is reasonable.")
                                   (commit (string-append "v" version))))
               (sha256
                (base32
-                "1xd3maiipfbxmhc9rrblc5x52nxvkwxp14npg31y5njqvkvzax9b"))
+                "17014q25c99qyis6l3fwxidw6222bb269fdlr74gn7pzmzg4lvg3"))
               (file-name (git-file-name name version))))
-    (build-system gnu-build-system)
-    (arguments
-     `(#:phases (modify-phases %standard-phases
-                  (add-before 'check 'disable-signal-tests
-                    (lambda _
-                      ;; XXX: This test fails on non x86_64.  See e.g.
-                      ;; https://github.com/google/glog/issues/219 and
-                      ;; https://github.com/google/glog/issues/256.
-                      (substitute* "Makefile"
-                        (("\tsignalhandler_unittest_sh") "\t$(EMPTY)"))
-                      #t)))))
+    (build-system cmake-build-system)
     (native-inputs
-     `(("perl" ,perl)                             ;for tests
-       ("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("libtool" ,libtool)))
+     (list perl ;for tests
+           autoconf automake libtool))
     (synopsis "C++ logging library")
     (description
      "Google glog is a library that implements application-level logging.
@@ -111,38 +116,43 @@ particular severity level.  It allows logging to be controlled from the
 command line.")
     (license license:bsd-3)))
 
+;; This is the legacy version of the tailon package.  The new version, written
+;; in Go in available here: https://github.com/gvalkov/tailon.
 (define-public tailon
   (package
     (name "tailon")
-    (version "1.3.0")
+    (version "1.4.3")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri name version))
        (sha256
         (base32
-         "0wl2wm6p3pc0vkk33s7rzgcfvs9cwxfmlz997pdfhlw72r00l7s5"))))
+         "0xkmrivzilsc9wqr8ms67v7399gxnh7pv5687k4rdpdgz4309fwc"))))
     (build-system python-build-system)
+    (native-inputs
+     (list python-tox python-wheel))
     (inputs
-     `(("python-pyyaml" ,python-pyyaml)
-       ("python-sockjs-tornado" ,python-sockjs-tornado)
-       ("python-tornado-http-auth" ,python-tornado-http-auth)
-       ("python-tornado" ,python-tornado)))
+     (list python-pyyaml-5 python-sockjs-tornado python-tornado-http-auth
+           python-tornado python-deepmerge))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'patch-commands.py
-                     (lambda args
-                       (substitute* "tailon/commands.py"
-                         (("self\\.first_in_path\\('grep'\\)")
-                          (string-append"'" (which "grep") "'"))
-                         (("self\\.first_in_path\\('gawk', 'awk'\\)")
-                          (string-append"'" (which "gawk") "'"))
-                         (("self\\.first_in_path\\('gsed', 'sed'\\)")
-                          (string-append"'" (which "sed") "'"))
-                         (("self\\.first_in_path\\('gtail', 'tail'\\)")
-                          (string-append"'" (which "tail") "'")))
-                       #t)))))
+           (lambda args
+             (substitute* "tailon/commands.py"
+               (("self\\.first_in_path\\('grep'\\)")
+                (string-append"'" (which "grep") "'"))
+               (("self\\.first_in_path\\('gawk', 'awk'\\)")
+                (string-append"'" (which "gawk") "'"))
+               (("self\\.first_in_path\\('gsed', 'sed'\\)")
+                (string-append"'" (which "sed") "'"))
+               (("self\\.first_in_path\\('gtail', 'tail'\\)")
+                (string-append"'" (which "tail") "'")))))
+         (add-after 'unpack 'relax-requirements
+           (lambda _
+             (substitute* "setup.py"
+               ((",<5.0.0") "")))))))
     (home-page "https://tailon.readthedocs.io/")
     (synopsis
      "Webapp for looking at and searching through log files")
@@ -154,32 +164,43 @@ commands, displaying the results via a web interface.")
 (define-public multitail
   (package
     (name "multitail")
-    (version "6.5.0")
+    (version "6.5.2")
     (source
      (origin
-      (method url-fetch)
-      (uri (string-append "https://vanheusden.com/multitail/multitail-"
-                          version ".tgz"))
+      (method git-fetch)
+      (uri (git-reference
+            (url "https://github.com/halturin/multitail")
+            (commit (string-append "v" version))))
+      (file-name (git-file-name name version))
       (sha256
-       (base32 "1vd9vdxyxsccl64ilx542ya5vlw2bpg6gnkq1x8cfqy6vxvmx7dj"))))
+       (base32 "17hg5qpangyx4m7hp2x4h56mp6w3wsaslg1il39qcpwsffh1rihc"))))
     (build-system gnu-build-system)
     (arguments
      `(#:make-flags
        (list (string-append "CC=" ,(cc-for-target))
-             (string-append "PREFIX="
-                            (assoc-ref %outputs "out")))
+             (string-append "PREFIX=" (assoc-ref %outputs "out"))
+             "SYSCONFDIR=$(PREFIX)/etc")
        #:phases
        (modify-phases %standard-phases
-         (add-after 'unpack 'patch-curses-lib
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (substitute* "mt.h"
-                 (("ncursesw\\/panel.h") "panel.h")
-                 (("ncursesw\\/ncurses.h") "ncurses.h")))
-             #t))
+         (add-after 'unpack 'fix-broken-build
+           ;; With some luck, you might be able to remove this when updating…
+           (lambda _
+             (substitute* "Makefile"
+               ((" \\*\\.txt") "")
+               ((".*CONFIG_DIR.*") "")
+               (("^install: .*" match)
+                (string-append match
+                               "\t$(INSTALL_DIR) $(DESTDIR)$(SYSCONFDIR)\n")))
+             (substitute* "version"
+               (("(VERSION=).*" _ assign)
+                (string-append assign ,version)))))
+         (add-after 'unpack 'patch-curses-headers
+           (lambda _
+             (substitute* "mt.h"
+               (("ncursesw/") ""))))
          (delete 'configure))           ; no configure script
        #:tests? #f)) ; no test suite (make check just runs cppcheck)
-    (inputs `(("ncurses" ,ncurses)))
+    (inputs (list ncurses))
     (home-page "https://vanheusden.com/multitail/")
     (synopsis "Monitor multiple log files")
     (description
@@ -190,7 +211,7 @@ output in multiple windows in a terminal.")
 (define-public spdlog
   (package
     (name "spdlog")
-    (version "1.8.5")
+    (version "1.10.0")
     (source
      (origin
        (method git-fetch)
@@ -199,13 +220,21 @@ output in multiple windows in a terminal.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "179krvg5sad6dviqpcjwg6czzknnilqszrg1d0fgp12h6sy66vqg"))))
+        (base32 "02xz017ba9fssm1rp1fcfld7h79awbr6fqai9dxaqp02akp3davk"))
+       (modules '((guix build utils)))
+       (snippet
+        ;; Prevent race on busy hardware.  Remove snippet for versions
+        ;; > 1.10.0; see <https://github.com/gabime/spdlog/issues/2363>.
+        '(substitute* "tests/test_misc.cpp"
+           (("spdlog::details::os::sleep_for_millis\\(10\\)")
+            "spdlog::details::os::sleep_for_millis(100)")))))
     (build-system cmake-build-system)
     ;; TODO run benchmark. Currently not possible, as adding
     ;; (gnu packages benchmark) forms a dependency cycle
     (arguments
      '(#:configure-flags
        (list "-DSPDLOG_BUILD_BENCH=OFF"
+             "-DSPDLOG_BUILD_SHARED=ON"
              "-DSPDLOG_BUILD_TESTS=ON")))
     (home-page "https://github.com/gabime/spdlog")
     (synopsis "Fast C++ logging library")
@@ -214,3 +243,153 @@ library.")
     ;; spdlog is under Expat license, but the bundled fmt library in
     ;; "include/spdlog/fmt/bundled" is under BSD 2 clause license.
     (license (list license:expat license:bsd-2))))
+
+(define-public rsyslog
+  (package
+    (name "rsyslog")
+    (version "8.2204.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/rsyslog/rsyslog.git")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "0bsd1n3n4hvlkwf4g85g3fg37mnvkdmxsfdmg273gcachhyl5hbx"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:phases
+      '(modify-phases %standard-phases
+         ;; autogen.sh calls configure at the end of the script.
+         (replace 'bootstrap
+           (lambda _ (invoke "autoreconf" "-vfi"))))
+      #:configure-flags
+      ;; Rsyslog comes with a plethora of optional modules.  We enable most of
+      ;; them for a full-featured build.
+      '(list "--enable-kmsg"
+             "--enable-liblogging_stdlog"
+             "--enable-unlimited_select"
+             "--enable-usertools"
+         
+             ;; Input plugins
+             "--enable-imbatchreport"
+             "--enable-imczmq"
+             "--enable-imdiag"          ;for full tests
+             "--enable-imdocker"
+             "--enable-imfile"
+             "--enable-imkafka"
+             "--enable-improg"
+             "--enable-impstats"
+             "--enable-imptcp"
+             "--enable-imtuxedoulog"
+       
+             ;; Output plugins
+             "--enable-clickhouse"
+             "--enable-elasticsearch"
+             "--enable-mail"
+             "--enable-omczmq"
+             "--enable-omfile_hardened"
+             "--enable-omhttp"
+             "--enable-omhttpfs"
+             "--enable-omkafka"
+             "--enable-omprog"
+             "--enable-omruleset"
+             "--enable-omstdout"
+             "--enable-omtcl"
+             "--enable-omudpspoof"
+             "--enable-omuxsock"
+
+             ;; Parser Modules
+             "--enable-pmaixforwardedfrom"
+             "--enable-pmciscoios"
+             "--enable-pmcisconames"
+             "--enable-pmdb2diag"
+             "--enable-pmlastmsg"
+             "--enable-pmnormalize"
+             "--enable-pmnull"
+             "--enable-pmpanngfw"
+             "--enable-pmsnare"
+
+             ;; Message Modification Modules
+             "--enable-mmanon"
+             "--enable-mmaudit"
+             "--enable-mmcount"
+             "--enable-mmdarwin"
+             "--enable-mmdblookup"
+             "--enable-mmfields"
+             "--enable-mmjsonparse"
+             "--enable-mmkubernetes"
+             "--enable-mmnormalize"
+             "--enable-mmpstrucdata"
+             "--enable-mmrfc5424addhmac"
+             "--enable-mmrm1stspace"
+             "--enable-mmsequence"
+             "--enable-mmsnmptrapd"
+             "--enable-mmtaghostname"
+             "--enable-mmutf8fix"
+
+             ;; Database Support
+             "--enable-libdbi"
+             "--enable-mysql"
+             "--enable-pgsql"
+
+             ;; Protocol Support
+             "--enable-openssl"
+             "--enable-gnutls"
+             "--enable-gssapi-krb5"
+             "--enable-snmp"
+
+             ;; Function modules
+             "--enable-fmhash_xxhash"
+
+             ;; Needed to build rscryutil.1.gz.
+             "--enable-generate-man-pages")))
+    (native-inputs
+     (list autoconf
+           automake
+           bison
+           flex
+           libtool
+           pkg-config
+           python-docutils))            ; rst2man for man pages
+    (inputs
+     (list curl
+           cyrus-sasl
+           czmq
+           gnutls
+           libdbi
+           libestr
+           libfastjson
+           libgcrypt
+           liblogging
+           liblognorm
+           libmaxminddb
+           libnet
+           librdkafka
+           lz4
+           (list mariadb "dev")
+           (list mariadb "lib")
+           mit-krb5
+           net-snmp
+           openssl
+           postgresql
+           tcl
+           (list util-linux "lib")
+           zeromq
+           zlib))
+    (home-page "https://www.rsyslog.com/")
+    (synopsis "RSYSLOG is a flexible and fast system for log processing")
+    (description
+     "Rsyslog offers high-performance, great security features and a modular
+design.  While it started as a regular syslogd, rsyslog has evolved into a
+kind of swiss army knife of logging, being able to accept inputs from a wide
+variety of sources, transform them, and output the results to diverse
+destinations.")
+    ;; Most of the source code is licensed under the LGPL3+ with many source
+    ;; files licensed under the terms of the ASL2.0.  Some modules are
+    ;; licensed under GPL3+.
+    (license (list license:lgpl3+
+                   license:gpl3+
+                   license:asl2.0))))

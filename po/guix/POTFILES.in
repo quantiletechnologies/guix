@@ -4,7 +4,11 @@ gnu.scm
 gnu/packages.scm
 gnu/services.scm
 gnu/system.scm
+gnu/services/configuration.scm
 gnu/services/shepherd.scm
+gnu/home/services.scm
+gnu/home/services/ssh.scm
+gnu/home/services/symlink-manager.scm
 gnu/system/file-systems.scm
 gnu/system/image.scm
 gnu/system/linux-container.scm
@@ -64,6 +68,7 @@ guix/ci.scm
 guix/cve.scm
 guix/git-authenticate.scm
 guix/gnupg.scm
+guix/graph.scm
 guix/lint.scm
 guix/scripts/download.scm
 guix/scripts/package.scm
@@ -84,6 +89,7 @@ guix/scripts/pull.scm
 guix/scripts/substitute.scm
 guix/scripts/authenticate.scm
 guix/scripts/system.scm
+guix/scripts/system/edit.scm
 guix/scripts/system/search.scm
 guix/scripts/lint.scm
 guix/scripts/publish.scm
@@ -111,6 +117,7 @@ guix/narinfo.scm
 guix/channels.scm
 guix/packages.scm
 guix/profiles.scm
+guix/read-print.scm
 guix/remote.scm
 guix/ssh.scm
 guix/git.scm
@@ -121,6 +128,7 @@ guix/scripts/archive.scm
 guix/scripts/build.scm
 guix/scripts/discover.scm
 guix/scripts/environment.scm
+guix/scripts/home/edit.scm
 guix/scripts/home/import.scm
 guix/scripts/home.scm
 guix/scripts/time-machine.scm
@@ -140,5 +148,7 @@ guix/scripts/offload.scm
 guix/scripts/perform-download.scm
 guix/scripts/refresh.scm
 guix/scripts/repl.scm
+guix/scripts/shell.scm
+guix/scripts/style.scm
 guix/scripts/system/reconfigure.scm
 nix/nix-daemon/guix-daemon.cc

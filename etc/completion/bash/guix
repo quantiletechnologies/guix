@@ -1,5 +1,5 @@
 # GNU Guix --- Functional package management for GNU
-# Copyright © 2015, 2016, 2017, 2018, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+# Copyright © 2015-2022 Ludovic Courtès <ludo@gnu.org>
 # Copyright © 2021 Tobias Geerinck-Rice <me@tobias.gr>
 #
 # This file is part of GNU Guix.
@@ -28,10 +28,11 @@ _guix_complete_command ()
     if [ -z "$_guix_commands" ]
     then
 	# Cache the list of commands to speed things up.
-	_guix_commands="$(guix --help 2> /dev/null  \
+	_guix_commands="$(${COMP_WORDS[0]} --help 2> /dev/null  \
                                      | grep '^    ' \
 				     | sed '-es/^ *\([a-z-]\+\).*$/\1/g')"
     fi
+
     COMPREPLY+=($(compgen -W "$_guix_commands" -- "$word_at_point"))
 }
 
@@ -71,10 +72,16 @@ _guix_complete_option ()
 {
     local command="${COMP_WORDS[$1]}"
     local subcommand="${COMP_WORDS[$(($1 + 1))]}"
-    if _guix_is_option "$subcommand"
+
+    if [ $1 -eq 0 ]
+    then
+	command=""
+	subcommand=""
+    elif _guix_is_option "$subcommand"
     then
 	subcommand=""
     fi
+
     local options="$(${COMP_WORDS[0]} $command $subcommand --help 2> /dev/null \
                             | grep '^  \+-' \
                             | sed -e's/^.*--\([a-zA-Z0-9_-]\+\)\(=\?\).*/--\1\2/g')"
@@ -110,58 +117,59 @@ _guix_is_removing ()
     $result
 }
 
+_guix_is_short_option ()
+{
+    case "${COMP_WORDS[$COMP_CWORD - 1]}" in
+	--*)	false;;
+	-*$1)	true ;;
+	*)	false ;;
+    esac
+}
+
+_guix_is_long_option ()
+{
+    # Don't handle (non-GNU?) ‘--long-option VALUE’, as Guix doesn't either.
+    case "${COMP_WORDS[$COMP_CWORD]}" in
+	--$1=*)	true ;;
+	*)	false ;;
+    esac
+}
+
 _guix_is_dash_f ()
 {
-    [ "${COMP_WORDS[$COMP_CWORD - 1]}" = "-f" ] \
-	|| { case "${COMP_WORDS[$COMP_CWORD]}" in
-		 --file=*|--install-from-file=*) true;;
-		 *)                              false;;
-	     esac }
+    _guix_is_short_option f ||
+    _guix_is_long_option file ||
+    _guix_is_long_option install-from-file
 }
 
 _guix_is_dash_l ()
 {
-    [ "${COMP_WORDS[$COMP_CWORD - 1]}" = "-l" ] \
-	|| { case "${COMP_WORDS[$COMP_CWORD]}" in
-		 --load=*) true;;
-		 *)        false;;
-	     esac }
+    _guix_is_short_option l ||
+    _guix_is_long_option load
 }
 
 _guix_is_dash_L ()
 {
-    [ "${COMP_WORDS[$COMP_CWORD - 1]}" = "-L" ] \
-	|| { case "${COMP_WORDS[$COMP_CWORD]}" in
-		 --load-path=*) true;;
-		 *)             false;;
-	     esac }
+    _guix_is_short_option L ||
+    _guix_is_long_option load-path
 }
 
 _guix_is_dash_m ()
 {
-    [ "${COMP_WORDS[$COMP_CWORD - 1]}" = "-m" ] \
-	|| { case "${COMP_WORDS[$COMP_CWORD]}" in
-		 --manifest=*) true;;
-		 *)            false;;
-	     esac }
+    _guix_is_short_option m ||
+    _guix_is_long_option manifest
 }
 
 _guix_is_dash_C ()
 {
-    [ "${COMP_WORDS[$COMP_CWORD - 1]}" = "-C" ] \
-	|| { case "${COMP_WORDS[$COMP_CWORD]}" in
-		 --channels=*)  true;;
-		 *)             false;;
-	     esac }
+    _guix_is_short_option C ||
+    _guix_is_long_option channels
 }
 
 _guix_is_dash_p ()
 {
-    [ "${COMP_WORDS[$COMP_CWORD - 1]}" = "-p" ] \
-	|| { case "${COMP_WORDS[$COMP_CWORD]}" in
-		 --profile=*)   true;;
-		 *)             false;;
-	     esac }
+    _guix_is_short_option p ||
+    _guix_is_long_option profile
 }
 
 _guix_complete_file ()
@@ -215,7 +223,7 @@ _guix_complete ()
 	if [[ "$word" = "--" ]]
 	then
 	    case "$command" in
-		environment)
+		environment|shell)
 		    break
 		    ;;
 		time-machine)
@@ -228,6 +236,7 @@ _guix_complete ()
     case $COMP_CWORD in
 	$command_index)
 	    _guix_complete_command
+	    _guix_complete_option 0 "$word_at_point"
 	    ;;
 	*)
 	    if [[ "$command" = "package" ]]
@@ -265,11 +274,15 @@ _guix_complete ()
 		else
 		    _guix_complete_available_package_or_store_file "$word_at_point"
                 fi
-	    elif [[ "$command" = "environment" ]]
+	    elif [[ "$command" = "environment" || "$command" = "shell" ]]
 	    then
-                if _guix_is_dash_L || _guix_is_dash_m || _guix_is_dash_p || _guix_is_dash_l
-                then
-                    _guix_complete_file
+		if _guix_is_dash_f && [[ "$command" = "shell" ]]
+		then
+		    # The otherwise identical ‘guix environment’ lacks the ‘-f’ option.
+		    _guix_complete_file
+		elif _guix_is_dash_L || _guix_is_dash_m || _guix_is_dash_p || _guix_is_dash_l
+		then
+		    _guix_complete_file
 		elif _guix_is_option "$word_at_point"
 		then
 		    _guix_complete_option "$command_index" "$word_at_point"
@@ -282,7 +295,7 @@ _guix_complete ()
 	    elif [[ "$command" = "size" ]]
 	    then
 		_guix_complete_available_package_or_store_file "$word_at_point"
-	    elif [[ "$command" = "system" ]]
+	    elif [[ "$command" = "system" || "$command" = "home" ]]
 	    then
 		case $((COMP_CWORD - command_index)) in
 		    1) _guix_complete_subcommand;;

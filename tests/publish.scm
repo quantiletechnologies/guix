@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2015 David Thompson <davet@gnu.org>
 ;;; Copyright © 2020 by Amar M. Singh <nly@disroot.org>
-;;; Copyright © 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2016-2022 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -41,12 +41,15 @@
   #:autoload   (zstd) (call-with-zstd-input-port)
   #:use-module (web uri)
   #:use-module (web client)
+  #:use-module (web request)
   #:use-module (web response)
+  #:use-module ((guix http-client) #:select (http-multiple-get))
   #:use-module (rnrs bytevectors)
   #:use-module (ice-9 binary-ports)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-64)
+  #:use-module (srfi srfi-71)
   #:use-module (ice-9 threads)
   #:use-module (ice-9 format)
   #:use-module (ice-9 match)
@@ -142,15 +145,10 @@
          (unsigned-info
           (format #f
                   "StorePath: ~a
-URL: nar/~a
-Compression: none
-FileSize: ~a
 NarHash: sha256:~a
 NarSize: ~d
 References: ~a~%"
                   %item
-                  (basename %item)
-                  (path-info-nar-size info)
                   (bytevector->nix-base32-string
                    (path-info-hash info))
                   (path-info-nar-size info)
@@ -159,12 +157,37 @@ References: ~a~%"
                      (string->utf8
                       (canonical-sexp->string
                        (signed-string unsigned-info))))))
-    (format #f "~aSignature: 1;~a;~a~%"
-            unsigned-info (gethostname) signature))
+    (format #f "~aSignature: 1;~a;~a
+URL: nar/~a
+Compression: none
+FileSize: ~a\n"
+            unsigned-info (gethostname) signature
+            (basename %item)
+            (path-info-nar-size info)))
   (utf8->string
    (http-get-body
     (publish-uri
      (string-append "/" (store-path-hash-part %item) ".narinfo")))))
+
+(test-equal "/*.narinfo pipeline"
+  (make-list 500 200)
+  ;; Make sure clients can pipeline requests and correct responses, in the
+  ;; right order.  See <https://issues.guix.gnu.org/54723>.
+  (let* ((uri (string->uri (publish-uri
+                            (string-append "/"
+                                           (store-path-hash-part %item)
+                                           ".narinfo"))))
+         (_ expected (http-get uri #:streaming? #f #:decode-body? #f)))
+    (http-multiple-get (string->uri (publish-uri ""))
+                       (lambda (request response port result)
+                         (and (bytevector=? expected
+                                            (get-bytevector-n port
+                                                              (response-content-length
+                                                               response)))
+                              (cons (response-code response) result)))
+                       '()
+                       (make-list 500 (build-request uri))
+                       #:batch-size 77)))
 
 (test-equal "/*.narinfo with properly encoded '+' sign"
   ;; See <http://bugs.gnu.org/21888>.
@@ -173,15 +196,10 @@ References: ~a~%"
          (unsigned-info
           (format #f
                   "StorePath: ~a
-URL: nar/~a
-Compression: none
-FileSize: ~a
 NarHash: sha256:~a
 NarSize: ~d
 References: ~%"
                   item
-                  (uri-encode (basename item))
-                  (path-info-nar-size info)
                   (bytevector->nix-base32-string
                    (path-info-hash info))
                   (path-info-nar-size info)))
@@ -189,8 +207,13 @@ References: ~%"
                      (string->utf8
                       (canonical-sexp->string
                        (signed-string unsigned-info))))))
-    (format #f "~aSignature: 1;~a;~a~%"
-            unsigned-info (gethostname) signature))
+    (format #f "~aSignature: 1;~a;~a
+URL: nar/~a
+Compression: none
+FileSize: ~a~%"
+            unsigned-info (gethostname) signature
+            (uri-encode (basename item))
+            (path-info-nar-size info)))
 
   (let ((item (add-text-to-store %store "fake-gtk+" "Congrats!")))
     (utf8->string
@@ -324,7 +347,12 @@ References: ~%"
               (part (store-path-hash-part %item))
               (url  (string-append base part ".narinfo"))
               (body (http-get-port url)))
-         (list (take (recutils->alist body) 5)
+         (list (filter (match-lambda
+                         (("StorePath" . _) #t)
+                         (("URL" . _) #t)
+                         (("Compression" . _) #t)
+                         (_ #f))
+                       (recutils->alist body))
                (response-code
                 (http-get (string-append base "nar/gzip/"
                                          (basename %item))))
@@ -504,16 +532,22 @@ References: ~%"
                                              (basename %item))))
            (and (file-exists? (nar "gzip"))
                 (file-exists? (nar "lzip"))
-                (equal? (take (pk 'narinfo/gzip+lzip narinfo) 7)
-                        `(("StorePath" . ,%item)
-                          ("URL" . ,(nar-url "gzip"))
-                          ("Compression" . "gzip")
-                          ("FileSize" . ,(number->string
-                                          (stat:size (stat (nar "gzip")))))
-                          ("URL" . ,(nar-url "lzip"))
-                          ("Compression" . "lzip")
-                          ("FileSize" . ,(number->string
-                                          (stat:size (stat (nar "lzip")))))))
+                (match (pk 'narinfo/gzip+lzip narinfo)
+                  ((("StorePath" . path)
+                    _ ...
+                    ("Signature" . _)
+                    ("URL" . gzip-url)
+                    ("Compression" . "gzip")
+                    ("FileSize" . (= string->number gzip-size))
+                    ("URL" . lzip-url)
+                    ("Compression" . "lzip")
+                    ("FileSize" . (= string->number lzip-size)))
+                   (and (string=? gzip-url (nar-url "gzip"))
+                        (string=? lzip-url (nar-url "lzip"))
+                        (= gzip-size
+                           (stat:size (stat (nar "gzip"))))
+                        (= lzip-size
+                           (stat:size (stat (nar "lzip")))))))
                 (list (response-code
                        (http-get (string-append base (nar-url "gzip"))))
                       (response-code
@@ -679,7 +713,7 @@ References: ~%"
                 (response-code (http-get nar)))))))))
 
 (test-equal "/log/NAME"
-  `(200 #t application/x-bzip2)
+  `(200 #t text/plain (gzip))
   (let ((drv (run-with-store %store
                (gexp->derivation "with-log"
                                  #~(call-with-output-file #$output
@@ -695,10 +729,11 @@ References: ~%"
            (base     (basename (derivation-file-name drv)))
            (log      (string-append (dirname %state-directory)
                                     "/log/guix/drvs/" (string-take base 2)
-                                    "/" (string-drop base 2) ".bz2")))
+                                    "/" (string-drop base 2) ".gz")))
       (list (response-code response)
             (= (response-content-length response) (stat:size (stat log)))
-            (first (response-content-type response))))))
+            (first (response-content-type response))
+            (response-content-encoding response)))))
 
 (test-equal "negative TTL"
   `(404 42)

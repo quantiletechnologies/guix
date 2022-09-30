@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2014, 2015, 2016, 2017, 2018, 2019 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014-2019, 2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2016 David Craven <david@craven.ch>
 ;;; Copyright © 2016 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2017 Clément Lassieur <clement@lassieur.org>
@@ -39,6 +39,7 @@
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-26)
   #:use-module (ice-9 match)
+  #:use-module (ice-9 vlist)
   #:export (lsh-configuration
             lsh-configuration?
             lsh-service
@@ -282,7 +283,7 @@ The other options should be self-descriptive."
 (define-record-type* <openssh-configuration>
   openssh-configuration make-openssh-configuration
   openssh-configuration?
-  ;; <package>
+  ;; file-like object
   (openssh               openssh-configuration-openssh
                          (default openssh))
   ;; string
@@ -291,6 +292,9 @@ The other options should be self-descriptive."
   ;; integer
   (port-number           openssh-configuration-port-number
                          (default 22))
+  ;; integer
+  (max-connections       openssh-configuration-max-connections
+                         (default 200))
   ;; Boolean | 'prohibit-password
   (permit-root-login     openssh-configuration-permit-root-login
                          (default #f))
@@ -347,8 +351,12 @@ The other options should be self-descriptive."
                          (default ""))
 
   ;; list of user-name/file-like tuples
-  (authorized-keys       openssh-authorized-keys
+  (authorized-keys       openssh-configuration-authorized-keys
                          (default '()))
+
+  ;; Boolean
+  (generate-host-keys?   openssh-configuration-generate-host-keys?
+                         (default #t))
 
   ;; Boolean
   ;; XXX: This should really be handled in an orthogonal way, for instance as
@@ -386,12 +394,12 @@ The other options should be self-descriptive."
         ;; authorized-key directory to /etc.
         (catch 'system-error
           (lambda ()
-            (delete-file-recursively "/etc/authorized_keys.d"))
+            (delete-file-recursively "/etc/ssh/authorized_keys.d"))
           (lambda args
             (unless (= ENOENT (system-error-errno args))
               (apply throw args))))
         (copy-recursively #$(authorized-key-directory
-                             (openssh-authorized-keys config))
+                             (openssh-configuration-authorized-keys config))
                           "/etc/ssh/authorized_keys.d")
 
         (chmod "/etc/ssh/authorized_keys.d" #o555)
@@ -401,9 +409,10 @@ The other options should be self-descriptive."
             (unless (file-exists? lastlog)
               (touch lastlog))))
 
-        ;; Generate missing host keys.
-        (system* (string-append #$(openssh-configuration-openssh config)
-                                "/bin/ssh-keygen") "-A"))))
+        (when #$(openssh-configuration-generate-host-keys? config)
+          ;; Generate missing host keys.
+          (system* (string-append #$(openssh-configuration-openssh config)
+                                  "/bin/ssh-keygen") "-A")))))
 
 (define (authorized-key-directory keys)
   "Return a directory containing the authorized keys specified in KEYS, a list
@@ -509,17 +518,56 @@ of user-name/file-like tuples."
   (define pid-file
     (openssh-configuration-pid-file config))
 
+  (define port-number
+    (openssh-configuration-port-number config))
+
+  (define max-connections
+    (openssh-configuration-max-connections config))
+
   (define openssh-command
     #~(list (string-append #$(openssh-configuration-openssh config) "/sbin/sshd")
             "-D" "-f" #$(openssh-config-file config)))
+
+  (define inetd-style?
+    ;; Whether to use 'make-inetd-constructor'.  That procedure appeared in
+    ;; Shepherd 0.9.0, but in 0.9.0, 'make-inetd-constructor' wouldn't let us
+    ;; pass a list of endpoints, and it wouldn't let us define a service
+    ;; listening on both IPv4 and IPv6, hence the conditional below.
+    #~(and (defined? 'make-inetd-constructor)
+           (not (string=? (@ (shepherd config) Version) "0.9.0"))))
+
+  (define ipv6-support?
+    ;; Expression that returns true if IPv6 support is available.
+    #~(catch 'system-error
+        (lambda ()
+          (let ((sock (socket AF_INET6 SOCK_STREAM 0)))
+            (close-port sock)
+            #t))
+        (const #f)))
 
   (list (shepherd-service
          (documentation "OpenSSH server.")
          (requirement '(syslogd loopback))
          (provision '(ssh-daemon ssh sshd))
-         (start #~(make-forkexec-constructor #$openssh-command
-                                             #:pid-file #$pid-file))
-         (stop #~(make-kill-destructor))
+
+         (start #~(if #$inetd-style?
+                      (make-inetd-constructor
+                       (append #$openssh-command '("-i"))
+                       (cons (endpoint
+                              (make-socket-address AF_INET INADDR_ANY
+                                                   #$port-number))
+                             (if #$ipv6-support?
+                                 (list
+                                  (endpoint
+                                   (make-socket-address AF_INET6 IN6ADDR_ANY
+                                                        #$port-number)))
+                                 '()))
+                       #:max-connections #$max-connections)
+                      (make-forkexec-constructor #$openssh-command
+                                                 #:pid-file #$pid-file)))
+         (stop #~(if #$inetd-style?
+                     (make-inetd-destructor)
+                     (make-kill-destructor)))
          (auto-start? (openssh-auto-start? config)))))
 
 (define (openssh-pam-services config)
@@ -535,7 +583,15 @@ of user-name/file-like tuples."
   (openssh-configuration
    (inherit config)
    (authorized-keys
-    (append (openssh-authorized-keys config) keys))))
+    (match (append (openssh-configuration-authorized-keys config) keys)
+      ((and alist ((users _ ...) ...))
+       ;; Build a user/key-list mapping.
+       (let ((user-keys (alist->vhash alist)))
+         ;; Coalesce the key lists associated with each user.
+         (map (lambda (user)
+                `(,user
+                  ,@(concatenate (vhash-fold* cons '() user user-keys))))
+              users)))))))
 
 (define openssh-service-type
   (service-type (name 'openssh)
@@ -754,7 +810,7 @@ object."
 (define-record-type* <webssh-configuration>
   webssh-configuration make-webssh-configuration
   webssh-configuration?
-  (package     webssh-configuration-package     ;package
+  (package     webssh-configuration-package     ;file-like
                (default webssh))
   (user-name   webssh-configuration-user-name   ;string
                (default "webssh"))

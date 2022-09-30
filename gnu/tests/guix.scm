@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2019 Christopher Baines <mail@cbaines.net>
+;;; Copyright © 2019, 2020, 2021, 2022 Christopher Baines <mail@cbaines.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -36,7 +36,8 @@
   #:use-module (guix utils)
   #:use-module (ice-9 match)
   #:export (%test-guix-build-coordinator
-            %test-guix-data-service))
+            %test-guix-data-service
+            %test-nar-herder))
 
 ;;;
 ;;; Guix Build Coordinator
@@ -74,9 +75,7 @@
           (define marionette
             (make-marionette (list #$vm)))
 
-          (mkdir #$output)
-          (chdir #$output)
-
+          (test-runner-current (system-test-runner #$output))
           (test-begin "guix-build-coordinator")
 
           (test-assert "service running"
@@ -99,8 +98,7 @@
                             #:decode-body? #t)))
               (response-code response)))
 
-          (test-end)
-          (exit (= (test-runner-fail-count (test-runner-current)) 0)))))
+          (test-end))))
 
   (gexp->derivation "guix-build-coordinator-test" test))
 
@@ -199,9 +197,7 @@ host	all	all	::1/128 	trust"))))))
           (define marionette
             (make-marionette (list #$vm)))
 
-          (mkdir #$output)
-          (chdir #$output)
-
+          (test-runner-current (system-test-runner #$output))
           (test-begin "guix-data-service")
 
           (test-assert "service running"
@@ -226,17 +222,25 @@ host	all	all	::1/128 	trust"))))))
                      ((pid) (number? pid))))))
              marionette))
 
+          ;; The service starts immediately but replies with status 500 until
+          ;; initialization is complete, so keep trying for a while.
+          (define (try-http-get attempts)
+            (let ((status
+                   (let-values (((response text)
+                                 (http-get #$(simple-format
+                                              #f "http://localhost:~A/healthcheck"
+                                              forwarded-port))))
+                     (response-code response))))
+              (if (or (= status 200) (<= attempts 1))
+                  status
+                  (begin (sleep 5)
+                         (try-http-get (- attempts 1))))))
+
           (test-equal "http-get"
             200
-            (let-values
-                (((response text)
-                  (http-get #$(simple-format
-                               #f "http://localhost:~A/healthcheck" forwarded-port)
-                            #:decode-body? #t)))
-              (response-code response)))
+            (try-http-get 12))
 
-          (test-end)
-          (exit (= (test-runner-fail-count (test-runner-current)) 0)))))
+          (test-end))))
 
   (gexp->derivation "guix-data-service-test" test))
 
@@ -245,3 +249,79 @@ host	all	all	::1/128 	trust"))))))
    (name "guix-data-service")
    (description "Connect to a running Guix Data Service.")
    (value (run-guix-data-service-test))))
+
+
+;;;
+;;; Nar Herder
+;;;
+
+(define %nar-herder-os
+  (simple-operating-system
+   (service dhcp-client-service-type)
+   (service nar-herder-service-type
+            (nar-herder-configuration
+             (host "0.0.0.0")
+             ;; Not a realistic value, but works for the test
+             (storage "/tmp")))))
+
+(define (run-nar-herder-test)
+  (define os
+    (marionette-operating-system
+     %nar-herder-os
+     #:imported-modules '((gnu services herd)
+                          (guix combinators))))
+
+  (define forwarded-port
+    (nar-herder-configuration-port
+     (nar-herder-configuration)))
+
+  (define vm
+    (virtual-machine
+     (operating-system os)
+     (memory-size 1024)
+     (port-forwardings `((,forwarded-port . ,forwarded-port)))))
+
+  (define test
+    (with-imported-modules '((gnu build marionette))
+      #~(begin
+          (use-modules (srfi srfi-11) (srfi srfi-64)
+                       (gnu build marionette)
+                       (web uri)
+                       (web client)
+                       (web response))
+
+          (define marionette
+            (make-marionette (list #$vm)))
+
+          (test-runner-current (system-test-runner #$output))
+          (test-begin "nar-herder")
+
+          (test-assert "service running"
+            (marionette-eval
+             '(begin
+                (use-modules (gnu services herd))
+                (match (start-service 'nar-herder)
+                  (#f #f)
+                  (('service response-parts ...)
+                   (match (assq-ref response-parts 'running)
+                     ((pid) (number? pid))))))
+             marionette))
+
+          (test-equal "http-get"
+            404
+            (let-values
+                (((response text)
+                  (http-get #$(simple-format
+                               #f "http://localhost:~A/" forwarded-port)
+                            #:decode-body? #t)))
+              (response-code response)))
+
+          (test-end))))
+
+  (gexp->derivation "nar-herder-test" test))
+
+(define %test-nar-herder
+  (system-test
+   (name "nar-herder")
+   (description "Connect to a running Nar Herder server.")
+   (value (run-nar-herder-test))))
