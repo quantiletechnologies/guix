@@ -3,8 +3,8 @@ repos:
     hooks:
     -   id: guix-git-authenticate
         name: Commit Signature Authenticator
-        description: This hook ensures that all commits to guix-packages repo are signed by an approved member of the EA team
-        entry: guix git authenticate 06fae09eb46ddef70136cf326fb8a689fd651e55 "5882 6D44 7BDD 52B4 EA6B  1202 7967 2059 1212 FEC5"
+        description: This hook ensures that all commits to qt-guix repo are signed by an approved member of the EA team
+        entry: guix git authenticate 80bd06a8b8b6971ef23ecccfd4c73688e7ffcb38 "5882 6D44 7BDD 52B4 EA6B  1202 7967 2059 1212 FEC5"
         always_run: true
         pass_filenames: false
         verbose: true
