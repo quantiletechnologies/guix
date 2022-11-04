@@ -24,6 +24,7 @@
   #:use-module (guix packages)
   #:use-module (guix search-paths)
   #:use-module (guix build-system)
+  #:use-module (guix git)
   #:use-module (gnu packages)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-26)
@@ -85,50 +86,65 @@ when evaluated."
       ((factorized ...) `(string-append ,@factorized))))
 
   (define (source->code source version)
-    (let ((uri       (origin-uri source))
-          (method    (origin-method source))
-          (hash      (origin-hash source))
-          (file-name (origin-file-name source))
-          (patches   (origin-patches source)))
-      `(origin
-         ;; Since 'procedure-name' returns the procedure name within the
-         ;; module where it's defined, not its public name.  Thus, try hard to
-         ;; find its public name and use 'procedure-name' as a last resort.
-         (method ,(or (any (lambda (module)
-                             (variable-name method module))
-                           '((guix download)
-                             (guix git-download)
-                             (guix hg-download)
-                             (guix svn-download)))
-                      (procedure-name method)))
-         (uri ,(if version
-                   (match uri
-                     ((? string? uri)
-                      (factorized-uri-code uri version))
-                     ((lst ...)
-                      `(list
-                        ,@(map (cut factorized-uri-code <> version) uri))))
-                   uri))
-         ,(if (equal? (content-hash-algorithm hash) 'sha256)
-              `(sha256 (base32 ,(bytevector->nix-base32-string
-                                 (content-hash-value hash))))
-              `(hash (content-hash ,(bytevector->nix-base32-string
-                                     (content-hash-value hash))
-                                   ,(content-hash-algorithm hash))))
-         ;; FIXME: in order to be able to throw away the directory prefix,
-         ;; we just assume that the patch files can be found with
-         ;; "search-patches".
-         ,@(cond ((null? patches)
-                  '())
-                 ((every string? patches)
-                  `((patches (search-patches ,@(map basename patches)))))
-                 (else
-                  `((patches (list ,@(map (match-lambda
-                                            ((? string? file)
-                                             `(search-patch ,file))
-                                            ((? origin? origin)
-                                             (source->code origin #f)))
-                                          patches)))))))))
+    (cond ((origin? source)
+           (let ((uri       (origin-uri source))
+                 (method    (origin-method source))
+                 (hash      (origin-hash source))
+                 (file-name (origin-file-name source))
+                 (patches   (origin-patches source)))
+             `(origin
+                ;; Since 'procedure-name' returns the procedure name within the
+                ;; module where it's defined, not its public name.  Thus, try hard to
+                ;; find its public name and use 'procedure-name' as a last resort.
+                (method ,(or (any (lambda (module)
+                                    (variable-name method module))
+                                  '((guix download)
+                                    (guix git-download)
+                                    (guix hg-download)
+                                    (guix svn-download)))
+                             (procedure-name method)))
+                (uri ,(if version
+                          (match uri
+                            ((? string? uri)
+                             (factorized-uri-code uri version))
+                            ((lst ...)
+                             `(list
+                               ,@(map (cut factorized-uri-code <> version) uri))))
+                          uri))
+                ,(if (equal? (content-hash-algorithm hash) 'sha256)
+                     `(sha256 (base32 ,(bytevector->nix-base32-string
+                                        (content-hash-value hash))))
+                     `(hash (content-hash ,(bytevector->nix-base32-string
+                                            (content-hash-value hash))
+                                          ,(content-hash-algorithm hash))))
+                ;; FIXME: in order to be able to throw away the directory prefix,
+                ;; we just assume that the patch files can be found with
+                ;; "search-patches".
+                ,@(cond ((null? patches)
+                         '())
+                        ((every string? patches)
+                         `((patches (search-patches ,@(map basename patches)))))
+                        (else
+                         `((patches (list ,@(map (match-lambda
+                                                   ((? string? file)
+                                                    `(search-patch ,file))
+                                                   ((? origin? origin)
+                                                    (source->code origin #f)))
+                                                 patches)))))))))
+           ((git-checkout? source)
+           (let ((url (git-checkout-url source))
+                 (branch (git-checkout-branch source))
+                 (commit (git-checkout-commit source))
+                 (recursive (git-checkout-recursive? source)))
+             `(git-checkout
+               (url ,url)
+               ,@(if branch
+                    `((branch ,branch)) '())
+               ,@(if commit
+                    `((commit ,commit)) '())
+               ,@(if recursive
+                    '((recursive? #t)) '()))))
+           (else (throw 'source-type-mismatch source))))
 
   (define (variable-reference module name)
     ;; FIXME: using '@ certainly isn't pretty, but it avoids having to import
