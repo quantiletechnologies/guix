@@ -1,0 +1,175 @@
+;; -*- mode: scheme; eval: (skribilo-mode 1); geiser-scheme-implementation: guile; compile-command: "cd .. && guix environment --ad-hoc skribilo guile -- guix repl -- compile-docs.scm"  -*-
+
+;; this should be compiled with the wrapper script compile-docs.scm
+;; which wraps skribilo inside a guix repl to allow compile-time
+;; access to guix and channel functions.
+
+(use-modules (skribilo source lisp) ;; source language scheme
+             (skribilo engine)
+             (skribilo package web-book) ;; use web-book layout
+             (guix packages) ;; package-name
+             (gnu packages) ;; %package-module-path
+             (guix discovery) ;; all-modules
+             ((guix ui) #:hide (display-profile-content))  ;; warn-about-load-error
+             (guix scripts describe) ;; display-profile-content
+             (guix describe) ;; current-channels
+             (guix channels) ;; channel->code
+             (guix import print) ;; package->code
+             (ice-9 pretty-print)
+             (srfi srfi-9 gnu) ;; set-fields
+             (srfi srfi-19)) ;; date->string, current-date
+
+(define channel-code-str
+  (with-output-to-string
+    (λ () (pretty-print `(list ,@(map channel->code (current-channels)))))))
+
+(define guix-channel
+  (car (filter (λ (ch) (eq? (channel-name ch) 'guix)) (current-channels))))
+
+(define (update-channel ch url branch)
+  (set-fields ch
+              ((channel-url) url)
+              ((channel-branch) branch)
+              ((channel-commit) #f)))
+
+(define local-channel-str
+  (with-output-to-string
+    (λ () (pretty-print
+           `(list ,(channel->code
+                    (update-channel guix-channel
+                                    "file:///home/my-username/git/qt-guix"
+                                    "feature/FOO-123")))))))
+
+(let ((html (find-engine 'html)))
+  (if (engine? html)
+      (begin
+        ;; Customizing the HTML output...
+        (engine-custom-set! html 'css "static/manual.css")
+        (engine-custom-set! html 'charset "UTF-8"))))
+
+
+(document :title [Quantile QT-Guix Documentation]
+          :author #f
+          :keywords '("Guix" "CI/CD" "Packages" "Build")
+  
+  ;; ----------------------------------------
+  ;; ------------- LANDING PAGE -------------
+  ;; ----------------------------------------
+  (p [Document compilation date: ,(date->string (current-date))
+,(linebreak 2)
+This document will provide accompanying notes to the Quantile's
+,(ref :url "https://github.com/quantiletechnologies/qt-guix" :text "qt-guix")
+repository. This a fork of Guix containig a handful of enhancements we aim to ultimately
+merge back into Guix proper, pending acceptance from the wider community.  It's very much a WIP for now!
+,(linebreak 2)
+Here is the channel snapshot used to generate the details in this document.])
+  (frame :width 100.
+         (prog :line #f
+               (source :language scheme
+                       channel-code-str)))
+
+  ;; ------------------------------------
+  ;; ------------- CHAPTERS -------------
+  ;; ------------------------------------
+  (chapter :title [Development Guidelines]
+    (section :title [What to Clone]
+      (p [The qt-guix repo can be cloned just like an internal repo using the following URL.
+,(linebreak 2)
+,(code "git@github.com:quantiletechnologies/qt-guix.git")
+,(linebreak 2)
+In order to be able to push to the repository you will to have your GPG key added to the Guix
+Authorizations, and be granted write access to the repository.
+]))
+    (section :title [Mandatory Use of Feature Branches]
+      (p [All work must be carried out in feature branches off the quantile branch.
+Merging work to the the quantile branch will require a rebuild of Guix and must be done in
+a controlled fashion.  Do not merge to quantile branch without explicit prior approval.])
+      )
+    (section :title [Testing Locally]
+      (p [The easiest way to test a change is with a local
+,(ref :url "https://guix.gnu.org/manual/en/guix.html#Channels" :test "channel") file, referencing
+a local clone of qt-guix, using
+,(ref :url "https://guix.gnu.org/manual/en/guix.html#Invoking-guix-time_002dmachine" :url "time-machine").
+An bare-bones example channels file prepared for this purpose is given below, notice we've aligned the guix
+channel to a local repo, a feature branch, and we've removed the commit id anchoring.])
+      (frame :width 100.
+             (prog :line #f
+                   (source :language scheme
+                           local-channel-str))))
+    (section :title [Testing Using Remote Feature Branch]
+      (p [Once you've satisified yourself that your local clone tests OK, you can push your
+,(underline "signed") changes to a remote feature branch.  You can then update your channel
+file to test this either using time-machine as per above, or by adding a user-level channels file to
+,(code "/home/my-username/.config/guix/channels.scm") and doing a ,(code "guix pull").]))
+    (section :title [Merge in quantile Branch]
+      (p [Do not merge using the Github merge tool - this will not sign your merge commit!
+Please merge locally and make sure all commits both your own and any merges done on your
+behalf by git are signed before pushing.  There is a
+,(ref :url "https://github.com/quantiletechnologies/qt-guix/blob/43c1bbd8aa06ff1ae7d8940725c6b16d1b25f065/.pre-commit-config.yaml#L7" :text "pre-push")
+hook in the repository that should be used to check all commits are authenticated.])
+      ))
+  (chapter :title [Synchronising with Guix]
+    (section :title [Synchronising the Keyring Branch]
+      (p [Before pulling in any changes from Guix you first must think about if these new changes
+were signed by a new key.  If so then you should update the keyring branch first.  The keyring
+branch should be additive however be well aware that a descrepancy between master and quantile
+branches must be such that the keyring branch can authorized both branches at once.  Thus adding a
+new key to keyring to satisfy a master ahead of quantile branch is fine.  If a key is removed from
+keyring for some reason then do update the keyring branch until both master and quantile are in sync.
+If the latest keyring branch contains both additions and removals this is potentially an issue and keyring
+might not be able to authorize across 2 divergent branches such as master and quantile.  Think carefully
+before proceeding with any change in these circumstances!])
+      )
+    (section :title [Synchronising the Master Branch]
+      (p [This is typically kept reasonably upto date with Guix's own master branch.  Production systems
+are not run off this branch, more it represents a staging branch for that we can test and verify
+before incorporating changes into the quantile branch.  We ,(underline "never") commit our own changes to
+this branch - it is always represents some perfect copy of Guix proper at some point in time.])
+      )
+    (section :title [Synchronising the Quantile Branch]
+      (p [This branch is our production version of Guix.  It contains some tested Guix basline, merged
+in from the master branch and any changes to the Guix code made in quantile and not yet patched into Guix
+proper.  Changes to this branch should never occur without prior approval.])))
+  (chapter :title [Documenting Guix Packages]
+    (section :title [Writing Documentation]
+      (p [Documentation of our Guix patches that we aim to provide back to the Guix project are kept in the
+qt-guix repo.  This allows for public referencing of the patches before submission to the Guix project.
+Documentation of internal channels and processes not intended for upstream patching is kept entirely separate
+from this.])
+      (subsection :title [Skribilo]
+        (p [We use ,(ref :url "https://www.nongnu.org/skribilo" :text "skribilo" ) to compile documentation.])))
+    (section :title [Documentation Tools]
+      (p [See Skribilo's website for a useful Emacs pluging for writing documentation in.  We also provide some yasnippet
+templates for generating chapters, sections, etc.]))
+    (section :title [Compiling Documentation]
+      (p [In emacs you should just be able to ,(code "M-x compile") to generate the HTML.  Outside of Emacs the following
+will work:])
+      (code "guix environment --ad-hoc skribilo guile -- guix repl -- compile-docs.scm")))
+  (chapter :title [A List of Current Enhancements]
+    (p [The current quantile changes to Guix proper can be seen
+,(ref :url "https://github.com/guix-mirror/guix/compare/master...quantiletechnologies:qt-guix:quantile" :text "here").])
+    (section :title [,(ref :url "https://github.com/guix-mirror/guix/commit/9ec3fe1d3004406cce7dc101b47f1a9997f06e8f" :text "Optional Force Color when not TTY")]
+      (p [When running Guix inside a system that automates the running of Guix commands rather than entering the commands
+into the console as a user, it is still nice to have Color output from Guix which is recorded in our automation logs.
+This allows this by introducing a new optional environment variable ,(code "GUIX_COLOR_OUTPUT") to control ths setting.]))
+    (section :title [,(ref :url "https://github.com/guix-mirror/guix/commit/473954dd92bbb84693b6fa3f007752eb53c804db" :text "Always Fetch Git References")]
+      (p [This is a workaround of a ,(ref :url "https://github.com/libgit2/libgit2/issues/6183" :text "bug") in libgit2 which Guix
+relies on.  The proper fix should be in libgit2 but this resolves the issue in Guix in the interim.  This issue is an optimisation
+in Guix that a fetch is not performed immediately after the clone of a source repo.  However, if we need to clone extra references
+added to our git config, because we are building a PR branch created off an automatic merge for example - when using libgit2 then the
+fetch is mandatory.  Even immediately after a clone, these references will not exist until a fetch or pull is performed.  This behaviour
+is divergent from the latest git command line tool which automatically fetches refs on the first clone.]))
+    (section :title [,(ref :url "https://github.com/guix-mirror/guix/commit/49900405617fdf6a2e4ab6f4004306a2770221e0" :text "Printing git-checkout Package Sources")]
+      (p [Currently the ,(code "source->code") function only supports sources that a are ,(code "origin") records.  When referencing
+package source that have SSH based URLs it is necessary to use a ,(code "git-checkout") record instead.  However doing so
+currently will result in a failure if the package is passed to ,(code "package->code").  This fixes the issue.])
+      (frame :width 100.
+             (prog :line #f
+                   (source :language scheme
+                           [(package
+  (name "example")
+  (version "123")
+  (source
+    (git-checkout
+      (url "ssh://git@foo/foo/bar.git")
+      (commit "12345abcd"))))]))))))
