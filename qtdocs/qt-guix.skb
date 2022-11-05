@@ -87,10 +87,10 @@ a controlled fashion.  Do not merge to quantile branch without explicit prior ap
       )
     (section :title [Testing Locally]
       (p [The easiest way to test a change is with a local
-,(ref :url "https://guix.gnu.org/manual/en/guix.html#Channels" :test "channel") file, referencing
+,(ref :url "https://guix.gnu.org/manual/en/guix.html#Channels" :text "channel") file, referencing
 a local clone of qt-guix, using
-,(ref :url "https://guix.gnu.org/manual/en/guix.html#Invoking-guix-time_002dmachine" :url "time-machine").
-An bare-bones example channels file prepared for this purpose is given below, notice we've aligned the guix
+,(ref :url "https://guix.gnu.org/manual/en/guix.html#Invoking-guix-time_002dmachine" :text "time-machine").
+A bare-bones example channels file prepared for this purpose is given below, notice we've aligned the guix
 channel to a local repo, a feature branch, and we've removed the commit id anchoring.])
       (frame :width 100.
              (prog :line #f
