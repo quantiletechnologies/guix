@@ -143,13 +143,12 @@ Git repo that contains package definitions.  A new channel file will be made ava
 This can be used in place of the default ,(code [/etc/guix/channel.scm]) channel to create a local environment
 representative of the proposed state of our Guix baseline.  This is done using the
 ,(ref :url "https://guix.gnu.org/manual/en/guix.html#Invoking-guix-time_002dmachine" :text "time-machine")
-command.])
-      )
+command.]))
     (section :title [Which Packages will be Upgraded?]
       (p [It can be useful to know given a channel and a project, which dependencies have changed.  There is a
 ,(ref :url "https://guix.gnu.org/manual/en/guix.html#Invoking-guix-repl" :text "guix repl") script which can do
 this for you in ea-tools called ,(code [compare-package-versions.scm]).  It will list any dependencies which have
-changed what the new highest version number is, and any alternative versions available in the channel.])
+changed what the new highest version number is, and any alternative versions available in the channel.]))
     (section :title [Building and Installing Against a Future Channel]
       (p [Once we have a copy of the future channel building my-project against it is as simple as:])
       (code "guix time-machine -C /path/to/my/copy/of/the/future/channel.scm -- build my-project")
@@ -159,8 +158,7 @@ it is also required to install the newly built my-project into a Guix, as some e
 only manifest themselves at install time:])
       (code "guix time-machine -C /path/to/my/copy/of/the/future/channel.scm -- install -p /path/to/my/test/profile my-project")
       (p [Note that if the previous build step is not done, the install will also take care of the build, however
-you will get far less information on stdout using the install method, so it is recommended to build separately first.])
-      )
+you will get far less information on stdout using the install method, so it is recommended to build separately first.]))
     (section :title [Branch Substitution using Package Transformations]
       (p [If you are fortunate enough to have the current integration package of your project build and test under
 the new baseline without any issues, then you don't need to read this section.  More realistically, when you try to
@@ -209,7 +207,7 @@ using ,(ref :url "https://guix.gnu.org/manual/en/guix.html#Invoking-guix-refresh
       (code "guix refresh -l my-stem-project")
       (p [There is also a ,(ref :url "https://guix.gnu.org/manual/en/guix.html#Invoking-guix-repl" :text "guix repl") script
 available in ea-tools called ,(code [get-dependency-locations.scm]) to do the reverse - that is, given a package - what does it
-depend on?  It can filter by Quantile custom packages as well as listing standard Guix packages.]))))
+depend on?  It can filter by Quantile custom packages as well as listing standard Guix packages.])))
   (chapter :title [Documenting Guix Packages]
     (section :title [Writing Documentation]
       (p [Documentation of our Guix patches that we aim to provide back to the Guix project are kept in the
