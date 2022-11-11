@@ -147,14 +147,14 @@ command.]))
     (section :title [Which Packages will be Upgraded?]
       (p [It can be useful to know given a channel and a project, which dependencies have changed.  There is a
 ,(ref :url "https://guix.gnu.org/manual/en/guix.html#Invoking-guix-repl" :text "guix repl") script which can do
-this for you in ea-tools called ,(code [compare-package-versions.scm]).  It will list any dependencies which have
-changed what the new highest version number is, and any alternative versions available in the channel.]))
+this for you in ea-tools called ,(code [compare-package-versions.scm]).  It will list: any dependencies which have
+changed, what the new highest version number is, and any alternative versions available in the channel.]))
     (section :title [Building and Installing Against a Future Channel]
-      (p [Once we have a copy of the future channel building my-project against it is as simple as:])
+      (p [Once we have a copy of the future channel, building my-project against it is as simple as:])
       (code "guix time-machine -C /path/to/my/copy/of/the/future/channel.scm -- build my-project")
       (p [If the build completes we can be sure that the source compiles and the unit tests pass - which is a
 good indicator that the software is at least syntactically compatible.  However building alone is not enough,
-it is also required to install the newly built my-project into a Guix, as some errors such as package clashes
+it is also required to install the newly built my-project into a Guix profile, as some errors such as package clashes
 only manifest themselves at install time:])
       (code "guix time-machine -C /path/to/my/copy/of/the/future/channel.scm -- install -p /path/to/my/test/profile my-project")
       (p [Note that if the previous build step is not done, the install will also take care of the build, however
@@ -167,9 +167,9 @@ but to the project code.  In an ideal world you would make changes that are back
 Guix baseline such that the changes can be integrated immediately - this will substantially reduce the effort required
 and risk undertaken during the release process itself - so it's strongly recommended you aim for this.  Alas, this is not
 always possible - third party libraries occasionally introduce breaking changes and in these cases we need to create
-a branch parallel to normal development (but kept in synchrony with it) which makes the breaking changes such that
+a branch parallel to normal development (but kept in synchrony with it) which contains the breaking changes such that
 the code is compatible with the future channel.  In order to test a branch against the future channel we use
-(,ref "https://guix.gnu.org/manual/en/guix.html#Package-Transformation-Options" :text "Package Transformations"):])
+,(ref "https://guix.gnu.org/manual/en/guix.html#Package-Transformation-Options" :text "Package Transformations"):])
       (code "guix time-machine -C /path/to/my/copy/of/the/future/channel.scm -- build my-project --with-branch=my-project=feature/FOO-123_my_branch")
       (p [As per the previous section, installation must be tested as well as building:])
       (code "guix time-machine -C /path/to/my/copy/of/the/future/channel.scm -- install --with-branch=my-project=feature/FOO-123_my_branch -p /path/to/my/test/profile my-project")
@@ -184,8 +184,8 @@ of this document, and should only ever be done by people on the guix-development
 channel and make changes locally ,(emph [providing]) these are *never* pushed back to the remote channel.  Local changes can
 be tested by removing the reference to ,(code [guix-packages]) from a copy of the channel file and using the ,(code [-L])
 switch to reference a local clone of the repo.  It is also possible to change the ,(code [guix-packages]) reference to point
-to a local clone using ,(code [file:///path/to/my/local/clone]).  In the later case, not you will need to commit your changes
-to your local repo for them to be picked up.  Remember never ever push these local commits.  These are advanced techniques and
+to a local clone using ,(code [file:///path/to/my/local/clone]).  In the later case, you will need to commit your changes
+to your ,(emph [local]) repo for them to be picked up.  Remember never push these local commits.  These are advanced techniques and
 should only be attempted by people who have a clear understanding of the methods and the risks involved.]))
     (section :title [System Verification for your Project]
       (p [Each project maintains it's own System Verification Document which must be run twice during a normal release
@@ -196,7 +196,7 @@ time-machine using the future channel.])
        (item [After The Release - The System Verification Document should be executed and signed-off in the standard
 Guix production environment using the newly installed channel.]))
       (p [The release cannot proceed until all projects sign off the initial verification.  Any failure after the release
-would be handled either by fixing forward, or rolling back there is no alternative.]))
+would be handled either by fixing forward, or rolling back if there is no alternative.]))
     (section :title [System Verification for any Dependent Projects]
       (p [The order of verification is important.  That is, projects at the stem of the dependency tree should be verified
 before leaf projects - so that leaf project can be reasonably assured that all their dependencies are sane.  Also any change
