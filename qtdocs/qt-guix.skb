@@ -169,7 +169,7 @@ and risk undertaken during the release process itself - so it's strongly recomme
 always possible - third party libraries occasionally introduce breaking changes and in these cases we need to create
 a branch parallel to normal development (but kept in synchrony with it) which contains the breaking changes such that
 the code is compatible with the future channel.  In order to test a branch against the future channel we use
-,(ref "https://guix.gnu.org/manual/en/guix.html#Package-Transformation-Options" :text "Package Transformations"):])
+,(ref :url "https://guix.gnu.org/manual/en/guix.html#Package-Transformation-Options" :text "Package Transformations"):])
       (code "guix time-machine -C /path/to/my/copy/of/the/future/channel.scm -- build my-project --with-branch=my-project=feature/FOO-123_my_branch")
       (p [As per the previous section, installation must be tested as well as building:])
       (code "guix time-machine -C /path/to/my/copy/of/the/future/channel.scm -- install --with-branch=my-project=feature/FOO-123_my_branch -p /path/to/my/test/profile my-project")
