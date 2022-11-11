@@ -97,7 +97,7 @@ channel to a local repo, a feature branch, and we've removed the commit id ancho
                    (source :language scheme
                            local-channel-str))))
     (section :title [Testing Using Remote Feature Branch]
-      (p [Once you've satisified yourself that your local clone tests OK, you can push your
+      (p [Once you've satisfied yourself that your local clone tests OK, you can push your
 ,(underline "signed") changes to a remote feature branch.  You can then update your channel
 file to test this either using time-machine as per above, or by adding a user-level channels file to
 ,(code "/home/my-username/.config/guix/channels.scm") and doing a ,(code "guix pull").]))
@@ -108,11 +108,11 @@ behalf by git are signed before pushing.  There is a
 ,(ref :url "https://github.com/quantiletechnologies/qt-guix/blob/43c1bbd8aa06ff1ae7d8940725c6b16d1b25f065/.pre-commit-config.yaml#L7" :text "pre-push")
 hook in the repository that should be used to check all commits are authenticated.])
       ))
-  (chapter :title [Synchronising with Guix]
-    (section :title [Synchronising the Keyring Branch]
+  (chapter :title [Synchronizing with Guix]
+    (section :title [Synchronizing the Keyring Branch]
       (p [Before pulling in any changes from Guix you first must think about if these new changes
 were signed by a new key.  If so then you should update the keyring branch first.  The keyring
-branch should be additive however be well aware that a descrepancy between master and quantile
+branch should be additive however be well aware that a discrepancy between master and quantile
 branches must be such that the keyring branch can authorized both branches at once.  Thus adding a
 new key to keyring to satisfy a master ahead of quantile branch is fine.  If a key is removed from
 keyring for some reason then do update the keyring branch until both master and quantile are in sync.
@@ -120,14 +120,14 @@ If the latest keyring branch contains both additions and removals this is potent
 might not be able to authorize across 2 divergent branches such as master and quantile.  Think carefully
 before proceeding with any change in these circumstances!])
       )
-    (section :title [Synchronising the Master Branch]
-      (p [This is typically kept reasonably upto date with Guix's own master branch.  Production systems
+    (section :title [Synchronizing the Master Branch]
+      (p [This is typically kept reasonably up-to date with Guix's own master branch.  Production systems
 are not run off this branch, more it represents a staging branch for that we can test and verify
 before incorporating changes into the quantile branch.  We ,(underline "never") commit our own changes to
 this branch - it is always represents some perfect copy of Guix proper at some point in time.])
       )
-    (section :title [Synchronising the Quantile Branch]
-      (p [This branch is our production version of Guix.  It contains some tested Guix basline, merged
+    (section :title [Synchronizing the Quantile Branch]
+      (p [This branch is our production version of Guix.  It contains some tested Guix baseline, merged
 in from the master branch and any changes to the Guix code made in quantile and not yet patched into Guix
 proper.  Changes to this branch should never occur without prior approval.  Upgrading it is the subject of
 the next chapter.])))
@@ -159,7 +159,7 @@ it is also required to install the newly built my-project into a Guix, as some e
 only manifest themselves at install time:])
       (code "guix time-machine -C /path/to/my/copy/of/the/future/channel.scm -- install -p /path/to/my/test/profile my-project")
       (p [Note that if the previous build step is not done, the install will also take care of the build, however
-you will get far less information on stdout using the install method, so it is recommended to build seperatly first.])
+you will get far less information on stdout using the install method, so it is recommended to build separately first.])
       )
     (section :title [Branch Substitution using Package Transformations]
       (p [If you are fortunate enough to have the current integration package of your project build and test under
@@ -219,7 +219,7 @@ from this.])
       (subsection :title [Skribilo]
         (p [We use ,(ref :url "https://www.nongnu.org/skribilo" :text "skribilo" ) to compile documentation.])))
     (section :title [Documentation Tools]
-      (p [See Skribilo's website for a useful Emacs pluging for writing documentation in.  We also provide some yasnippet
+      (p [See Skribilo's website for a useful Emacs plugin for writing documentation in.  We also provide some yasnippet
 templates for generating chapters, sections, etc.]))
     (section :title [Compiling Documentation]
       (p [In emacs you should just be able to ,(code "M-x compile") to generate the HTML.  Outside of Emacs the following
@@ -231,13 +231,13 @@ will work:])
     (section :title [,(ref :url "https://github.com/guix-mirror/guix/commit/9ec3fe1d3004406cce7dc101b47f1a9997f06e8f" :text "Optional Force Color when not TTY")]
       (p [When running Guix inside a system that automates the running of Guix commands rather than entering the commands
 into the console as a user, it is still nice to have Color output from Guix which is recorded in our automation logs.
-This allows this by introducing a new optional environment variable ,(code "GUIX_COLOR_OUTPUT") to control ths setting.]))
+This allows this by introducing a new optional environment variable ,(code "GUIX_COLOR_OUTPUT") to control this setting.]))
     (section :title [,(ref :url "https://github.com/guix-mirror/guix/commit/473954dd92bbb84693b6fa3f007752eb53c804db" :text "Always Fetch Git References")]
       (p [This is a workaround of a ,(ref :url "https://github.com/libgit2/libgit2/issues/6183" :text "bug") in libgit2 which Guix
-relies on.  The proper fix should be in libgit2 but this resolves the issue in Guix in the interim.  This issue is an optimisation
+relies on.  The proper fix should be in libgit2 but this resolves the issue in Guix in the interim.  This issue is an optimization
 in Guix that a fetch is not performed immediately after the clone of a source repo.  However, if we need to clone extra references
 added to our git config, because we are building a PR branch created off an automatic merge for example - when using libgit2 then the
-fetch is mandatory.  Even immediately after a clone, these references will not exist until a fetch or pull is performed.  This behaviour
+fetch is mandatory.  Even immediately after a clone, these references will not exist until a fetch or pull is performed.  This behavior
 is divergent from the latest git command line tool which automatically fetches refs on the first clone.]))
     (section :title [,(ref :url "https://github.com/guix-mirror/guix/commit/49900405617fdf6a2e4ab6f4004306a2770221e0" :text "Printing git-checkout Package Sources")]
       (p [Currently the ,(code "source->code") function only supports sources that a are ,(code "origin") records.  When referencing
