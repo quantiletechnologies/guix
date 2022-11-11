@@ -129,18 +129,87 @@ this branch - it is always represents some perfect copy of Guix proper at some p
     (section :title [Synchronising the Quantile Branch]
       (p [This branch is our production version of Guix.  It contains some tested Guix basline, merged
 in from the master branch and any changes to the Guix code made in quantile and not yet patched into Guix
-proper.  Changes to this branch should never occur without prior approval.])))
+proper.  Changes to this branch should never occur without prior approval.  Upgrading it is the subject of
+the next chapter.])))
   (chapter :title [Upgrading From Guix Baseline]
+    (p [Quantile lags the true head of Guix, anchoring to a commit that is well tested against our internal
+software, and then moving incrementally to a new commit baseline as required.  This section covers the process by
+which we publish a new baseline candidate, test against it, and release it.  The details are general and apply
+to all projects.  The specifics of signing-off each internal project are not covered here.])
     (section :title [Creating a Future Channel]
+      (p [A ,(ref :url "https://guix.gnu.org/manual/en/guix.html#Channels" :text "channel") is nothing more than a
+Git repo that contains package definitions.  A new channel file will be made available by the Guix release manager
+- essentially this contains a new commit-id in the channel repo which represents some future state of the packages.
+This can be used in place of the default ,(code [/etc/guix/channel.scm]) channel to create a local environment
+representative of the proposed state of our Guix baseline.  This is done using the
+,(ref :url "https://guix.gnu.org/manual/en/guix.html#Invoking-guix-time_002dmachine" :text "time-machine")
+command.])
       )
     (section :title [Which Packages will be Upgraded?]
+      (p [It can be useful to know given a channel and a project, which dependencies have changed.  There is a
+,(ref :url "https://guix.gnu.org/manual/en/guix.html#Invoking-guix-repl" :text "guix repl") script which can do
+this for you in ea-tools called ,(code [compare-package-versions.scm]).  It will list any dependencies which have
+changed what the new highest version number is, and any alternative versions available in the channel.])
+    (section :title [Building and Installing Against a Future Channel]
+      (p [Once we have a copy of the future channel building my-project against it is as simple as:])
+      (code "guix time-machine -C /path/to/my/copy/of/the/future/channel.scm -- build my-project")
+      (p [If the build completes we can be sure that the source compiles and the unit tests pass - which is a
+good indicator that the software is at least syntactically compatible.  However building alone is not enough,
+it is also required to install the newly built my-project into a Guix, as some errors such as package clashes
+only manifest themselves at install time:])
+      (code "guix time-machine -C /path/to/my/copy/of/the/future/channel.scm -- install -p /path/to/my/test/profile my-project")
+      (p [Note that if the previous build step is not done, the install will also take care of the build, however
+you will get far less information on stdout using the install method, so it is recommended to build seperatly first.])
       )
-    (section :title [Building Against a Future Channel]
-      )
+    (section :title [Branch Substitution using Package Transformations]
+      (p [If you are fortunate enough to have the current integration package of your project build and test under
+the new baseline without any issues, then you don't need to read this section.  More realistically, when you try to
+build or when we run our unit or regression tests we come across issues which warrant change not to the package,
+but to the project code.  In an ideal world you would make changes that are backwards compatible with the current
+Guix baseline such that the changes can be integrated immediately - this will substantially reduce the effort required
+and risk undertaken during the release process itself - so it's strongly recommended you aim for this.  Alas, this is not
+always possible - third party libraries occasionally introduce breaking changes and in these cases we need to create
+a branch parallel to normal development (but kept in synchrony with it) which makes the breaking changes such that
+the code is compatible with the future channel.  In order to test a branch against the future channel we use
+(,ref "https://guix.gnu.org/manual/en/guix.html#Package-Transformation-Options" :text "Package Transformations"):])
+      (code "guix time-machine -C /path/to/my/copy/of/the/future/channel.scm -- build my-project --with-branch=my-project=feature/FOO-123_my_branch")
+      (p [As per the previous section, installation must be tested as well as building:])
+      (code "guix time-machine -C /path/to/my/copy/of/the/future/channel.scm -- install --with-branch=my-project=feature/FOO-123_my_branch -p /path/to/my/test/profile my-project")
+      (p [More complex transformations beyond just switching branch are possible, see the Guix Manual for details.]))
+    (section :title [Changing Your Project Definition in the Quantile Channel]
+      (p [It may be that as well as changing project code, changes are required to the package definitions for Quantile's
+internal packages.  One example would be if the new baseline provides a package that we had previously built a custom version
+of - in this case we should remove the custom definition and use the new standard Guix version.  This would usually be handled
+by the channel file provided by the Guix Release Manager, where a release branch on ,(code [guix-packages]) could house
+and required changes to our internal package structure.  Making changes to the Quantile Channel is beyond the scope
+of this document, and should only ever be done by people on the guix-development team.  However one can clone the internal
+channel and make changes locally ,(emph [providing]) these are *never* pushed back to the remote channel.  Local changes can
+be tested by removing the reference to ,(code [guix-packages]) from a copy of the channel file and using the ,(code [-L])
+switch to reference a local clone of the repo.  It is also possible to change the ,(code [guix-packages]) reference to point
+to a local clone using ,(code [file:///path/to/my/local/clone]).  In the later case, not you will need to commit your changes
+to your local repo for them to be picked up.  Remember never ever push these local commits.  These are advanced techniques and
+should only be attempted by people who have a clear understanding of the methods and the risks involved.]))
     (section :title [System Verification for your Project]
-      )
+      (p [Each project maintains it's own System Verification Document which must be run twice during a normal release
+cycle.])
+      (enumerate
+       (item [Before The Release - The System Verification Document should be executed and signed-off inside a
+time-machine using the future channel.])
+       (item [After The Release - The System Verification Document should be executed and signed-off in the standard
+Guix production environment using the newly installed channel.]))
+      (p [The release cannot proceed until all projects sign off the initial verification.  Any failure after the release
+would be handled either by fixing forward, or rolling back there is no alternative.]))
     (section :title [System Verification for any Dependent Projects]
-      ))
+      (p [The order of verification is important.  That is, projects at the stem of the dependency tree should be verified
+before leaf projects - so that leaf project can be reasonably assured that all their dependencies are sane.  Also any change
+to a stem project's dependencies must be reconciled against the leaf projects that depend on it.  For example if a new
+dependency is introduced to a stem project, it is important to check that does not clash with a separately declared dependency
+in a leaf project.  If such a change has taken place you can return all dependent projects using for ,(code [my-stem-project])
+using ,(ref :url "https://guix.gnu.org/manual/en/guix.html#Invoking-guix-refresh" :text "guix refresh"):])
+      (code "guix refresh -l my-stem-project")
+      (p [There is also a ,(ref :url "https://guix.gnu.org/manual/en/guix.html#Invoking-guix-repl" :text "guix repl") script
+available in ea-tools called ,(code [get-dependency-locations.scm]) to do the reverse - that is, given a package - what does it
+depend on?  It can filter by Quantile custom packages as well as listing standard Guix packages.]))))
   (chapter :title [Documenting Guix Packages]
     (section :title [Writing Documentation]
       (p [Documentation of our Guix patches that we aim to provide back to the Guix project are kept in the
