@@ -179,7 +179,7 @@ the code is compatible with the future channel.  In order to test a branch again
 internal packages.  One example would be if the new baseline provides a package that we had previously built a custom version
 of - in this case we should remove the custom definition and use the new standard Guix version.  This would usually be handled
 by the channel file provided by the Guix Release Manager, where a release branch on ,(code [guix-packages]) could house
-and required changes to our internal package structure.  Making changes to the Quantile Channel is beyond the scope
+any required changes to our internal package structure.  Making changes to the Quantile Channel is beyond the scope
 of this document, and should only ever be done by people on the guix-development team.  However one can clone the internal
 channel and make changes locally ,(emph [providing]) these are *never* pushed back to the remote channel.  Local changes can
 be tested by removing the reference to ,(code [guix-packages]) from a copy of the channel file and using the ,(code [-L])
