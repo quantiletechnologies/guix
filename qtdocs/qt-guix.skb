@@ -130,6 +130,17 @@ this branch - it is always represents some perfect copy of Guix proper at some p
       (p [This branch is our production version of Guix.  It contains some tested Guix basline, merged
 in from the master branch and any changes to the Guix code made in quantile and not yet patched into Guix
 proper.  Changes to this branch should never occur without prior approval.])))
+  (chapter :title [Upgrading From Guix Baseline]
+    (section :title [Creating a Future Channel]
+      )
+    (section :title [Which Packages will be Upgraded?]
+      )
+    (section :title [Building Against a Future Channel]
+      )
+    (section :title [System Verification for your Project]
+      )
+    (section :title [System Verification for any Dependent Projects]
+      ))
   (chapter :title [Documenting Guix Packages]
     (section :title [Writing Documentation]
       (p [Documentation of our Guix patches that we aim to provide back to the Guix project are kept in the
