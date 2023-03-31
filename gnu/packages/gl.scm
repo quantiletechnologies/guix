@@ -48,7 +48,6 @@
   #:use-module (gnu packages image)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages llvm)
-  #:use-module (gnu packages mono)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-xyz)
@@ -68,6 +67,7 @@
   #:use-module (guix build-system waf)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
+  #:use-module (guix gexp)
   #:use-module (guix utils)
   #:use-module (ice-9 match)
   #:use-module ((srfi srfi-1) #:hide (zip)))
@@ -75,15 +75,22 @@
 (define-public glu
   (package
     (name "glu")
-    (version "9.0.1")
+    (version "9.0.2")
     (source (origin
-              (method url-fetch)
-              (uri (string-append "ftp://ftp.freedesktop.org/pub/mesa/glu/glu-"
-                                  version ".tar.gz"))
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitlab.freedesktop.org/mesa/glu")
+                    (commit (string-append "glu-" version))))
+              (file-name (git-file-name name version))
               (sha256
                (base32
-                "1xqhk9bn10nbvffw3r4p4rjslwz1l7gaycc0x2pqkr2irp7q9x7n"))))
+                "1khxfidyglpx4yd8f3xvrj05ah823cz1ygcszhcaa4w7h9kd1lbr"))))
     (build-system gnu-build-system)
+    (native-inputs
+     (list pkg-config
+           autoconf
+           automake
+           libtool))
     (propagated-inputs
      (list mesa)) ; according to glu.pc
     (home-page "http://www.opengl.org/archives/resources/faq/technical/glu.htm")
@@ -104,16 +111,15 @@ as ASCII text.")
 (define-public freeglut
   (package
     (name "freeglut")
-    (version "3.2.1")
+    (version "3.2.2")
     (source (origin
               (method url-fetch)
               (uri (string-append
-                    "mirror://sourceforge/freeglut/freeglut/"
-                    version "/freeglut-" version ".tar.gz"))
-              (patches (search-patches "freeglut-gcc-compat.patch"))
+                    "https://github.com/FreeGLUTProject/freeglut/releases"
+                    "/download/v" version "/freeglut-" version ".tar.gz"))
               (sha256
                (base32
-                "0s6sk49q8ijgbsrrryb7dzqx2fa744jhx1wck5cz5jia2010w06l"))))
+                "0l3s57zw51fy3mn5qfdm4z775kfhflgxppanaxmskfzh5l44m565"))))
     (build-system cmake-build-system)
     (arguments
      '(#:tests? #f                      ;no test target
@@ -249,14 +255,14 @@ also known as DXTn or DXTC) for Mesa.")
     (package
       (inherit libva)
       (name "libva-without-mesa")
-      (inputs `(,@(fold alist-delete (package-inputs libva)
-                        '("mesa" "wayland"))))
+      (inputs (fold alist-delete (package-inputs libva)
+                    '("mesa" "wayland")))
       (arguments
        (strip-keyword-arguments
         '(#:make-flags)
         (substitute-keyword-arguments (package-arguments libva)
           ((#:configure-flags flags)
-           '(list "--disable-glx" "--disable-egl"))))))))
+           '(list "--disable-glx"))))))))
 
 (define-public mesa
   (package
@@ -581,30 +587,29 @@ from software emulation to complete hardware acceleration for modern GPUs.")
     (source (mesa-demos-source version))
     (build-system gnu-build-system)
     (inputs
-     `(("mesa" ,mesa)
-       ("glut" ,freeglut)
-       ("glew" ,glew)))
+     (list mesa freeglut glew))
     (native-inputs
      (list pkg-config))
     (arguments
-     '(#:phases
-       (modify-phases %standard-phases
-         (replace
-          'install
-          (lambda* (#:key outputs #:allow-other-keys)
-            (let ((out (assoc-ref outputs "out")))
-              (mkdir-p (string-append out "/bin"))
-              (for-each
-               (lambda (file)
-                 (copy-file file (string-append out "/bin/" (basename file))))
-               '("src/xdemos/glxdemo" "src/xdemos/glxgears"
-                 "src/xdemos/glxinfo" "src/xdemos/glxheads"))
-              #t))))))
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'install
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let ((out #$output))
+                (mkdir-p (string-append out "/bin"))
+                (for-each (lambda (file)
+                            (copy-file file
+                                       (string-append out "/bin/"
+                                                      (basename file))))
+                          '("src/xdemos/glxdemo" "src/xdemos/glxgears"
+                            "src/egl/opengl/eglinfo"
+                            "src/xdemos/glxinfo" "src/xdemos/glxheads"))))))))
     (home-page "https://mesa3d.org/")
     (synopsis "Utility tools for Mesa")
     (description
-     "The mesa-utils package contains several utility tools for Mesa: glxdemo,
-glxgears, glxheads, and glxinfo.")
+     "The mesa-utils package contains several utility tools for Mesa: eglinfo,
+glxdemo, glxgears, glxheads, and glxinfo.")
     ;; glxdemo is public domain; others expat.
     (license (list license:expat license:public-domain))))
 
@@ -717,37 +722,31 @@ OpenGL graphics API.")
 (define-public libepoxy
   (package
     (name "libepoxy")
-    (version "1.5.5")
+    (version "1.5.10")
+    (home-page "https://github.com/anholt/libepoxy")
     (source (origin
-              (method url-fetch)
-              (uri (string-append
-                    "https://github.com/anholt/libepoxy/releases/download/"
-                    version "/libepoxy-" version ".tar.xz"))
+              (method git-fetch)
+              (uri (git-reference (url home-page) (commit version)))
+              (file-name (git-file-name name version))
               (sha256
                (base32
-                "0mh5bdgqfd8m4wj6jlvn4ac94sgfa8r6ish75ciwrhdw47dn65i6"))))
+                "0jw02bzdwynyrwsn5rhcacv92h9xx928j3xp436f8gdnwlyb5641"))))
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (delete 'bootstrap)
-         (add-before
-           'configure 'patch-paths
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let ((python (assoc-ref inputs "python"))
-                   (mesa (assoc-ref inputs "mesa")))
-               (substitute* "src/gen_dispatch.py"
-                 (("/usr/bin/env python") python))
-               (substitute* (find-files "." "\\.[ch]$")
-                 (("libGL.so.1") (string-append mesa "/lib/libGL.so.1"))
-                 (("libEGL.so.1") (string-append mesa "/lib/libEGL.so.1")))
-               #t))))))
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-before 'configure 'patch-paths
+            (lambda* (#:key inputs #:allow-other-keys)
+              (let ((mesa (dirname (search-input-file inputs "lib/libGL.so"))))
+                (substitute* (find-files "." "\\.[ch]$")
+                  (("libGL.so.1") (string-append mesa "/libGL.so.1"))
+                  (("libEGL.so.1") (string-append mesa "/libEGL.so.1")))))))))
     (build-system meson-build-system)
     (native-inputs
      (list pkg-config python))
     (propagated-inputs
      ;; epoxy.pc: 'Requires.private: gl egl'
      (list mesa))
-    (home-page "https://github.com/anholt/libepoxy/")
     (synopsis "Library for handling OpenGL function pointer management")
     (description
      "A library for handling OpenGL function pointer management.")
@@ -756,7 +755,7 @@ OpenGL graphics API.")
 (define-public libglvnd
   (package
     (name "libglvnd")
-    (version "1.3.4")
+    (version "1.5.0")
     (home-page "https://gitlab.freedesktop.org/glvnd/libglvnd")
     (source (origin
               (method git-fetch)
@@ -766,7 +765,7 @@ OpenGL graphics API.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0phvgg2h3pcz3x39gaymwb37bnw1s26clq9wsj0zx398zmp3dwpk"))))
+                "1nvlcwzivrdchp70i2l7ic7qdlsdmlsb0ckydscr43rhqldswx69"))))
     (build-system meson-build-system)
     (arguments
      '(#:configure-flags '("-Dx11=enabled")
@@ -1041,44 +1040,6 @@ the shaders at runtime.")
       (synopsis "Work with Direct3D shaders on alternate 3D APIs (with viewport flip)")
       (description "This is the last version of the mojoshader library with
 the glProgramViewportFlip before it was replaced with glProgramViewportInfo.")
-      (license license:zlib))))
-
-(define-public mojoshader-cs
-  (let ((commit "10d0dba21ff1cfe332eb7de328a2adce01286bd7"))
-    (package
-      (name "mojoshader-cs")
-      (version (git-version "20191205" "1" commit))
-      (source (origin
-                (method git-fetch)
-                (uri (git-reference
-                      (url "https://github.com/FNA-XNA/MojoShader")
-                      (commit commit)))
-                (file-name (git-file-name name version))
-                (sha256
-                 (base32
-                  "11mdhf3fmb9rsn2iv753gmb596j4dh5j2iipgw078vg0lj23rml7"))))
-      (build-system gnu-build-system)
-      (arguments
-       '(#:tests? #f  ; No tests.
-         #:phases
-         (modify-phases %standard-phases
-           (delete 'configure)
-           (replace 'build
-             (lambda _
-               (invoke "make" "-C" "csharp")))
-           (replace 'install
-             (lambda* (#:key outputs #:allow-other-keys)
-               (let ((out (assoc-ref outputs "out")))
-                 (install-file "csharp/bin/MojoShader-CS.dll" (string-append out "/lib"))
-                 #t))))))
-      (native-inputs
-       (list mono))
-      (home-page "https://github.com/FNA-XNA/MojoShader")
-      (synopsis "C# wrapper for MojoShader")
-      (description
-       "Mojoshader-CS provides C# bindings for the Mojoshader library.
-The C# wrapper was written to be used for FNA's platform support.  However, this
-is written in a way that can be used for any general C# application.")
       (license license:zlib))))
 
 (define-public glmark2

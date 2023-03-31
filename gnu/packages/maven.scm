@@ -27,6 +27,7 @@
   #:use-module (guix git-download)
   #:use-module (guix utils)
   #:use-module (guix build-system ant)
+  #:use-module (guix gexp)
   #:use-module (gnu packages)
   #:use-module (gnu packages base)
   #:use-module (gnu packages compression)
@@ -1780,31 +1781,33 @@ artifactId=maven-core" ,(package-version maven-core-bootstrap))))
     (arguments
      `(#:jar-name "maven-slf4j-provider.jar"
        #:source-dir "maven-slf4j-provider/src/main/java"
-       #:tests? #f; no tests
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'unpack-slf4j
-           (lambda* (#:key inputs #:allow-other-keys)
-             (mkdir-p "generated-sources")
-             (with-directory-excursion "generated-sources"
-               (invoke "tar" "xf" (assoc-ref inputs "java-slf4j-simple-source"))
-               (for-each delete-file (find-files "." "StaticLoggerBinder.java")))
-             (for-each
-               (lambda (simple)
-                 (for-each
-                   (lambda (java)
-                     (copy-file java
-                                (string-append
-                                  "maven-slf4j-provider/src/main/java/org/slf4j/impl/"
-                                  (basename java))))
-                   (find-files (string-append simple "/src/main/java/") "\\.java$")))
-               (find-files "generated-sources" "slf4j-simple" #:directories? #t))))
-         (replace 'install
-           (install-from-pom "maven-slf4j-provider/pom.xml")))))
-    (inputs
-     `(("java-slf4j-api" ,java-slf4j-api)
-       ("java-slf4j-simple-source" ,(package-source java-slf4j-simple))
-       ("maven-shared-utils" ,maven-shared-utils)))
+       #:tests? #f ;no tests
+       #:phases (modify-phases %standard-phases
+                  (add-after 'unpack 'unpack-slf4j
+                    (lambda* (#:key inputs #:allow-other-keys)
+                      (mkdir-p "generated-sources")
+                      (copy-recursively (assoc-ref inputs
+                                                   "java-slf4j-simple-source")
+                                        "generated-sources")
+                      (with-directory-excursion "generated-sources"
+                        (for-each delete-file
+                                  (find-files "." "StaticLoggerBinder.java")))
+                      (for-each (lambda (simple)
+                                  (for-each (lambda (java)
+                                              (copy-file java
+                                                         (string-append
+                                                          "maven-slf4j-provider/src/main/java/org/slf4j/impl/"
+                                                          (basename java))))
+                                            (find-files (string-append simple
+                                                         "/src/main/java/")
+                                                        "\\.java$")))
+                                (find-files "generated-sources" "slf4j-simple"
+                                            #:directories? #t))))
+                  (replace 'install
+                    (install-from-pom "maven-slf4j-provider/pom.xml")))))
+    (inputs `(("java-slf4j-api" ,java-slf4j-api)
+              ("java-slf4j-simple-source" ,(package-source java-slf4j-simple))
+              ("maven-shared-utils" ,maven-shared-utils)))
     (native-inputs (list unzip))))
 
 (define-public maven-embedder
@@ -2316,7 +2319,6 @@ reporting or the build process.")))
        #:modules
        ((guix build ant-build-system)
         (guix build java-utils)
-        (guix build syscalls)
         (guix build utils))
        #:phases
        (modify-phases %standard-phases
@@ -2325,7 +2327,7 @@ reporting or the build process.")))
              ;; The model has almost not changed, but the newer version is
              ;; needed to prevent an error in the newer modello we have
              (let ((source (assoc-ref inputs "maven-source"))
-                   (dir (mkdtemp! "maven-source-XXXXXXXX")))
+                   (dir (mkdtemp "maven-source-XXXXXXXX")))
                (with-directory-excursion dir
                  (invoke "tar" "xf" source)
                  (copy-file (car (find-files "." "maven.mdo"))
@@ -3012,6 +3014,50 @@ Maven project dependencies.")
            maven-plugin-annotations
            maven-enforcer-parent-pom))))
 
+(define-public maven-sisu-plugin
+  (package
+    (name "maven-sisu-plugin")
+    (version "0.3.5")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/eclipse/sisu.mojos/")
+                    (commit (string-append "releases/" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "00hb7v6hz8jg0mgkj3cl0nmqz49za4k2a0rbjr4gdhy2m7f34sq3"))))
+    (build-system ant-build-system)
+    (arguments
+     (list #:jar-name "maven-sisu-plugin.jar"
+           #:source-dir "src"
+           #:tests? #f ;no tests
+           #:phases #~(modify-phases %standard-phases
+                        (add-before 'build 'generate-plugin.xml
+                          (generate-plugin.xml "pom.xml" "sisu"
+                           "src/main/java/org/eclipse/sisu/mojos/"
+                           (list (list "IndexMojo.java")
+                                 (list "MainIndexMojo.java")
+                                 (list "TestIndexMojo.java"))))
+                        (replace 'install
+                          (install-from-pom "pom.xml")))))
+    (propagated-inputs (list java-sonatype-oss-parent-pom-9))
+    (inputs (list maven-artifact
+                  maven-plugin-api
+                  maven-plugin-annotations
+                  maven-core
+                  maven-common-artifact-filters
+                  java-slf4j-nop
+                  java-eclipse-sisu-inject
+                  java-plexus-utils
+                  java-plexus-build-api
+                  java-slf4j-api))
+    (home-page "https://www.eclipse.org/sisu/")
+    (synopsis "Maven plugin that generates annotation indexes for Sisu")
+    (description "Maven plugin that generates annotation indexes for Sisu to
+avoid classpath scanning at runtime.")
+    (license license:epl1.0)))
+
 (define-public maven-artifact-transfer
   (package
     (name "maven-artifact-transfer")
@@ -3415,8 +3461,7 @@ internal to the SureFire Logger API.  It is designed to have no dependency.")
          (add-before 'install 'fix-pom-dependency-versions
            (lambda _
              (substitute* "pom.xml"
-               (("1.11") ,(package-version java-commons-compress))
-               (("1.13") ,(package-version java-commons-codec)))
+               (("1.11") ,(package-version java-commons-codec)))
              (substitute* "pom.xml"
                (("commonsLang3Version>.*")
                 (string-append

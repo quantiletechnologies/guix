@@ -38,6 +38,7 @@
 
             emacs-generate-autoloads
             emacs-byte-compile-directory
+            emacs-compile-directory
             emacs-header-parse
 
             as-display
@@ -74,10 +75,15 @@ true, evaluate using dynamic scoping."
           (string-append "--visit=" file)
           (string-append "--eval=" (expr->string expr))))
 
-(define (emacs-batch-disable-compilation file)
+(define* (emacs-batch-disable-compilation file #:key native?)
+  "Disable byte compilation for FILE.
+If NATIVE?, only disable native compilation."
   (emacs-batch-edit-file file
-    '(progn
-      (add-file-local-variable 'no-byte-compile t)
+    `(progn
+      (add-file-local-variable ',(if native?
+                                     'no-native-compile
+                                     'no-byte-compile)
+                               t)
       (basic-save-buffer))))
 
 (define-condition-type &emacs-batch-error &error
@@ -105,7 +111,14 @@ true, evaluate using dynamic scoping."
   (let* ((file (string-append directory "/" name "-autoloads.el"))
          (expr `(let ((backup-inhibited t)
                       (generated-autoload-file ,file))
-                  (update-directory-autoloads ,directory))))
+                  (cond
+                   ((require 'loaddefs-gen nil t)
+                    ;; Emacs >= 29
+                    (loaddefs-generate ,directory ,file))
+                   ((fboundp 'make-directory-autoloads)
+                    ;; Emacs 28
+                    (make-directory-autoloads ,directory ,file))
+                   (t (update-directory-autoloads ,directory))))))
     (emacs-batch-eval expr #:dynamic? #t)))
 
 (define* (emacs-byte-compile-directory dir)
@@ -114,6 +127,35 @@ true, evaluate using dynamic scoping."
                 (setq byte-compile-debug t) ; for proper exit status
                 (byte-recompile-directory (file-name-as-directory ,dir) 0 1))))
     (emacs-batch-eval expr)))
+
+(define* (emacs-compile-directory dir)
+  "Compile all files in DIR to native code.
+
+If native code is not supported, compile to bytecode instead."
+  (emacs-batch-eval
+    `(let ((byte-compile-debug t)       ; for proper exit status
+           (byte+native-compile (native-comp-available-p))
+           (files (directory-files-recursively ,dir "\\.el$")))
+       (mapc
+        (lambda (file)
+          (let (byte-to-native-output-file
+                ;; First entry is the eln-cache of the homeless shelter,
+                ;; second entry is the install directory.
+                (eln-dir (and (native-comp-available-p)
+                              (cadr native-comp-eln-load-path))))
+            (if byte+native-compile
+                (native-compile file
+                                (comp-el-to-eln-filename file eln-dir))
+                (byte-compile-file file))
+            ;; Sadly, we can't use pcase because quasiquote works different in
+            ;; Emacs.  See `batch-byte+native-compile' in comp.el for the
+            ;; actual shape of byte-to-native-output-file.
+            (unless (null byte-to-native-output-file)
+              (rename-file (car byte-to-native-output-file)
+                           (cdr byte-to-native-output-file)
+                           t))))
+       files))
+    #:dynamic? #t))
 
 (define (emacs-header-parse section file)
   "Parse the header SECTION in FILE and return it as a string."
@@ -183,7 +225,7 @@ useful to avoid double quotes being added when the replacement is provided as
 a string."
     ((_ file (variable replacement modifier ...) ...)
      (emacs-substitute-sexps file
-       ((string-append "(def[a-z]+[[:space:]\n]+" variable "\\>")
+       ((string-append "(def[a-z]+[[:space:]\n]+" variable "\\_>")
         replacement
         modifier ...)
        ...))))

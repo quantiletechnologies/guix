@@ -12,6 +12,8 @@
 ;;; Copyright © 2021 Raphaël Mélotte <raphael.melotte@mind.be>
 ;;; Copyright © 2022 Paul A. Patience <paul@apatience.com>
 ;;; Copyright © 2022 Hartmut Goebel <h.goebel@crazy-compilers.com>
+;;; Copyright © 2022 ( <paren@disroot.org>
+;;; Copyright © 2022 Mathieu Laparie <mlaparie@disr.it>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -35,6 +37,7 @@
   #:use-module (guix git-download)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix build-system perl)
+  #:use-module (guix build-system pyproject)
   #:use-module (guix build-system python)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system go)
@@ -50,6 +53,7 @@
   #:use-module (gnu packages django)
   #:use-module (gnu packages gd)
   #:use-module (gnu packages gettext)
+  #:use-module (gnu packages gnome)               ;libnotify
   #:use-module (gnu packages image)
   #:use-module (gnu packages mail)
   #:use-module (gnu packages ncurses)
@@ -167,7 +171,7 @@ etc. via a Web interface.  Features include:
 (define-public zabbix-agentd
   (package
     (name "zabbix-agentd")
-    (version "6.0.5")
+    (version "6.0.9")
     (source
      (origin
        (method url-fetch)
@@ -175,7 +179,7 @@ etc. via a Web interface.  Features include:
              "https://cdn.zabbix.com/zabbix/sources/stable/"
              (version-major+minor version) "/zabbix-" version ".tar.gz"))
        (sha256
-        (base32 "1hmx6dgsag84dpv867p12bkln141nypgkp6zhipxbnn5xxip1sry"))
+        (base32 "0rzdlmfvyqys166zi94q1c6pbf57b0g1dygb23ixsx083gq1hh01"))
        (modules '((guix build utils)))
        (snippet
         '(substitute* '("src/zabbix_proxy/proxy.c"
@@ -185,10 +189,17 @@ etc. via a Web interface.  Features include:
             "/run/setuid-programs/fping")))))
     (build-system gnu-build-system)
     (arguments
-     '(#:configure-flags
-       '("--enable-agent" "--enable-ipv6" "--with-libpcre2")))
+     (list #:configure-flags
+           #~(list "--enable-agent"
+                   "--enable-ipv6"
+                   "--with-libpcre2"
+                   "--with-gnutls"
+                   (string-append "--with-gnutls="
+                                  (assoc-ref %build-inputs "gnutls")))))
+    (native-inputs
+     (list pkg-config))
     (inputs
-     (list pcre2))
+     (list gnutls pcre2))
     (home-page "https://www.zabbix.com/")
     (synopsis "Distributed monitoring solution (client-side agent)")
     (description "This package provides a distributed monitoring
@@ -234,8 +245,6 @@ solution (client-side agent)")
                         (string-append "--with-libevent="
                                        (assoc-ref %build-inputs "libevent"))
                         "--with-net-snmp"
-                        (string-append "--with-gnutls="
-                                       (assoc-ref %build-inputs "gnutls"))
                         "--with-libcurl"
                         (string-append "--with-zlib="
                                        (assoc-ref %build-inputs "zlib")))
@@ -244,7 +253,6 @@ solution (client-side agent)")
      (modify-inputs (package-inputs zabbix-agentd)
        (prepend curl
                 libevent
-                gnutls
                 net-snmp
                 postgresql
                 zlib)))
@@ -265,7 +273,7 @@ solution (server-side)")))
               (sha256
                (base32
                 "1p8xkq3mxg476srwrgqax76vjzji0rjx32njmgnpa409vaqrbj5p"))))
-    (build-system python-build-system)
+    (build-system pyproject-build-system)
     (arguments
      (list #:phases
            #~(modify-phases %standard-phases
@@ -290,10 +298,7 @@ solution (server-side)")))
                                  (string-append #$output "/share/man/man1"))
                    (copy-recursively "docs/_build/singlehtml"
                                      (string-append #$output "/share/doc/"
-                                                    #$name "/html"))))
-               (replace 'check
-                 (lambda _
-                   (invoke "pytest" "-vv"))))))
+                                                    #$name "/html")))))))
     (native-inputs
      (list python-pytest python-sphinx))
     (inputs
@@ -309,7 +314,7 @@ through a text-based interface.")
 (define-public python-pyzabbix
   (package
     (name "python-pyzabbix")
-    (version "1.0.0")
+    (version "1.2.1")
     (home-page "https://github.com/lukecyca/pyzabbix")
     ;; No tests on PyPI, use the git checkout.
     (source
@@ -319,26 +324,20 @@ through a text-based interface.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "146pv8bj6pv8max1lkm07560b9zcc268c927kff6rcib47qxfnn2"))))
+         "0ad5xac67brmwc3wd0f87pjplly3cqyrz1dp725lzz2hrjgiaqi8"))))
     (build-system python-build-system)
     (arguments
      '(#:phases (modify-phases %standard-phases
-                  (add-after 'unpack 'patch
-                    (lambda _
-                      ;; Permit newer versions of httpretty.
-                      (substitute* "setup.py"
-                        (("httpretty<0\\.8\\.7")
-                         "httpretty"))))
                   (replace 'check
                     (lambda* (#:key tests? #:allow-other-keys)
                       (if tests?
-                          (invoke "nosetests")
+                          (invoke "pytest" "-vv" "tests")
                           (format #t "test suite not run~%")))))))
     (native-inputs
      ;; For tests.
-     (list python-httpretty python-nose))
+     (list python-requests-mock python-pytest))
     (propagated-inputs
-     (list python-requests python-semantic-version))
+     (list python-packaging python-requests))
     (synopsis "Python interface to the Zabbix API")
     (description
      "@code{pyzabbix} is a Python module for working with the Zabbix API.")
@@ -762,3 +761,46 @@ display resumes.
     (description "StatsD is a friendly front-end to Graphite.  This package
 provides a simple Python client for the StatsD daemon.")
     (license license:expat)))
+
+(define-public batsignal
+  (package
+    (name "batsignal")
+    (version "1.6.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/electrickite/batsignal")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0b1j6mljnqgxwr3id3r9shzhsjk5r0qdh9cxkvy1dm4kzbyc4dxq"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list #:make-flags
+           #~(list (string-append "PREFIX=" #$output)
+                   (string-append "CC=" #$(cc-for-target)))
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'fix-cross-compile
+                 (lambda _
+                   (substitute* "Makefile"
+                     (("pkg-config")
+                      #$(pkg-config-for-target)))))
+               (delete 'configure)
+               (replace 'check
+                 (lambda* (#:key tests? #:allow-other-keys)
+                   (when tests?
+                     (invoke "./batsignal" "-v")))))))
+    (inputs (list libnotify))
+    (native-inputs (list pkg-config))
+    (home-page "https://github.com/electrickite/batsignal")
+    (synopsis "Power monitoring tool")
+    (description
+     "This package provides a daemon that monitors device power levels,
+notifying the user and optionally running a command when it reaches
+user-configured power thresholds.  This can be used to force powering off a
+laptop when the battery gets below critical levels, instead of damaging the
+battery.")
+    (license license:isc)))
+

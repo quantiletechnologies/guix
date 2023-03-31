@@ -448,8 +448,8 @@ from a mounted file system.")
     (license license:gpl2+)))
 
 (define-public bcachefs-tools
-  (let ((commit "fd1b84975b960d5e42963bed2c18b8c63d8abce7")
-        (revision "14"))
+  (let ((commit "494421ee6e85514f90bb316d77e1dd4f7dad3420")
+        (revision "15"))
     (package
       (name "bcachefs-tools")
       (version (git-version "0.1" revision commit))
@@ -461,7 +461,7 @@ from a mounted file system.")
                (commit commit)))
          (file-name (git-file-name name version))
          (sha256
-          (base32 "08vh0pg2sj833062y4vvnvzqchhflcvysp3xdh0zjk121r3iqm0s"))))
+          (base32 "1sdh9rl8ydnb28646773lsxpdy5jysvjbxs2nwr3hsv4qyv93vc4"))))
       (build-system gnu-build-system)
       (arguments
        (list #:make-flags
@@ -472,7 +472,16 @@ from a mounted file system.")
                      (string-append "PKG_CONFIG=" #$(pkg-config-for-target))
                      (string-append "PYTEST_CMD="
                                     #$(this-package-native-input "python-pytest")
-                                    "/bin/pytest"))
+                                    "/bin/pytest")
+                     (string-append "PYTEST_ARGS=-k '"
+                                    ;; These fail (‘invalid argument’) on
+                                    ;; kernels with a previous bcachefs version.
+                                    "not test_format and "
+                                    "not test_fsck and "
+                                    "not test_list and "
+                                    "not test_list_inodes and "
+                                    "not test_list_dirent"
+                                    "'"))
              #:phases
              #~(modify-phases %standard-phases
                  (delete 'configure)    ; no configure script
@@ -1192,7 +1201,7 @@ with the included @command{xfstests-check} helper.")
 (define-public zfs
   (package
     (name "zfs")
-    (version "2.1.5")
+    (version "2.1.6")
     (outputs '("out" "module" "src"))
     (source
       (origin
@@ -1201,7 +1210,7 @@ with the included @command{xfstests-check} helper.")
                               "/download/zfs-" version
                               "/zfs-" version ".tar.gz"))
           (sha256
-           (base32 "0371j5k28cymqngfl76dfxzggvdf8n0ssij37350gzs4bhg084qr"))))
+           (base32 "0ymxkms1gwf731x61sj54rnnp029724zhywkxd4164yjz0a90cqm"))))
     (build-system linux-module-build-system)
     (arguments
      (list
@@ -1457,7 +1466,13 @@ On Guix System, you will need to invoke the included shell scripts as
                                                   "mount"))))
              (substitute* '("libfuse/util/mount.mergerfs.c")
                (("/bin/sh" command)
-                (string-append (assoc-ref inputs "bash-minimal") command))))))))
+                (string-append (assoc-ref inputs "bash-minimal") command))
+               ;; mount.mergerfs tries to execute `mergerfs`, which cannot be found
+               ;; without an absolute path. Hard-coding the path is fine, since we don’t
+               ;; link mount.mergerfs to mount.fuse anyway.
+               (("add_arg\\(&command, type\\);")
+                (string-append "add_arg(&command, \"" (assoc-ref outputs "out")
+                               "/bin/mergerfs\");"))))))))
     ;; Mergerfs bundles a heavily modified copy of fuse.
     (inputs
      (list bash-minimal util-linux))

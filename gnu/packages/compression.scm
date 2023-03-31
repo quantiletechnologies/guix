@@ -35,6 +35,7 @@
 ;;; Copyright © 2021 Simon Tournier <zimon.toutoune@gmail.com>
 ;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Ahmad Jarara <git@ajarara.io>
+;;; Copyright © 2022 Zhu Zihao <all_but_last@163.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -58,6 +59,7 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
+  #:use-module (guix build-system ant)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system glib-or-gtk)
   #:use-module (guix build-system gnu)
@@ -70,6 +72,7 @@
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages backup)
   #:use-module (gnu packages base)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages benchmark)
   #:use-module (gnu packages boost)
   #:use-module (gnu packages check)
@@ -81,6 +84,7 @@
   #:use-module (gnu packages gnome)
   #:use-module (gnu packages gnupg)
   #:use-module (gnu packages gtk)
+  #:use-module (gnu packages java)
   #:use-module (gnu packages llvm)
   #:use-module (gnu packages man)
   #:use-module (gnu packages maths)
@@ -281,6 +285,10 @@ adding and extracting files to/from a tar archive.")
                (string-append "exec " (assoc-ref outputs "out")
                               "/bin/gzip")))
             #t)))))
+   (inputs
+    `(,@(if (%current-target-system)
+            `(("bash" ,bash-minimal))
+            '())))
    (description
     "GNU Gzip provides data compression and decompression utilities; the
 typical extension is \".gz\".  Unlike the \"zip\" format, it compresses a single
@@ -388,6 +396,10 @@ file; as a result, it is often used in conjunction with \"tar\", resulting in
        ;; Don't attempt to run the tests when cross-compiling.
        ,@(if (%current-target-system)
              '(#:tests? #f)
+             '())))
+    (inputs
+     `(,@(if (%current-target-system)
+             `(("bash" ,bash-minimal))
              '())))
     (outputs '("out" "static"))
     (synopsis "High-quality data compression program")
@@ -524,6 +536,10 @@ compressed with pbzip2 can be decompressed with bzip2).")
                 (("^old_library='liblzma.a'") "old_library=''"))
               #t))))))
    (outputs '("out" "static"))
+   (inputs
+    `(,@(if (%current-target-system)
+            `(("bash" ,bash-minimal))
+            '())))
    (synopsis "General-purpose data compression")
    (description
     "XZ Utils is free general-purpose data compression software with high
@@ -632,6 +648,12 @@ some compression ratio).")
               (base32
                "0j59hx72258334rmkwn57ahr6s69nlrx0a5ip1jw2fbiwr12sd63"))))
     (build-system gnu-build-system)
+    (arguments
+     ;; The configure script doesn't recognise the --build or --host
+     ;; arguments, so set CXX here
+     `(,@(if (%current-target-system)
+             `(#:make-flags (list ,(string-append "CXX=" (cxx-for-target))))
+             '())))
     (home-page "https://www.nongnu.org/lzip/lzip.html")
     (synopsis "Lossless data compressor based on the LZMA algorithm")
     (description
@@ -653,6 +675,12 @@ archiving.  Lzip is a clean implementation of the LZMA algorithm.")
                (base32
                 "0wmmyi03fv2lflsir5ldrsv04q57k3hmlqajzb1m3p86gwbh967j"))))
     (build-system gnu-build-system)
+    (arguments
+     ;; The configure script doesn't recognise the --build or --host
+     ;; arguments, so set CXX here
+     `(,@(if (%current-target-system)
+             `(#:make-flags (list ,(string-append "CXX=" (cxx-for-target))))
+             '())))
     (home-page "https://www.nongnu.org/lzip/lziprecover.html")
     (synopsis "Recover and decompress data from damaged lzip files")
     (description
@@ -2239,6 +2267,19 @@ package, an implementation of the Brotli lossless compression algorithm.")))
 (define-public python-google-brotli
   (deprecated-package "python-google-brotli" python-brotli))
 
+(define-public java-brotli
+  (package
+    (inherit brotli)
+    (name "java-brotli")
+    (build-system ant-build-system)
+    (arguments
+     `(#:jar-name "java-brotli.jar"
+       #:source-dir "java"
+       ;; Tests are mixed in with java sources, the ant build system
+       ;; doesn't allow that
+       #:tests? #f))
+    (native-inputs (list java-junit))))
+
 (define-public ucl
   (package
     (name "ucl")
@@ -2268,40 +2309,16 @@ decompression is a little bit slower.")
 (define-public upx
   (package
     (name "upx")
-    (version "3.96")
-    (source (origin
-             (method url-fetch)
-             (uri (string-append "https://github.com/upx/upx/releases/download/v"
-                                 version "/upx-" version "-src.tar.xz"))
-             (sha256
-              (base32
-               "051pk5jk8fcfg5mpgzj43z5p4cn7jy5jbyshyn78dwjqr7slsxs7"))
-             (patches (search-patches "upx-CVE-2021-20285.patch"))))
-    (build-system gnu-build-system)
-    (native-inputs
-     (list perl))
-    (inputs
-     (list ucl zlib))
-    (arguments
-     `(#:make-flags
-       (list "all")
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)            ; no configure script
-         (delete 'check)                ; no test suite
-         (add-before 'build 'patch-exec-bin-sh
-           (lambda _
-             (substitute* (list "Makefile"
-                                "src/Makefile")
-               (("/bin/sh") (which "sh")))
-             #t))
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (bin (string-append out "/bin")))
-               (mkdir-p bin)
-               (copy-file "src/upx.out" (string-append bin "/upx")))
-             #t)))))
+    (version "4.0.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://github.com/upx/upx/releases/download/v"
+                           version "/upx-" version "-src.tar.xz"))
+       (sha256
+        (base32
+         "1sinky0rq40q2qqzly99c5hdd6ilz2bxlbqla9lg0rafhbw3iyga"))))
+    (build-system cmake-build-system)
     (home-page "https://upx.github.io/")
     (synopsis "Compression tool for executables")
     (description

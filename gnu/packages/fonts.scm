@@ -11,7 +11,7 @@
 ;;; Copyright © 2016 Jookia <166291@gmail.com>
 ;;; Copyright © 2016 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2016 Dmitry Nikolaev <cameltheman@gmail.com>
-;;; Copyright © 2016, 2017, 2018, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016-2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016, 2020 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2016 Toni Reina <areina@riseup.net>
 ;;; Copyright © 2017–2022 Tobias Geerinckx-Rice <me@tobias.gr>
@@ -19,7 +19,7 @@
 ;;; Copyright © 2017 Alex Griffin <a@ajgrf.com>
 ;;; Copyright © 2017 Clément Lassieur <clement@lassieur.org>
 ;;; Copyright © 2017 Brendan Tildesley <mail@brendan.scot>
-;;; Copyright © 2017, 2018, 2019, 2020 Arun Isaac <arunisaac@systemreboot.net>
+;;; Copyright © 2017, 2018, 2019, 2020, 2022 Arun Isaac <arunisaac@systemreboot.net>
 ;;; Copyright © 2017 Mohammed Sadiq <sadiq@sadiqpk.org>
 ;;; Copyright © 2018 Charlie Ritter <chewzerita@posteo.net>
 ;;; Copyright © 2018 Gabriel Hondet <gabrielhondet@gmail.com>
@@ -35,14 +35,14 @@
 ;;; Copyright © 2020 Raghav Gururajan <raghavgururajan@disroot.org>
 ;;; Copyright © 2020, 2021 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2020 Zhu Zihao <all_but_last@163.com>
-;;; Copyright © 2020, 2021 Simen Endsjø <simendsjo@gmail.com>
+;;; Copyright © 2020, 2021, 2022 Simen Endsjø <simendsjo@gmail.com>
 ;;; Copyright © 2020 Tim Van den Langenbergh <tmt_vdl@gmx.com>
 ;;; Copyright © 2020 Nicolò Balzarotti <nicolo@nixo.xyz>
 ;;; Copyright © 2021 Antoine Côté <antoine.cote@posteo.net>
 ;;; Copyright © 2021 Sergiu Ivanov <sivanov@colimite.fr>
 ;;; Copyright © 2021 Sarah Morgensen <iskarian@mgsn.dev>
 ;;; Copyright © 2021 Paul A. Patience <paul@apatience.com>
-;;; Copyright © 2021 Taiju HIGASHI <higashi@taiju.info>
+;;; Copyright © 2021, 2022 Taiju HIGASHI <higashi@taiju.info>
 ;;; Copyright © 2022 Philip McGrath <philip@philipmcgrath.com>
 ;;; Copyright © 2022 Kitzman <kitzman@disroot.org>
 ;;; Copyright © 2021 Wamm K. D. <jaft.r@outlook.com>
@@ -85,6 +85,7 @@
   #:use-module (gnu packages bash)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages fontutils)
+  #:use-module (gnu packages gd)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gtk)
@@ -117,15 +118,19 @@ titling.")
 (define-public font-ibm-plex
   (package
     (name "font-ibm-plex")
-    (version "5.1.3")
+    (version "6.1.1")
+    ;; We prefer git-fetch since it lets us get the opentype, truetype and web
+    ;; fonts all in one download. The zip archive releases separate the
+    ;; opentype, truetype and web fonts into three separate archives.
     (source (origin
-              (method url-fetch)
-              (uri (string-append
-                    "https://github.com/IBM/plex/releases/download/"
-                    "v" version "/OpenType.zip"))
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/IBM/plex")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
               (sha256
                (base32
-                "0zlz8kxx54i4hpgaip9690bilvn5w14gp7jjkk6cz4h9p3xml231"))))
+                "1jxyd0zl7jssn7mwz8x5xvjmw59x4mn82s2kywf9583k1pg949k1"))))
     (build-system font-build-system)
     (home-page "https://github.com/IBM/plex")
     (synopsis "IBM Plex typeface")
@@ -756,7 +761,7 @@ OpenType variant of these fonts.")
 (define-public font-amiri
   (package
     (name "font-amiri")
-    (version "0.114")
+    (version "0.117")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -765,7 +770,7 @@ OpenType variant of these fonts.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "01d54i68pmy37fhvxv8kld3iqlc1m0vr871zd66y5y4c7kn2v7as"))))
+                "1z2hdmny52bapakf96y5xfr29f8ax7q6nj651zrihnnhfdriqfx1"))))
     (build-system gnu-build-system)
     (arguments
      (list
@@ -778,7 +783,8 @@ OpenType variant of these fonts.")
                    (replace 'install
                      (assoc-ref font:%standard-phases 'install)))))
     (native-inputs
-     (list python-fonttools
+     (list python-fonttools-next
+           python-glyphsets
            python-pcpp
            python-opentype-sanitizer
            python-sfdlib
@@ -842,7 +848,7 @@ for use at smaller text sizes")))
 (define-public font-gnu-unifont
   (package
     (name "font-gnu-unifont")
-    (version "14.0.04")
+    (version "15.0.01")
     (source
      (origin
        (method url-fetch)
@@ -852,31 +858,45 @@ for use at smaller text sizes")))
              (string-append "mirror://gnu/unifont/unifont-"
                             version "/unifont-" version ".tar.gz")))
        (sha256
-        (base32 "1fzycjxmgnq77r2s5914w1phg3qdwwnwa6p3zyfa1cscrxy52phz"))))
+        (base32 "1m9lfss6sbmcr0b6h7pxxmdl71j9dmnvk8idvxzylqrwpwjaj4bx"))
+       (snippet
+        '(begin
+           (use-modules (guix build utils))
+           (delete-file-recursively "font/precompiled")))))
     (build-system gnu-build-system)
-    (outputs '("out"   ; TrueType version
+    (outputs '("out"   ; TrueType/OpenType version
                "pcf"   ; PCF (bitmap) version
                "psf"   ; PSF (console) version
                "bin")) ; Utilities to manipulate '.hex' format
     (arguments
      `(#:tests? #f          ; no check target
        #:make-flags
-       (list (string-append "CC=" ,(cc-for-target)))
+       (list (string-append "CC=" ,(cc-for-target))
+             "BUILDFONT=TRUE")
        #:phases
        (modify-phases %standard-phases
          (delete 'configure)
+         (add-after 'unpack 'patch-source
+           (lambda _
+             (substitute* (find-files "." "Makefile")
+               (("/bin/sh -s") (string-append (which "sh") " -s")))))
          (replace 'install
           (lambda* (#:key make-flags outputs #:allow-other-keys)
             (let* ((ttf (string-append (assoc-ref outputs "out")
                                        "/share/fonts/truetype"))
+                   (otf (string-append (assoc-ref outputs "out")
+                                       "/share/fonts/opentype"))
                    (pcf (string-append (assoc-ref outputs "pcf")
                                        "/share/fonts/misc"))
                    (psf (string-append (assoc-ref outputs "psf")
                                        "/share/consolefonts"))
                    (bin (assoc-ref outputs "bin")))
+              ;; This directory isn't created in fonts/Makefile.
+              (mkdir-p otf)
               (apply invoke "make" "install"
                      (string-append "PREFIX=" bin)
                      (string-append "TTFDEST=" ttf)
+                     (string-append "OTFDEST=" otf)
                      (string-append "PCFDEST=" pcf)
                      (string-append "CONSOLEDEST=" psf)
                      make-flags)
@@ -885,8 +905,10 @@ for use at smaller text sizes")))
               (invoke "gzip" "-9n" "doc/unifont.info")
               (install-file "doc/unifont.info.gz"
                             (string-append bin "/share/info"))))))))
+    (native-inputs
+     (list bdftopcf console-setup fontforge))
     (inputs
-     (list perl)) ; for utilities
+     (list perl perl-gd))       ; for utilities
     (synopsis
      "Large bitmap font covering Unicode's Basic Multilingual Plane")
     (description
@@ -915,6 +937,50 @@ utilities to ease adding new glyphs to the font.")
     (description "Google Noto Fonts is a family of fonts designed to support
 all languages with a consistent look and aesthetic.  Its goal is to properly
 display all Unicode symbols.")
+    (license license:silofl1.1)))
+
+(define-public font-google-noto-sans-cjk
+  (package
+    (name "font-google-noto-sans-cjk")
+    (version "2.004")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append
+             "https://github.com/googlefonts/noto-cjk/releases/download/Sans"
+             version "/03_NotoSansCJK-OTC.zip"))
+       (file-name (string-append name "-" version ".zip"))
+       (sha256
+        (base32 "1v9yda7r98g4a3pk0y3cjbgc1i2lv4ax0f0v6aqasfzz4ldlx3sj"))))
+    (build-system font-build-system)
+    (home-page "https://www.google.com/get/noto/")
+    (synopsis "Fonts to cover all languages")
+    (description "Google Noto Fonts is a family of fonts designed to support
+all languages with a consistent look and aesthetic.  Its goal is to properly
+display all Unicode symbols.  This package provides the Sans Serif variant of
+CJK fonts.")
+    (license license:silofl1.1)))
+
+(define-public font-google-noto-serif-cjk
+  (package
+    (name "font-google-noto-serif-cjk")
+    (version "2.001")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append
+             "https://github.com/googlefonts/noto-cjk/releases/download/Serif"
+             version "/04_NotoSerifCJKOTC.zip"))
+       (file-name (string-append name "-" version ".zip"))
+       (sha256
+        (base32 "1l6r3sz2s0vcyfx6ria7wqcq45zp40gxgg97lh8hpmajhzw301ig"))))
+    (build-system font-build-system)
+    (home-page "https://www.google.com/get/noto/")
+    (synopsis "Fonts to cover all languages")
+    (description "Google Noto Fonts is a family of fonts designed to support
+all languages with a consistent look and aesthetic.  Its goal is to properly
+display all Unicode symbols.  This package provides the Serif variant of CJK
+fonts.")
     (license license:silofl1.1)))
 
 (define-public font-google-roboto
@@ -1432,7 +1498,7 @@ guix repl <<EOF
              (ice-9 string-fun)
              (gnu packages fonts))
 
-(let ((new-version "15.2.0")
+(let ((new-version "16.4.0")
       (iosevka-hashes #nil)
       (iosevka-fails #nil))
   (for-each (lambda (font)
@@ -1466,7 +1532,7 @@ EOF
 (define-public font-iosevka
   (package
     (name "font-iosevka")
-    (version "15.2.0")
+    (version "16.4.0")
     (source
      (origin
        (method url-fetch/zipbomb)
@@ -1474,7 +1540,7 @@ EOF
                            "/releases/download/v" version
                            "/ttc-iosevka-" version ".zip"))
        (sha256
-        (base32 "0yyz8vmpi8pww0p9na564lvbkwhdhpk4bcyrli91dn5gq0pc1pvv"))))
+        (base32 "07v98pr0anqbxn1yc55245k5ixxzfk2wmfq67zhz84aa18viqhbc"))))
     (build-system font-build-system)
     (home-page "https://be5invis.github.io/Iosevka/")
     (synopsis "Coders' typeface, built from code")
@@ -1497,7 +1563,7 @@ programming.  Iosevka is completely generated from its source code.")
                            "/releases/download/v" version
                            "/ttc-iosevka-slab-" version ".zip"))
        (sha256
-        (base32 "1qy86kdl6lgq5k1qb97adibpfjm4vg1wdnxbqizhqka5bc7avyzb"))))))
+        (base32 "063qk1d75l1jq7gdwzqxd7j8j56g7da0aagsqm0lvwl217l7x48b"))))))
 
 (define-public font-iosevka-term
   (package
@@ -1511,7 +1577,7 @@ programming.  Iosevka is completely generated from its source code.")
                            "/releases/download/v" version
                            "/ttf-iosevka-term-" version ".zip"))
        (sha256
-        (base32 "15znvvkhldgbl9k04pwrrnvmjnanw2fr92c0zspg7bbw7id2v510"))))
+        (base32 "17465bvg6fap53xfqwrg2g4fasv01w86wh658n1rf6djs3yzn1gx"))))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -1532,7 +1598,7 @@ programming.  Iosevka is completely generated from its source code.")
                            "releases/download/v" version "/"
                            "ttf-iosevka-term-slab-" version ".zip"))
        (sha256
-        (base32 "1rla7kcb94c7daklp4av27gix86cmwsrqg6884zmv5zfnhz0r700"))))
+        (base32 "00pc4d8awdiziyzncah3fnh0ppvcdvi9cd7vyknl68f6fj283fvm"))))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -1553,7 +1619,7 @@ programming.  Iosevka is completely generated from its source code.")
                            "/releases/download/v" version
                            "/ttc-iosevka-aile-" version ".zip"))
        (sha256
-        (base32 "1lciycahvxgvmcniq4h3m1v3rc42nmv8ydb0fpbl9g4sc0qp81hq"))))))
+        (base32 "03y0xijb7c0kampm3gjb69mv8hikhsgqhlw1w3zfcjhr2vc62g6q"))))))
 
 (define-public font-iosevka-curly
   (package
@@ -1567,7 +1633,7 @@ programming.  Iosevka is completely generated from its source code.")
                            "releases/download/v" version  "/"
                            "ttc-iosevka-curly-" version ".zip"))
        (sha256
-        (base32 "02jvrj7kzd4bx3maj1bq2p9j746b8c5713d8lqkxx4fn9fm0zppq"))))))
+        (base32 "1i31zj0j8npgx7wn2qibih48s76qjxakz14sa2hgx908p8xyfwq5"))))))
 
 (define-public font-iosevka-curly-slab
   (package
@@ -1581,7 +1647,7 @@ programming.  Iosevka is completely generated from its source code.")
                            "releases/download/v" version  "/"
                            "ttc-iosevka-curly-slab-" version ".zip"))
        (sha256
-        (base32 "1bhvf95xs74wm8srsvl4yxwvl36llk93mpl1y9acc5z9rdcpzjqq"))))))
+        (base32 "1xijhk5vbgs3c89a7g9cfjqjqv801gimjja4wqpvaficab692jh2"))))))
 
 (define-public font-iosevka-etoile
   (package
@@ -1595,12 +1661,12 @@ programming.  Iosevka is completely generated from its source code.")
                            "/releases/download/v" version
                            "/ttc-iosevka-etoile-" version ".zip"))
        (sha256
-        (base32 "1zmgfxfsbxv1k4fwnc7g2jlfhmlzp5kap8m3f10fqanpnkd0yf08"))))))
+        (base32 "1rqagk6gyja15fa4m107ylbjwbhn811gbl9lbr9yzashw4drjpp9"))))))
 
 (define-public font-sarasa-gothic
   (package
     (name "font-sarasa-gothic")
-    (version "0.36.8")
+    (version "0.37.4")
     (source
      (origin
        (method url-fetch)
@@ -1608,7 +1674,7 @@ programming.  Iosevka is completely generated from its source code.")
                            "/releases/download/v" version
                            "/sarasa-gothic-ttc-" version ".7z"))
        (sha256
-        (base32 "01fn5mzr1rcz0c8nbhabwbv1pq1c3ylf2msxldc9adks1pi45fmh"))))
+        (base32 "12i8lccl4ysinhz40s2fz6249r9n35in4rqmk3a0fgcjfaby3kfm"))))
     (build-system font-build-system)
     (arguments
      `(#:phases (modify-phases %standard-phases
@@ -1831,7 +1897,7 @@ ExtraLight, Light, Book, Medium, Semibold, Bold & ExtraBold")
                #t))))))
     (native-inputs
      (list fontforge))
-    (home-page "http://culmus.sourceforge.net/")
+    (home-page "https://culmus.sourceforge.io/")
     (synopsis "TrueType Hebrew Fonts for X11")
     (description "14 Hebrew trivial families.  Contain ASCII glyphs from various
 sources.  Those families provide a basic set of a serif (Frank Ruehl), sans
@@ -1993,7 +2059,7 @@ formatting.")
 (define-public font-plemoljp
   (package
     (name "font-plemoljp")
-    (version "1.2.2")
+    (version "1.2.7")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -2001,7 +2067,7 @@ formatting.")
                     "v" version "/PlemolJP_v" version ".zip"))
               (sha256
                (base32
-                "03cwzkqg09c87lmsx9xfzdrlgjml93bhhp1dqq3qkpdfww30wkaw"))))
+                "0pkkys5kl5s79shd1jmwfyk469ih8cymqb4vjwdadj52kzq4m9z6"))))
     (build-system font-build-system)
     (home-page "https://github.com/yuru7/PlemolJP")
     (synopsis "Plex Mono Language JP")
@@ -2486,7 +2552,7 @@ and heavily inspired by Creep.")
 (define-public font-montserrat
   (package
     (name "font-montserrat")
-    (version "7.210")
+    (version "7.222")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -2495,14 +2561,15 @@ and heavily inspired by Creep.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0jn1yvfamq5xazw85sfnxgriji60g7mkss9mkf8d0117vdk838bn"))))
+                "03cfk45r5g694dqp2gjgg0qwra8w78nl6hc6p56qwd5dcfgr2l3r"))))
     (build-system font-build-system)
     (home-page "https://github.com/JulietaUla/Montserrat")
     (synopsis "The Montserrat font")
-    (description "The old posters and signs in the traditional Montserrat
-neighborhood of Buenos Aires inspired Julieta Ulanovsky to design this
-typeface and rescue the beauty of urban typography that emerged in the first
-half of the twentieth century.")
+    (description
+     "The old posters and signs in the traditional Montserrat neighborhood of
+Buenos Aires inspired Julieta Ulanovsky to design this typeface and rescue the
+beauty of urban typography that emerged in the first half of the twentieth
+century.")
     (license license:silofl1.1)))
 
 (define-public font-overpass
@@ -2707,6 +2774,27 @@ This package contains the following outputs:
 ")
     (license license:gpl2)))
 
+(define-public font-arphic-ukai
+  (package
+    (name "font-arphic-ukai")
+    (version "0.2.20080216.2")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "http://deb.debian.org/debian/pool/main"
+                                  "/f/fonts-arphic-ukai/fonts-arphic-ukai_"
+                                  version ".orig.tar.bz2"))
+              (sha256
+               (base32
+                "1lp3i9m6x5wrqjkh1a8vpyhmsrhvsa2znj2mx13qfkwza5rqv5ml"))))
+    (build-system font-build-system)
+    (home-page "https://www.freedesktop.org/wiki/Software/CJKUnifonts/")
+    (synopsis "Truetype fonts for Taiwanese and Hakka")
+    (description
+     "This package provides a set of Truetype fonts, which contain all
+characters necessary to display Taiwanese and Hakka.")
+    (license (license:fsdg-compatible
+              "https://www.freedesktop.org/wiki/Arphic_Public_License/"))))
+
 (define-public font-atui-feather
   (let ((version "0")
         (commit "c51fe7cedbcf2cbf4f1b993cef5d8def612dec1d")
@@ -2735,7 +2823,7 @@ and readability.  This package bundles those icons into a font.")
 (define-public font-lxgw-wenkai
   (package
     (name "font-lxgw-wenkai")
-    (version "1.235.2")
+    (version "1.245.1")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -2743,7 +2831,7 @@ and readability.  This package bundles those icons into a font.")
                     version "/lxgw-wenkai-v" version ".tar.gz"))
               (sha256
                (base32
-                "17li3xry4j4ccdnwz2pcnf0gv7c5mwq0h5fwvl7ar28brn2qgdbk"))))
+                "13hvr1jz9xpb0cgi4xk3zfbn6w5x258zja55hznbgny2sijnjn8a"))))
     (build-system font-build-system)
     (home-page "https://lxgw.github.io/2021/01/28/Klee-Simpchin/")
     (synopsis "Simplified Chinese Imitation Song typeface")
@@ -2757,7 +2845,7 @@ within GB 2312, standard glyphs for Mainland China is used.")
   (package
     (inherit font-lxgw-wenkai)
     (name "font-lxgw-wenkai-tc")
-    (version "0.920")
+    (version "0.922.1")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -2765,7 +2853,7 @@ within GB 2312, standard glyphs for Mainland China is used.")
                     version "/lxgw-wenkai-tc-v" version ".tar.gz"))
               (sha256
                (base32
-                "1kysqzi19ldd1a3pd9axmggcbm1719myq6i6q6fdb1afscn272cp"))))
+                "0a1n0yfnh3sc3ldgjxxglw4xyg82i2pk432sk8hfdzrrl4zzjyz3"))))
     (home-page "https://github.com/lxgw/LxgwWenKaitc")
     (synopsis "Traditional Chinese Imitation Song typeface")
     (description
@@ -2776,7 +2864,7 @@ dialects in Hong Kong and Taiwan.")))
 (define-public font-chiron-sung-hk
   (package
     (name "font-chiron-sung-hk")
-    (version "1.005")
+    (version "1.007")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -2785,7 +2873,7 @@ dialects in Hong Kong and Taiwan.")))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0iqlnb7825kisg2avhr9hwwvb4jw8f642vvmms5dw6m9czzydpgw"))))
+                "1mhw3vgahfc9kyb7sw5w5zswp93a4sz7q12f7qba069f834j5qjq"))))
     (build-system font-build-system)
     (home-page "https://chiron-fonts.github.io/")
     (synopsis "Traditional Chinese Song typeface")
@@ -2800,7 +2888,7 @@ prevalent typefaces in Traditional Chinese regions.")
   (package
     (inherit font-chiron-sung-hk)
     (name "font-chiron-hei-hk")
-    (version "2.503")
+    (version "2.505")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -2809,7 +2897,7 @@ prevalent typefaces in Traditional Chinese regions.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "00av598lcsvbwfxabs8m1bfvlk3zq98nziynsrg5p2s5mhz2pkvk"))))
+                "1h2ps2kdv2s29pp9an4gpb84xwmkizqrgsk4hs5f0g0004897hi5"))))
     (synopsis "Traditional Chinese Gothic typeface")
     (description
      "Chiron Hei HK is a Traditional Chinese Gothic typeface based on the Hong

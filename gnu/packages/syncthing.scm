@@ -2,7 +2,7 @@
 ;;; Copyright © 2016 Petter <petter@mykolab.ch>
 ;;; Copyright © 2016, 2017, 2018, 2019, 2020, 2021 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
-;;; Copyright © 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2020-2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2020 Giacomo Leidi <goodoldpaul@autistici.org>
 ;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Arun Isaac <arunisaac@systemreboot.net>
@@ -27,6 +27,7 @@
   #:use-module (guix build-system go)
   #:use-module (guix build-system python)
   #:use-module (guix build-system trivial)
+  #:use-module (guix gexp)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
@@ -46,7 +47,7 @@
 (define-public syncthing
   (package
     (name "syncthing")
-    (version "1.20.3")
+    (version "1.20.4")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://github.com/syncthing/syncthing"
@@ -54,7 +55,7 @@
                                   "/syncthing-source-v" version ".tar.gz"))
               (sha256
                (base32
-                "0xpm7bz4i6krr4wzj5fr10yk6f7jv2pf70b9dmvsgdvmrw412kqi"))))
+                "1falkf3lv6x9avbcinqzndzix7mzl255hds1pcrw3sipsy2vfly1"))))
     (build-system go-build-system)
     ;; The primary Syncthing executable goes to "out", while the auxiliary
     ;; server programs and utility tools go to "utils".  This reduces the size
@@ -136,7 +137,7 @@ supports a wide variety of computing platforms.  It uses the Block Exchange
 Protocol.")
     (home-page "https://github.com/syncthing/syncthing")
     (properties
-     '((release-monitoring-url . "https://github.com/syncthing/syncthing/releases")
+     '((release-monitoring-url . "https://syncthing.net/downloads/")
        (upstream-name . "syncthing-source")))
     (license mpl2.0)))
 
@@ -1111,7 +1112,7 @@ and RFC 5389).")
 (define-public go-github-com-cespare-xxhash
   (package
     (name "go-github-com-cespare-xxhash")
-    (version "2.1.0")
+    (version "2.1.2")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1120,10 +1121,19 @@ and RFC 5389).")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "12ad3z7ki9j07c4kx3ywkl6188i2afsjg7sl60wd21p6zkkpfjxq"))))
+                "1f3wyr9msnnz94szrkmnfps9wm40s5sp9i4ak0kl92zcrkmpy29a"))))
     (build-system go-build-system)
     (arguments
-     '(#:import-path "github.com/cespare/xxhash"))
+     (list
+       #:import-path "github.com/cespare/xxhash"
+       #:phases
+       #~(modify-phases %standard-phases
+           (replace 'check
+             (lambda* (#:key inputs #:allow-other-keys #:rest args)
+               (unless
+                 ;; The tests fail when run with gccgo.
+                 (false-if-exception (search-input-file inputs "/bin/gccgo"))
+                 (apply (assoc-ref %standard-phases 'check) args)))))))
     (synopsis "Go implementation of xxHash")
     (description "This package provides of Go implementation of the 64-bit
 xxHash algorithm (XXH64).")

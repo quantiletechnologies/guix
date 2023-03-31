@@ -17,12 +17,12 @@
 ;;; Copyright © 2019 Pierre Neidhardt <mail@ambrevar.xyz>
 ;;; Copyright © 2019, 2020, 2021 Liliana Marie Prikler <liliana.prikler@gmail.com>
 ;;; Copyright © 2019 Jethro Cao <jethrocao@gmail.com>
-;;; Copyright © 2020, 2021 Nicolas Goaziou <mail@nicolasgoaziou.fr>
+;;; Copyright © 2020-2022 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2020 Timotej Lazar <timotej.lazar@araneo.si>
 ;;; Copyright © 2020 Giacomo Leidi <goodoldpaul@autistici.org>
 ;;; Copyright © 2021 Alexandru-Sergiu Marton <brown121407@posteo.ro>
 ;;; Copyright © 2021 Dmitry Polyakov <polyakov@liltechdude.xyz>
-;;; Copyright © 2020-2021 James Smith <jsubuntuxp@disroot.org>
+;;; Copyright © 2020-2022 James Smith <jsubuntuxp@disroot.org>
 ;;; Copyright © 2021 Ekaitz Zarraga <ekaitz@elenq.tech>
 ;;; Copyright © 2021 Andy Tai <atai@atai.org>
 ;;; Copyright © 2022 Felix Gruber <felgru@posteo.net>
@@ -63,6 +63,7 @@
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages boost)
+  #:use-module (gnu packages build-tools)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages check)
   #:use-module (gnu packages curl)
@@ -73,6 +74,7 @@
   #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages fribidi)
   #:use-module (gnu packages dbm)
+  #:use-module (gnu packages gawk)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages gl)
   #:use-module (gnu packages glib)
@@ -84,9 +86,9 @@
   #:use-module (gnu packages guile)
   #:use-module (gnu packages image)
   #:use-module (gnu packages linux)
+  #:use-module (gnu packages llvm)
   #:use-module (gnu packages lua)
   #:use-module (gnu packages m4)
-  #:use-module (gnu packages mono)
   #:use-module (gnu packages mp3)
   #:use-module (gnu packages multiprecision)
   #:use-module (gnu packages music)
@@ -180,6 +182,71 @@
      "Bullet is a physics engine library usable for collision detection.  It
 is used in some video games and movies.")
     (license license:zlib)))
+
+(define-public dds
+  (package
+    (name "dds")
+    (version "2.9.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/dds-bridge/dds")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "1iv09qic43nvla02lm8zgnkqpjgnc95p8zh3wyifmnmlh1rz02yj"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'chdir
+                 (lambda _
+                   (chdir "src")))
+               (replace 'configure
+                 ;; Configuration is done by copying the appropriate
+                 ;; make file in the working directory.  There is no
+                 ;; configure script.
+                 (lambda _
+                   (copy-file "Makefiles/Makefile_linux_shared"
+                              "Makefile")))
+               (replace 'check
+                 ;; There is no "check" traget.  We must compile
+                 ;; a "dtest" program and apply it on a data set.
+                 (lambda* (#:key tests? #:allow-other-keys)
+                   (when tests?
+                     (install-file "libdds.so" "../test")
+                     (with-directory-excursion "../test"
+                       (copy-file "Makefiles/Makefile_linux"
+                                  "Makefile")
+                       (substitute* "Makefile"
+                         (("-Werror") ""))
+                       (invoke "make")
+                       (invoke "./dtest" "-f" "../hands/list100.txt")))))
+               (replace 'install
+                 ;; "install" target merely moves ".so" file around
+                 ;; the source directory.  We install it in the store,
+                 ;; along with all shipped documentation (which cannot
+                 ;; be built from source unfortunately).
+                 (lambda _
+                   (install-file "libdds.so"
+                                 (string-append #$output "/lib"))
+                   (let ((doc (string-append #$output
+                                             "/share/doc/"
+                                             #$name "-" #$version)))
+                     (install-file "../LICENSE" doc)
+                     (copy-recursively "../doc" doc)))))))
+    (native-inputs
+     (list gawk procps))
+    (inputs
+     (list boost))
+    (home-page "http://privat.bahnhof.se/wb758135/")
+    (synopsis "Double dummy solver for the bridge card game")
+    (description "DDS is a double-dummy solver of bridge hands.  It supports
+single-threading and multi-threading for improved performance.  DDS
+offers a wide range of functions, including par-score calculations.")
+    (license license:asl2.0)))
 
 (define-public deutex
   (package
@@ -313,9 +380,10 @@ PCM data.")
                       (substitute* (find-files "." "^Makefile\\.in$")
                         (("-Werror") ""))
                       #t)))))
-    (native-inputs `(("pkgconfig" ,pkg-config)))
+    (native-inputs (list pkg-config))
     (inputs (list bdb
                   glib
+                  gmp
                   guile-3.0
                   libmicrohttpd
                   ncurses
@@ -449,52 +517,45 @@ support.")
 (define-public slade
   (package
     (name "slade")
-    (version "3.1.13")
+    (version "3.2.1")
     (source
      (origin
        (method git-fetch)
        (uri (git-reference
              (url "https://github.com/sirjuddington/SLADE")
              (commit version)))
-       (sha256 (base32 "009yc5m6y074wfalvwbrnv2zsmaf9yhbi8hzgs973di0zqnqv011"))
+       (sha256 (base32 "11ab38nv190lpvkdba5r2gckdrk4h15pri0zzslz7zy8qzg5fm18"))
        (file-name (git-file-name name version))))
     (build-system cmake-build-system)
     (arguments
-     '(#:configure-flags
-       (list "-DWX_GTK3=ON" "-DNO_WEBVIEW=ON"
-             (string-append "-DWITH_WXPATH="
-                            (assoc-ref %build-inputs "wxwidgets") "/bin")
-             (string-append "-DwxWidgets_LIBRARIES="
-                            (assoc-ref %build-inputs "wxwidgets") "/lib"))
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'reset-slade.pk3-timestamps
-           ;; This is neccessary to make slade reproducible due to
-           ;; <https://bugs.gnu.org/44741>.  TODO: Remove on next core update
-           ;; cycle.
-           (lambda _
-             (invoke "find" "../source/dist/res" "-exec" "touch"
-                     "--no-dereference" "-t" "197001010000.00" "{}"
-                     "+")))
-         (add-after 'install 'wrap-with-x11-gdk-backend
-           ;; Set GDK_BACKEND to x11 to prevent crash on Wayland.
-           ;; See https://github.com/sirjuddington/SLADE/issues/1097 for details.
-           (lambda* (#:key outputs #:allow-other-keys)
-             (wrap-program
-                 (string-append (assoc-ref outputs "out")
-                                "/bin/slade")
-               '("GDK_BACKEND" = ("x11"))))))
-       #:tests? #f)) ;; No test suite.
+     (list #:configure-flags
+           #~(list "-DWX_GTK3=ON" "-DNO_WEBVIEW=ON"
+                   (string-append "-DWITH_WXPATH="
+                                  #$(this-package-input "wxwidgets") "/bin")
+                   (string-append "-DwxWidgets_LIBRARIES="
+                                  #$(this-package-input "wxwidgets") "/lib"))
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'install 'wrap-with-x11-gdk-backend
+                 ;; Set GDK_BACKEND to x11 to prevent crash on Wayland.
+                 ;; See https://github.com/sirjuddington/SLADE/issues/1097 for
+                 ;; details.
+                 (lambda _
+                   (wrap-program (string-append #$output "/bin/slade")
+                     '("GDK_BACKEND" = ("x11"))))))
+           #:tests? #f)) ;; No test suite.
     (inputs
-     `(("bash" ,bash-minimal)
-       ("curl" ,curl)
-       ("fluidsynth" ,fluidsynth)
-       ("freeimage" ,freeimage)
-       ("ftgl" ,ftgl)
-       ("glew" ,glew)
-       ("gtk+" ,gtk+)
-       ("sfml" ,sfml)
-       ("wxwidgets" ,wxwidgets-3.1)))
+     (list bash-minimal
+           curl
+           fluidsynth
+           freeimage
+           ftgl
+           glew
+           gtk+
+           lua
+           mpg123
+           sfml
+           wxwidgets))
     (native-inputs
      (list pkg-config which zip))
     (home-page "https://slade.mancubus.net")
@@ -508,16 +569,16 @@ formats such as PNG.")
 (define-public tiled
   (package
     (name "tiled")
-    (version "1.8.1")
+    (version "1.8.6")
     (source (origin
               (method git-fetch)
               (uri (git-reference
-                    (url "https://github.com/bjorn/tiled")
+                    (url "https://github.com/mapeditor/tiled")
                     (commit (string-append "v" version))))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "05gczsywkk45bh0z1vv8l6cmrlncc2qj8agavj5ryxpnxkzy69r1"))))
+                "0iimfj4kbhmjk94586fqz11bk4i7v0zsxby8agx7450cqlh2y3zi"))))
     (build-system gnu-build-system)
     (inputs
      (list qtbase-5 qtdeclarative-5 qtsvg-5 zlib))
@@ -550,7 +611,7 @@ clone.")
 (define-public tsukundere
   (package
     (name "tsukundere")
-    (version "0.4.1")
+    (version "0.4.3")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -559,7 +620,7 @@ clone.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "11glghnff27rqh2s34g51afg93g3f5ryfz9mkyb7qj35ngl8vw5f"))))
+                "1lq2rs33s6l6y0hwwkv8pppgq2ki0q5kzj11s90yivi8g8g201af"))))
     (build-system gnu-build-system)
     (arguments
      `(#:modules ((ice-9 match)
@@ -713,7 +774,7 @@ sounds from presets such as \"explosion\" or \"powerup\".")
 (define-public surgescript
   (package
     (name "surgescript")
-    (version "0.5.5")
+    (version "0.5.6.1")
     (source
      (origin
        (method git-fetch)
@@ -722,15 +783,10 @@ sounds from presets such as \"explosion\" or \"powerup\".")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0xwd4g7n0b0rxkpbyshkzyl472h1y606ghyvf8gv034n3jz2g4jk"))))
+        (base32 "1p1pxb4iixzq7z14bpy32dx3dhfaaf6mcz4y3g3g09bkdmm1ys6j"))))
      (build-system cmake-build-system)
      (arguments
-      '(#:configure-flags
-        (let ((share (string-append (assoc-ref %outputs "out") "/share")))
-          (list "-DWANT_STATIC=NO"
-                (string-append "-DICON_PATH=" share "/pixmaps")
-                (string-append "-DMETAINFO_PATH=" share "/metainfo")))
-        #:tests? #f))
+      (list #:tests? #f)) ; there are no tests
      (home-page "https://docs.opensurge2d.org")
      (synopsis "Scripting language for games")
      (description "@code{SurgeScript} is a dynamically typed object-oriented
@@ -1021,7 +1077,8 @@ the creation of animations, tiled graphics, texture atlases, and more.")
     (build-system cmake-build-system)
     (arguments
      '(#:configure-flags
-       (list "-DWITH_WEBP_SUPPORT=1")
+       (list "-DWITH_WEBP_SUPPORT=1"
+             "-DWITH_DESKTOP_INTEGRATION=1")
        ;; Tests are unmaintained
        #:tests? #f))
     (native-inputs
@@ -1210,7 +1267,7 @@ to create fully featured games and multimedia programs in the python language.")
 
 (define-public python-pygame-sdl2
   (let ((real-version "2.1.0")
-        (renpy-version "8.0.0"))
+        (renpy-version "8.0.3"))
     (package
       (inherit python-pygame)
       (name "python-pygame-sdl2")
@@ -1220,7 +1277,7 @@ to create fully featured games and multimedia programs in the python language.")
          (method url-fetch)
          (uri (string-append "https://www.renpy.org/dl/" renpy-version
                              "/pygame_sdl2-" version ".tar.gz"))
-         (sha256 (base32 "0majf64pdfba5byjlv41pgsdmwvy09hw3m7143jz3kc1wjd2gaw8"))
+         (sha256 (base32 "1nq78mybkvshshdjy5bly6nfq6dnwll648ng62fwmksxpni17486"))
          (modules '((guix build utils)))
          (snippet
           '(begin
@@ -1261,13 +1318,13 @@ developed mainly for Ren'py.")
 (define-public python-renpy
   (package
     (name "python-renpy")
-    (version "8.0.0")
+    (version "8.0.3")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://www.renpy.org/dl/" version
                            "/renpy-" version "-source.tar.bz2"))
-       (sha256 (base32 "09z3r16j4cxddkb50ghmi4xp0s05s15q4pzdmfajy85ignwqhjdi"))
+       (sha256 (base32 "1b49y60pi6304fg06lw5gajzrgg9w80swpfkn6pw0lxbr6djgjgn"))
        (modules '((guix build utils)))
        (patches
         (search-patches
@@ -1635,7 +1692,7 @@ robust and compatible with many systems and operating systems.")
 (define-public mygui
   (package
     (name "mygui")
-    (version "3.2.2")
+    (version "3.4.1")
     (source
      (origin
        (method git-fetch)
@@ -1645,7 +1702,7 @@ robust and compatible with many systems and operating systems.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "1wk7jmwm55rhlqqcyvqsxdmwvl70bysl9azh4kd9n57qlmgk3zmw"))))
+         "1gyd4bzm6qqpqw6is065qs5c729gl6rp989bnkygha6q4s371vz6"))))
     (build-system cmake-build-system)
     (arguments
      '(#:tests? #f                      ; No test target
@@ -1677,10 +1734,8 @@ of use.")
 
 (define-public mygui-gl
   ;; Closure size is reduced by some 800 MiB.
-  (package
-    (inherit mygui)
+  (package/inherit mygui
     (name "mygui-gl")
-    (version "3.2.2")
     (arguments
      (substitute-keyword-arguments (package-arguments mygui)
        ((#:configure-flags _)
@@ -2001,14 +2056,14 @@ a 2D editor view.")
 (define-public guile-chickadee
   (package
     (name "guile-chickadee")
-    (version "0.8.0")
+    (version "0.9.0")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://files.dthompson.us/chickadee/"
                                   "chickadee-" version ".tar.gz"))
               (sha256
                (base32
-                "1k2dml2z57lnc36wrmwhh7avnpczxgxnshlfhpbk174vg6v609n0"))))
+                "0b92lld7kj629mvq44vgd8vmf9h7s5gkdawb35vkzlx5q03wjfvk"))))
     (build-system gnu-build-system)
     (arguments
      '(#:make-flags '("GUILE_AUTO_COMPILE=0")))
@@ -2018,6 +2073,8 @@ a 2D editor view.")
     (inputs
      (list freetype
            guile-3.0-latest
+           libjpeg-turbo
+           libpng
            libvorbis
            mpg123
            openal
@@ -2305,58 +2362,6 @@ specific knowledge of the hardware they are targeting.")
 double-buffering.")
     (license license:gpl2+)))
 
-(define-public fna
-  (package
-    (name "fna")
-    (version "19.12.01")
-    (source
-     (origin
-       (method git-fetch)
-       (uri (git-reference
-             (url "https://github.com/FNA-XNA/FNA")
-             (commit version)))
-       (file-name (git-file-name name version))
-       (sha256
-        (base32 "1vdyi9hac24fqcs8kpj6yk36bf5rrl4dvlvdd9fc701fawcf6lrr"))))
-    (build-system gnu-build-system)
-    (arguments
-     '(#:tests? #f                      ; No tests.
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'link-dep-src
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let ((sdl2 (assoc-ref inputs "sdl2-cs-src"))
-                   (mojoshader (assoc-ref inputs "mojoshader-src"))
-                   (faudio (assoc-ref inputs "faudio-src"))
-                   (theorafile (assoc-ref inputs "theorafile-src")))
-               (symlink (string-append sdl2 "/src") "lib/SDL2-CS/src")
-               (symlink (string-append mojoshader "/csharp") "lib/MojoShader/csharp")
-               (symlink (string-append faudio "/csharp") "lib/FAudio/csharp")
-               (symlink (string-append theorafile "/csharp") "lib/Theorafile/csharp"))))
-         (delete 'configure)
-         (replace 'build
-           (lambda _
-             (invoke "make" "release")))
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (install-file "bin/Release/FNA.dll" (string-append out "/lib"))
-               #t))))))
-    (native-inputs
-     (list mono))
-    (inputs `(("sdl2-cs-src" ,(package-source sdl2-cs))
-              ("mojoshader-src" ,(package-source mojoshader-cs))
-              ("faudio-src" ,(package-source faudio))
-              ("theorafile-src" ,(package-source theorafile))))
-    (home-page "https://fna-xna.github.io/")
-    (synopsis "Accuracy-focused XNA4 reimplementation")
-    (description "FNA is a Microsoft XNA Game Studio 4.0 reimplementation that
-focuses solely on developing a fully accurate XNA4 runtime for the desktop.")
-    (license (list license:ms-pl        ; FNA
-                   license:lgpl2.1      ; LzxDecoder.cs
-                   ;; Mono.Xna:
-                   license:expat))))
-
 (define-public libccd
   (package
     (name "libccd")
@@ -2438,12 +2443,20 @@ computer games, 3D authoring tools and simulation tools.")
              (commit (string-append "Chipmunk-" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1qmkn01g06p3rnhmbyffmjns6wj5vhgf9cscigk3wzxcpwv1hyxb"))))
+        (base32 "1qmkn01g06p3rnhmbyffmjns6wj5vhgf9cscigk3wzxcpwv1hyxb"))
+       (modules '((guix build utils)))
+       (snippet
+        #~(begin
+            ;; This is fixed in the upstream repository but the fix
+            ;; has not been released.
+            (substitute* "src/cpHastySpace.c"
+              (("#include <sys/sysctl.h>") ""))))))
     (build-system cmake-build-system)
     (arguments
-     `(#:tests? #f                      ;no test
-       #:configure-flags '("-DBUILD_STATIC=OFF"
-                           "-DBUILD_DEMOS=OFF")))
+     (list #:tests? #f                      ;no test
+           #:configure-flags
+           #~(list "-DBUILD_STATIC=OFF"
+                   "-DBUILD_DEMOS=OFF")))
     (inputs
      (list freeglut libxmu libxrandr))
     (home-page "https://chipmunk-physics.net/")

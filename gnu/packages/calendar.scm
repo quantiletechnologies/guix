@@ -34,6 +34,7 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
+  #:use-module (guix build-system go)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system python)
   #:use-module (gnu packages admin)
@@ -45,6 +46,7 @@
   #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gnome)
+  #:use-module (gnu packages golang)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages icu4c)
   #:use-module (gnu packages perl)
@@ -119,7 +121,7 @@ the <tz.h> library for handling time zones and leap seconds.")
 (define-public libical
   (package
     (name "libical")
-    (version "3.0.10")
+    (version "3.0.14")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -127,7 +129,7 @@ the <tz.h> library for handling time zones and leap seconds.")
                     version "/libical-" version ".tar.gz"))
               (sha256
                (base32
-                "1d1nqcfilb4k8bc5x85fhnd26l1ski58wpk2nmds6mlxrzkb6czr"))))
+                "13ycghsi4iv8mnm0xv97bs0x6qvfhdxkw20n3yhcc7bg6n0bg122"))))
     (build-system cmake-build-system)
     (arguments
      '(#:tests? #f ; test suite appears broken
@@ -143,8 +145,7 @@ the <tz.h> library for handling time zones and leap seconds.")
              (substitute* "doc/reference/libical-glib/libical-glib-docs.sgml.in"
                (("http://www.oasis-open.org/docbook/xml/4.3/")
                 (string-append (assoc-ref inputs "docbook-xml")
-                               "/xml/dtd/docbook/")))
-             #t))
+                               "/xml/dtd/docbook/")))))
          (add-before 'configure 'patch-paths
            (lambda* (#:key inputs #:allow-other-keys)
              ;; TODO: libical 3.1.0 supports using TZDIR instead of a hard-coded
@@ -156,8 +157,7 @@ the <tz.h> library for handling time zones and leap seconds.")
                   (string-append "\"" tzdata "/share/zoneinfo\""))
                  (("\\\"/usr/lib/zoneinfo\\\",") "")
                  (("\\\"/etc/zoneinfo\\\",") "")
-                 (("\\\"/usr/share/lib/zoneinfo\\\"") "")))
-             #t)))))
+                 (("\\\"/usr/share/lib/zoneinfo\\\"") ""))))))))
     (native-inputs
      (list docbook-xml-4.3
            gobject-introspection
@@ -403,7 +403,7 @@ traditional Chinese characters.")
     (license (list license:gpl2+ license:lgpl2.1+))))
 
 (define-public gsimplecal
-  (let ((version "2.2"))
+  (let ((version "2.4.1"))
     (package
       (name "gsimplecal")
       (version version)
@@ -413,17 +413,53 @@ traditional Chinese characters.")
                       (url "https://github.com/dmedvinsky/gsimplecal/")
                       (commit (string-append "v" version))))
                 (file-name (git-file-name name version))
-                (sha256 (base32
-                         "1qyf65l088dqsz25hm6s1cv18j52yaias0llqvpqwjfnvssa5cxg"))
+                (sha256
+                 (base32
+                  "0ypnq9q6v2l8jg0ah31d8502jig1rk2bz749ljj97wk0rg1rixpi"))
                 (modules '((guix build utils)))))
       (build-system gnu-build-system)
       (inputs (list gtk+))
-      (native-inputs
-       (list autoconf automake pkg-config))
+      (native-inputs (list autoconf automake pkg-config))
       (home-page "https://dmedvinsky.github.io/gsimplecal/")
       (synopsis "Lightweight calendar applet")
-      (description "@command{gsimplecal} is a lightweight calendar application
+      (description
+       "@command{gsimplecal} is a lightweight calendar application
 written in C++ using GTK.  Launched once, it pops up a small calendar applet,
 launched again it closes the running instance.  It can additionally be
 configured to show the current time in different timezones.")
       (license license:bsd-3))))
+
+(define-public hebcal
+  (let ((commit "2384bb88dc1a41a4a5ae57a29fb58b2dd49a475d")
+        (revision "0"))
+    (package
+      (name "hebcal")
+      (version (git-version "5.3.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/hebcal/hebcal")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "12rv3b51jb7wcjwmmizz9jkw7gh37yklys4xncvpzgxdkkfgmmjx"))))
+      (build-system go-build-system)
+      (arguments
+       (list #:import-path "github.com/hebcal/hebcal"))
+      (inputs
+       (list go-github-com-hebcal-hebcal-go
+             go-github-com-pborman-getopt))
+      (synopsis "Perpetual Jewish Calendar program")
+      (description
+       "Hebcal is a program for converting between Hebrew and Gregorian
+dates, and generating lists of Jewish holidays for a given year.
+Shabbat, holiday candle lighting, and havdalah times are approximated
+using your location.
+
+It can also show daily prayer times, the weekly Torah reading, and
+the daily leaf of Talmud.  The program can help with counting of the
+Omer or with calculation of Hebrew yahrzeits, birthdays, or
+anniversaries.")
+      (home-page "https://github.com/hebcal/hebcal")
+      (license license:gpl2+))))

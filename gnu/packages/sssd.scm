@@ -66,7 +66,7 @@
 (define-public adcli
   (package
     (name "adcli")
-    (version "0.9.1")
+    (version "0.9.2")
     (source
      (origin
        (method git-fetch)
@@ -75,7 +75,7 @@
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1mwzd5vakdsssdvs6vljqpp8pw8i97n5lhxvmn9dn9720am7hfv7"))))
+        (base32 "1lg181hpv07zcdybpykjq6h4v6f5sjc60gxqbklm0wqxa8m4sakn"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags
@@ -154,7 +154,7 @@ fundamental object types for C.")
 (define-public sssd
   (package
     (name "sssd")
-    (version "2.7.3")
+    (version "2.7.4")
     (source
      (origin
        (method git-fetch)
@@ -163,7 +163,7 @@ fundamental object types for C.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "18kcg82gcf5wgmaq5w9fszv9sg3d93yqm39p1npr8kw8b9203n4r"))
+        (base32 "1946pfwyv1ci0m4flrhwkksq42p14n7kcng6fbq6sy4lcn5g3yml"))
        (patches (search-patches "sssd-optional-systemd.patch"
                                 "sssd-system-directories.patch"))))
     (build-system gnu-build-system)

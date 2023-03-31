@@ -28,8 +28,9 @@
 ;;; Copyright © 2020 Alexandru-Sergiu Marton <brown121407@member.fsf.org>
 ;;; Copyright © 2020 Carlo Holl <carloholl@gmail.com>
 ;;; Copyright © 2020 Christine Lemmer-Webber <cwebber@dustycloud.org>
-;;; Copyright © 2021 Alice BRENON <alice.brenon@ens-lyon.fr>
+;;; Copyright © 2021, 2022 Alice BRENON <alice.brenon@ens-lyon.fr>
 ;;; Copyright © 2021 John Kehayias <john.kehayias@protonmail.com>
+;;; Copyright © 2022 jgart <jgart@dismail.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -52,6 +53,7 @@
   #:use-module (gnu packages compression)
   #:use-module (gnu packages databases)
   #:use-module (gnu packages emacs)
+  #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages gl)
   #:use-module (gnu packages graphviz)
   #:use-module (gnu packages gtk)
@@ -75,6 +77,7 @@
   #:use-module (gnu packages xorg)
   #:use-module (guix build-system haskell)
   #:use-module (guix download)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix utils)
   #:use-module ((guix licenses) #:prefix license:)
@@ -297,14 +300,13 @@ systems.")
          "042lrkn0dbpjn5ivj6j26jzb1fwrj8c1aj18ykxja89isg0hiali"))))
     (build-system haskell-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-before 'check 'set-check-variables
-           (lambda _
-             (setenv "PATH" (string-append (getcwd) "/dist/build/alex:"
-                                           (getenv "PATH")))
-             (setenv "alex_datadir" (string-append (getcwd) "/data"))
-             #t)))))
+      (list #:phases
+            #~(modify-phases %standard-phases
+                (add-before 'check 'set-check-variables
+                  (lambda _
+                    (setenv "PATH" (string-append (getcwd) "/dist/build/alex:"
+                                                  (getenv "PATH")))
+                    (setenv "alex_datadir" (string-append (getcwd) "/data")))))))
     (inputs (list ghc-quickcheck))
     (native-inputs
      (list which))
@@ -7216,7 +7218,7 @@ online}.")
     (arguments
      `(#:cabal-revision
        ("1"
-        "1f0whk5ncanxfjjanrf6rqyncig2xgc5mh2j0sqy3nrlyjr9aqq9")))
+        "1xllyf26ypk37k807g5v6fl1449mhpvk18dljmqgwj723n0v8rpj")))
     (home-page "https://github.com/chrisdone/lucid")
     (synopsis "Haskell DSL for rendering HTML")
     (description "Clear to write, read and edit Haskell DSL for HTML.
@@ -10913,6 +10915,27 @@ expose it from another module in the hierarchy.
 @end itemize")
     (license license:expat)))
 
+(define-public ghc-roman-numerals
+  (package
+    (name "ghc-roman-numerals")
+    (version "0.5.1.5")
+    (source (origin
+              (method url-fetch)
+              (uri (hackage-uri "roman-numerals" version))
+              (sha256
+               (base32
+                "10da5vls9l5i255bapms4b2r7dnwmxgsaa1cdll2lrmid5dikixr"))))
+    (build-system haskell-build-system)
+    (inputs (list ghc-base-unicode-symbols))
+    (home-page "https://github.com/roelvandijk/roman-numerals")
+    (synopsis "Parsing and pretty printing of Roman numerals")
+    (description
+     "This library provides functions for parsing and pretty printing Roman numerals.
+Because the notation of Roman numerals has varied through the centuries this
+package allows for some customisation using a configuration that is passed to
+the conversion functions.")
+    (license license:bsd-3)))
+
 (define-public ghc-safe
   (package
     (name "ghc-safe")
@@ -12000,9 +12023,6 @@ in the @code{IO} monad, like @code{IORef}s or parts of the OpenGL state.")
         (base32
          "0j9awbg47fzb58k5z2wgkp6a0042j7hqrl1g6lyflrbsfswdp5n4"))))
     (build-system haskell-build-system)
-    (arguments
-     '(;; Two tests fail: "Discrete CDF is OK" and "Quantile is CDF inverse".
-       #:tests? #t))
     (inputs
      (list ghc-aeson
            ghc-async
@@ -12338,7 +12358,7 @@ literals.")
      (list ghc-hunit))
     (home-page "https://hackage.haskell.org/package/string-qq")
     (synopsis
-     "QuasiQuoter for non-interpolated strings, texts and bytestrings.")
+     "QuasiQuoter for non-interpolated strings, texts and bytestrings")
     (description
      "This package provides a quasiquoter for non-interpolated strings, texts
 and bytestrings.")
@@ -13834,7 +13854,7 @@ for Unix time in Haskell.")
     (native-inputs (list ghc-hspec))
     (home-page "https://github.com/fpco/unliftio")
     (synopsis "Provides MonadUnliftIO typecplass for unlifting monads to
-IO (batteries included)")
+IO")
     (description "This Haskell package provides the core @code{MonadUnliftIO}
 typeclass, a number of common instances, and a collection of common functions
 working with it.")
@@ -16081,6 +16101,51 @@ data Dec a
 @end example")
     (license license:bsd-3)))
 
+(define-public ghc-ansi2html
+  (package
+    (name "ghc-ansi2html")
+    (version "0.9")
+    (source (origin
+              (method url-fetch)
+              (uri (hackage-uri "Ansi2Html" version))
+              (sha256
+               (base32
+                "1dqq1rnx1w0cn4w11knmxvn7qy4lg4m39dgw4rs6r2pjqzgrwarh"))))
+    (build-system haskell-build-system)
+    (home-page "http://janzzstimmpfle.de/~jens/software/Ansi2Html/")
+    (synopsis "Convert ANSI Terminal Sequences to nice HTML markup")
+    (description
+     "This package enables integration of terminal screen state in html
+pages.")
+    (license license:bsd-3)))
+
+(define-public ghc-open-browser
+  (package
+    (name "ghc-open-browser")
+    (version "0.2.1.0")
+    (source (origin
+              (method url-fetch)
+              (uri (hackage-uri "open-browser" version))
+              (sha256
+               (base32
+                "0rna8ir2cfp8gk0rd2q60an51jxc08lx4gl0liw8wwqgh1ijxv8b"))))
+    (build-system haskell-build-system)
+    (arguments
+      (list
+       #:phases
+       #~(modify-phases %standard-phases
+         (add-before 'configure 'patch-xdg-open
+           (lambda* (#:key inputs #:allow-other-keys)
+             (let ((xdg-open (assoc-ref inputs "xdg-utils")))
+               (substitute* "lib/Web/Browser/Linux.hs"
+                 (("xdg-open")
+                  (search-input-file inputs "/bin/xdg-open")))))))))
+    (inputs (list xdg-utils))
+    (home-page "https://github.com/rightfold/open-browser")
+    (synopsis "Open a web browser from Haskell")
+    (description "Haskell library for opening the web browser.")
+    (license license:bsd-3)))
+
 (define-public ghc-singleton-bool
   (package
     (name "ghc-singleton-bool")
@@ -16105,3 +16170,8 @@ data Dec a
      "This package provides Type-level booleans.")
     (license license:bsd-3)))
 
+;;;
+;;; Avoid adding new packages to the end of this file. To reduce the chances
+;;; of a merge conflict, place them above by existing packages with similar
+;;; functionality or similar names.
+;;;

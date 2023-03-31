@@ -65,7 +65,7 @@
 ;;; Copyright © 2021 Solene Rapenne <solene@perso.pw>
 ;;; Copyright © 2021 Noisytoot <noisytoot@disroot.org>
 ;;; Copyright © 2021 Petr Hodina <phodina@protonmail.com>
-;;; Copyright © 2021 Brendan Tildesley <mail@brendan.scot>
+;;; Copyright © 2021, 2022 Brendan Tildesley <mail@brendan.scot>
 ;;; Copyright © 2021 Christopher Baines <mail@cbaines.net>
 ;;; Copyright © 2021 Foo Chuan Wei <chuanwei.foo@hotmail.com>
 ;;; Copyright © 2022 Yovan Naumovski <yovan@gorski.stream>
@@ -73,6 +73,7 @@
 ;;; Copyright © 2022 zamfofex <zamfofex@twdb.moe>
 ;;; Copyright © 2022 Gabriel Arazas <foo.dogsquared@gmail.com>
 ;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Hendursaga <hendursaga@aol.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -155,8 +156,6 @@
   #:use-module (gnu packages image)
   #:use-module (gnu packages imagemagick)
   #:use-module (gnu packages javascript)
-  #:use-module (gnu packages kde)
-  #:use-module (gnu packages kde-frameworks)
   #:use-module (gnu packages less)
   #:use-module (gnu packages lesstif)
   #:use-module (gnu packages libcanberra)
@@ -178,6 +177,7 @@
   #:use-module (gnu packages ocaml)
   #:use-module (gnu packages opencl)
   #:use-module (gnu packages pcre)
+  #:autoload (gnu packages pascal) (fpc)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages perl-check)
   #:use-module (gnu packages perl-compression)
@@ -828,7 +828,7 @@ possible, while battling many vicious aliens.")
     (home-page "https://github.com/vattam/BSDGames")
     (synopsis "Collection of the old text-based games and amusements")
     (description
-     "These are the BSD games.  See the fortune-mod package for fortunes.
+     "These are the BSD games.
 
 Action: atc (keep the airplanes safe), hack (explore the dangerous Dungeon),
 hunt (kill the others for the Pair of Boots, multi-player only), robots (avoid
@@ -880,14 +880,14 @@ Quizzes: arithmetic and quiz.")
 (define-public bzflag
   (package
     (name "bzflag")
-    (version "2.4.24")
+    (version "2.4.26")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://download.bzflag.org/bzflag/source/"
                            version "/bzflag-" version ".tar.bz2"))
        (sha256
-        (base32 "1i73ijlnxsz52fhqgkj2qcvibfgav3byq1is68gab2zwnyz330az"))))
+        (base32 "050h933lmcdf4bw9z3c6g3k8c9sch9f6kq57jp2ivb96zw2h90q1"))))
     (build-system gnu-build-system)
     (arguments
      (list
@@ -1556,7 +1556,7 @@ Joy-Con controllers.")
 (define-public julius
   (package
     (name "julius")
-    (version "1.6.0")
+    (version "1.7.0")
     (source
      (origin
        (method git-fetch)
@@ -1565,7 +1565,7 @@ Joy-Con controllers.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0nfdn8n6ywhm69ckz9a1chl5xxiqyaj3l337wadsbppnpscjihrc"))
+        (base32 "0w7kmgz9ya0ck9cxhsyralarg7y6ydx4plmh33r4mkxkamlr7493"))
        ;; Remove unused bundled libraries.
        (modules '((guix build utils)))
        (snippet
@@ -1590,7 +1590,7 @@ does not include game data.")
   (package
     (inherit julius)
     (name "augustus")
-    (version "2.0.1")
+    (version "3.2.0")
     (source
      (origin
        (method git-fetch)
@@ -1599,17 +1599,19 @@ does not include game data.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0czazw8mc3fbvdazs2nzvgxd1dpzjc8z5fwiv89vv4nd7laz3jkj"))
+        (base32 "0d1k5279imc17mk3lxn8amc4ljgcj4v6x6lj2w3bph1z0a7a4bim"))
        ;; Remove unused bundled libraries.
        (modules '((guix build utils)))
        (snippet
         '(begin
            (with-directory-excursion "ext"
-             (for-each delete-file-recursively '("dirent" "png" "SDL2" "zlib")))
-           #t))))
+             (for-each delete-file-recursively
+                       '("dirent" "expat" "png" "SDL2" "zlib")))))))
     (arguments
      ;; No tests.  See https://github.com/Keriew/augustus/issues/82.
      `(#:tests? #f))
+    (inputs (modify-inputs (package-inputs julius)
+              (prepend expat)))
     (home-page "https://github.com/Keriew/augustus")
     (synopsis "Re-implementation of Caesar III game engine with gameplay changes")
     (description
@@ -1661,7 +1663,7 @@ shadow mimic them to reach blocks you couldn't reach alone.")
 (define-public opensurge
   (package
     (name "opensurge")
-    (version "0.5.2.1")
+    (version "0.6.0.3")
     (source
      (origin
        (method git-fetch)
@@ -1670,40 +1672,37 @@ shadow mimic them to reach blocks you couldn't reach alone.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "13g5izss7dmgigc8iif8hid3z6i066b0z29rbql2b9qjmdj1dp41"))))
+        (base32 "0yia2qcva741a64qpls8a59lvnx5vynqkk2i3arkflw6f1m1vb55"))))
     (build-system cmake-build-system)
     (arguments
-     `(#:tests? #f                      ;there are no tests
-       #:configure-flags
-       (let* ((out (assoc-ref %outputs "out"))
-              (share (string-append out "/share")))
-         (list (string-append "-DCMAKE_INSTALL_PREFIX=" out)
-               (string-append "-DGAME_BINDIR=" out "/bin") ; not /bin/games
-               (string-append "-DGAME_DATADIR=" share "/" ,name)
-               (string-append "-DDESKTOP_ENTRY_PATH=" share "/applications")
-               (string-append "-DDESKTOP_ICON_PATH=" share "/pixmaps")
-               (string-append "-DDESKTOP_METAINFO_PATH=" share "/metainfo")))
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'fix-xdg-open-path
-           (lambda* (#:key inputs #:allow-other-keys)
-             ;; Look for xdg-open in the store.
-             (substitute* "src/core/web.c"
-               (("/usr(/bin/xdg-open)" _ bin)
-                (search-input-file inputs bin)))))
-         (add-after 'unpack 'unbundle-fonts
-           (lambda* (#:key inputs #:allow-other-keys)
-             ;; Replace bundled Roboto fonts with links to the store.
-             (with-directory-excursion "fonts"
-               (let ((roboto-dir (string-append
-                                  (assoc-ref inputs "font-google-roboto")
-                                  "/share/fonts/truetype/")))
-                 (for-each
-                  (lambda (font)
-                    (delete-file font)
-                    (symlink (string-append roboto-dir font) font))
-                  '("Roboto-Black.ttf" "Roboto-Bold.ttf" "Roboto-Medium.ttf")))
-               #t))))))
+     (list #:tests? #f ; there are no tests
+           #:configure-flags
+           #~(list (string-append "-DCMAKE_INSTALL_PREFIX=" #$output)
+                   (string-append "-DGAME_BINDIR=" #$output "/bin") ; not games
+                   (string-append "-DGAME_DATADIR=" #$output "/share/" #$name)
+                   (string-append "-DDESKTOP_ENTRY_PATH=" #$output "/share/applications")
+                   (string-append "-DDESKTOP_ICON_PATH=" #$output "/share/pixmaps")
+                   (string-append "-DDESKTOP_METAINFO_PATH=" #$output "/share/metainfo"))
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'fix-xdg-open-path
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   ;; Look for xdg-open in the store.
+                   (substitute* "src/core/web.c"
+                     (("/usr/(bin/xdg-open)" _ bin)
+                      (search-input-file inputs bin)))))
+               (add-after 'unpack 'unbundle-fonts
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   ;; Replace bundled fonts with links to the store.
+                   (with-directory-excursion "fonts"
+                     (for-each (lambda (font)
+                                 (let ((file (string-append "share/fonts/truetype/"
+                                                            font)))
+                                   (delete-file font)
+                                   (symlink (search-input-file inputs file) font)))
+                               '("Roboto-Black.ttf"
+                                 "Roboto-Bold.ttf"
+                                 "Roboto-Medium.ttf"))))))))
     (inputs
      (list allegro font-google-roboto surgescript xdg-utils))
     (home-page "https://opensurge2d.org")
@@ -1788,17 +1787,20 @@ destroying an ancient book using a special wand.")
            ;; Don't create 'icon-theme.cache'.
            (lambda _
              (substitute* "meson_post_install.py"
-               (("gtk-update-icon-cache") "true"))
-             #t)))))
+               (("gtk-update-icon-cache") "true")))))))
     (inputs
-     (list gtk+ clutter clutter-gtk libgee libgnome-games-support))
+     (list gtk+
+           clutter
+           clutter-gtk
+           libgee
+           libgnome-games-support-1))
     (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("glib:bin" ,glib "bin") ; for desktop-file-validate and appstream-util
-       ("itstool" ,itstool)
-       ("libxml2" ,libxml2)
-       ("pkg-config" ,pkg-config)
-       ("vala" ,vala)))
+     (list gettext-minimal
+           `(,glib "bin")       ; for desktop-file-validate and appstream-util
+           itstool
+           libxml2
+           pkg-config
+           vala))
     (home-page "https://wiki.gnome.org/Apps/2048")
     (synopsis "Move the tiles until you obtain the 2048 tile")
     (description "GNOME 2048 provides a 2D grid for playing 2048, a
@@ -2682,6 +2684,35 @@ runnable=true
 available, as well as a single-player mode with AI-controlled ships.")
     (license (list license:expat         ; game
                    license:silofl1.1)))) ; fonts
+
+(define-public tetzle
+  (package
+    (name "tetzle")
+    (version "2.2.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "https://gottcode.org/"
+                                  name
+                                  "/"
+                                  name
+                                  "-"
+                                  version
+                                  "-src.tar.bz2"))
+              (sha256
+               (base32
+                "1m4j4lzqp8fnwmvyglmzcn3vh14ix4hhh52ycmcsjgrsgj1w4p6a"))))
+    (build-system cmake-build-system)
+    (arguments
+     `(#:tests? #f)) ; no tests
+    (native-inputs (list qttools))
+    (inputs (list qtbase))
+    (home-page "https://gottcode.org/tetzle/")
+    (synopsis "Jigsaw puzzle game that uses tetrominoes for the pieces")
+    (description
+     "Tetzle is a jigsaw puzzle game that uses tetrominoes for the pieces.  Any image
+can be imported and used to create puzzles with a wide range of sizes.  Games are
+saved automatically, and you can select between currently in progress games.")
+    (license license:gpl3+)))
 
 (define %ufoai-commit "a542a87a891f96b1ab2c44d35b2f6f16859a5019")
 (define %ufoai-revision "0")
@@ -3625,20 +3656,24 @@ for common mesh file formats, and collision detection.")
   (package
     (inherit irrlicht)
     (name "irrlicht-for-minetest")
-    (version "1.9.0mt5")
+    (version "1.9.0mt8")
     (source
      (origin
        (method git-fetch)
        (uri (git-reference
              (url "https://github.com/minetest/irrlicht")
              (commit version)))
+       (file-name (git-file-name name version))
        (sha256
         (base32
-         "1jxk1x0f60n8lrz8a6x62aj2pqg0qnbajsld3lqncvwsfbi0xjx1"))))
+         "1646pj40dqkzbbc2lxzbmq2pjyrkgggbi2lah6pa5mv420p402kg"))))
     (build-system cmake-build-system)
     (arguments
      ;; No check target.
-     (list #:tests? #f))))
+     (list #:tests? #f))
+    (inputs
+     (modify-inputs (package-inputs irrlicht)
+       (prepend libxi)))))
 
 (define-public mars
   ;; The latest release on SourceForge relies on an unreleased version of SFML
@@ -3963,6 +3998,103 @@ This game is based on the GPL version of the famous game TuxRacer.")
     (home-page "https://sourceforge.net/projects/extremetuxracer/")
     (license license:gpl2+)))
 
+(define-public exult
+  (package
+    (name "exult")
+    (version "1.8")
+    (source
+     (origin
+       ;; The release tarball isn't bootstrapped, and Git is more robust (SWH).
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/exult/exult")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1qfbkz05w8989vafc6dvw1wmdi1mvkr4kkgk3ccixadf4616kcb3"))))
+    (build-system gnu-build-system)
+    (outputs (list "out" "gimp" "studio"))
+    (arguments
+     (list #:configure-flags
+           #~(list "--enable-shared"
+                   "--disable-static"
+                   "--enable-lto"
+                   "--enable-exult-studio"
+                   "--enable-exult-studio-support"
+                   "--enable-compiler"
+                   "--enable-mods"      ; needs --enable-compiler!
+                   "--enable-gimp-plugin"
+                   ;; A few lines on stdout can save a lot of head-scratching:
+                   "CPPFLAGS=-DDEBUG_PATHS=1")
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-before 'bootstrap 'patch-game-home-directory
+                 (lambda _
+                   (substitute* "gamemgr/modmgr.cc"
+                     ;; EXULT_DATADIR is in the store where it's rather hard for
+                     ;; users to put game assets.  Use a more writable home by
+                     ;; default, which users can override in their ~/.exult.cfg.
+                     (("<GAMEHOME>")
+                      (string-append "<HOME>/.local/share/exult"))
+                     ;; …however, this causes a regression: the mods which we'll
+                     ;; install to EXULT_DATADIR are no longer found.  So: don't
+                     ;; look for mods alongside the assets by default.  This too
+                     ;; can be overridden in users' ~/.exult.cfg.
+                     (("game_path( \\+ \"/mods\")" _ +suffix)
+                      (string-append "get_system_path(\"<GAMEHOME>/\") + "
+                                     "cfgname" +suffix)))))
+               (add-before 'bootstrap 'move-exult-studio
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   (let ((out (assoc-ref outputs "studio")))
+                     (substitute* "mapedit/studio.cc"
+                       (("(esdir, )EXULT_DATADIR" _ prefix)
+                        (string-append prefix "\"" out "/share/exult\"")))
+                     (substitute* "data/Makefile.am"
+                       (("(estudionewdir =.*)\\$\\(datadir\\)(.*)"
+                         _ variable= suffix)
+                        (string-append variable= out "/share" suffix "\n"))))))
+               (add-before 'bootstrap 'fix-gimp-plug-in-prefix
+                 ;; ./configure will propagate this value to myriad Makefiles
+                 ;; scattered across the tree, so fix it early.
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   (let ((out (assoc-ref outputs "gimp")))
+                     (substitute* "configure.ac"
+                       (("(GIMP_PLUGIN_PREFIX=).*" _ variable=)
+                        (string-append variable= out "/lib/gimp/2.0"))))))
+               (add-after 'install 'move-exult_studio
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   (let ((source (assoc-ref outputs "out"))
+                         (target (assoc-ref outputs "studio"))
+                         (file   "/bin/exult_studio"))
+                     (mkdir-p (string-append target (dirname file)))
+                     (rename-file (string-append source file)
+                                  (string-append target file))))))))
+    (native-inputs
+     (list autoconf automake libtool pkg-config
+           ;; The following are needed only by the GIMP plug-in.
+           gimp libjpeg-turbo
+           gegl gtk+-2                  ; needed by gimpui-2.0.pc
+           ;; The following are needed only by the Usecode compiler.
+           bison flex))
+    (inputs
+     (list fluidsynth freetype libvorbis sdl2
+           ;; GTK is needed only by Exult Studio.
+           gtk+))
+    (synopsis "Role-playing game engine compatible with Ultima VII")
+    (description
+     "Exult is an Ultima 7 game engine that runs on modern operating systems.
+Ultima 7 (or Ultima VII) is a two-part @acronym{RPG, role-playing game} from the
+early 1990s.
+
+Exult is fully compatible with the original Ultima 7, but doesn't require any
+of its data files to be useful.  Explore entirely new game worlds---or create
+your own with the included game and map editor, Exult Studio.
+
+This package expects the game(s) to be placed in subdirectories of
+@file{~/.local/share/exult}.")
+    (home-page "http://exult.info/")
+    (license license:gpl2+)))
+
 (define-public supertuxkart
   (package
     (name "supertuxkart")
@@ -4163,22 +4295,19 @@ falling, themeable graphics and sounds, and replays.")
 (define-public wesnoth
   (package
     (name "wesnoth")
-    (version "1.16.5")
+    (version "1.16.6")
     (source (origin
-              (method url-fetch)
-              (uri (string-append "mirror://sourceforge/wesnoth/wesnoth-"
-                                  (version-major+minor version)
-                                  "/wesnoth-" version "/"
-                                  "wesnoth-" version ".tar.bz2"))
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/wesnoth/wesnoth")
+                    (commit version)))
+              (file-name (string-append name "-" version ".tar.bz2"))
               (sha256
                (base32
-                "02pzijbmkgcb8hc4l3f4r3r3mxqda936dp488i9sd9d4m3xdzimh"))))
+                "0hfvxmdnwn86w254blbjacia342j47rhhahm6ca79la9d04rlz3m"))))
     (build-system cmake-build-system)
     (arguments
-     `(#:tests? #f))                    ;no check target
-    (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("pkg-config" ,pkg-config)))
+     (list #:tests? #f)) ;no test target
     (inputs
      (list boost
            dbus
@@ -4187,6 +4316,9 @@ falling, themeable graphics and sounds, and replays.")
            openssl
            pango
            (sdl-union (list sdl2 sdl2-image sdl2-mixer sdl2-ttf))))
+    (native-inputs
+     (list gettext-minimal
+           pkg-config))
     (home-page "https://www.wesnoth.org/")
     (synopsis "Turn-based strategy game")
     (description
@@ -5666,17 +5798,14 @@ Linux / Mac OS X servers, and an auto mapper with a VT100 map display.")
              (patches (search-patches "laby-make-install.patch"))))
     (build-system gnu-build-system)
     (inputs
-     `(("lablgtk3" ,lablgtk3)
-       ("ocaml" ,ocaml)
-       ("ocaml-findlib" ,ocaml-findlib)
-       ("ocamlbuild" ,ocamlbuild)))
+     (list lablgtk3 ocaml-lablgtk3-sourceview3 ocaml ocaml-findlib ocamlbuild))
     (arguments
      '(#:phases
        (modify-phases %standard-phases
          (delete 'configure)
          (add-before 'build 'set-library-path
            (lambda* (#:key inputs #:allow-other-keys)
-             (let ((lablgtk (assoc-ref inputs "lablgtk3")))
+             (let ((lablgtk (assoc-ref inputs "lablgtk")))
                (setenv "LD_LIBRARY_PATH"
                        (string-append lablgtk "/lib/ocaml/stublibs"))))))
        #:tests? #f ; no 'check' target
@@ -5794,101 +5923,63 @@ throwing people around in pseudo-randomly generated buildings.")
 (define-public hyperrogue
   (package
     (name "hyperrogue")
-    (version "11.3a")
-    ;; When updating this package, be sure to update the "hyperrogue-data"
-    ;; origin in native-inputs.
-    (source (origin
-              (method url-fetch)
-              (uri (string-append
-                    "https://www.roguetemple.com/z/hyper/hyperrogue"
-                    (string-join (string-split version #\.) "")
-                    "-src.tgz"))
-              (sha256
-               (base32
-                "1yxabbswq02fc5frigvs43f83m5vlxybc7n5mynkwzj2c70lfp2k"))))
+    (version "12.1a")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/zenorogue/hyperrogue")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "1l09d1r3jdwp54zq071fk09hpggif5phjn0gsapzrjy3i289jran"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:tests? #f ; no check target
-       #:make-flags '("HYPERROGUE_USE_GLEW=1"
-                      "HYPERROGUE_USE_PNG=1")
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'set-paths 'set-sdl-paths
-           (lambda* (#:key inputs #:allow-other-keys)
-             (setenv "CPATH"
-                     (string-append (or (getenv "CPATH") "") ":"
-                                    (assoc-ref inputs "sdl-union")
-                                    "/include/SDL"))))
-         (replace 'configure
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (share-dir (string-append out "/share/hyperrogue"))
-                    (dejavu-dir (string-append
-                                 (assoc-ref inputs "font-dejavu")
-                                 "/share/fonts/truetype"))
-                    (dejavu-font "DejaVuSans-Bold.ttf")
-                    (music-file "hyperrogue-music.txt"))
-               ;; Fix font and music paths.
-               (substitute* "basegraph.cpp"
-                 ((dejavu-font)
-                  (string-append dejavu-dir "/" dejavu-font)))
-               (substitute* music-file
-                 (("\\*/")
-                  (string-append share-dir "/sounds/")))
-               (substitute* "sound.cpp"
-                 (("musicfile = \"\"")
-                  (string-append "musicfile = \""
-                                 share-dir "/" music-file "\"")))
-               ;; Disable build machine CPU optimizations and warnings treated
-               ;; as errors.
-               (substitute* "Makefile"
-                 (("-march=native") "")
-                 (("-Werror") "")))
-             #t))
-         (replace 'install
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (bin (string-append out "/bin"))
-                    (share-dir (string-append out "/share/hyperrogue")))
-               (mkdir-p bin)
-               (install-file "hyperrogue" bin)
-               (install-file "hyperrogue-music.txt" share-dir))
-             #t))
-         (add-after 'install 'install-data
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let* ((data (assoc-ref inputs "hyperrogue-data"))
-                    (out (assoc-ref outputs "out"))
-                    (sounds (string-append out "/share/hyperrogue/sounds"))
-                    (unzip (search-input-file inputs "/bin/unzip")))
-               ;; Extract media license information into sounds directory.
-               (invoke unzip "-j" data
-                       (string-append
-                        "hyperrogue"
-                        (string-join (string-split ,version #\.) "")
-                        "/sounds/credits.txt") "-d" sounds)
-               ;; Extract sounds and music into sounds directory.
-               (invoke "unzip" "-j" data
-                       (string-append
-                        "hyperrogue"
-                        (string-join (string-split ,version #\.) "")
-                        "/*.ogg") "-d" sounds)))))))
-    (native-inputs
-     `(("hyperrogue-data"
-        ,(origin
-           (method url-fetch)
-           (uri
-            (string-append
-             "https://www.roguetemple.com/z/hyper/hyperrogue"
-             (string-join (string-split version #\.) "")
-             "-win.zip"))
-           (sha256
-            (base32
-             "11yhbia45f1w9z0j67h9nynwjqmvakr9l6rnrmdrdkzin6lvzzj4"))))
-       ("unzip" ,unzip)))
+     (list
+      #:tests? #f                       ; no check target
+      #:make-flags #~(list "HYPERROGUE_USE_GLEW=1"
+                           "HYPERROGUE_USE_PNG=1")
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'set-paths 'set-sdl-paths
+            (lambda* (#:key inputs #:allow-other-keys)
+              (setenv "CPATH"
+                      (string-append (or (getenv "CPATH") "") ":"
+                                     (search-input-directory inputs
+                                                             "/include/SDL")))))
+          (replace 'configure
+            (lambda* (#:key inputs #:allow-other-keys)
+              (let ((share-dir (string-append #$output "/share/hyperrogue/"))
+                    (fonts-dir (dirname
+                                (search-input-file inputs
+                                                   "DejaVuSans-Bold.ttf"))))
+                ;; Set fonts and music path.
+                (substitute* "sysconfig.h"
+                  (("(#define HYPERPATH ).*" _ lead)
+                   (string-append lead "\"" share-dir "\"\n"))
+                  (("(#define HYPERFONTPATH ).*" _ lead)
+                   (string-append lead "\"" fonts-dir "/\"\n")))
+                ;; Disable build machine CPU optimizations and warnings treated
+                ;; as errors.
+                (substitute* "Makefile"
+                  (("-march=native") "")
+                  (("-Werror") "")))))
+          (replace 'install
+            (lambda _
+              (install-file "hyperrogue" (string-append #$output "/bin"))
+              (let ((share-dir (string-append #$output "/share/hyperrogue/")))
+                (install-file "hyperrogue-music.txt" share-dir)
+                (for-each (lambda (dir)
+                            (copy-recursively dir
+                                              (string-append share-dir dir)))
+                          '("music" "sounds"))))))))
     (inputs
-     (list font-dejavu glew libpng
+     (list font-dejavu
+           glew
+           libpng
            (sdl-union (list sdl sdl-gfx sdl-mixer sdl-ttf))))
-    (home-page "https://www.roguetemple.com/z/hyper/")
+    (home-page "https://roguetemple.com/z/hyper")
     (synopsis "Non-euclidean graphical rogue-like game")
     (description
      "HyperRogue is a game in which the player collects treasures and fights
@@ -5901,9 +5992,9 @@ are home to particular creatures and may be subject to their own rules of
 
 While the game can use ASCII characters to display the the classical rogue
 symbols, it still needs graphics to render the non-euclidean world.")
-    (license (list license:bsd-3         ; glew.c, mtrand.*
-                   license:cc-by-sa3.0   ; music
-                   license:cc-by-sa4.0   ; sounds
+    (license (list license:bsd-3        ; glew.c, mtrand.*
+                   license:cc-by-sa3.0  ; music
+                   license:cc-by-sa4.0  ; sounds
                    license:cc0
                    license:public-domain ; direntx.*, some sounds
                    license:zlib          ; savepng.*
@@ -6046,21 +6137,21 @@ starting a decryption sequence to reveal the original plaintext characters.")
          "1ffck3ii1wp5k3nn5p0ga06jgp7pzk4zw0xln3xim2w7qrxzdzh9"))))
     (build-system cmake-build-system)
     (inputs
-     `(("curl" ,curl)
-       ("fontconfig" ,fontconfig)
-       ("ftgl" ,ftgl)
-       ("glew" ,glew)
-       ("libjpeg-turbo" ,libjpeg-turbo)
-       ("megaglest-data" ,megaglest-data)
-       ("mesa" ,mesa)
-       ("miniupnpc" ,miniupnpc)
-       ("openal" ,openal)
-       ("libircclient" ,libircclient)
-       ("libpng" ,libpng)
-       ("libvorbis" ,libvorbis)
-       ("lua" ,lua)
-       ("sdl2" ,sdl2)
-       ("wxwidgets" ,wxwidgets)))
+     (list curl
+           fontconfig
+           ftgl
+           glew
+           libjpeg-turbo
+           megaglest-data
+           mesa
+           miniupnpc
+           openal
+           libircclient
+           libpng
+           libvorbis
+           lua
+           sdl2
+           wxwidgets))
     (native-inputs
      (list cppunit pkg-config))
     (arguments
@@ -6068,8 +6159,8 @@ starting a decryption sequence to reveal the original plaintext characters.")
        (list "-DCMAKE_CXX_FLAGS=-fcommon"
              "-DCMAKE_C_FLAGS=-fcommon"
              (string-append "-DCUSTOM_DATA_INSTALL_PATH="
-                            (assoc-ref %build-inputs "megaglest-data")
-                            "/share/megaglest")
+                            (search-input-directory %build-inputs
+                                                    "share/megaglest"))
              "-DBUILD_MEGAGLEST_TESTS=ON")
        #:phases
        (modify-phases %standard-phases
@@ -6148,7 +6239,7 @@ emerges from a sewer hole and pulls her below ground.")
 (define-public cdogs-sdl
   (package
     (name "cdogs-sdl")
-    (version "0.8.0")
+    (version "1.4.0")
     (source
      (origin
        (method git-fetch)
@@ -6157,7 +6248,7 @@ emerges from a sewer hole and pulls her below ground.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0vx37zb2iw7sfw5a2bs97ydlmb301nvy485ybdm8g46c5hn9s13c"))))
+        (base32 "1505z8rli59i1ych4rzwbf4dvhv72icdj22n1xarb8xfyz0wyp3b"))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags
@@ -6515,7 +6606,7 @@ fish.  The whole game is accompanied by quiet, comforting music.")
 (define-public crawl
   (package
     (name "crawl")
-    (version "0.29.0")
+    (version "0.29.1")
     (source
      (origin
        (method git-fetch)
@@ -6524,7 +6615,7 @@ fish.  The whole game is accompanied by quiet, comforting music.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0cx67ln5qr4bawidi48ss63wflx7x22901da683c9wvy6m41vks8"))
+        (base32 "17bl8hdv2z3mpdfmd5gnwg3r1p9dqjbisiql24pxs1d33qcw0h7x"))
        (patches (search-patches "crawl-upgrade-saves.patch"))))
     (build-system gnu-build-system)
     (inputs
@@ -6664,7 +6755,7 @@ fight against their plot and save his fellow rabbits from slavery.")
 (define-public 0ad-data
   (package
     (name "0ad-data")
-    (version "0.0.25b-alpha")
+    (version "0.0.26-alpha")
     (source
      (origin
        (method url-fetch)
@@ -6672,7 +6763,7 @@ fight against their plot and save his fellow rabbits from slavery.")
                            version "-unix-data.tar.xz"))
        (file-name (string-append name "-" version ".tar.xz"))
        (sha256
-        (base32 "1c9zrddmjxvvacismld6fbwbw9vrdbq6g6d3424p8w5p6xg5wlwy"))))
+        (base32 "0z9dfw2hn2fyrx70866lv5464fbagdb8dip321wq10pqb22y805j"))))
     (build-system trivial-build-system)
     (native-inputs (list tar unzip xz))
     (arguments
@@ -6711,7 +6802,7 @@ fight against their plot and save his fellow rabbits from slavery.")
 (define-public 0ad
   (package
     (name "0ad")
-    (version "0.0.25b-alpha")
+    (version "0.0.26-alpha")
     (source
      (origin
        (method url-fetch)
@@ -6719,7 +6810,7 @@ fight against their plot and save his fellow rabbits from slavery.")
                            version "-unix-build.tar.xz"))
        (file-name (string-append name "-" version ".tar.xz"))
        (sha256
-        (base32 "1p9fa8f7sjb9c5wl3mawzyfqvgr614kdkhrj2k4db9vkyisws3fp"))))
+        (base32 "0jzfq09ispi7740c01h6yqxqv9y3zx66d217z32pfbiiwgvns71f"))))
     ;; A snippet here would cause a build failure because of timestamps
     ;; reset.  See https://bugs.gnu.org/26734.
     (inputs
@@ -6727,6 +6818,7 @@ fight against their plot and save his fellow rabbits from slavery.")
            curl
            enet
            fmt
+           freetype
            gloox
            icu4c-68
            libidn
@@ -6736,7 +6828,7 @@ fight against their plot and save his fellow rabbits from slavery.")
            libxcursor
            libxml2
            miniupnpc
-           mozjs
+           mozjs-78
            openal
            sdl2
            wxwidgets
@@ -6851,7 +6943,7 @@ at their peak of economic growth and military prowess.
 (define-public open-adventure
   (package
     (name "open-adventure")
-    (version "1.9")
+    (version "1.11")
     (source
      (origin
        (method git-fetch)
@@ -6860,40 +6952,39 @@ at their peak of economic growth and military prowess.
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "123svzy7xczdklx6plbafp22yv9bcvwfibjk0jv2c9i22dfsr07f"))))
+        (base32 "1n0fzrdlbc6px88qr574ww2q85xk43bv09jpmsskzv1l2cncwm37"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:make-flags (list "CC=gcc")
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)            ;no configure script
-         (add-before 'build 'use-echo
-           (lambda _
-             (substitute* "tests/Makefile"
-               (("/bin/echo") (which "echo")))
-             #t))
-         (add-after 'build 'build-manpage
-           (lambda _
-             ;; This target is missing a dependency
-             (substitute* "Makefile"
-               ((".adoc.6:" line)
-                (string-append line " advent.adoc")))
-             (invoke "make" ".adoc.6")))
-         ;; There is no install target.
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (bin (string-append out "/bin"))
-                    (man (string-append out "/share/man/man6")))
-               (install-file "advent" bin)
-               (install-file "advent.6" man))
-             #t)))))
+     (list
+      #:make-flags #~(list (string-append "CC=" #$(cc-for-target)))
+      #:parallel-tests? #f              ;some tests fail non-deterministically
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)           ;no configure script
+          (add-before 'build 'use-echo
+            (lambda _
+              (substitute* (list "tests/Makefile" "tests/tapview")
+                (("/bin/echo") (which "echo")))))
+          (add-after 'build 'build-manpage
+            (lambda _
+              ;; This target is missing a dependency
+              (substitute* "Makefile"
+                ((".adoc.6:" line)
+                 (string-append line " advent.adoc")))
+              (invoke "make" ".adoc.6")))
+          ;; There is no install target.
+          (replace 'install
+            (lambda _
+              (let ((bin (string-append #$output "/bin"))
+                    (man (string-append #$output "/share/man/man6")))
+                (install-file "advent" bin)
+                (install-file "advent.6" man)))))))
     (native-inputs
-     `(("asciidoc" ,asciidoc)
-       ("libedit" ,libedit)
-       ("pkg-config" ,pkg-config)
-       ("python" ,python-wrapper)
-       ("python-pyyaml" ,python-pyyaml)))
+     (list asciidoc
+           libedit
+           pkg-config
+           python-pyyaml
+           python-wrapper))
     (home-page "https://gitlab.com/esr/open-adventure")
     (synopsis "Colossal Cave Adventure")
     (description
@@ -7622,148 +7713,6 @@ entirely config file, savegame, netplay and demo compatible with the
 original.")
     (home-page "https://www.chocolate-doom.org/wiki/index.php/Crispy_Doom")))
 
-(define shlomif-cmake-modules
-  (origin
-    (method url-fetch)
-    (uri (string-append
-          "https://raw.githubusercontent.com/shlomif/shlomif-cmake-modules/"
-          "89f05caf86078f783873975525230cf4fecede8a"
-          "/shlomif-cmake-modules/Shlomif_Common.cmake"))
-    (sha256
-     (base32 "05xdikw5ln0yh8p5chsmd8qnndmxg5b5vjlfpdqrjcb1ncqzywkc"))))
-
-(define-public rinutils
-  (package
-    (name "rinutils")
-    (version "0.10.1")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url "https://github.com/shlomif/rinutils")
-                    (commit version)))
-              (file-name (git-file-name name version))
-              (sha256
-               (base32
-                "0r90kncf6mvyklifpdsnm50iya7w2951nz35nlgndmqnr82gvdwf"))))
-    (build-system cmake-build-system)
-    (arguments
-     (list #:phases
-           #~(modify-phases %standard-phases
-               (add-after 'unpack 'copy-cmake-modules
-                 (lambda _
-                   (copy-file #$shlomif-cmake-modules
-                              (string-append "cmake/"
-                                             (strip-store-file-name
-                                              #$shlomif-cmake-modules)))))
-               (replace 'check
-                 (lambda* (#:key tests? #:allow-other-keys)
-                   (when tests?
-                     (with-directory-excursion "../source"
-                       (setenv "FCS_TEST_BUILD" "1")
-                       (setenv "RINUTILS_TEST_BUILD" "1")
-                       ;; TODO: Run tests after setting RINUTILS_TEST_TIDY to `1',
-                       ;; which requires tidy-all.
-                       ;; (setenv "RINUTILS_TEST_TIDY" "1")
-                       (invoke "perl"
-                               "CI-testing/continuous-integration-testing.pl"))))))))
-    (native-inputs
-     (list perl
-           ;; The following are needed only for tests.
-           perl-class-xsaccessor
-           perl-file-find-object
-           perl-io-all
-           perl-test-differences
-           perl-test-runvalgrind
-           pkg-config))
-    (inputs
-     (list cmocka
-           perl-env-path
-           perl-inline
-           perl-inline-c
-           perl-string-shellquote
-           perl-test-trailingspace
-           perl-file-find-object-rule
-           perl-text-glob
-           perl-number-compare
-           perl-moo))
-    (home-page "https://www.shlomifish.org/open-source/projects/")
-    (synopsis "C11 / gnu11 utilities C library")
-    (description "This package provides C11 / gnu11 utilities C library")
-    (license license:expat)))
-
-(define-public fortune-mod
-  (package
-    (name "fortune-mod")
-    (version "3.14.0")
-    (source
-     (origin
-       (method git-fetch)
-       (uri (git-reference
-             (url "https://github.com/shlomif/fortune-mod")
-             (commit (string-append "fortune-mod-" version))))
-       (file-name (git-file-name name version))
-       (sha256
-        (base32 "1f2zif3s6vddbhph4jr1cymdsn7gagg59grrxs0yap6myqmy8shg"))))
-    (build-system cmake-build-system)
-    (arguments
-     (list #:configure-flags
-           #~(let ((fortunes (string-append #$output "/share/fortunes")))
-               (list (string-append "-DLOCALDIR=" fortunes)
-                     (string-append "-DLOCALODIR=" fortunes "/off")
-                     (string-append "-DCOOKIEDIR=" fortunes)
-                     (string-append "-DOCOOKIEDIR=" fortunes "/off")))
-           #:test-target "check"
-           #:phases
-           #~(modify-phases %standard-phases
-               (add-after 'unpack 'enter-build-directory
-                 (lambda _
-                   (chdir "fortune-mod")))
-               (add-after 'enter-build-directory 'symlink-rinutils
-                 (lambda _
-                   (mkdir-p "rinutils")
-                   (symlink #$(this-package-native-input "rinutils")
-                            "rinutils/rinutils")))
-               (add-after 'enter-build-directory 'copy-cmake-modules
-                 (lambda _
-                   (copy-file #$shlomif-cmake-modules
-                              (string-append "cmake/"
-                                             (strip-store-file-name
-                                              #$shlomif-cmake-modules)))))
-               (add-after 'enter-build-directory 'delete-failing-test
-                 (lambda _
-                   ;; TODO: Valgrind tests fail for some reason.  Similar issue?
-                   ;; https://github.com/shlomif/fortune-mod/issues/21
-                   (delete-file "tests/data/valgrind.t")
-                   (with-output-to-file "tests/scripts/split-valgrind.pl"
-                     (const #t))))
-               (add-after 'install 'fix-install-directory
-                 ;; Move fortune from "games/" to "bin/" and remove the
-                 ;; former.  This is easier than patching CMakeLists.txt
-                 ;; since the tests hard-code the location as well.
-                 (lambda _
-                   (with-directory-excursion #$output
-                     (rename-file "games/fortune" "bin/fortune")
-                     (rmdir "games")))))))
-    (inputs (list recode))
-    (native-inputs
-     (list perl
-           ;; For generating the documentation.
-           docbook-xml-5
-           docbook-xsl
-           perl-app-xml-docbook-builder
-           ;; The following are only needed for tests.
-           perl-file-find-object
-           perl-test-differences
-           perl-class-xsaccessor
-           perl-io-all
-           perl-test-runvalgrind
-           rinutils))
-    (home-page "https://www.shlomifish.org/open-source/projects/fortune-mod/")
-    (synopsis "The Fortune Cookie program from BSD games")
-    (description "Fortune is a command-line utility which displays a random
-quotation from a collection of quotes.")
-    (license license:bsd-4)))
-
 (define xonotic-data
   (package
     (name "xonotic-data")
@@ -8328,7 +8277,7 @@ your score gets higher, you level up and the blocks fall faster.")
 (define-public endless-sky
   (package
     (name "endless-sky")
-    (version "0.9.14")
+    (version "0.9.16.1")
     (source
      (origin
        (method git-fetch)
@@ -8337,31 +8286,31 @@ your score gets higher, you level up and the blocks fall faster.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "12iganf8dxiyrjznnabsarxjsr0h717j3k4mz15p0k67wxyahhmf"))))
+        (base32 "0cb2g1cb0mk6x9gq2x7n10rxlfhsq8wnssk068j6h80al3hhybly"))))
     (build-system scons-build-system)
     (arguments
-     `(#:scons ,scons-python2
-       #:scons-flags (list (string-append "PREFIX=" (assoc-ref %outputs "out")))
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'fix-paths
-           (lambda* (#:key outputs #:allow-other-keys)
-             ;; Look for resources in the store directory.
-             (substitute* "source/Files.cpp"
-               (("/usr/local") (assoc-ref outputs "out")))
-             ;; Install game binary into %out/bin.
-             (substitute* "SConstruct"
-               (("games\"") "bin\""))))
-         (add-before 'build 'use-gcc-ar
-           ;; Use gcc-ar to support LTO.
-           (lambda _ (setenv "AR" "gcc-ar"))))))
+     (list #:scons-flags #~(list (string-append "PREFIX=" #$output))
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'fix-paths
+                 (lambda _
+                   ;; Look for resources in the store directory.
+                   (substitute* "source/Files.cpp"
+                     (("/usr/local") #$output))
+                   ;; Install game binary into %out/bin.
+                   (substitute* "SConstruct"
+                     (("games\"") "bin\""))))
+               (add-before 'build 'use-gcc-ar
+                 ;; Use gcc-ar to support LTO.
+                 (lambda _ (setenv "AR" "gcc-ar"))))))
     (inputs
-     `(("glew" ,glew)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libmad" ,libmad)
-       ("libpng" ,libpng)
-       ("openal" ,openal)
-       ("sdl2" ,sdl2)))
+     (list glew
+           libjpeg-turbo
+           libmad
+           libpng
+           openal
+           sdl2
+           `(,util-linux "lib"))) ; for libuuid
     (home-page "https://endless-sky.github.io/")
     (synopsis "2D space trading and combat game")
     (description "Endless Sky is a 2D space trading and combat game.  Explore
@@ -9355,60 +9304,56 @@ play with up to four players simultaneously.  It has network support.")
 (define-public hedgewars
   (package
     (name "hedgewars")
-    (version "1.0.0")
+    (version "1.0.2")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://www.hedgewars.org/download/releases/"
                                   "hedgewars-src-" version ".tar.bz2"))
-              (patches (search-patches "hedgewars-network-bsd.patch"))
               (sha256
                (base32
-                "0nqm9w02m0xkndlsj6ys3wr0ik8zc14zgilq7k6fwjrf3zk385i1"))))
+                "04pjpkjhpy720n803gv35iygmjdvsrmw13mih4ympjnqbgjfa7r0"))))
     (build-system cmake-build-system)
     (arguments
-     ;; XXX: Engine is built as Pascal source code, requiring Free Pascal
-     ;; Compiler, which we haven't packaged yet.  With the flag below, we use
-     ;; a Pascal to C translator and Clang instead.
-     `(#:configure-flags (list "-DBUILD_ENGINE_C=ON"
-                               "-Dhaskell_flags=-dynamic;-fPIC")
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'configure 'fix-sources
-           (lambda _
-             ;; Fix a missing 'include'.
-             (substitute* "QTfrontend/ui/page/pagegamestats.cpp"
-               (("#include <QSizePolicy>")
-                "#include <QSizePolicy>\n#include <QPainterPath>"))))
-         (replace 'check
-           (lambda _ (invoke "ctest")))
-         (add-after 'install 'install-icon
-           (lambda _
-             ;; Install icon for the desktop file.
-             (let* ((out (assoc-ref %outputs "out"))
-                    (icons (string-append out "/share/icons/hicolor/512x512/apps")))
-               (with-directory-excursion (string-append "../hedgewars-src-" ,version)
-                 (install-file "misc/hedgewars.png" icons)))
-             #t)))))
+     (list
+      ;; XXX: Engine is built as Pascal source code, requiring Free Pascal
+      ;; Compiler, which we haven't packaged yet.  With the flag below, we use
+      ;; a Pascal to C translator and Clang instead.
+      #:configure-flags #~(list "-DBUILD_ENGINE_C=ON"
+                                "-Dhaskell_flags=-dynamic;-fPIC")
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                (invoke "ctest"))))
+          (add-after 'install 'install-icon
+            (lambda _
+              ;; Install icon for the desktop file.
+              (let ((icons (string-append #$output
+                                          "/share/icons/hicolor/512x512/apps")))
+                (with-directory-excursion
+                    (string-append "../hedgewars-src-" #$version)
+                  (install-file "misc/hedgewars.png" icons))))))))
     (inputs
-     `(("ffmpeg" ,ffmpeg)
-       ("freeglut" ,freeglut)
-       ("ghc-entropy" ,ghc-entropy)
-       ("ghc-hslogger" ,ghc-hslogger)
-       ("ghc-network" ,ghc-network)
-       ("ghc-random" ,ghc-random)
-       ("ghc-regex-tdfa" ,ghc-regex-tdfa)
-       ("ghc-sandi" ,ghc-sandi)
-       ("ghc-sha" ,ghc-sha)
-       ("ghc-utf8-string" ,ghc-utf8-string)
-       ("ghc-vector" ,ghc-vector)
-       ("ghc-zlib" ,ghc-zlib)
-       ("glew" ,glew)
-       ("libpng" ,libpng)
-       ("lua" ,lua-5.1)
-       ("physfs" ,physfs)
-       ("qtbase" ,qtbase-5)
-       ("sdl" ,(sdl-union
-                (list sdl2 sdl2-mixer sdl2-net sdl2-ttf sdl2-image)))))
+     (list ffmpeg
+           freeglut
+           ghc-entropy
+           ghc-hslogger
+           ghc-network
+           ghc-random
+           ghc-regex-tdfa
+           ghc-sandi
+           ghc-sha
+           ghc-utf8-string
+           ghc-vector
+           ghc-zlib
+           glew
+           libpng
+           lua-5.1
+           physfs
+           qtbase-5
+           (sdl-union
+            (list sdl2 sdl2-mixer sdl2-net sdl2-ttf sdl2-image))))
     (native-inputs
      (list clang-9 ghc pkg-config qttools-5))
     (home-page "https://hedgewars.org/")
@@ -10220,1523 +10165,6 @@ can be downloaded from @url{https://zero.sjeng.org/best-network}.")
    (home-page "https://github.com/bernds/q5Go")
    (license license:gpl2+)))
 
-(define-public ktuberling
-  (package
-    (name "ktuberling")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/ktuberling-" version ".tar.xz"))
-      (sha256
-       (base32 "0mlv9qllg70p26dbrcsr820c70d3ib88hapc1z6wgjhdpmc12ni1"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools perl))
-    (inputs
-     (list kcompletion
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kio
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           python-wrapper
-           qtbase-5
-           qtmultimedia-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Stamp drawing toy")
-    (description "KTuberling is a drawing toy intended for small children and
-adults who remain young at heart.  The game has no winner; the only purpose is
-to make the funniest faces you can.  Several activities are possible, e.g.:
-
-@itemize
-@item Give the potato a funny face, clothes, and other goodies
-@item Build a small town, complete with school, zoo, and fire department
-@item Create a fantastic moonscape with spaceships and aliens
-@item Top a pizza
-@end itemize
-
-KTuberling can speak the name of each the object in several languages,
-to assist in learning basic vocabulary.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public picmi
-  (package
-    (name "picmi")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/picmi-" version ".tar.xz"))
-      (sha256
-       (base32 "1dfq9m4njh0czz8zws46rkz6xq2n6xra5w223m3s2f5civiw5msz"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcoreaddons
-           kcrash
-           kdbusaddons
-           kdeclarative
-           ki18n
-           kio
-           knewstuff
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Number logic game")
-    (description "Picmi is a number logic game in which cells in a grid have
-to be colored or left blank according to numbers given at the side of the
-grid.  The aim is to reveal a hidden picture.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public kolf
-  (package
-    (name "kolf")
-    (version "20.12.0")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "mirror://kde/stable/release-service/" version
-                           "/src/kolf-" version ".tar.xz"))
-       (sha256
-        (base32 "1lpp6pzr5dgd4si4a8c7hcvgxgqy0bgyhkx9m6jqb0zhll6dxj10"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kio
-           kwidgetsaddons
-           kxmlgui
-           ktextwidgets
-           libkdegames
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Miniature golf game")
-    (description "Kolf is a miniature golf game for one to ten players.  The
-game is played from an overhead view, with a short bar representing the golf
-club.  Kolf features many different types of objects, such as water hazards,
-slopes, sand traps, and black holes (warps), among others.
-
-Features are:
-@itemize
-@item Single and Multi-player (up to ten players) modes
-@item High scores table
-@item Dynamic courses
-@item Third-party courses
-@item Course editor
-@end itemize
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:lgpl2.0+ license:fdl1.2+))))
-
-(define-public libkmahjongg
-  (package
-    (name "libkmahjongg")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/"
-                          version "/src/libkmahjongg-" version ".tar.xz"))
-      (sha256
-       (base32 "10ljzbf7qki5flydankrbksaihhkqpfyljb8c71fbwqwmkr7rgfq"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules))
-    (inputs
-     (list kauth
-           kcompletion
-           ;("kconfig" ,kconfig)
-           kcodecs
-           kconfigwidgets
-           kcoreaddons
-           ki18n
-           kwidgetsaddons
-           qtbase-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Shared library for kmahjongg and kshisen")
-    (description "Shared library and common files for kmahjongg, kshisen and
-other Mah Jongg like games.")
-    (license (list license:gpl2+ license:lgpl2.0+ license:fdl1.2+))))
-
-(define-public kmahjongg
-  (package
-    (name "kmahjongg")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/"
-                          version "/src/kmahjongg-" version ".tar.xz"))
-      (sha256
-       (base32 "1fcj4jb2zzbaxp7cp04w36y0c7lh77yzin66fmvrcxkl11xi2wwd"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kcrash
-           kdbusaddons
-           kdeclarative
-           ki18n
-           knewstuff
-           kxmlgui
-           libkdegames
-           libkmahjongg
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Tile laying patience")
-    (description "In KMahjongg the tiles are scrambled and staked on top of
-each other to resemble a certain shape.  The player is then expected to remove
-all the tiles off the game board by locating each tile's matching pair.
-
-A variety of tile layouts are included, as well as an editor to create new
-layouts.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:lgpl2.0+ license:fdl1.2+))))
-
-(define-public kshisen
-  (package
-    (name "kshisen")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/"
-                          version "/src/kshisen-" version ".tar.xz"))
-      (sha256
-       (base32 "1hrwr0f1kidivsp8lnwdbqz3xxagjvjwh72r3gma8smfilybygfb"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules
-           ;("perl" ,perl)
-           ;("pkg-config" ,pkg-config)
-           kdoctools))
-    (inputs
-     (list kauth
-           kcompletion
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kxmlgui
-           libkdegames
-           libkmahjongg
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Shisen-Sho solitaire game")
-    (description "KShisen is a solitaire-like game played using the standard
-set of Mahjong tiles.  Unlike Mahjong however, KShisen has only one layer of
-scrambled tiles
-
-This package is part of the KDE games module.")
-    (license license:gpl2+)))
-
-(define-public kajongg
-  (package
-    (name "kajongg")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/"
-                          version "/src/kajongg-" version ".tar.xz"))
-      (sha256
-       (base32 "03fdbnx7zx7vgcxvwd1h1098ks9gq162bwz35fhpyzpynr667m5r"))))
-    (build-system qt-build-system)
-    (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'fix-paths
-           (lambda* (#:key inputs #:allow-other-keys)
-             (substitute* "src/mjresource.py"
-               (("'share', 'kmahjongglib'" all)
-                (string-append "'" (assoc-ref inputs "libkmahjongg")
-                               "/share', 'kmahjongglib'")))))
-         (add-after 'qt-wrap 'wrap
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (for-each (lambda (program)
-                           (wrap-program program
-                             `("GUIX_PYTHONPATH" ":" prefix
-                               (,(getenv "GUIX_PYTHONPATH")))))
-                         (list (string-append out "/bin/kajongg")
-                               (string-append out "/bin/kajonggserver")))))))))
-    (native-inputs
-     (list extra-cmake-modules
-           ;("perl" ,perl)
-           kdoctools))
-    (inputs
-     (list kconfig
-           kconfigwidgets
-           kcoreaddons
-           ki18n
-           libkmahjongg
-           python
-           python-twisted
-           python-pyqt
-           python-zope-interface
-           qtbase-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Classical Mah Jongg game for 4 players")
-    (description "Kajongg is the ancient Chinese board game for 4 players.
-
-If you are looking for the Mah Jongg solitaire please use the application
-kmahjongg.
-
-Kajongg can be used in two different ways: Scoring a manual game where you
-play as always and use Kajongg for the computation of scores and for
-bookkeeping.  Or you can use Kajongg to play against any combination of other
-human players or computer players.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public kbreakout
-  (package
-    (name "kbreakout")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/kbreakout-" version ".tar.xz"))
-      (sha256
-       (base32 "0kqj2cx0ny3qq65c6w5fpnzmrwl9irg8slzvpd3anck5cnvma3j4"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Breakout like game")
-    (description "KBreakout is similar to the classics breakout and xboing,
-featuring a number of added graphical enhancements and effects.  You control a
-paddle at the bottom of the playing-field, and must destroy bricks at the top
-by bouncing balls against them.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public kmines
-  (package
-    (name "kmines")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/kmines-" version ".tar.xz"))
-      (sha256
-       (base32 "0hqjwh3jq2npqwkvh67fyn2xnq8swiasdw5jz8f0ikl0k28id775"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           ktextwidgets
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Classical mine sweeper game")
-    (description "KMines is a classic Minesweeper game.  The idea is to
-uncover all the squares without blowing up any mines.  When a mine is blown
-up, the game is over.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public konquest
-  (package
-    (name "konquest")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/"
-                          version "/src/konquest-" version ".tar.xz"))
-      (sha256
-       (base32 "0lnwj06vv4qx05hr8pzysnvrxh8y04asajrph0rsj37v8hs9g5lh"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           kguiaddons
-           ki18n
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Simple turn-based strategy game")
-    (description "Konquest is the KDE version of Gnu-Lactic Konquest.  Players
-conquer other planets by sending ships to them.  The goal is to build an
-interstellar empire and ultimately conquer all other player's planets.  The
-game can be played with up to nine empires, commanded either by the computer
-or by puny earthlings.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public kbounce
-  (package
-    (name "kbounce")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/"
-                          version "/src/kbounce-" version ".tar.xz"))
-      (sha256
-       (base32 "0ymy0z1qlw3n653xs3dsa1xm78q4xaj09dnnci4km77rzis26vb6"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kio
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Jezzball arcade game")
-    (description "KBounce is a single player arcade game with the elements of
-puzzle.  It is played on a field, surrounded by wall, with two or more balls
-bouncing around within the walls.  The object of the game is to build new
-walls to decrease the size of the active field.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:lgpl2.0+ license:fdl1.2+))))
-
-(define-public kblocks
-  (package
-    (name "kblocks")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/"
-                          version "/src/kblocks-" version ".tar.xz"))
-      (sha256
-       (base32 "09yfm9mzbamp294cvc5finq6ilxvxr68i0dnb0m72pa4sfzmij32"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Single player falling blocks puzzle game")
-    (description "KBlocks is the classic Tetris-like falling blocks game.
-
-The idea is to stack the falling blocks to create horizontal lines without any
-gaps.  When a line is completed it is removed, and more space is available in
-the play area.  When there is not enough space for blocks to fall, the game is
-over.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public ksudoku
-  (package
-    (name "ksudoku")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/"
-                          version "/src/ksudoku-" version ".tar.xz"))
-      (sha256
-       (base32 "0pj6ry7ak1rnpb93mqypaxrcbmrhwg9ir6zhb3ybzfkfcrh67g12"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list karchive
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kguiaddons
-           ki18n
-           kiconthemes
-           kio
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           glu
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Sudoku puzzle game and solver")
-    (description "KSudoku is a Sudoku game and solver, supporting a range of
-2D and 3D Sudoku variants.  In addition to playing Sudoku, it can print Sudoku
-puzzle sheets and find the solution to any Sudoku puzzle.
-
-The word Sudoku means \"single number in an allotted place\" in Japanese.
-These are the basic rules: Every Sudoku is a square divided into 3x3
-subsquares with 3x3 cells each.
-
-Some cells are filled with a number at the beginning.  The remaining ones are
-to be filled by the player using numbers from 1 to 9, without repeating a
-number twice on each column, row or subsquare (each of them must contain only
-one 1, one 2, one 3, and so on).  The game requires logic and patience.
-Solving takes usually 10 to 30 minutes, depending on puzzle level, your skill
-and experience.
-
-The numerals in Sudoku puzzles are used for convenience (for example in 16x16
-board we use letters): arithmetic relationships between numbers are
-irrelevant.
-
-This program supports also 16x16 games with numbers from 1 to 16 and 256
-cells with 16 cols, rows and subsquares!
-
-More information at http://en.wikipedia.org/wiki/Sudoku
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public klines
-  (package
-    (name "klines")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/klines-" version ".tar.xz"))
-      (sha256
-       (base32 "0y8lnwawrkl4ixn7v4dg48k2zpr083krv7dv4d94b2dpkh7xfvih"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Place 5 equal pieces together, but wait, there are 3 new ones")
-    (description "KLines is a simple but highly addictive one player game.
-
-The player has to move the colored balls around the game board, gathering them
-into the lines of the same color by five.  Once the line is complete it is
-removed from the board, therefore freeing precious space.  In the same time
-the new balls keep arriving by three after each move, filling up the game
-board.
-
-KLines is a single-player game where the player removes colored balls from the
-board by arranging them into lines of five or more.  However, every time the
-player moves a ball, three more balls are added to the board.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public kgoldrunner
-  (package
-    (name "kgoldrunner")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/kgoldrunner-" version ".tar.xz"))
-      (sha256
-       (base32 "17ra5d3r9ajy2inj17gwd5xphzhvbzx5kpvdwyj6msx4dd9wxgfi"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kio
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Action and puzzle solving game")
-    (description "KGoldrunner is an action game where the hero runs through a
-maze, climbs stairs, dig holes and dodges enemies in order to collect all the
-gold nuggets and escape to the next level.  Your enemies are also after the
-gold.  Worse still, they are after you!.
-
-KGoldrunner is a fast-paced platform game where the player must navigate a
-maze while collecting gold nuggets and avoiding enemies.  A variety of level
-packs are included, as well as an editor to create new levels.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public kdiamond
-  (package
-    (name "kdiamond")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/kdiamond-" version ".tar.xz"))
-      (sha256
-       (base32 "1iyxrx3422asa58kh0siwvi1svds5kccrym6gdfpdhlmhmciqlzi"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           knotifications
-           knotifyconfig
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Three-in-a-row game")
-    (description "KDiamond is a three-in-a-row game like Bejeweled.  It
-features unlimited fun with randomly generated games and five difficulty
-levels with varying number of diamond colors and board sizes.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public kfourinline
-  (package
-    (name "kfourinline")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/kfourinline-" version ".tar.xz"))
-      (sha256
-       (base32 "0plx3lv35fc8q9svbyl71mms3ji6zn58j306bvm1f8kkgg0x395b"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdnssd
-           ki18n
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Place 4 pieces in a row")
-    (description "KFourInLine is a board game for two players based on the
-Connect-Four game.
-
-KFourInLine is a game where two players take turns dropping pieces into a
-grid, the winner being the first to place four pieces in a line.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:lgpl2.0+ license:fdl1.2+))))
-
-(define-public kblackbox
-  (package
-    (name "kblackbox")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/kblackbox-" version ".tar.xz"))
-      (sha256
-       (base32 "0la5w44b0gl72g3wfp0pw8gwnm287lh7nd9k5ikpszw5nn49db0h"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list karchive
-           kcompletion
-           kconfig
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           ktextwidgets
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Find atoms in a grid by shooting electrons")
-    (description "KBlackbox is a game of hide and seek played on a grid of
-boxes where the computer has hidden several balls.  The position of the hidden
-balls can be deduced by shooting beams into the box
-
-KBlackBox is a game of hide and seek played on an grid of boxes, where the
-player shoots rays into the grid to deduce the positions of hidden objects.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public knetwalk
-  (package
-    (name "knetwalk")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/knetwalk-" version ".tar.xz"))
-      (sha256
-       (base32 "060kj06vpigdy570izsjfgnmqqrpmb8bkr9arqc109hg3avl5wjz"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           ktextwidgets
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Turn the board pieces to get all computers connected")
-    (description "KNetWalk is a small game where you have to build up a
-computer network by rotating the wires to connect the terminals to the server.
-When the network is build, a highscore-list comes up where competitions can be
-fought out.
-
-KNetwalk is a puzzle game where the player arranges sections of wire to
-connect all the computers on the board.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public bomber
-  (package
-    (name "bomber")
-    (version "20.12.0")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "mirror://kde/stable/release-service/" version
-                           "/src/bomber-" version ".tar.xz"))
-       (sha256
-        (base32 "1fjcwm591jgx3bgqpi0j5fnb2l2r2h3r6lav3vhaxz4rkf56pg2a"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Arcade bombing game")
-    (description "Bomber is a single player arcade game.
-
-The player is invading various cities in a plane that is decreasing in height.
-The goal of the game is to destroy all the buildings and advance to the next
-level.  Each level gets a bit harder by increasing the speed of the plane and
-the height of the buildings.
-
-Bomber is a game where you fly a spaceship and attempt to bomb the buildings
-below you.  Each pass the spaceship makes, it gets lower and lower.  If you've
-not destroyed a building in your path, you will crash into it.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public granatier
-  (package
-    (name "granatier")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/granatier-" version ".tar.xz"))
-      (sha256
-       (base32 "1fyh7zyacb3pnlfd29jw2jmyl8a7sjw354pi234nd5x5999xw5z6"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           knewstuff
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Bomberman clone")
-    (description "Granatier is a clone of the classic Bomberman game,
-inspired by the work of the Clanbomber clone.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public ksirk
-  (package
-    (name "ksirk")
-    (version "20.12.0")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/ksirk-" version ".tar.xz"))
-       (sha256
-        (base32 "10y7nm0x6zcc0gh3am69bbxyyb8azbbfyrdqsa023ggr7n04cn21"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcrash
-           ki18n
-           kiconthemes
-           kio
-           knewstuff
-           kwallet
-           kxmlgui
-           libkdegames
-           phonon
-           qca
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5
-           zlib))
-    (home-page "https://games.kde.org/")
-    (synopsis "Computerized version of the well known strategy board game
-'Risk'")
-    (description "KsirK is a multi-player network-enabled game.  The goal of
-the game is simply to conquer the world by attacking your neighbors with your
-armies.
-
-At the beginning of the game, countries are distributed to all the players.
-Each country contains one army represented by an infantryman.  Each player has
-some armies to distribute to his countries.  On each turn, each player can
-attack his neighbours, eventually conquering one or more countries.  At the
-end of each turn, some bonus armies are distributed to the players in function
-of the number of countries they own.  The winner is the player that conquered
-all the world.
-
-Features:
-@itemize
-@item Support for 1-6 human or computer players
-@item Multi-player gaming over a network
-@item You can easily create new skins with SVG graphics and the skin editor
-@item Hot New Stuff support.  You can easily download and install new skins
-@end itemize
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:lgpl2.0+ license:fdl1.2+))))
-
-(define-public palapeli
-  (package
-    (name "palapeli")
-    (version "20.12.0")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "mirror://kde/stable/release-service/" version
-                           "/src/palapeli-" version ".tar.xz"))
-       (sha256
-        (base32 "0xxz9g4zxljlg20g88a5lkbwzzm9yg4vxnrfigk8m018cz0nqd5b"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list karchive
-           kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kcrash
-           ki18n
-           ki18n
-           kio
-           kitemviews
-           knotifications
-           kservice
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5
-           shared-mime-info))
-    (home-page "https://games.kde.org/")
-    (synopsis "Jigsaw puzzle game")
-    (description "Palapeli is a jigsaw puzzle game.  Unlike other games in
-that genre, you are not limited to aligning pieces on imaginary grids.  The
-pieces are freely moveable.  Also, Palapeli features real persistency, i.e.
-everything you do is saved on your disk immediately.
-
-Palapeli is the Finnish word for jigsaw puzzle.
-
-This package is part of the KDE games module.")
-    (license license:gpl2+)))
-
-(define-public kiriki
-  (package
-    (name "kiriki")
-    (version "20.12.0")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "mirror://kde/stable/release-service/" version
-                           "/src/kiriki-" version ".tar.xz"))
-       (sha256
-        (base32 "0milc8fl1rj4yrwdvm60ampd47dyiys1xvqi5f0g7y6mgymgyk4x"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kiconthemes
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Yahtzee dice game")
-    (description "Kiriki is an addictive and fun dice game, designed to be
-played by as many as six players.
-
-Participants have to collect points by rolling five dice for up to three times
-per single turn to make combinations with the highest score.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public kigo
-  (package
-    (name "kigo")
-    (version "20.12.0")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "mirror://kde/stable/release-service/" version
-                           "/src/kigo-" version ".tar.xz"))
-       (sha256
-        (base32 "088752yzmfsnppd27p8hld4x5s7sw5fagm08024l5ra1mlicdfz9"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kio
-           knewstuff
-           ktextwidgets
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Go board game")
-    (description "Kigo is an open-source implementation of the popular Go
-game.
-
-Go is a strategic board game for two players.  It is also known as
-igo (Japanese), weiqi or wei ch'i (Chinese) or baduk (Korean).  Go is noted
-for being rich in strategic complexity despite its simple rules.  The game is
-played by two players who alternately place black and white stones (playing
-pieces, now usually made of glass or plastic) on the vacant intersections of a
-grid of 19x19 lines (9x9 or 13x13 for easier games).
-
-You also need to install a go engine, e.g. @code{gnugo}.
-
-This package is part of the KDE games module.")
-    (license license:gpl3+)))
-
-(define-public kubrick
-  (package
-    (name "kubrick")
-    (version "20.12.0")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "mirror://kde/stable/release-service/" version
-                           "/src/kubrick-" version ".tar.xz"))
-       (sha256
-        (base32 "0h3mypwd67sss08j5vvrih5f5ss85m9kax6412y40xmsm51lz2pq"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list glu
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           ki18n
-           kio
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Game based on Rubik's Cube")
-    (description "Kubrick is a game based on the Rubik's Cube puzzle.
-
-The cube sizes range from 2x2x2 up to 6x6x6, or you can play with irregular
-\"bricks\" such as 5x3x2 or \"mats\" such as 6x4x1 or 2x2x1.  The game has a
-selection of puzzles at several levels of difficulty, as well as demos of
-pretty patterns and solution moves, or you can make up your own puzzles.  The
-game has unlimited undo, redo, save and reload capabilities.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public lskat
-  (package
-    (name "lskat")
-    (version "20.12.0")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "mirror://kde/stable/release-service/" version
-                           "/src/lskat-" version ".tar.xz"))
-       (sha256
-        (base32 "1wg9zxp64kwjxqs4qw0h7j8yhgffbmvh8j9d4dgmz45dscngnjli"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kcoreaddons
-           kcrash
-           kguiaddons
-           ki18n
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Lieutnant Skat card game")
-    (description "Lieutnant Skat (from German \"Offiziersskat\") is a fun and
-engaging card game for two players, where the second player is either live
-opponent, or a built in artificial intelligence.
-
-Lieutnant Skat is a simplified variant of the Skat card game for two players.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:lgpl2.0+ license:fdl1.2+))))
-
-(define-public kapman
-  (package
-    (name "kapman")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/kapman-" version ".tar.xz"))
-      (sha256
-       (base32 "14x3v6li4r3gzzwfd6ar9saq2rhc7yxs0sp9ygalzq8vq4d7i1kh"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Pac-Man clone")
-    (description "Kapman is a clone of the well known game Pac-Man.
-
-You must run through the maze to eat all pills without being captured by a
-ghost.  By eating an energizer, Kapman gets the ability to eat ghosts for a
-few seconds.  When a stage is cleared of pills and energizer the player is
-taken to the next stage with slightly increased game speed
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public kspaceduel
-  (package
-    (name "kspaceduel")
-    (version "20.12.0")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "mirror://kde/stable/release-service/" version
-                           "/src/kspaceduel-" version ".tar.xz"))
-       (sha256
-        (base32 "1aixh6ygif2cm1a5g32sl5y6b5x68139pzihaxq4334c6avamdai"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Two player game with shooting spaceships flying around a sun")
-    (description "KSpaceduel is a space battle game for one or two players,
-where two ships fly around a star in a struggle to be the only survivor.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public bovo
-  (package
-    (name "bovo")
-    (version "20.12.0")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "mirror://kde/stable/release-service/" version
-                           "/src/bovo-" version ".tar.xz"))
-       (sha256
-        (base32 "18qbac366m0xma3ary11q9zxz0wgnysppcl7kpypl6ic3nf61wqz"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Classic pen and paper game: five in a line")
-    (description "Bovo is a Gomoku (from Japanese 五目並べ - lit.  \"five
-points\") like game for two players, where the opponents alternate in placing
-their respective pictogram on the game board.  The winner is the first to
-complete a line of five markers.  (Also known as: Connect Five, Five in a row,
-X and O, Naughts and Crosses)
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public killbots
-  (package
-    (name "killbots")
-    (version "20.12.0")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "mirror://kde/stable/release-service/" version
-                           "/src/killbots-" version ".tar.xz"))
-       (sha256
-        (base32 "1296gww42nwnai7y6m2qpjqpyc30p7z9chfv5rv0n48jvdhva88y"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Port of the classic BSD console game robots")
-    (description "Killbots is a simple game of evading killer robots.
-
-Who created the robots and why they have been programmed to destroy, no one
-knows.  All that is known is that the robots are numerous and their sole
-objective is to destroy you.  Fortunately for you, their creator has focused
-on quantity rather than quality and as a result the robots are severely
-lacking in intelligence.  Your superior wit and a fancy teleportation device
-are your only weapons against the never-ending stream of mindless automatons.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public ksnakeduel
-  (package
-    (name "ksnakeduel")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/ksnakeduel-" version ".tar.xz"))
-      (sha256
-       (base32 "0mp6g258n3xzvgf23jnhkw10xgwqwqdzqfdc6r9jq6a6m8v77swz"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           kguiaddons
-           ki18n
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Snake race played against the computer")
-    (description "KSnakeDuel is a fast action game where you steer a snake
-which has to eat food.  While eating the snake grows.  But once a player
-collides with the other snake or the wall the game is lost.  This becomes of
-course more and more difficult the longer the snakes grow.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public kollision
-  (package
-    (name "kollision")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/kollision-" version ".tar.xz"))
-      (sha256
-       (base32 "180ybafizpwjsg80npy0l9142cjsnlyxwv9dz3bq6r8v4smn2g6b"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Simple ball dodging game")
-    (description "In Kollision you use mouse to control a small blue ball in a
-closed space environment filled with small red balls, which move about
-chaotically.  Your goal is to avoid touching any of those red balls with your
-blue one, because the moment you do the game will be over.  The longer you can
-stay in game the higher will your score be.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public knavalbattle
-  (package
-    (name "knavalbattle")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/knavalbattle-" version ".tar.xz"))
-      (sha256
-       (base32 "03rqf4avn61b0v340ymmzgp7s0axygjgxq1nlp5aaqbx70zcb4lq"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kauth
-           kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           kdnssd
-           ki18n
-           ktextwidgets
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Battleship board game with built-in game server")
-    (description "KBattleship is a Battle Ship game for KDE.
-
-Ships are placed on a board which represents the sea.  Players try to hit each
-others ships in turns without knowing where they are placed.  The first player
-to destroy all ships wins the game.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public kreversi
-  (package
-    (name "kreversi")
-    (version "20.08.3")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/kreversi-" version ".tar.xz"))
-      (sha256
-       (base32 "0d3y072q61xcik9lf0pz0c9njvarwlvf6hqv5fp5jyqaf2902pmi"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           kdeclarative
-           ki18n
-           kiconthemes
-           kio
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Old reversi board game, also known as othello")
-    (description "KReversi is a simple one player strategy game played
-against the computer.
-
-If a player's piece is captured by an opposing player, that piece is turned
-over to reveal the color of that player.  A winner is declared when one player
-has more pieces of his own color on the board and there are no more possible
-moves.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
-(define-public ksquares
-  (package
-    (name "ksquares")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/ksquares-" version ".tar.xz"))
-      (sha256
-       (base32 "0chd30byl2kww1k699vkygrxq2wdyvi84m2bimk23q96fl8h831y"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kcompletion
-           kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Dots and Boxes game")
-    (description "KSquares is an implementation of the popular paper based
-game Squares.  Two players take turns connecting dots on a grid to complete
-squares, the player with the most squares wins.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:lgpl2.0+ license:fdl1.2+))))
-
-(define-public kjumpingcube
-  (package
-    (name "kjumpingcube")
-    (version "20.12.0")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kde/stable/release-service/" version
-                          "/src/kjumpingcube-" version ".tar.xz"))
-      (sha256
-       (base32 "1mk73il4jh15z5pm3fp65hsyvmrga11c3h7w96yamy2n2bbniapq"))))
-    (build-system qt-build-system)
-    (native-inputs
-     (list extra-cmake-modules kdoctools))
-    (inputs
-     (list kconfig
-           kconfigwidgets
-           kcoreaddons
-           kcrash
-           kdbusaddons
-           ki18n
-           kio
-           kwidgetsaddons
-           kxmlgui
-           libkdegames
-           qtbase-5
-           qtdeclarative-5
-           qtsvg-5))
-    (home-page "https://games.kde.org/")
-    (synopsis "Simple tactical game for number-crunchers")
-    (description "KJumpingcube is a simple tactical game for one or two
-players, played on a grid of numbered squares.  Each turn, players compete for
-control of the board by capturing or adding to one square.
-
-This package is part of the KDE games module.")
-    (license (list license:gpl2+ license:fdl1.2+))))
-
 (define-public xmoto
   (package
     (name "xmoto")
@@ -12023,14 +10451,14 @@ get high scores.")
 (define-public burgerspace
   (package
     (name "burgerspace")
-    (version "1.9.4")
+    (version "1.9.5")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "http://perso.b2b2c.ca/~sarrazip/dev/"
                            "burgerspace-" version ".tar.gz"))
        (sha256
-        (base32 "1xb4immzmd419aa08lgkzf7ibxa6ax238zb2l5iw9nkgvzlh1v6l"))))
+        (base32 "1r2albqv2ygs58rwcldsx1mp2vy96j7k4yw5jjmvwgnxjmddq7wr"))))
     (build-system gnu-build-system)
     (native-inputs
      (list pkg-config))
@@ -12388,7 +10816,8 @@ inside the Zenith Colony.")
     (description "Provides a large set of Go-related services for X11:
 @itemize
 @item Local games with precise implementation of the Chinese and Japanese rulesets
-@item Edition and visualization of SGF files-Connection to the NNGS or IGS Go servers
+@item Edition and visualization of SGF files
+@item Connection to the NNGS or IGS Go servers
 @item Bridge to Go modem protocol, allowing to play against Go modem-capable AIs
 such as GnuGo.
 @end itemize")
@@ -12694,7 +11123,7 @@ meant to be quick and fun.")
                    (string-append "CPPFLAGS=" "-I"
                                   #$(this-package-input "sdl-union")
                                   "/include/SDL"))))
-    (synopsis "Liquid War 6 is a unique multiplayer wargame.")
+    (synopsis "Liquid War 6 is a unique multiplayer wargame")
     (description
      "Liquid War 6 is a unique multiplayer war game.  Your army is a blob of
 liquid and you have to try and eat your opponents.  Rules are very simple yet
@@ -12727,9 +11156,142 @@ original, they have been invented by Thomas Colcombet.")
 RollerCoaster Tycoon 1 and 2, graphics- and gameplay-wise.
 
 In this game, you play as a manager of a theme park, allowing you to make a
-park of your dreams.  The list of responsiblities includes managing staff,
+park of your dreams.  The list of responsibilities includes managing staff,
 finances, landscaping, and most importantly: rides.  Good managers follow the
 principle of prioritizing the guests' happiness with a well-maintained park.
 Should they go unwise, a theme park plunge into chaos with vandalizing guests
 and unsafe rides.  Which path will you take?")
     (license license:gpl2)))
+
+(define-public ultrastar-deluxe
+  ;; The last release is quite old and does not support recent ffmpeg versions.
+  (let ((commit "43484b0a10ce6aae339e19d81ae2f7b37caf6baa")
+        (revision "1"))
+    (package
+      (name "ultrastar-deluxe")
+      (version (git-version "2020.4.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/UltraStar-Deluxe/USDX.git")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "078g1rbm1ympmwq9s64v68sxvcms7rr0qid12d2wgm4r04ana47r"))
+                (patches (search-patches "ultrastar-deluxe-no-freesans.patch"))
+                (modules '((guix build utils)))
+                (snippet
+                 #~(begin
+                     ;; Remove Windows binaries.
+                     (for-each delete-file (find-files "game" "\\.dll$"))
+                     ;; Remove font blobs.
+                     (let ((font-directories
+                            (list "DejaVu" "FreeSans" "NotoSans"
+                                  "wqy-microhei")))
+                       (for-each
+                        (lambda (d) (delete-file-recursively
+                                (string-append "game/fonts/" d)))
+                        font-directories))))))
+      (build-system gnu-build-system)
+      (arguments
+        (list
+         #:tests? #f ; No tests.
+         #:phases
+         #~(modify-phases %standard-phases
+             (add-after 'unpack 'fix-configure
+               (lambda* (#:key inputs configure-flags outputs #:allow-other-keys)
+                 (define (where inputs file)
+                   (dirname (search-input-file inputs file)))
+                 ;; The configure script looks for lua$version, but we
+                 ;; provide lua-$version.
+                 (substitute* "configure.ac"
+                   (("lua\\$i") "lua-$i"))
+                 ;; fpc does not pass -lfoo to the linker, but uses its own
+                 ;; linker script, which references libs.  Pass the libraries
+                 ;; listed in that linker script, so our custom linker adds
+                 ;; a correct rpath.
+                 (substitute* "src/Makefile.in"
+                   (("linkflags\\s+:= ")
+                    (string-append
+                     "linkflags := -lpthread -lsqlite3 -lSDL2"
+                     " -lSDL2_image -ldl "
+                     " -lz -lfreetype -lportaudio -lavcodec"
+                     " -lavformat -lavutil -lswresample"
+                     " -lswscale -llua -ldl -lX11 -lportmidi"
+                     " -L" (where inputs "lib/libz.so")
+                     " -L" (where inputs "lib/libX11.so")
+                     " -L" (where inputs "lib/libportmidi.so"))))))
+             (add-after 'install 'font-paths
+               (lambda* (#:key outputs #:allow-other-keys)
+                 (substitute* (string-append
+                               (assoc-ref outputs "out")
+                               "/share/ultrastardx/fonts/fonts.ini")
+                   (("=NotoSans/") (string-append "=" #$font-google-noto
+                                                  "/share/fonts/truetype/"))
+                   (("=DejaVu/") (string-append "=" #$font-dejavu
+                                                "/share/fonts/truetype/"))))))))
+      (inputs (list ffmpeg
+                    font-dejavu
+                    font-google-noto
+                    ; Not needed, since we don’t have freesans.
+                    ;font-wqy-microhei
+                    freetype
+                    libx11
+                    lua
+                    portaudio
+                    portmidi
+                    sdl2
+                    sdl2-image
+                    sqlite
+                    zlib))
+      (native-inputs (list pkg-config fpc autoconf automake))
+      (synopsis "Karaoke game")
+      (description
+       "UltraStar Deluxe (USDX) is a karaoke game.  It allows up to six players
+to sing along with music using microphones in order to score points, depending
+on the pitch of the voice and the rhythm of singing.")
+      (home-page "https://usdx.eu/")
+      (license license:gpl2+))))
+
+(define-public steam-devices-udev-rules
+  ;; Last release from 2019-04-10
+  (let ((commit "d87ef558408c5e7a1a793d738db4c9dc2cb5f8fa")
+        (revision "0"))
+    (package
+      (name "steam-devices-udev-rules")
+      (version (git-version "1.0.0.61" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/ValveSoftware/steam-devices")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "1yqigraz9f19018ma5n2pbx7naadh9960lia3z8ayg7vz1fjdl54"))))
+      (build-system copy-build-system)
+      (arguments
+       '(#:install-plan '(("./" "lib/udev/rules.d"
+                           #:include-regexp ("rules$")))
+         #:phases (modify-phases %standard-phases
+                    (add-after 'unpack 'patch-paths
+                      (lambda* (#:key inputs #:allow-other-keys)
+                        (substitute* "60-steam-input.rules"
+                          (("/bin/sh")
+                           (search-input-file inputs "/bin/sh"))
+                          (("udevadm")
+                           (search-input-file inputs "/bin/udevadm"))))))))
+      (inputs (list eudev))
+      (home-page "https://github.com/ValveSoftware/steam-devices")
+      (synopsis "udev rules for game controllers and virtual reality devices")
+      (description
+       "This package provides a set of udev rules for game controllers and
+virtual reality devices.")
+      (license license:expat))))
+
+;;;
+;;; Avoid adding new packages to the end of this file. To reduce the chances
+;;; of a merge conflict, place them above by existing packages with similar
+;;; functionality or similar names.
+;;;

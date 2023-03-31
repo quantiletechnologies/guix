@@ -14,7 +14,7 @@
 ;;; Copyright © 2020 Jakub Kądziołka <kuba@kadziolka.net>
 ;;; Copyright © 2020, 2021 Brice Waegeneire <brice@waegenei.re>
 ;;; Copyright © 2020 Mathieu Othacehe <m.othacehe@gmail.com>
-;;; Copyright © 2020, 2021 Marius Bakke <mbakke@fastmail.com>
+;;; Copyright © 2020, 2021, 2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2020, 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2020 Brett Gilio <brettg@gnu.org>
 ;;; Copyright © 2021 Leo Famulari <leo@famulari.name>
@@ -61,7 +61,9 @@
   #:use-module (gnu packages cluster)
   #:use-module (gnu packages cmake)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages containers)
   #:use-module (gnu packages cross-base)
+  #:use-module (gnu packages cryptsetup)
   #:use-module (gnu packages curl)
   #:use-module (gnu packages cyrus-sasl)
   #:use-module (gnu packages debian)
@@ -158,7 +160,7 @@
 (define-public qemu
   (package
     (name "qemu")
-    (version "6.2.0")
+    (version "7.1.0")
     (source
      (origin
        (method url-fetch)
@@ -166,168 +168,175 @@
                            version ".tar.xz"))
        (sha256
         (base32
-         "0iavlsy9hin8k38230j8lfmyipx3965zljls1dp34mmc8n75vqb8"))
+         "1rmvrgqjhrvcmchnz170dxvrrf14n6nm39y8ivrprmfydd9lwqx0"))
        (patches (search-patches "qemu-build-info-manual.patch"
+                                "qemu-disable-aarch64-migration-test.patch"
                                 "qemu-fix-agent-paths.patch"))
        (modules '((guix build utils)))
        (snippet
         '(begin
-           ;; Delete the bundled meson copy.
-           (delete-file-recursively "meson")))))
+           ;; Delete bundled code that we provide externally.
+           ;; TODO: Unbundle SeaBIOS!
+           (for-each delete-file-recursively
+                     '("dtc" "meson" "slirp"))))))
     (outputs '("out" "static" "doc"))   ;5.3 MiB of HTML docs
     (build-system gnu-build-system)
     (arguments
-     ;; FIXME: Disable tests on i686 to work around
-     ;; <https://bugs.gnu.org/40527>.
-     `(#:tests? ,(or (%current-target-system)
-                     (not (string=? "i686-linux" (%current-system))))
-       #:configure-flags
-       (let ((gcc (search-input-file %build-inputs "/bin/gcc"))
-             (out (assoc-ref %outputs "out")))
-         (list (string-append "--cc=" gcc)
-               ;; Some architectures insist on using HOST_CC.
-               (string-append "--host-cc=" gcc)
-               (string-append "--prefix=" out)
-               "--sysconfdir=/etc"
-               (string-append "--smbd=" out "/libexec/samba-wrapper")
-               "--disable-debug-info"   ;for space considerations
-               ;; The binaries need to be linked against -lrt.
-               (string-append "--extra-ldflags=-lrt")))
-       ;; Make build and test output verbose to facilitate investigation upon failure.
-       #:make-flags '("V=1")
-       #:modules ((srfi srfi-1)
+     (list
+      ;; FIXME: Disable tests on i686 to work around
+      ;; <https://bugs.gnu.org/40527>.
+      #:tests? (or (%current-target-system)
+                   (not (string=? "i686-linux" (%current-system))))
+      #:configure-flags
+      #~(let ((gcc (search-input-file %build-inputs "/bin/gcc"))
+              (out #$output))
+          (list (string-append "--cc=" gcc)
+                ;; Some architectures insist on using HOST_CC.
+                (string-append "--host-cc=" gcc)
+                (string-append "--prefix=" out)
+                "--sysconfdir=/etc"
+                "--enable-slirp=system"
+                "--enable-fdt=system"
+                (string-append "--smbd=" out "/libexec/samba-wrapper")
+                "--disable-debug-info"  ;for space considerations
+                ;; The binaries need to be linked against -lrt.
+                (string-append "--extra-ldflags=-lrt")))
+      ;; Make build and test output verbose to facilitate investigation upon failure.
+      #:make-flags #~'("V=1")
+      #:modules `((srfi srfi-1)
                   (srfi srfi-26)
                   (ice-9 ftw)
                   (ice-9 match)
                   ,@%gnu-build-system-modules)
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'extend-test-time-outs
-           (lambda _
-             ;; These tests can time out on heavily-loaded and/or slow storage.
-             (substitute* (cons* "tests/qemu-iotests/common.qemu"
-                                 (find-files "tests/qemu-iotests" "^[0-9]+$"))
-               (("QEMU_COMM_TIMEOUT=[0-9]+" match)
-                (string-append match "9")))))
-         (add-after 'unpack 'disable-unusable-tests
-           (lambda _
-             (substitute* "tests/unit/meson.build"
-               ;; Comment out the test-qga test, which needs /sys and
-               ;; fails within the build environment.
-               (("tests.*test-qga.*$" all)
-                (string-append "# " all))
-               ;; Comment out the test-char test, which needs networking and
-               ;; fails within the build environment.
-               ((".*'test-char':.*" all)
-                (string-append "# " all)))))
-         ,@(if (target-riscv64?)
-             `((add-after 'unpack 'disable-some-tests
-                 (lambda _
-                   ;; qemu.qmp.QMPConnectError: Unexpected empty reply from server
-                   (delete-file "tests/qemu-iotests/040")
-                   (delete-file "tests/qemu-iotests/041")
-                   (delete-file "tests/qemu-iotests/256")
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'extend-test-time-outs
+            (lambda _
+              ;; These tests can time out on heavily-loaded and/or slow storage.
+              (substitute* (cons* "tests/qemu-iotests/common.qemu"
+                                  (find-files "tests/qemu-iotests" "^[0-9]+$"))
+                (("QEMU_COMM_TIMEOUT=[0-9]+" match)
+                 (string-append match "9")))))
+          (add-after 'unpack 'disable-unusable-tests
+            (lambda _
+              (substitute* "tests/unit/meson.build"
+                ;; Comment out the test-qga test, which needs /sys and
+                ;; fails within the build environment.
+                (("tests.*test-qga.*$" all)
+                 (string-append "# " all))
+                ;; Comment out the test-char test, which needs networking and
+                ;; fails within the build environment.
+                ((".*'test-char':.*" all)
+                 (string-append "# " all)))))
+          #$@(if (target-riscv64?)
+                 '((add-after 'unpack 'disable-some-tests
+                     (lambda _
+                       ;; qemu.qmp.QMPConnectError:
+                       ;; Unexpected empty reply from server
+                       (delete-file "tests/qemu-iotests/040")
+                       (delete-file "tests/qemu-iotests/041")
+                       (delete-file "tests/qemu-iotests/256")
 
-                   ;; No 'PCI' bus found for device 'virtio-scsi-pci'
-                   (delete-file "tests/qemu-iotests/127")
-                   (delete-file "tests/qemu-iotests/267"))))
-             '())
-         (add-after 'patch-source-shebangs 'patch-embedded-shebangs
-           (lambda* (#:key native-inputs inputs #:allow-other-keys)
-             ;; Ensure the executables created by these source files reference
-             ;; /bin/sh from the store so they work inside the build container.
-             (substitute* '("block/cloop.c" "migration/exec.c"
-                            "net/tap.c" "tests/qtest/libqtest.c"
-                            "tests/qtest/vhost-user-blk-test.c")
-               (("/bin/sh") (search-input-file inputs "/bin/sh")))
-             (substitute* "tests/qemu-iotests/testenv.py"
-               (("#!/usr/bin/env python3")
-                (string-append "#!" (search-input-file (or native-inputs inputs)
-                                                       "/bin/python3"))))))
-         (add-before 'configure 'fix-optionrom-makefile
-           (lambda _
-             ;; Work around the inability of the rules defined in this
-             ;; Makefile to locate the firmware files (e.g.: No rule to make
-             ;; target 'multiboot.bin') by extending the VPATH.
-             (substitute* "pc-bios/optionrom/Makefile"
-               (("^VPATH = \\$\\(SRC_DIR\\)")
-                "VPATH = $(SRC_DIR):$(TOPSRC_DIR)/pc-bios"))))
-         ;; XXX ./configure is being re-run at beginning of build phase...
-         (replace 'configure
-           (lambda* (#:key inputs outputs configure-flags #:allow-other-keys)
-             ;; The `configure' script doesn't understand some of the
-             ;; GNU options.  Thus, add a new phase that's compatible.
-             (let ((out (assoc-ref outputs "out")))
-               (setenv "SHELL" (which "bash"))
-               ;; Ensure config.status gets the correct shebang off the bat.
-               ;; The build system gets confused if we change it later and
-               ;; attempts to re-run the whole configuration, and fails.
-               (substitute* "configure"
-                 (("#!/bin/sh")
-                  (string-append "#!" (which "sh"))))
-               (mkdir-p "b/qemu")
-               (chdir "b/qemu")
-               (apply invoke "../../configure" configure-flags))))
-         ;; Configure, build and install QEMU user-emulation static binaries.
-         (add-after 'configure 'configure-user-static
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let* ((gcc (search-input-file inputs "/bin/gcc"))
-                    (static (assoc-ref outputs "static"))
-                    ;; This is the common set of configure flags; it is
-                    ;; duplicated here to isolate this phase from manipulations
-                    ;; to the #:configure-flags build argument, as done in
-                    ;; derived packages such as qemu-minimal.
-                    (configure-flags (list (string-append "--cc=" gcc)
-                                           (string-append "--host-cc=" gcc)
-                                           "--sysconfdir=/etc"
-                                           "--disable-debug-info")))
-               (mkdir-p "../user-static")
-               (with-directory-excursion "../user-static"
-                 (apply invoke "../../configure"
-                        "--static"
-                        "--disable-docs" ;already built
-                        "--disable-system"
-                        "--enable-linux-user"
-                        (string-append "--prefix=" static)
-                        configure-flags)))))
-         (add-after 'build 'build-user-static
-           (lambda args
-             (with-directory-excursion "../user-static"
-               (apply (assoc-ref %standard-phases 'build) args))))
-         (add-after 'install 'install-user-static
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((static (assoc-ref outputs "static"))
-                    (bin (string-append static "/bin")))
-               (with-directory-excursion "../user-static"
-                 (for-each (cut install-file <> bin)
-                           (append-map (cut find-files <> "^qemu-" #:stat stat)
-                                       (scandir "."
-                                                (cut string-suffix?
-                                                     "-linux-user" <>))))))))
-         ;; Create a wrapper for Samba. This allows QEMU to use Samba without
-         ;; pulling it in as an input. Note that you need to explicitly install
-         ;; Samba in your Guix profile for Samba support.
-         (add-after 'install 'create-samba-wrapper
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let* ((out    (assoc-ref outputs "out"))
-                    (libexec (string-append out "/libexec")))
-               (call-with-output-file "samba-wrapper"
-                 (lambda (port)
-                   (format port "#!/bin/sh
+                       ;; No 'PCI' bus found for device 'virtio-scsi-pci'
+                       (delete-file "tests/qemu-iotests/127")
+                       (delete-file "tests/qemu-iotests/267"))))
+                 '())
+          (add-after 'patch-source-shebangs 'patch-embedded-shebangs
+            (lambda* (#:key native-inputs inputs #:allow-other-keys)
+              ;; Ensure the executables created by these source files reference
+              ;; /bin/sh from the store so they work inside the build container.
+              (substitute* '("block/cloop.c" "migration/exec.c"
+                             "net/tap.c" "tests/qtest/libqtest.c"
+                             "tests/qtest/vhost-user-blk-test.c")
+                (("/bin/sh") (search-input-file inputs "/bin/sh")))
+              (substitute* "tests/qemu-iotests/testenv.py"
+                (("#!/usr/bin/env python3")
+                 (string-append "#!" (search-input-file (or native-inputs inputs)
+                                                        "/bin/python3"))))))
+          (add-before 'configure 'fix-optionrom-makefile
+            (lambda _
+              ;; Work around the inability of the rules defined in this
+              ;; Makefile to locate the firmware files (e.g.: No rule to make
+              ;; target 'multiboot.bin') by extending the VPATH.
+              (substitute* "pc-bios/optionrom/Makefile"
+                (("^VPATH = \\$\\(SRC_DIR\\)")
+                 "VPATH = $(SRC_DIR):$(TOPSRC_DIR)/pc-bios"))))
+          ;; XXX ./configure is being re-run at beginning of build phase...
+          (replace 'configure
+            (lambda* (#:key inputs configure-flags #:allow-other-keys)
+              ;; The `configure' script doesn't understand some of the
+              ;; GNU options.  Thus, add a new phase that's compatible.
+              (setenv "SHELL" (which "bash"))
+              ;; Ensure config.status gets the correct shebang off the bat.
+              ;; The build system gets confused if we change it later and
+              ;; attempts to re-run the whole configuration, and fails.
+              (substitute* "configure"
+                (("#!/bin/sh")
+                 (string-append "#!" (which "sh"))))
+              (mkdir-p "b/qemu")
+              (chdir "b/qemu")
+              (apply invoke "../../configure" configure-flags)))
+          ;; Configure, build and install QEMU user-emulation static binaries.
+          (add-after 'configure 'configure-user-static
+            (lambda* (#:key inputs outputs #:allow-other-keys)
+              (let* ((static (assoc-ref outputs "static"))
+                     (gcc (search-input-file inputs "/bin/gcc"))
+                     ;; This is the common set of configure flags; it is
+                     ;; duplicated here to isolate this phase from manipulations
+                     ;; to the #:configure-flags build argument, as done in
+                     ;; derived packages such as qemu-minimal.
+                     (configure-flags (list (string-append "--cc=" gcc)
+                                            (string-append "--host-cc=" gcc)
+                                            "--sysconfdir=/etc"
+                                            "--disable-debug-info")))
+              (mkdir-p "../user-static")
+              (with-directory-excursion "../user-static"
+                (apply invoke "../../configure"
+                       "--static"
+                       "--disable-docs" ;already built
+                       "--disable-system"
+                       "--enable-linux-user"
+                       (string-append "--prefix=" static)
+                       configure-flags)))))
+          (add-after 'build 'build-user-static
+            (lambda args
+              (with-directory-excursion "../user-static"
+                (apply (assoc-ref %standard-phases 'build) args))))
+          (add-after 'install 'install-user-static
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let* ((static (assoc-ref outputs "static"))
+                     (bin (string-append static "/bin")))
+                (with-directory-excursion "../user-static"
+                  (for-each (cut install-file <> bin)
+                            (append-map (cut find-files <> "^qemu-" #:stat stat)
+                                        (scandir "."
+                                                 (cut string-suffix?
+                                                      "-linux-user" <>))))))))
+          ;; Create a wrapper for Samba. This allows QEMU to use Samba without
+          ;; pulling it in as an input. Note that you need to explicitly install
+          ;; Samba in your Guix profile for Samba support.
+          (add-after 'install 'create-samba-wrapper
+            (lambda* (#:key inputs #:allow-other-keys)
+              (let ((libexec (string-append #$output "/libexec")))
+                (call-with-output-file "samba-wrapper"
+                  (lambda (port)
+                    (format port "#!/bin/sh
 exec smbd $@")))
-               (chmod "samba-wrapper" #o755)
-               (install-file "samba-wrapper" libexec))))
-         (add-after 'install 'move-html-doc
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (doc (assoc-ref outputs "doc"))
-                    (qemu-doc (string-append doc "/share/doc/qemu-" ,version)))
-               (mkdir-p qemu-doc)
-               (rename-file (string-append out "/share/doc/qemu")
-                            (string-append qemu-doc "/html"))))))))
+                (chmod "samba-wrapper" #o755)
+                (install-file "samba-wrapper" libexec))))
+          (add-after 'install 'move-html-doc
+            (lambda* (#:key inputs outputs #:allow-other-keys)
+              (let* ((out #$output)
+                     (doc #$output:doc)
+                     (qemu-doc (string-append doc "/share/doc/qemu-"
+                                              #$(package-version this-package))))
+                (mkdir-p qemu-doc)
+                (rename-file (string-append out "/share/doc/qemu")
+                             (string-append qemu-doc "/html"))))))))
     (inputs
      (list alsa-lib
            bash-minimal
+           dtc
            glib
            gtk+
            libaio
@@ -338,6 +347,7 @@ exec smbd $@")))
            libjpeg-turbo
            libpng
            libseccomp
+           libslirp
            liburing
            libusb                       ;USB pass-through support
            mesa
@@ -405,7 +415,7 @@ server and embedded PowerPC, and S390 guests.")
      "Machine emulator and virtualizer (without GUI) for the host architecture")
     (arguments
      (substitute-keyword-arguments (package-arguments qemu)
-       ((#:configure-flags configure-flags '(list))
+       ((#:configure-flags configure-flags #~'())
         ;; Restrict to the host's architecture.
         (let* ((system (or (%current-target-system)
                            (%current-system)))
@@ -436,12 +446,12 @@ server and embedded PowerPC, and S390 guests.")
                    "--target-list=riscv32-softmmu,riscv64-softmmu")
                   (else       ; An empty list actually builds all the targets.
                    '()))))
-          `(cons ,target-list-arg ,configure-flags)))
+          #~(cons #$target-list-arg #$configure-flags)))
        ((#:phases phases)
-        `(modify-phases ,phases
-           (delete 'configure-user-static)
-           (delete 'build-user-static)
-           (delete 'install-user-static)))))
+        #~(modify-phases #$phases
+            (delete 'configure-user-static)
+            (delete 'build-user-static)
+            (delete 'install-user-static)))))
 
     ;; Remove dependencies on optional libraries, notably GUI libraries.
     (native-inputs (filter (lambda (input)
@@ -892,7 +902,7 @@ commodity hardware.")
 (define-public ganeti-instance-guix
   (package
     (name "ganeti-instance-guix")
-    (version "0.6.1")
+    (version "0.8")
     (home-page "https://github.com/mbakke/ganeti-instance-guix")
     (source (origin
               (method git-fetch)
@@ -900,14 +910,22 @@ commodity hardware.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "18h8hdd38h1l89si8122v3ylzvvirs8hiypayklk1nr2wnfgbvff"))))
+                "0sw9ks3j3y33apdcghjxxjf09ld592z9skaa7bgn9d2lhplzjihr"))))
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags '("--sysconfdir=/etc" "--localstatedir=/var")))
     (native-inputs
-     (list autoconf automake))
+     (list autoconf automake jq))
     (inputs
-     (list util-linux qemu-minimal))
+     (list btrfs-progs
+           cryptsetup
+           e2fsprogs
+           f2fs-tools
+           lvm2
+           multipath-tools
+           util-linux
+           parted
+           xfsprogs))
     (synopsis "Guix OS integration for Ganeti")
     (description
      "This package provides a guest OS definition for Ganeti that uses
@@ -1311,9 +1329,16 @@ pretty simple, REST API.")
               (substitute* "scripts/meson-install-dirs.py"
                 (("destdir = .*")
                  "destdir = '/tmp'"))))
+          (add-after 'unpack 'use-absolute-dnsmasq
+            (lambda* (#:key inputs #:allow-other-keys)
+              (let ((dnsmasq (search-input-file inputs "sbin/dnsmasq")))
+                (substitute* "src/util/virdnsmasq.c"
+                  (("#define DNSMASQ \"dnsmasq\"")
+                   (string-append "#define DNSMASQ \"" dnsmasq "\""))))))
           (add-before 'configure 'disable-broken-tests
             (lambda _
               (let ((tests (list "commandtest"         ; hangs idly
+                                 "networkxml2conftest" ; fails with absolute dnsmasq
                                  "qemuxml2argvtest"    ; fails
                                  "virnetsockettest"))) ; tries to network
                 (substitute* "tests/meson.build"
@@ -1428,7 +1453,7 @@ virtualization library.")
 (define-public virt-manager
   (package
     (name "virt-manager")
-    (version "3.2.0")
+    (version "4.1.0")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://virt-manager.org/download/sources"
@@ -1436,7 +1461,7 @@ virtualization library.")
                                   version ".tar.gz"))
               (sha256
                (base32
-                "11kvpzcmyir91qz0dsnk7748jbb4wr8mrc744w117qc91pcy6vrb"))))
+                "18lhlnd3gmyzhbnjc16gdyzhjcd33prlxnca4xlidiidngbq21lm"))))
     (build-system python-build-system)
     (arguments
      `(#:use-setuptools? #f          ; uses custom distutils 'install' command
@@ -1502,7 +1527,7 @@ virtualization library.")
      (list dconf
            gtk+
            gtk-vnc
-           gtksourceview
+           gtksourceview-4
            libvirt
            libvirt-glib
            libosinfo
@@ -1543,7 +1568,7 @@ domains, their live performance and resource utilization statistics.")
 (define-public criu
   (package
     (name "criu")
-    (version "3.17")
+    (version "3.17.1")
     (source
      (origin
        (method git-fetch)
@@ -1552,7 +1577,7 @@ domains, their live performance and resource utilization statistics.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1qql1xp2zkkd7z50vp0nylx3rqrp8xa3c6x25c886d5i1j9pak5x"))))
+        (base32 "0ff3xfcf0wfz02fc0qbj56mci1a0xdl8jzaihaw6qyjvgrsiq7fh"))))
     (build-system gnu-build-system)
     (arguments
      `(#:test-target "test"

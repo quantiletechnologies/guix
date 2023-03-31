@@ -24,6 +24,7 @@
 ;;; Copyright © 2021 Justin Veilleux <terramorpha@cock.li>
 ;;; Copyright © 2014, 2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Disseminate Dissent <disseminatedissent@protonmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -45,6 +46,7 @@
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
+  #:use-module (gnu packages build-tools)
   #:use-module (gnu packages c)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
@@ -266,6 +268,7 @@ tmpfs/ramfs filesystems.")
            perl
            python-wrapper
            util-linux))
+    (outputs '("out" "debug"))
     (home-page "https://www.gnu.org/software/parted/")
     (synopsis "Disk partition editor")
     (description
@@ -572,18 +575,18 @@ and can dramatically shorten the lifespan of the drive if left unchecked.")
 (define-public gparted
   (package
     (name "gparted")
-    (version "1.3.1")
+    (version "1.4.0")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://sourceforge/gparted/gparted/gparted-"
                            version "/gparted-" version ".tar.gz"))
        (sha256
-        (base32 "02g1s6hrhnias7kj241l0f72kllfhq6338mk2dmzjpmifinjxvjy"))))
+        (base32 "1gl7g1lg72s63a9xlc4kcc6ksq6r7h8k9a6456xbxzak5rwklag5"))))
     (build-system glib-or-gtk-build-system)
     (arguments
-      ;; Tests require access to paths outside the build container, such
-      ;; as '/dev/disk/by-id'
+      ;; Tests require access to files outside the build container, such
+      ;; as ‘/dev/disk/by-id/’.
      `(#:tests? #f))
     (inputs
      (list `(,util-linux "lib") parted glib gtkmm-3 libxml2))
@@ -832,6 +835,46 @@ provides a minimalistic and nice curses interface with a view on the directory
 hierarchy.  It ships with @code{rifle}, a file launcher that is good at
 automatically finding out which program to use for what file type.")
     (license license:gpl3)))
+
+(define-public fff
+  (package
+   (name "fff")
+   (version "2.2")
+   (source (origin
+            (method git-fetch)
+            (uri (git-reference
+                  (url "https://github.com/dylanaraps/fff")
+                  (commit version)))
+            (file-name (git-file-name name version))
+            (sha256
+             (base32
+              "14ymdw6l6phnil0xf1frd5kgznaiwppcic0v4hb61s1zpf4wrshg"))))
+   (build-system gnu-build-system)
+   (inputs
+    (list bash
+          file))
+   (arguments
+    (list
+     #:tests? #f                       ; no tests
+     #:make-flags
+     #~(list
+        (string-append "PREFIX=" #$output))
+     #:phases
+     #~(modify-phases %standard-phases
+         (add-after 'unpack 'refer-to-inputs
+           (lambda* (#:key inputs #:allow-other-keys)
+             (let ((file (assoc-ref inputs "file")))
+               (substitute* "fff"
+                 (("\\bfile [-\"]" match)
+                  (string-append file "/bin/" match))))))
+         (delete 'configure))))         ; no configure script
+   (home-page "https://github.com/dylanaraps/fff")
+   (synopsis "Simple file manager written in bash")
+   (description
+    "@command{fff} (fast file-manager) is a simple, blazing fast and minimal
+file manager for Linux, written in bash.  It only requires bash and coreutils,
+and its highly optimized now for efficient performance.")
+   (license license:expat)))
 
 (define-public volume-key
   (package
@@ -1453,3 +1496,51 @@ wrapper for disk usage querying and visualisation.")
 gone and to help you to clean it up.")
     (home-page "https://github.com/shundhammer/qdirstat")
     (license license:gpl2)))
+
+(define-public wipe
+  (package
+    (name "wipe")
+    (version "2.3.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://sourceforge/wipe/wipe/" version
+                                  "/wipe-" version ".tar.bz2"))
+              (sha256
+               (base32
+                "180snqvh6k6il6prb19fncflf2jcvkihlb4w84sbndcv1wvicfa6"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:tests? #f                       ;no tests
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'patch-makefile
+            (lambda _
+              (substitute* "Makefile.in"
+                ;; The Makefile.in uses install -o root, but during the
+                ;; build there is no root user, so if we leave that in,
+                ;; the build fails with the following error:
+                ;; /gnu/[...]/install: invalid user ‘root’
+                (("-o root") "")
+                ;; It's up to the distribution to strip the binaries or
+                ;; not.
+                (("\\$\\(INSTALL_BIN\\) -s ")
+                 "$(INSTALL_BIN) "))))
+          (add-after 'unpack 'force-autotools-bootstrap
+            (lambda _
+              ;; Rebuild the build system scripts, as the ones in bundles are
+              ;; very old and do not support all the options used by Guix.
+              (delete-file "configure"))))))
+    (native-inputs (list autoconf automake libtool))
+    (home-page "https://wipe.sourceforge.net")
+    (synopsis "Secure file/block device wiping utility")
+    (description
+     "Wipe can erase files and block devices securely.  To work properly it
+relies on several assumptions like having the block device write the correct
+sectors, etc.  For files it also doesn't work on log-structured file systems
+such as F2FS, JFFS, LogFS, etc.  You should @emph{not} trust @command{wipe} to
+work as advertised until you have manually verified that all its assumption
+hold true on your system.  To overwrite data it uses the Mersenne Twister
+pseudo-random number generator (PRNG) that is seeded with @file{/dev/urandom}
+or, if unavailable, @file{/dev/random}.")
+    (license license:gpl2+)))

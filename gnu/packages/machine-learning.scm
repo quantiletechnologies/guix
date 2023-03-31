@@ -45,6 +45,7 @@
   #:use-module (guix build-system ocaml)
   #:use-module (guix build-system python)
   #:use-module (guix build-system r)
+  #:use-module (guix build-system trivial)
   #:use-module (guix git-download)
   #:use-module (gnu packages)
   #:use-module (gnu packages adns)
@@ -103,6 +104,7 @@
   #:use-module (gnu packages video)
   #:use-module (gnu packages web)
   #:use-module (gnu packages xml)
+  #:use-module (gnu packages xdisorg)
   #:use-module (gnu packages xorg)
   #:use-module (ice-9 match))
 
@@ -295,19 +297,36 @@ training, HMM clustering, HMM mixtures.")
 (define-public guile-aiscm
   (package
     (name "guile-aiscm")
-    (version "0.23.1")
+    (version "0.24.2")
     (source (origin
               (method git-fetch)
               (uri (git-reference
                     (url "https://github.com/wedesoft/aiscm")
-                    (commit "c78b91edb7c17c6fbf3b294452f44e91d75e3c67")))
+                    (commit "2e16e38391bf1638f1dd9a1cf4b25a25f6626078")))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "09rdbcr8dinzijyx9h940ann91yjlbg0fangx365llhvy354n840"))))
+                "1gwqpzl6irpaszkpxaf5wliwq19280632hlgxs3ikjkfg8mkqql0"))))
     (build-system gnu-build-system)
     (arguments
      (list
+      #:configure-flags
+      #~(list (string-append "OPENCV_CFLAGS=-I" #$(this-package-input "opencv")
+                             "/include/opencv4")
+              (let ((modules
+                     (list "aruco" "barcode" "bgsegm" "bioinspired"
+                           "calib3d" "ccalib" "core" "datasets" "dnn"
+                           "dnn_objdetect" "dnn_superres" "dpm" "face"
+                           "features2d" "flann" "freetype" "fuzzy" "hdf"
+                           "hfs" "highgui" "img_hash" "imgcodecs" "imgproc"
+                           "intensity_transform" "line_descriptor" "mcc"
+                           "ml" "objdetect" "optflow" "phase_unwrapping"
+                           "photo" "plot" "quality" "rapid" "reg" "rgbd"
+                           "saliency" "shape" "stereo" "stitching"
+                           "structured_light" "superres" "surface_matching"
+                           "text" "tracking" "video" "videoio" "videostab"
+                           "wechat_qrcode" "ximgproc" "xobjdetect" "xphoto")))
+                (format #false "OPENCV_LIBS=~{-lopencv_~a~^ ~}" modules)))
       #:make-flags
       #~(list (string-append "GUILE_CACHE=" #$output "/lib/guile/3.0/site-ccache")
               (string-append "GUILE_EXT=" #$output "/lib/guile/3.0/extensions")
@@ -318,10 +337,23 @@ training, HMM clustering, HMM mixtures.")
            (lambda _
              (substitute* "doc/Makefile.am"
                (("\\$\\(DATE\\)") "1970-01-01"))))
+         (add-after 'unpack 'find-clearsilver
+           (lambda* (#:key inputs #:allow-other-keys)
+             (substitute* "configure.ac"
+               (("/usr/local/include/ClearSilver")
+                (string-append (assoc-ref inputs "clearsilver")
+                               "/include/ClearSilver")))
+             (substitute* "aiscm/Makefile.am"
+               (("-lneo_utl" m)
+                (string-append m " -lstreamhtmlparser")))
+             (setenv "C_INCLUDE_PATH"
+                     (string-append (assoc-ref inputs "clearsilver")
+                                    "/include/ClearSilver:"
+                                    (or (getenv "C_INCLUDE_PATH") "")))))
          (add-after 'unpack 'use-llvm-config
            (lambda _
              (substitute* "m4/ax_llvmc.m4"
-               (("llvm-config-13") "llvm-config")
+               (("llvm-config-11") "llvm-config")
                ;; For some reason this library is not on the link list.
                (("(LLVM_LIBS=\"\\$\\(\\$ac_llvm_config_path --libs \\$1\\))\"" _ m)
                 (string-append m " -lLLVMMCJIT\"")))
@@ -329,10 +361,17 @@ training, HMM clustering, HMM mixtures.")
              ;; Because of this message:
              ;; symbol lookup error: ./.libs/libguile-aiscm-core.so: undefined symbol: LLVMInitializeX86TargetInfo
              ;; This probably needs to differ when building on architectures
-             ;; other than x86_64p
+             ;; other than x86_64.
              (substitute* "aiscm/Makefile.am"
                (("LLVM_LIBS\\)") "LLVM_LIBS) \
 -lLLVMX86AsmParser -lLLVMX86CodeGen -lLLVMX86Desc -lLLVMX86Info"))))
+         ;; This test fails because our version of tensorflow is too old
+         ;; to provide tf-string-length.
+         (add-after 'unpack 'disable-broken-test
+           (lambda _
+             (substitute* "tests/test_tensorflow.scm"
+               (("\\(test-eqv \"determine string length" m)
+                (string-append "#;" m)))))
          ;; Use Clang instead of GCC.
          (add-before 'configure 'prepare-build-environment
            (lambda _
@@ -341,10 +380,12 @@ training, HMM clustering, HMM mixtures.")
              (setenv "CC" "clang")
              (setenv "CXX" "clang++"))))))
     (inputs
-     (list ffmpeg
+     (list clearsilver
+           ffmpeg-4
            freeglut
            guile-3.0
            imagemagick
+           libgc
            libjpeg-turbo
            libomp
            libxi
@@ -354,12 +395,15 @@ training, HMM clustering, HMM mixtures.")
            libxv
            mesa
            mjpegtools
+           opencv
            pandoc
-           pulseaudio))
+           pulseaudio
+           tensorflow))
     (native-inputs
-     (list clang-13
-           llvm-13
+     (list clang-11
+           llvm-11
            pkg-config
+           protobuf-c-for-aiscm
            autoconf
            automake
            gettext-minimal
@@ -372,68 +416,7 @@ Performance is achieved by using the LLVM JIT compiler.")
     (license license:gpl3+)))
 
 (define-public guile-aiscm-next
-  (let ((commit "b17ed538c303badc419a7c358d91f266d2a8c354")
-        (revision "1"))
-    (package
-      (inherit guile-aiscm)
-      (name "guile-aiscm-next")
-      (version (git-version "0.23.1" revision commit))
-      (source (origin
-                (method git-fetch)
-                (uri (git-reference
-                      (url "https://github.com/wedesoft/aiscm")
-                      (commit commit)))
-                (file-name (git-file-name name version))
-                (sha256
-                 (base32
-                  "0px7r7lfskbp1prdrfrcvrsc4wjrk3ahkigsw4pqvny6zs7jnvc0"))))
-      (arguments
-       (substitute-keyword-arguments (package-arguments guile-aiscm)
-         ((#:configure-flags flags '())
-          #~(list (string-append "OPENCV_CFLAGS=-I" #$(this-package-input "opencv")
-                                 "/include/opencv4")
-                  (let ((modules
-                         (list "aruco" "barcode" "bgsegm" "bioinspired"
-                               "calib3d" "ccalib" "core" "datasets" "dnn"
-                               "dnn_objdetect" "dnn_superres" "dpm" "face"
-                               "features2d" "flann" "freetype" "fuzzy" "hdf"
-                               "hfs" "highgui" "img_hash" "imgcodecs" "imgproc"
-                               "intensity_transform" "line_descriptor" "mcc"
-                               "ml" "objdetect" "optflow" "phase_unwrapping"
-                               "photo" "plot" "quality" "rapid" "reg" "rgbd"
-                               "saliency" "shape" "stereo" "stitching"
-                               "structured_light" "superres" "surface_matching"
-                               "text" "tracking" "video" "videoio" "videostab"
-                               "wechat_qrcode" "ximgproc" "xobjdetect" "xphoto")))
-                    (format #false "OPENCV_LIBS=~{-lopencv_~a~^ ~}" modules))))
-         ((#:phases phases '%standard-phases)
-          `(modify-phases ,phases
-             (add-after 'unpack 'find-clearsilver
-               (lambda* (#:key inputs #:allow-other-keys)
-                 (substitute* "configure.ac"
-                   (("/usr/local/include/ClearSilver")
-                    (string-append (assoc-ref inputs "clearsilver")
-                                   "/include/ClearSilver")))
-                 (substitute* "aiscm/Makefile.am"
-                   (("-lneo_utl" m)
-                    (string-append m " -lstreamhtmlparser")))
-                 (setenv "C_INCLUDE_PATH"
-                         (string-append (assoc-ref inputs "clearsilver")
-                                        "/include/ClearSilver:"
-                                        (or (getenv "C_INCLUDE_PATH") "")))))
-             ;; This test fails because our version of tensorflow is too old
-             ;; to provide tf-string-length.
-             (add-after 'unpack 'disable-broken-test
-               (lambda _
-                 (substitute* "tests/test_tensorflow.scm"
-                   (("\\(test-eqv \"determine string length" m)
-                    (string-append "#;" m)))))))))
-      (inputs
-       (modify-inputs (package-inputs guile-aiscm)
-         (append clearsilver opencv tensorflow libgc)))
-      (native-inputs
-       (modify-inputs (package-native-inputs guile-aiscm)
-         (append protobuf-c))))))
+  (deprecated-package "guile-aiscm-next" guile-aiscm))
 
 (define-public mcl
   (package
@@ -527,6 +510,7 @@ algorithm.")
        (uri (string-append
              "https://www.imbs.uni-luebeck.de/fileadmin/files/Software"
              "/randomjungle/randomjungle-" version ".tar_.gz"))
+       (file-name (string-append name "-" version ".tar.gz"))
        (patches (search-patches "randomjungle-disable-static-build.patch"))
        (sha256
         (base32
@@ -552,8 +536,7 @@ algorithm.")
     (inputs
      (list boost gsl libxml2 zlib))
     (native-inputs
-     `(("gfortran" ,gfortran)
-       ("gfortran:lib" ,gfortran "lib")))
+     (list gfortran-7 (list gfortran-7 "lib")))
     ;; Non-portable assembly instructions are used so building fails on
     ;; platforms other than x86_64 or i686.
     (supported-systems '("x86_64-linux" "i686-linux"))
@@ -601,6 +584,22 @@ optimizing, and searching weighted finite-state transducers (FSTs).")
                 "038a60w7y8qnbxmcrsim9rafz9mihsny8xv50jpzlr7rl166pp5q"))))
     (arguments '(#:configure-flags '("--enable-ngram-fsts" "CXXFLAGS=-std=c++14")
                  #:make-flags '("CXXFLAGS=-std=c++14")))))
+
+(define openfst-for-vosk
+  (package
+    (inherit openfst)
+    (version "1.8.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "http://www.openfst.org/twiki/pub/FST/"
+                           "FstDownload/openfst-" version ".tar.gz"))
+       (sha256
+        (base32 "0h2lfhhihg63b804hrcljnkggijbjmp84i5g8q735wb09y9z2c4p"))))
+    (arguments
+     '(#:configure-flags
+       '("--enable-shared" "--enable-far" "--enable-ngram-fsts"
+         "--enable-lookahead-fsts" "--with-pic" "--disable-bin")))))
 
 (define-public shogun
   (package
@@ -1097,7 +1096,7 @@ computing environments.")
 (define-public python-scikit-learn
   (package
     (name "python-scikit-learn")
-    (version "1.0.2")
+    (version "1.1.2")
     (source
      (origin
        (method git-fetch)
@@ -1107,7 +1106,7 @@ computing environments.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "1rli53544vlsnmx4v4xcb8fdqcy5n3zksl4plwp76gsmrppb2lig"))))
+         "0wcngyfm2fl3vgyi2aq6j5fvky5185xjzgip64968wqj1hmir5nv"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
@@ -1128,10 +1127,14 @@ computing environments.")
                ;; Some tests require write access to $HOME.
                (setenv "HOME" "/tmp")
 
-               (invoke "pytest" "sklearn" "-m" "not network"
-                       "-n" (number->string (parallel-job-count))
-                       ;; This test tries to access the internet.
-                       "-k" "not test_load_boston_alternative")))))))
+               ;; Step out of the source directory to avoid interference;
+               ;; we want to run the installed code with extensions etc.
+               (with-directory-excursion "/tmp"
+                 (invoke "pytest" "-vv" "--pyargs" "sklearn"
+                         "-m" "not network"
+                         "-n" (number->string (parallel-job-count))
+                         ;; This test tries to access the internet.
+                         "-k" "not test_load_boston_alternative"))))))))
     (inputs (list openblas))
     (native-inputs
      (list python-cython
@@ -1594,6 +1597,104 @@ discrete, and conditional dimensions.")
       (description "Kaldi is an extensible toolkit for speech recognition
 written in C++.")
       (license license:asl2.0))))
+
+(define kaldi-for-vosk
+  (let* ((commit "6417ac1dece94783e80dfbac0148604685d27579")
+         (revision "0")
+         (openfst openfst-for-vosk))
+    (package
+      (inherit kaldi)
+      (name "kaldi")
+      (version (git-version "0" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://github.com/alphacep/kaldi")
+               (commit commit)))
+         (file-name (git-file-name name version))
+         (sha256
+          (base32 "04xw2dpfvpla8skpk08azmgr9k97cd8hn83lj4l85q165gbzql4s"))))
+      (inputs
+       (list alsa-lib
+             lapack ;; compared to base kaldi, replacing `(,gfortran "lib")
+             glib
+             gstreamer
+             jack-1
+             openblas
+             openfst
+             portaudio
+             python))
+      (arguments
+       (list
+        #:test-target "test"
+        #:make-flags ''("online2" "lm" "rnnlm")
+        #:phases
+        #~(modify-phases %standard-phases
+            (add-after 'unpack 'chdir
+              (lambda _ (chdir "src")))
+            (replace 'configure
+              (lambda _
+                (let* ((portaudio #$(this-package-input "portaudio"))
+                       (lapack    #$(this-package-input "lapack"))
+                       (openfst   #$(this-package-input "openfst"))
+                       (openblas  #$(this-package-input "openblas")))
+                  #$@(if (target-x86?)
+                         '()
+                         #~((substitute* "makefiles/linux_openblas.mk"
+                              (("-msse -msse2") ""))))
+                  (substitute* "makefiles/default_rules.mk"
+                    (("/bin/bash") (which "bash")))
+                  (substitute* "Makefile"
+                    (("ext_depend: check_portaudio")
+                     "ext_depend:"))
+                  (substitute* '("online/Makefile"
+                                 "onlinebin/Makefile"
+                                 "gst-plugin/Makefile")
+                    (("../../tools/portaudio/install")
+                     portaudio))
+                  (substitute* "matrix/Makefile"     ;temporary test bypass
+                    (("matrix-lib-test sparse-matrix-test") ""))
+
+                  ;; This `configure' script doesn't support variables passed as
+                  ;; arguments, nor does it support "prefix".
+                  (substitute* "configure"
+                    (("check_for_slow_expf;") "")
+                    ;; This affects the RPATH and also serves as the installation
+                    ;; directory.
+                    (("KALDILIBDIR=`pwd`/lib")
+                     (string-append "KALDILIBDIR=" #$output "/lib"))
+                    (("OPENBLASROOT=\\\"\\$\\(rel2abs ..\\/tools\\/OpenBLAS\\/install\\)\\\"")
+                     (string-append "OPENBLASROOT=\"" openblas "\""))
+                    (("-L\\$OPENBLASLIBDIR -l:libopenblas.a -l:libblas.a -l:liblapack.a -l:libf2c.a")
+                     (string-append "-L$OPENBLASLIBDIR -lopenblas "
+                                    "-L" lapack "/lib -lblas -llapack")))
+                  (mkdir-p #$output) ; must exist
+                  (setenv "CONFIG_SHELL" (which "bash"))
+                  (setenv "OPENFST_VER" #$(package-version openfst))
+                  (invoke "./configure"
+                          "--use-cuda=no"
+                          "--mathlib=OPENBLAS_CLAPACK"
+                          "--shared"
+                          (string-append "--fst-root=" openfst)))))
+            (add-after 'configure 'optimize-build
+                       (lambda _ (substitute* "kaldi.mk" ((" -O1") " -O3"))))
+            (replace 'install
+              (lambda _
+                (let* ((inc (string-append #$output "/include"))
+                       (lib (string-append #$output "/lib")))
+                  ;; The build phase installed symlinks to the actual
+                  ;; libraries.  Install the actual targets.
+                  (for-each (lambda (file)
+                              (let ((target (readlink file)))
+                                (delete-file file)
+                                (install-file target lib)))
+                            (find-files lib "\\.so"))
+                  ;; Install headers
+                  (for-each (lambda (file)
+                              (let ((target-dir (string-append inc "/" (dirname file))))
+                                (install-file file target-dir)))
+                            (find-files "." "\\.h")))))))))))
 
 (define-public gst-kaldi-nnet2-online
   (let ((commit "cb227ef43b66a9835c14eb0ad39e08ee03c210ad")
@@ -3024,7 +3125,7 @@ Note: currently this package does not provide GPU support.")
   (package
     (inherit python-pytorch)
     (name "python-pytorch")
-    (version "1.11.0")
+    (version "1.12.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -3034,7 +3135,7 @@ Note: currently this package does not provide GPU support.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1zbk7y74r0ycsfa7x59jnhwhs1gj5rs3n89p15y0212iszgbljq8"))
+                "1wimgnmn8kfazc8vhf65b9psdwj80n3chzkd8ic28541ac2zqzpk"))
               (patches (search-patches "python-pytorch-system-libraries.patch"
                                        "python-pytorch-runpath.patch"))
               (modules '((guix build utils)))
@@ -3094,7 +3195,7 @@ Note: currently this package does not provide GPU support.")
     (native-inputs
      (list which python-pytest))
     (home-page "https://pytorch.org/vision/stable/index.html")
-    (synopsis " Datasets, transforms and models specific to computer vision")
+    (synopsis "Datasets, transforms and models specific to computer vision")
     (description
      "The torchvision package consists of popular datasets, model architectures,
 and common image transformations for computer vision.")
@@ -3123,18 +3224,14 @@ Python.")
 (define-public python-hmmlearn
   (package
     (name "python-hmmlearn")
-    (version "0.2.6")
+    (version "0.2.7")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "hmmlearn" version))
        (sha256
         (base32
-         "1my0j3rzp17438idr32ssh0j969a98yjblx5igx5kgiiigr9qa1a"))
-       (snippet
-        #~(begin
-            (use-modules ((guix build utils)))
-            (delete-file "lib/hmmlearn/_hmmc.c")))))
+         "1qgnf1kdxicygy8nvpv866iqvwq0rc6xkd3s6slmvxvsy8h2fjvb"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
@@ -3146,7 +3243,11 @@ Python.")
                (with-directory-excursion (string-append (assoc-ref outputs "out") "/lib")
                  (invoke "python" "-m" "pytest"))))))))
     (propagated-inputs
-     (list python-cython python-numpy python-scikit-learn python-scipy
+     (list pybind11
+           python-cython
+           python-numpy
+           python-scikit-learn
+           python-scipy
            python-setuptools-scm))
     (native-inputs
      (list python-pytest))
@@ -3161,7 +3262,7 @@ of Hidden Markov Models.")
 (define-public liblantern
   (package
     (name "liblantern")
-    (version "0.8.0")
+    (version "0.9.0")
     (source
      (origin
        (method git-fetch)
@@ -3170,48 +3271,53 @@ of Hidden Markov Models.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1xkqyj1clj1r70yrp5qpbpyf0xmh9c128005idshi7vk883wfp77"))))
+        (base32 "0bjd0ym547k46ci8xnwsry7x8w5k65cl86snlcrfn4vs3fald2y9"))))
     (build-system cmake-build-system)
     (arguments
      (list
       #:tests? #false                   ;no test target
       #:phases
-      #~(modify-phases %standard-phases
-          (add-after 'unpack 'chdir
-            (lambda _ (chdir "lantern")))
-          (add-after 'chdir 'do-not-download-binaries
-            (lambda* (#:key inputs #:allow-other-keys)
-              (substitute* "CMakeLists.txt"
-                (("find_package\\(Torch.*") "set(TORCH_CXX_FLAGS \"-ltorch\")\n")
-                (("retrieve_lib\\(.*") ""))
-              (setenv "LIBRARY_PATH"
-                      (string-append
-                       (search-input-directory
-                        inputs "/lib/python3.9/site-packages/torch/lib")
-                       ":" (or (getenv "LIBRARY_PATH") "")))
-              (setenv "CPLUS_INCLUDE_PATH"
-                      (string-append
-                       (search-input-directory
-                        inputs "lib/python3.9/site-packages/torch/include/torch/csrc/api/include/")
-                       ":"
-                       (search-input-directory
-                        inputs "lib/python3.9/site-packages/torch/include/")
-                       ":"
-                       (or (getenv "CPLUS_INCLUDE_PATH") "")))
-              (setenv "C_INCLUDE_PATH"
-                      (string-append
-                       (search-input-directory
-                        inputs "lib/python3.9/site-packages/torch/include/")
-                       ":"
-                       (or (getenv "C_INCLUDE_PATH") "")))))
-          (replace 'install
-            (lambda _
-              (install-file
-               "../build/liblantern.so"
-               (string-append #$output "/lib"))
-              (copy-recursively
-               "../lantern/include"
-               (string-append #$output "/include")))))))
+      (let ((python-version (version-major+minor (package-version python))))
+        #~(modify-phases %standard-phases
+            (add-after 'unpack 'chdir
+              (lambda _ (chdir "lantern")))
+            (add-after 'chdir 'do-not-download-binaries
+              (lambda* (#:key inputs #:allow-other-keys)
+                (substitute* "CMakeLists.txt"
+                  (("find_package\\(Torch.*") "set(TORCH_CXX_FLAGS \"-ltorch\")\n")
+                  (("retrieve_lib\\(.*") ""))
+                (let ((site-packages (string-append "/lib/python"
+                                                    #$python-version
+                                                    "/site-packages")))
+                  (setenv "LIBRARY_PATH"
+                          (string-append
+                           (search-input-directory
+                            inputs (string-append site-packages "/torch/lib"))
+                           ":" (or (getenv "LIBRARY_PATH") "")))
+                  (setenv "CPLUS_INCLUDE_PATH"
+                          (string-append
+                           (search-input-directory
+                            inputs (string-append
+                                    site-packages "/torch/include/torch/csrc/api/include/"))
+                           ":"
+                           (search-input-directory
+                            inputs (string-append site-packages "/torch/include/"))
+                           ":"
+                           (or (getenv "CPLUS_INCLUDE_PATH") "")))
+                  (setenv "C_INCLUDE_PATH"
+                          (string-append
+                           (search-input-directory
+                            inputs (string-append site-packages "/torch/include/"))
+                           ":"
+                           (or (getenv "C_INCLUDE_PATH") ""))))))
+            (replace 'install
+              (lambda _
+                (install-file
+                 "../build/liblantern.so"
+                 (string-append #$output "/lib"))
+                (copy-recursively
+                 "../lantern/include"
+                 (string-append #$output "/include"))))))))
     (inputs (list python-pytorch-for-r-torch))
     (home-page "https://github.com/mlverse/torch/")
     (synopsis "C API to libtorch")
@@ -3251,7 +3357,7 @@ of Hidden Markov Models.")
     (native-inputs
      (list python-cython python-pytest))
     (home-page "https://github.com/gatagat/lap")
-    (synopsis "Linear Assignment Problem solver (LAPJV/LAPMOD).")
+    (synopsis "Linear Assignment Problem solver (LAPJV/LAPMOD)")
     (description "Lap is a linear assignment problem solver using Jonker-Volgenant
 algorithm for dense (LAPJV) or sparse (LAPMOD) matrices.")
     (license license:bsd-2)))
@@ -3304,7 +3410,7 @@ and Numpy.")
            python-sphinx
            python-sphinx-rtd-theme))
     (home-page "https://github.com/pyro-ppl/pyro-api")
-    (synopsis "Generic API for dispatch to Pyro backends.")
+    (synopsis "Generic API for dispatch to Pyro backends")
     (description "This package provides a generic API for dispatch to Pyro backends.")
     (license license:asl2.0)))
 
@@ -3381,3 +3487,187 @@ and Numpy.")
      "This package provides a Python library for probabilistic modeling and
 inference.")
     (license license:asl2.0)))
+
+(define-public vosk-api
+  (let* ((openfst openfst-for-vosk)
+         (kaldi kaldi-for-vosk))
+    (package
+      (name "vosk-api")
+      (version "0.3.43")
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://github.com/alphacep/vosk-api")
+               (commit (string-append "v" version))))
+         (file-name (git-file-name name version))
+         (sha256
+          (base32 "0xmp8i140c2hd3rj9dap8a2rnsvzb1k9hnqm12xzbaxrw73rkc29"))))
+      (build-system gnu-build-system)
+      (arguments
+       (list
+        #:tests? #f
+        #:phases
+        #~(modify-phases %standard-phases
+            (add-after 'unpack 'chdir
+              (lambda _ (chdir "src")))
+            (replace 'configure
+              (lambda _
+                (let* ((lapack   #$(this-package-input "lapack"))
+                       (openfst  #$(this-package-input "openfst"))
+                       (openblas #$(this-package-input "openblas"))
+                       (kaldi    #$(this-package-input "kaldi")))
+                  (substitute* "./Makefile"
+                    (("USE_SHARED\\?=0")
+                     "USE_SHARED?=1")
+                    (("-DFST_NO_DYNAMIC_LINKING")
+                     "")
+                    (("-lopenblas -llapack -lblas -lf2c")
+                     (string-append
+                      "-L" openblas "/lib " "-lopenblas "
+                      "-L" lapack "/lib " "-llapack -lblas "))
+                    (("-lfst -lfstngram")
+                     (string-append
+                      "-L" openfst "/lib " "-lfst -lfstngram "))
+                    (("\\$\\(HOME\\)\\/travis\\/kaldi")
+                     (string-append kaldi "/include"))
+                    (("\\$\\(KALDI_ROOT\\)\\/tools\\/openfst")
+                     openfst)
+                    (("\\$\\(KALDI_ROOT\\)\\/tools\\/OpenBLAS\\/install")
+                     openblas)
+                    (("\\$\\(KALDI_ROOT\\)\\/libs")
+                     (string-append kaldi "/lib"))))))
+            (replace 'install
+              (lambda _
+                (let* ((lib (string-append #$output "/lib"))
+                       (src (string-append #$output "/src")))
+                  (mkdir-p lib)
+                  (mkdir-p src)
+                  (install-file "libvosk.so" lib)
+                  (for-each
+                   (lambda (x) (install-file x src))
+                   (find-files "." "\\.h$"))))))))
+      (inputs (list kaldi openfst lapack openblas))
+      (home-page "https://alphacephei.com/vosk")
+      (synopsis "Speech recognition toolkit based on @code{kaldi}")
+      (description "\
+This package provides a speech recognition toolkit based on @code{kaldi}.  It
+supports more than 20 languages and dialects - English, Indian English,
+German, French, Spanish, Portuguese, Chinese, Russian, Turkish, Vietnamese,
+Italian, Dutch, Catalan, Arabic, Greek, Farsi, Filipino, Ukrainian, Kazakh,
+Swedish, Japanese, Esperanto, Hindi, Czech, Polish. The program works offline,
+even on lightweight devices.  Portable per-language models are about 50Mb each,
+and there are much bigger and precise models available.
+
+Vosk API provides a streaming API allowing to use it `on-the-fly' and bindings
+for different programming languages.  It allows quick reconfiguration of
+vocabulary for better accuracy, and supports speaker identification beside
+simple speech recognition.")
+      (license license:asl2.0))))
+
+(define-public python-vosk
+  (package
+    (inherit vosk-api)
+    (name "python-vosk")
+    (build-system python-build-system)
+    (propagated-inputs
+     (list python-cffi python-requests python-tqdm python-srt python-websockets))
+    (inputs (list vosk-api))
+    (arguments
+     (list
+      #:tests? #f  ;; TODO There are tests but not run through Makefile.
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'config
+            (lambda _
+              (chdir "python")
+              (setenv "VOSK_SOURCE" #$vosk-api)))
+          (add-before 'build 'from-abi-to-api
+            (lambda _
+              (substitute* "vosk_builder.py"
+                (("ffibuilder\\.set_source\\(\"vosk.vosk_cffi\", None\\)")
+                 (string-append
+                  "ffibuilder.set_source(\"vosk.vosk_cffi\", "
+                  "r\"\"\"\n#include<vosk_api.h>\n#include<Python.h>\"\"\",\n\t"
+                  "library_dirs=["
+                  "'" #$vosk-api "/lib'"
+                  "],\n\t"
+                  "libraries=['vosk', 'python3.9'],\n\t"
+                  "include_dirs=["
+                  "'" #$vosk-api "/src'" "])")))
+              (substitute* "vosk/__init__.py"
+                (("_c = open_dll\\(\\)")
+                 "")
+                (("_ffi")
+                 "ffi")
+                (("from \\.vosk_cffi import ffi as ffi")
+                 "from .vosk_cffi import ffi, lib")
+                (("_c\\.")
+                 "lib.")))))))))
+
+(define-public nerd-dictation
+  (let* ((commit "53ab129a5ee0f8b5df284e8cf2229219b732c59e")
+         (revision "0"))
+    (package
+      (name "nerd-dictation")
+      (version (git-version "0" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://github.com/ideasman42/nerd-dictation")
+               (commit commit)))
+         (file-name (git-file-name name version))
+         (sha256
+          (base32 "184qijiva1h1x00dzicik0yzgh78pq2lqr5fkgicgp26mkarlyhc"))))
+      (build-system python-build-system)
+      (arguments
+       '(#:phases
+         (modify-phases %standard-phases
+           (add-after 'unpack 'chdir
+             (lambda _ (chdir "package/python"))))))
+      (propagated-inputs (list python-vosk))
+      (inputs (list pulseaudio xdotool))
+      (home-page "https://github.com/ideasman42/nerd-dictation")
+      (synopsis "Offline speech-to-text for desktop Linux")
+      (description "\
+This package provides simple access speech to text for using in
+Linux without being tied to a desktop environment, using the @code{vosk-api}.
+The user configuration lets you manipulate text using Python string
+operations.  It has zero overhead, as this relies on manual activation and
+there are no background processes.  Dictation is accessed manually with
+@code{nerd-dictation begin} and @code{nerd-dictation end} commands.")
+      (license license:gpl3+))))
+
+(define-public nerd-dictation/wayland
+  (package
+    (inherit nerd-dictation)
+    (name "nerd-dictation-wayland")
+    (inputs (list bash-minimal nerd-dictation))
+    (propagated-inputs (list ydotool sox))
+    (build-system trivial-build-system)
+    (arguments
+     (list
+      #:modules '((guix build utils))
+      #:builder
+      #~(begin
+          (use-modules (guix build utils))
+          (let* ((exe (string-append #$output "/bin/nerd-dictation"))
+                 (original-exe #$(file-append nerd-dictation
+                                              "/bin/nerd-dictation"))
+                 (bash #$(this-package-input "bash-minimal"))
+                 (bash-exe (string-append bash "/bin/bash")))
+            (mkdir-p (dirname exe))
+            (call-with-output-file exe
+              (lambda (port)
+                (format port "#!~a
+if [ \"$1\" = begin ]
+  then
+    exec ~a $@ --input=SOX --simulate-input-tool=YDOTOOL
+  else
+    exec ~a $@
+fi"
+                        bash-exe
+                        original-exe
+                        original-exe)))
+            (chmod exe #o555)))))))

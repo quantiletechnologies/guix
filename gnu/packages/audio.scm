@@ -14,7 +14,7 @@
 ;;; Copyright © 2018, 2020, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2018 Clément Lassieur <clement@lassieur.org>
 ;;; Copyright © 2018 Brett Gilio <brettg@gnu.org>
-;;; Copyright © 2018, 2019 Marius Bakke <mbakke@fastmail.com>
+;;; Copyright © 2018, 2019, 2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2018, 2021 Thorsten Wilms <t_w_@freenet.de>
 ;;; Copyright © 2018 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2018 Brendan Tildesley <mail@brendan.scot>
@@ -38,6 +38,7 @@
 ;;; Copyright © 2021 Aleksandr Vityazev <avityazev@posteo.org>
 ;;; Copyright © 2022 Arjan Adriaanse <arjan@adriaan.se>
 ;;; Copyright © 2022 Juliana Sims <jtsims@protonmail.com>
+;;; Copyright © 2022 Simon Streit <simon@netpanic.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -144,7 +145,8 @@
   #:use-module (guix packages)
   #:use-module (guix utils)
   #:use-module (srfi srfi-1)
-  #:use-module (srfi srfi-26))
+  #:use-module (srfi srfi-26)
+  #:use-module (ice-9 match))
 
 (define-public opensles
   (package
@@ -235,7 +237,7 @@ promoting the market for advanced audio.")
        ("openal" ,openal)))
     (synopsis "Software Synthesizer")
     (description "WildMIDI is a simple software midi player which has a core
-softsynth library that can be use with other applications.")
+softsynth library that can be used with other applications.")
     (home-page "https://www.mindwerks.net/projects/wildmidi/")
     (license
      (list
@@ -365,7 +367,12 @@ Linux kernel.")
                 "07857vdkak306d9s5g6fhmjyxk7vijzjhkmqb15s7ihfxx9lx8xb"))))
     (build-system cmake-build-system)
     (arguments
-     '(#:tests? #f))                    ; no check target
+     '(#:tests? #f                                ;no check target
+
+       ;; XXX: Building with '-fsanitize=undefined' leads to embedded C++ STL
+       ;; header file names in libgme.so, meaning that libgme retains a
+       ;; reference to GCC.  Disable UBSAN to avoid that.
+       #:configure-flags '("-DENABLE_UBSAN=OFF")))
     (home-page "https://bitbucket.org/mpyne/game-music-emu")
     (synopsis "Video game music file playback library")
     (description
@@ -468,31 +475,6 @@ library.  It is based on the player code of the Open ModPlug Tracker project.")
 by MusicIP.")
     (home-page "https://code.google.com/archive/p/musicip-libofa/")
     (license license:gpl2+)))
-
-(define-public faac
-  (package
-    (name "faac")
-    (version "1.30")
-    (source
-     (origin
-       (method url-fetch)
-       (uri
-        (string-append "mirror://sourceforge/faac/faac-src"
-                       "/faac-" version "/faac-1_30.tar.gz"))
-       (sha256
-        (base32 "1lmj0dib3mjp84jhxc5ddvydkzzhb0gfrdh3ikcidjlcb378ghxd"))))
-    (build-system gnu-build-system)
-    (native-inputs
-     (list autoconf automake libtool pkg-config))
-    (synopsis "Freeware Advanced Audio Coder")
-    (description "FAAC is an MPEG-4 and MPEG-2 AAC encoder.")
-    (home-page "https://www.audiocoding.com/faac.html")
-    (license
-     (list
-      ;; ISO MPEG-4 reference code.
-      license:gpl2+
-      ;; Others.
-      license:lgpl2.0+))))
 
 (define-public libtimidity
   (package
@@ -633,6 +615,100 @@ attacks, performing pitch detection, tapping the beat and producing MIDI
 streams from live audio.")
     (license license:gpl3+)))
 
+(define-public dsp
+  (package
+    (name "dsp")
+    (version "1.9")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/bmc0/dsp")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0iksmianwig7w78hqip2a8yy6r63sv8cv9pis8qxny6w1xap6njb"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:tests? #false                   ;no tests
+      #:make-flags
+      #~(list (string-append "CC=" #$(cc-for-target)))
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'configure
+            (lambda _
+              (invoke "sh" "configure"
+                      (string-append "--prefix=" #$output)
+                      "--disable-pulse"))))))
+    (inputs
+     (list alsa-lib
+           ao
+           ffmpeg
+           ladspa
+           libmad
+           libsndfile
+           fftw
+           fftwf
+           zita-convolver))
+    (native-inputs
+     (list libtool pkg-config))
+    (home-page "https://github.com/bmc0/dsp")
+    (synopsis "Audio processing program with an interactive mode")
+    (description
+     "dsp is an audio processing program with an interactive mode.")
+    (license license:isc)))
+
+(define-public qm-dsp
+  (package
+    (name "qm-dsp")
+    (version "1.7.1")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/c4dm/qm-dsp")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1vkb1xr2hjcaw88gig7rknlwsx01lm0w94d2z0rk5vz9ih4fslvv"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:make-flags
+      #~(list #$(string-append "-f" "build/"
+                               (match (or (%current-target-system)
+                                          (%current-system))
+                                 ("x86_64-linux" "linux/Makefile.linux64")
+                                 ("i686-linux"   "linux/Makefile.linux32")
+                                 (target
+                                  (if (string-suffix? "-mingw32" target)
+                                      "mingw32/Makefile.mingw32"
+                                      "general/Makefile.inc"))))
+              (string-append "CC=" #$(cc-for-target)))
+       #:phases
+       #~(modify-phases %standard-phases
+           (delete 'configure)          ;no configure script
+           (replace 'install
+             (lambda* (#:key outputs #:allow-other-keys)
+               (let* ((lib (string-append #$output "/lib"))
+                      (include (string-append #$output "/include")))
+                 (install-file "libqm-dsp.a" lib)
+                 (mkdir-p include)
+                 (for-each (lambda (file)
+                             (unless (or (string-prefix? "./build" file)
+                                         (string-prefix? "./include" file))
+                               (install-file file (string-append include "/"
+                                                                 (dirname file)))))
+                           (find-files "." "\\.h$"))))))
+       #:test-target "tests"))
+    (home-page "https://code.soundsoftware.ac.uk/projects/qm-dsp")
+    (synopsis "C++ library of functions for DSP and Music Informatics purposes")
+    (description
+     "QM-DSP is a C++ library of functions for DSP and Music Informatics
+purposes developed at Queen Mary, University of London.")
+    (license license:gpl2+)))
+
 (define (ardour-rpath-phase major-version)
   `(lambda* (#:key outputs #:allow-other-keys)
      (let ((libdir (string-append (assoc-ref outputs "out")
@@ -646,13 +722,12 @@ streams from live audio.")
                          libdir "/engines" ":"
                          libdir "/panners" ":"
                          libdir "/surfaces" ":"
-                         libdir "/vamp" "\"]"))))
-     #t))
+                         libdir "/vamp" "\"]"))))))
 
 (define-public ardour
   (package
     (name "ardour")
-    (version "6.9")
+    (version "7.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -666,19 +741,19 @@ streams from live audio.")
                     "libs/ardour/revision.cc"
                   (lambda (port)
                     (format port ,(string-append "#include \"ardour/revision.h\"
-namespace ARDOUR { const char* revision = \"" version "\" ; const char* date = \"\"; }"))
-                    #t)))
+namespace ARDOUR { const char* revision = \"" version "\" ; const char* date = \"\"; }")))))
               (sha256
                (base32
-                "0vlcbd70y0an881zv87kc3akmaiz4w7whsy3yaiiqqjww35jg1mm"))
+                "11ca9xpzmzafl8xl0r0w32lxjqwy532hfd2bzb0d73bdpngpvcbq"))
               (file-name (string-append name "-" version))))
     (build-system waf-build-system)
     (arguments
-     `(#:configure-flags '("--cxx11"          ; required by gtkmm
+     `(#:configure-flags '("--cxx11"              ; required by gtkmm
                            "--optimize"
-                           "--no-phone-home"  ; don't contact ardour.org
-                           "--freedesktop"    ; build .desktop file
-                           "--test")          ; build unit tests
+                           "--no-phone-home"      ; don't contact ardour.org
+                           "--freedesktop"        ; build .desktop file
+                           "--test"               ; build unit tests
+                           "--use-external-libs") ; use system libraries
        #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'set-rpath-in-LDFLAGS
@@ -703,8 +778,11 @@ namespace ARDOUR { const char* revision = \"" version "\" ; const char* date = \
                              (string-append share "/applications/"))
                (install-file (string-append "build/gtk2_ardour/ardour"
                                             ver ".appdata.xml")
-                             (string-append share "/appdata/")))
-             #t)))
+                             (string-append share "/appdata/")))))
+         (add-after 'install 'install-man-page
+           (lambda* (#:key outputs #:allow-other-keys)
+             (install-file "ardour.1" (string-append (assoc-ref outputs "out")
+                                                     "/share/man/man1")))))
        #:test-target "test"))
     (inputs
      (list alsa-lib
@@ -718,13 +796,17 @@ namespace ARDOUR { const char* revision = \"" version "\" ; const char* date = \
            fftw
            fftwf
            flac
+           fluidsynth
            glibmm
            gtkmm-2
+           hicolor-icon-theme
+           hidapi
            jack-1
            libarchive
            libart-lgpl
            libgnomecanvasmm
            liblo
+           libltc
            libogg
            libsamplerate
            libsndfile
@@ -739,6 +821,7 @@ namespace ARDOUR { const char* revision = \"" version "\" ; const char* date = \
            pangomm
            python-rdflib
            pulseaudio
+           qm-dsp
            readline
            redland
            rubberband
@@ -750,11 +833,11 @@ namespace ARDOUR { const char* revision = \"" version "\" ; const char* date = \
            taglib
            vamp))
     (native-inputs
-     `(("cppunit" ,cppunit)
-       ("gettext" ,gettext-minimal)
-       ("itstool" ,itstool)
-       ("perl" ,perl)
-       ("pkg-config" ,pkg-config)))
+     (list cppunit
+           gettext-minimal
+           itstool
+           perl
+           pkg-config))
     (home-page "https://ardour.org")
     (synopsis "Digital audio workstation")
     (description
@@ -766,19 +849,26 @@ engineers, musicians, soundtrack editors and composers.")
 (define-public audacity
   (package
     (name "audacity")
-    (version "3.1.3")
+    (version "3.2.1")
     (source
      (origin
        ;; If built from the release tag, Audacity will describe itself
        ;; as an "Alpha test version" and suggest to users that they use
        ;; the "latest stable released version".
-       (method url-fetch)
-       (uri (string-append "https://github.com/audacity/audacity/releases/download/"
-                           "Audacity-" version "/audacity-" version
-                           "-source.tar.gz"))
+       ;; XXX: For 3.2.1 we rebelliously use a git tag anyway because the only
+       ;; "processed" download is a .zip containing a .tar.gz which does not
+       ;; fare well with the patch and snippet machinery:
+       ;;   https://github.com/audacity/audacity/issues/3811
+       ;; TODO: Find a way to control the "alpha" status even when using git
+       ;; so we're not reliant on preprocessed source code.
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/audacity/audacity")
+             (commit (string-append "Audacity-" version))))
+       (file-name (git-file-name name version))
        (sha256
         (base32
-         "189agx11361k9j958s6q5bngnnfx0rwaf0dwbjxy6fwvsb1wv3px"))
+         "00mal30jxbcacs1ka4yb5s8xq81zm7mv3y8l5hvg77abkyvfvdzf"))
        (patches (search-patches "audacity-ffmpeg-fallback.patch"))
        (modules '((guix build utils)))
        (snippet
@@ -808,14 +898,13 @@ engineers, musicians, soundtrack editors and composers.")
            jack-1
            expat
            lame
-           linux-libre-headers
            flac
            ffmpeg
            libid3tag
            libjpeg-turbo
-           libmad
            ;;("libsbsms" ,libsbsms)         ;bundled version is modified
            libsndfile
+           mpg123
            soundtouch
            soxr ;replaces libsamplerate
            sqlite
@@ -826,20 +915,24 @@ engineers, musicians, soundtrack editors and composers.")
            lilv ;for lv2
            suil ;for lv2
            portaudio
-           portmidi))
+           portmidi
+           wavpack))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("gettext" ,gettext-minimal)     ;for msgfmt
-       ("libtool" ,libtool)
-       ("pkg-config" ,pkg-config)
-       ("python" ,python)
-       ("which" ,which)))
+     (list autoconf
+           automake
+           gettext-minimal              ;for msgfmt
+           libtool
+           pkg-config
+           python
+           which))
     (arguments
      `(#:configure-flags
        (list
         "-Daudacity_conan_enabled=off"
         "-Daudacity_lib_preference=system"
+        ;; Disable support for VST 3 SDK, which is not yet in Guix (and has
+        ;; a dubious licensing agreement despite GPL code).
+        "-Daudacity_has_vst3=off"
         ;; TODO: enable this flag once we've packaged all dependencies
         ;; "-Daudacity_obey_system_dependencies=on"
         ;; disable crash reports, updates, ..., anything that phones home
@@ -861,24 +954,20 @@ engineers, musicians, soundtrack editors and composers.")
                 "CMAKE_BUILD_WITH_INSTALL_RPATH TRUE")
                (("CMAKE_INSTALL_RPATH_USE_LINK_PATH [A-Z]*")
                 "CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE"))
+             (substitute* "libraries/image-compiler/CMakeLists.txt"
+               (("PROPERTIES")
+                ;; This scripts needs to run during build, make sure it finds
+                ;; the required libraries.
+                "PROPERTIES BUILD_WITH_INSTALL_RPATH FALSE"))
              (substitute* "src/CMakeLists.txt"
+               ;; Despite the name, this script breaks rpath.  Don't run it.
+               (("install.*linux/fix_rpath\\.cmake.*")
+                "")
                (("-Wl,--disable-new-dtags") "-Wl,--enable-new-dtags"))))
-         (add-after 'unpack 'comment-out-revision-ident
-           (lambda _
-             (substitute* "src/CMakeLists.txt"
-               (("file\\( TOUCH \".*RevisionIdent\\.h\" \\)" directive)
-                (string-append "# " directive)))
-             (substitute* "src/AboutDialog.cpp"
-               (("(.*RevisionIdent\\.h.*)" include-line)
-                (string-append "// " include-line)))))
          (add-after 'unpack 'use-upstream-headers
            (lambda* (#:key inputs #:allow-other-keys)
              (substitute* '("libraries/lib-files/FileNames.cpp")
                (("\"/usr/include/linux/magic.h\"") "<linux/magic.h>"))))
-         (add-after 'install 'delete-gratuitous-script
-           (lambda* (#:key outputs #:allow-other-keys)
-             (delete-file (string-append (assoc-ref outputs "out")
-                                         "/audacity"))))
          (add-after 'wrap-program 'glib-or-gtk-wrap
            (assoc-ref glib-or-gtk:%standard-phases 'glib-or-gtk-wrap)))
        ;; The test suite is not "well exercised" according to the developers,
@@ -1119,6 +1208,39 @@ tools (analyzer, mono/stereo tools, crossovers).")
 guitar amplification and a small range of classic effects, signal processors and
 generators of mostly elementary and occasionally exotic nature.")
     (license license:gpl3+)))
+
+(define-public iir
+  (package
+    (name "iir")
+    (version "1.9.3")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/berndporr/iir1")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "0wbh804as740kjvmyaqx4rwvwwrbwh0fnj979dvv1ljlx1p50bk0"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'install 'delete-static-library
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let ((out (assoc-ref outputs "out")))
+                (delete-file (string-append out "/lib/libiir_static.a"))))))))
+    (home-page "https://berndporr.github.io/iir1/")
+    (synopsis
+     "Real-time C++ @acronym{IIR, infinite impulse response} filter library")
+    (description
+     "This C++ library implements the Butterworth, RBJ, and Chebychev
+@acronym{IIR, infinite impulse response} filters.  Samples are processed one by
+one, in real time.  It can easily import coefficients generated with Python
+(@code{scipy}).  It also avoids memory leaks by allocating memory at compile
+time, using templates, instead of calling @code{malloc()} or @code{new}.")
+    (license license:expat)))
 
 (define-public infamous-plugins
   (package
@@ -1399,7 +1521,7 @@ object library.")
 (define-public csound
   (package
     (name "csound")
-    (version "6.14.0")
+    (version "6.16.2")
     (source
      (origin
        (method git-fetch)
@@ -1408,7 +1530,7 @@ object library.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1sr9knfhbm2m0wpkjq2l5n471vnl51wy4p6j4m95zqybimzb4s2j"))))
+        (base32 "1lgasyk8j4cl9178vci1dph63nks3cgwhf8y1d04z9dc8gg15dyn"))))
     (build-system cmake-build-system)
     (native-inputs
      (list bison flex gettext-minimal zlib))
@@ -2599,14 +2721,13 @@ compensation, (de)interleaving, and byte-swapping
 (define-public python-pyaudio
   (package
     (name "python-pyaudio")
-    (version "0.2.11")
+    (version "0.2.12")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "PyAudio" version))
        (sha256
-        (base32
-         "0x7vdsigm7xgvyg3shd3lj113m8zqj2pxmrgdyj66kmnw0qdxgwk"))))
+        (base32 "17pvc27pn2xbisbq7nibhidyw8h2kyms7g2xbyx7nlxwfbdzbpam"))))
     (build-system python-build-system)
     (inputs
      (list portaudio))
@@ -2996,6 +3117,8 @@ including air absorption, occlusion, and environmental reverb, are available
 through the EFX extension.  It also facilitates streaming audio, multi-channel
 buffers, and audio capture.")
     (home-page "https://openal-soft.org/")
+    (properties
+     '((upstream-name . "openal-soft")))
     (license license:lgpl2.0+)))
 
 (define-public freealut
@@ -3087,19 +3210,23 @@ different audio devices such as ALSA or PulseAudio.")
 (define-public qjackctl
   (package
     (name "qjackctl")
-    (version "0.9.7")
+    (version "0.9.8")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://sourceforge/qjackctl/qjackctl/"
                                   version "/qjackctl-" version ".tar.gz"))
               (sha256
                (base32
-                "104hfvr15v8cbkzil8slrqj48y3fl7lx060alj80q1sjh5hl6j2j"))))
+                "1rvxgxd7bbv7yazcpw3ily0jlra8ms5c0kkf7cybgivahw59zk87"))))
     (build-system cmake-build-system)
     (arguments
      '(#:tests? #f))                    ; no check target
     (inputs
-     (list jack-1 alsa-lib portaudio qtbase-5 qtx11extras))
+     (list alsa-lib
+           jack-1
+           portaudio
+           qtbase-5
+           qtsvg-5))
     (native-inputs
      (list pkg-config qttools-5))
     (home-page "https://qjackctl.sourceforge.io/")
@@ -3586,7 +3713,8 @@ analysis plugins or audio feature extraction plugins.")
             (symlink
              (search-input-file inputs
                                 (string-append "/share/automake-"
-                                               ,(package-version automake)
+                                               ,(version-major+minor
+                                                 (package-version automake))
                                                "/ar-lib"))
              "ar-lib")
             #t)))))
@@ -3614,7 +3742,7 @@ stretching and pitch scaling of audio.  This package contains the library.")
         (base32 "0nvhdzy0m3bchk3dpnspv2f518p2v9fjcrv36z1sva1pv9a2g35w"))))
     (build-system cmake-build-system)
     (native-inputs
-     (list catch-framework2))
+     (list catch2))
     (inputs
      (list fftw))
     (home-page "https://mixxxdj.github.io/libkeyfinder/")
@@ -4853,7 +4981,7 @@ library.")
 (define-public faudio
   (package
     (name "faudio")
-    (version "21.10")
+    (version "22.11")
     (source
      (origin
        (method git-fetch)
@@ -4862,7 +4990,7 @@ library.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0l9bicg8v1shsyq9k48zh4wv5kwfs6lfjmm9blzd13xrgmhd07w2"))))
+        (base32 "0jdfslxgzysqy0r3nfbsyj6dz0n36fncbsczm9zznxv5phic7g87"))))
     (arguments
      '(#:tests? #f                      ; No tests.
        #:configure-flags '("-DGSTREAMER=ON")))
@@ -5842,7 +5970,7 @@ and DSD streams.")
 (define-public qpwgraph
   (package
     (name "qpwgraph")
-    (version "0.3.4")
+    (version "0.3.7")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -5851,7 +5979,7 @@ and DSD streams.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1xqmlbqj6ny4cpclzr8xyy6d6i392h9f1vmlbasp6xfy5b0yya94"))))
+                "05zbwikixxp5524ps7bd0i4xialgnp1m201rfvlz284sm40wk1vv"))))
     (build-system cmake-build-system)
     (arguments (list #:tests? #f)) ;; no tests
     (inputs (list alsa-lib
@@ -5867,3 +5995,30 @@ framework.  It provides a visual interface to audio and video connections
 managed by PipeWire.")
     (home-page "https://gitlab.freedesktop.org/rncbc/qpwgraph")
     (license license:gpl2)))
+
+(define-public streamripper
+  (package
+    (name "streamripper")
+    (version "1.64.6")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://sourceforge.net/projects/streamripper"
+                           "/files/streamripper%20(current)/"
+                           version "/streamripper-" version ".tar.gz"))
+       (sha256
+        (base32 "0hnyv3206r0rfprn3k7k6a0j959kagsfyrmyjm3gsf3vkhp5zmy1"))
+       (modules '((guix build utils)))
+       (snippet
+        ;; Delete bundled copy of libmad.
+        '(delete-file-recursively "libmad-0.15.1b"))))
+    (build-system gnu-build-system)
+    (native-inputs (list pkg-config))
+    (inputs (list faad2 glib libmad libvorbis))
+    (home-page "http://streamripper.sourceforge.net")
+    (synopsis "Record audio streams to your hard drive")
+    (description "Streamripper records shoutcast-compatible
+streams.  For shoutcast style streams it finds the “meta data” or track
+separation data, and uses that as a marker for where the track should
+be separated.")
+    (license license:gpl2+)))

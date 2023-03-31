@@ -2,7 +2,8 @@
 ;;; Copyright © 2016 David Craven <david@craven.ch>
 ;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 Rutger Helling <rhelling@mykolab.com>
-;;; Copyright © 2019, 2020 Marius Bakke <mbakke@fastmail.com>
+;;; Copyright © 2019, 2020, 2022 Marius Bakke <marius@gnu.org>
+;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -23,22 +24,26 @@
   #:use-module (gnu packages)
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages base)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages cyrus-sasl)
   #:use-module (gnu packages gl)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gnome)
+  #:use-module (gnu packages gettext)
   #:use-module (gnu packages gstreamer)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages image)
   #:use-module (gnu packages libusb)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages nss)
+  #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages pulseaudio)
   #:use-module (gnu packages python)
   #:use-module (gnu packages security-token)
   #:use-module (gnu packages tls)
+  #:use-module (gnu packages virtualization)
   #:use-module (gnu packages xorg)
   #:use-module (gnu packages xdisorg)
   #:use-module (gnu packages xiph)
@@ -47,6 +52,7 @@
   #:use-module (guix build-system meson)
   #:use-module (guix download)
   #:use-module (guix packages)
+  #:use-module (guix gexp)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix utils))
 
@@ -149,7 +155,7 @@ which allows users to view a desktop computing environment.")
             ;; These are required by the pkg-config files.
             gtk+
             pixman
-            openssl))
+            openssl-1.1))
     (inputs
       `(("glib-networking" ,glib-networking)
         ("gobject-introspection" ,gobject-introspection)
@@ -221,7 +227,7 @@ which allows users to view a desktop computing environment.")
                 "1xd0xffw0g5vvwbq4ksmm3jjfq45f9dw20xpmi82g1fj9f7wy85k"))))
     (build-system gnu-build-system)
     (propagated-inputs
-      (list openssl pixman spice-protocol))
+      (list openssl-1.1 pixman spice-protocol))
     (inputs
       (list cyrus-sasl
             glib
@@ -340,6 +346,13 @@ resolution scaling on graphical console window resize.")
                (base32
                 "1rrjlclm6ad63gah1fa4yfwrz4z6vgq2yrybbvzvvdbxrgl4vgzv"))))
     (build-system meson-build-system)
+    (arguments
+     (list #:configure-flags
+           ;; XXX: For some reason NSS is not automatically added on RUNPATH
+           ;; with newer versions of Meson (after 0.60).
+           #~(list (string-append "-Dc_link_args=-Wl,-rpath="
+                                  (search-input-directory
+                                   %build-inputs "lib/nss")))))
     (propagated-inputs
      (list glib ; Requires: in the pkg-config file
            nss ; Requires.private: in the pkg-config
@@ -361,35 +374,32 @@ share smart cards from client system to local or remote virtual machines.")
 (define-public virt-viewer
   (package
     (name "virt-viewer")
-    (version "7.0")
+    (version "11.0")
     (source (origin
               (method url-fetch)
               (uri (string-append
-                "https://virt-manager.org/download/sources/virt-viewer/"
-                "virt-viewer-" version ".tar.gz"))
+                    "https://virt-manager.org/download/sources/virt-viewer/"
+                    "virt-viewer-" version ".tar.xz"))
               (sha256
                (base32
-                "00y9vi69sja4pkrfnvrkwsscm41bqrjzvp8aijb20pvg6ymczhj7"))))
-    (build-system gnu-build-system)
-    (inputs
-      (list gtk+ gtk-vnc libcap libxml2 spice-gtk))
+                "1l5bv6x6j21l487mk3n93ai121gg62n6b069r2jpf72cbhra4gx4"))))
+    (build-system meson-build-system)
     (native-inputs
-      `(("glib:bin" ,glib "bin")
-        ("intltool" ,intltool)
-        ("pkg-config" ,pkg-config)))
-    (arguments
-      `(#:configure-flags
-        '("--with-spice-gtk")
-        #:phases
-         (modify-phases %standard-phases
-           (add-after
-            'install 'wrap-remote-viewer
-            (lambda* (#:key inputs outputs #:allow-other-keys)
-              (let ((out             (assoc-ref outputs "out"))
-                    (gst-plugin-path (getenv "GST_PLUGIN_SYSTEM_PATH")))
-                (wrap-program (string-append out "/bin/remote-viewer")
-                  `("GST_PLUGIN_SYSTEM_PATH" ":" prefix (,gst-plugin-path))))
-              #t)))))
+     (list `(,glib "bin")
+           gettext-minimal
+           perl                         ;for pod2man
+           pkg-config
+           python))
+    (inputs
+     (list bash-completion
+           gtk+
+           gtk-vnc
+           libcap
+           libgovirt
+           libvirt-glib
+           libxml2
+           spice-gtk
+           vte))
     (synopsis "Graphical console client for virtual machines")
     (description "Graphical console client for virtual machines using SPICE or
 VNC.")

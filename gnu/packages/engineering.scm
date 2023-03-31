@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2015 Federico Beffa <beffa@fbengineering.ch>
 ;;; Copyright © 2016, 2018, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016 David Thompson <davet@gnu.org>
@@ -78,6 +78,7 @@
   #:use-module (gnu packages bdw-gc)
   #:use-module (gnu packages bison)
   #:use-module (gnu packages boost)
+  #:use-module (gnu packages c)
   #:use-module (gnu packages check)
   #:use-module (gnu packages cmake)
   #:use-module (gnu packages commencement)
@@ -948,7 +949,7 @@ Emacs).")
 (define-public kicad
   (package
     (name "kicad")
-    (version "6.0.7")
+    (version "6.0.9")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -956,7 +957,7 @@ Emacs).")
                     (commit version)))
               (sha256
                (base32
-                "10bqn99nif9zyi5v0lkic3na2vac5lgacw01ayil359vaw7d0pzy"))
+                "1fr02jcy09v14d3k8ril0zhwnzhcqcf77wfj5b3bkrh6r8xraqhs"))
               (file-name (git-file-name name version))))
     (build-system cmake-build-system)
     (arguments
@@ -1041,7 +1042,8 @@ Emacs).")
                   python-wrapper
                   gtk+
                   wxwidgets
-                  python-wxpython))
+                  python-wxpython
+                  gdk-pixbuf))
     (home-page "https://www.kicad.org/")
     (synopsis "Electronics Design Automation Suite")
     (description
@@ -1063,7 +1065,7 @@ electrical diagrams), gerbview (viewing Gerber files) and others.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "15arkjjbzd4k09crhsrizmj8ljwpv6xjm59k58pfbd5pmqkklh2d"))))
+                "04idpdzz2rfp8v1a37if01l5dfjnjg6jxp90gkgyadjzqkp6kcv3"))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags (list "-DBUILD_FORMATS=html")
@@ -1097,7 +1099,7 @@ electrical diagrams), gerbview (viewing Gerber files) and others.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "006ksx8r6cm6q7v701nalggivp21cmysj8p9zc18y3sch8n1mj4g"))))
+                "0y5mjjmmln37hkp9wmydinlfgrn8im8rn20145g9xgdpj8j38d48"))))
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #f))                    ; no tests exist
@@ -1126,7 +1128,7 @@ libraries.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0c5fm4hlkka0ms43j02kbv7s9yrlkffn0jz6649ac3gpx6pk8lbf"))))
+                "02j445i0kcf87fhj9y6pwfcwq3arppxbrv77lbizm8kcpkpcfldl"))))
     (synopsis "Official KiCad footprint libraries")
     (description "This package contains the official KiCad footprint libraries.")))
 
@@ -1143,7 +1145,7 @@ libraries.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0rdhwyhknrc63sc5ykmq097rzrl36zibnkls7q5hf54lrhn0n3k4"))))
+                "0cnrg7mr3khpglviid1adk2ihs1qwj0r7l32z2vqsl8aidzbg9kr"))))
     (synopsis "Official KiCad 3D model libraries")
     (description "This package contains the official KiCad 3D model libraries.")))
 
@@ -1785,7 +1787,7 @@ high-performance parallel differential evolution (DE) optimization algorithm.")
   ;; See <https://debbugs.gnu.org/cgi/bugreport.cgi?bug=27344#236>.
   (package
     (name "libngspice")
-    (version "37")
+    (version "38")
     (source
      (origin
        (method url-fetch)
@@ -1796,7 +1798,7 @@ high-performance parallel differential evolution (DE) optimization algorithm.")
                             "old-releases/" version
                             "/ngspice-" version ".tar.gz")))
        (sha256
-        (base32 "1gpcic6b6xk3g4956jcsqljf33kj5g43cahmydq6m8rn39sadvlv"))))
+        (base32 "0mkw66d2isyyxssziwramd08amd7l1qm6dfg86r5s5kvqkv24gic"))))
     (build-system gnu-build-system)
     (arguments
      `(;; No tests for libngspice exist.
@@ -2584,6 +2586,36 @@ arithmetic operations on fields, entity location functionalities, and
 interpolation toolkit.")
     (license license:gpl3+)))
 
+(define-public cgns
+  (package
+    (name "cgns")
+    (version "4.3.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/CGNS/CGNS")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "0jig1y7lv9qk1ri2gqws7ffpajmhxnank7gbyna9hfaghsxdlnvd"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list #:configure-flags
+           '(list "-DCGNS_ENABLE_TESTS=ON"
+                  "-DCGNS_ENABLE_FORTRAN=ON")))
+    (inputs (list hdf5 gfortran))
+    (home-page "https://cgns.org/")
+    (synopsis "Read and write computational fluid dynamics analysis data")
+    (description "This package provides software that reads, writes, and
+modifies data in the @dfn{CFD General Notation System} (CGNS) format.  The
+format is meant for recording and recovering computer data associated with the
+numerical solution of fluid dynamics equations.  The format is a conceptual
+entity established by the documentation; the software is a physical product
+supplied to enable developers to access and produce data recorded in that
+format.")
+    (license license:zlib)))
+
 (define-public libarea
   (let ((revision "1")
         (commit "8f8bac811c10f1f01fda0d742a18591f61dd76ee"))
@@ -2895,6 +2927,105 @@ for the milling of PCBs.  It also includes an autoleveller for the automatic
 dynamic calibration of the milling depth.")
      (license license:gpl3+))))
 
+;; libdxfrw has no readme, no version release, no tags.  Initial commit says
+;; "libdxfrw-0.6.3 import", but it shares no git history with "upstream"
+;; https://github.com/codelibs/libdxfrw.  Both are difficult to package
+;; separately as they don't install properly.  Copying in-tree instead of
+;; #:recursive #t to avoid downloading the other bigger dependencies which
+;; aren't needed.
+(define libdxfrw-sources
+  (origin
+    (method git-fetch)
+    (uri (git-reference (url
+                         "https://github.com/solvespace/libdxfrw")
+                        (commit
+                         "0b7b7b709d9299565db603f878214656ef5e9ddf")))
+    (sha256 (base32
+             "0d2wjq81466m3hb5cffiy99vhx0irwwy47yfxp318k2q4cvd5z2a"))))
+
+(define-public solvespace
+  (let ((commit "70bde63cb32a7f049fa56cbdf924e2695fcb2916")
+        (version "3.1"))
+    (package
+      (name "solvespace")
+      (version version)
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/solvespace/solvespace")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "1hbdln44k00a6vlklv2mq2c9zda3i9d5x0f7ks85w4v6zskhqnra"))))
+      (build-system cmake-build-system)
+      (native-inputs (list pkg-config gettext-minimal))
+      (arguments
+       (list
+        #:build-type "Release"
+        #:phases #~(modify-phases %standard-phases
+                     (add-after 'unpack 'unpack-libdxfrw
+                       (lambda _
+                         (copy-recursively #$libdxfrw-sources
+                                           "extlib/libdxfrw")))
+                     (add-before 'configure 'embed-git-commit-hash
+                       (lambda _
+                         ;; `git describe` doesn't work here, so embed
+                         ;; the commit hash directly in CMakeLists.txt as
+                         ;; described instead.
+                         (substitute* "CMakeLists.txt"
+                           (("include\\(GetGitCommitHash\\)")
+                            (string-append "set(GIT_COMMIT_HASH "
+                                           #$commit ")")))))
+                     (add-before 'configure 'use-packaged-mimalloc
+                       (lambda _
+                         (substitute* "CMakeLists.txt"
+                           (("message\\(STATUS \"Using in-tree mimalloc\"\\)")
+                            "message(STATUS \"Using guix packaged mimalloc\")")
+                           (("add_subdirectory\\(extlib/mimalloc EXCLUDE_FROM_ALL\\)")
+                            "find_package(mimalloc REQUIRED)"))))
+                     (add-after 'install 'wrap-program
+                       (lambda* (#:key inputs outputs #:allow-other-keys)
+                         (wrap-program (string-append (assoc-ref outputs "out")
+                                                      "/bin/solvespace")
+                           ;; For GtkFileChooserDialog.
+                           `("GSETTINGS_SCHEMA_DIR" =
+                             (,(string-append (assoc-ref inputs "gtk+")
+                                              "/share/glib-2.0/schemas")))))))))
+      (inputs (list cairo
+                    eigen
+                    freetype
+                    gtkmm-3
+                    json-c
+                    libpng
+                    libspnav            ;spaceware
+                    mimalloc
+                    mesa
+                    zlib))
+      (synopsis
+       "Parametric 2D/3D @acronym{CAD, computer-aided design} software")
+      (description
+       "SOLVESPACE is a parametric 3D @acronym{CAD,
+computer-aided design} tool.  Applications include:
+
+@itemize
+@item modeling 3D parts — draw with extrudes, revolves, helixes and
+      Boolean (union / difference / intersection) operations
+@item modeling 2D parts — draw the part as a single section,
+      and export DXF, PDF, SVG; use 3D assembly to verify fit
+@item 3D-printed parts — export the STL or other triangle mesh
+      expected by most 3D printers
+@item preparing CAM data — export 2D vector art for a waterjet
+      machine or laser cutter; or generate STEP or STL, for import into
+      third-party CAM software for machining
+@item mechanism design — use the constraint solver to simulate planar
+      or spatial linkages, with pin, ball, or slide joints
+@item plane and solid geometry — replace hand-solved trigonometry and spreadsheets
+      with a live dimensioned drawing
+@end itemize")
+      (home-page "https://solvespace.com/")
+      (license license:gpl3+))))
+
 (define-public syscall-intercept
   ;; Upstream provides no tag. Also, last version update is 4 years old.
   (let ((commit "304404581c57d43478438d175099d20260bae74e")
@@ -3118,7 +3249,7 @@ perform various useful functions such as:
     ;;      with all of these.
     (inputs
      `(("boost" ,boost)
-       ("catch2" ,catch-framework2)
+       ("catch2" ,catch2)
        ("cgal" ,cgal)
        ("eigen" ,eigen)
        ("embree" ,embree)
@@ -3179,7 +3310,7 @@ visualization, matrix manipulation.")
 (define-public prusa-slicer
   (package
     (name "prusa-slicer")
-    (version "2.4.2")
+    (version "2.5.0")
     (source
      (origin
        (method git-fetch)
@@ -3188,7 +3319,7 @@ visualization, matrix manipulation.")
          (url "https://github.com/prusa3d/PrusaSlicer")
          (commit (string-append "version_" version))))
        (file-name (git-file-name name version))
-       (sha256 (base32 "17p56f0zmiryy8k4da02in1l6yxniz286gf9yz8s1gaz5ksqj4af"))
+       (sha256 (base32 "17ic92ww2ny0frxyv7ajwdwa0fq70ygq562ik8sh94jx67jvxdy0"))
        (modules '((guix build utils)))
        (snippet
         '(begin
@@ -3237,10 +3368,12 @@ visualization, matrix manipulation.")
            hidapi
            ilmbase
            libigl
+           libjpeg-turbo
            libpng
            mesa
            mpfr
            nlopt
+           opencascade-occt
            openvdb
            pango
            tbb
@@ -3300,6 +3433,11 @@ BOM creation and has a lot of extra features.")
        #:configure-flags '("-DBUILD_EXAMPLES=OFF")
        #:phases
        (modify-phases %standard-phases
+         (add-after 'unpack 'fix-protobuf-compatibility
+           (lambda _
+             (substitute* "src/Socket_p.h"
+               (("stream\\.SetTotalBytesLimit\\(message_size_maximum,.*\\);")
+                "stream.SetTotalBytesLimit(message_size_maximum);"))))
          (add-before 'configure 'fix-python-sitearch
            (lambda* (#:key outputs #:allow-other-keys)
              (substitute* "cmake/FindSIP.cmake"

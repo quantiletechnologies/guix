@@ -24,6 +24,7 @@
 ;;; Copyright © 2021, 2022 Brendan Tildesley <mail@brendan.scot>
 ;;; Copyright © 2022 Allan Adair <allan@adair.no>
 ;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Denis 'GNUtoo' Carikli <GNUtoo@cyberdimension.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -952,14 +953,14 @@ SHA256, SHA512, SHA3, AICH, ED2K, Tiger, DC++ TTH, BitTorrent BTIH, GOST R
 (define-public botan
   (package
     (name "botan")
-    (version "2.19.1")
+    (version "2.19.2")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://botan.randombit.net/releases/"
                                   "Botan-" version ".tar.xz"))
               (sha256
                (base32
-                "0q2mzzg0a40prp9gwjk7d9fn8kwj6z2x6h6mzlm0hr6sxz7h0vp2"))))
+                "0xad3fa96l6x3azxs2gbz5jfqm2drfv9y9idhf5wvdf62mvg3x9s"))))
     (build-system gnu-build-system)
     (arguments
      (list
@@ -1470,7 +1471,7 @@ non-encrypted files.")
 (define-public cryfs
   (package
     (name "cryfs")
-    (version "0.11.2")
+    (version "0.11.3")
     (source
      (origin
        (method url-fetch)
@@ -1478,7 +1479,7 @@ non-encrypted files.")
              "https://github.com/cryfs/cryfs/releases/download/"
              version "/cryfs-" version ".tar.xz"))
        (sha256
-        (base32 "1ggizlacm4fccsw9syy2763ihxnby6cdh3mhhraxy8bmsdjza7lm"))))
+        (base32 "1h41dhdfk2nll0vx5i66mgrdalv6kccwq5yx99gridywxw6qxxhq"))))
     (build-system cmake-build-system)
     (arguments
      '(#:modules ((guix build cmake-build-system)
@@ -1518,19 +1519,17 @@ non-encrypted files.")
              (when tests?
                (let ((tests (find-files "." "-test$")))
                  ;; XXX: Disable failing tests. Unfortunately there are a
-                   ;; few. Some only fail in the build environment due to
-                   ;; FUSE not being available.
-                   (for-each invoke
-                             (lset-difference string-contains
-                                              tests
-                                              '("cpp-utils-test"
-                                                "cryfs-cli-test"
-                                                "blobstore-test"
-                                                "fspp-test")))))
-             #t)))))
+                 ;; few. Some only fail in the build environment due to
+                 ;; FUSE not being available.
+                 (for-each invoke
+                           (lset-difference string-contains
+                                            tests
+                                            '("cpp-utils-test"
+                                              "cryfs-cli-test"
+                                              "blobstore-test"
+                                              "fspp-test"))))))))))
     (native-inputs
-     `(("python" ,python-wrapper)
-       ("pkg-config" ,pkg-config)))
+     (list pkg-config python-wrapper))
     (inputs
      (list boost curl fuse range-v3 spdlog))
     (home-page "https://www.cryfs.org/")
@@ -1699,3 +1698,42 @@ sha256crypt, md5crypt, SunMD5, sha1crypt, NT, bsdicrypt, bigcrypt, and
 descrypt.")
     (home-page "https://github.com/besser82/libxcrypt")
     (license license:lgpl2.1)))
+
+(define-public keychain
+  (package
+    (name "keychain")
+    (version "2.8.5")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/funtoo/keychain")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1bkjlg0a2bbdjhwp37ci1rwikvrl4s3xlbf2jq2z4azc96dr83mj"))))
+    (build-system gnu-build-system)
+    (propagated-inputs (list procps))
+    (arguments
+     `(#:tests? #f ; No test suite
+       #:phases (modify-phases %standard-phases
+                  (delete 'configure)
+                  (replace 'install
+                    (lambda _
+                      (install-file "keychain"
+                                    (string-append %output "/bin/"))
+                      (install-file "keychain.1"
+                                    (string-append %output "/share/man/man1"))
+                      #t)))))
+    (synopsis
+     "SSH or GPG agent frontend that can share a single agent on the same
+system")
+    (description
+     "Keychain is usually run from shell profiles like ~/.bash_profile, but
+it is also possible to use it with non-interactive shells.  It works
+with various operating systems (including GNU/Linux and HURD) and
+shells (like bourne-compatible, csh-compatible and fish shells).  By
+default Keychain will only start ssh-agent, but it can also be
+configured to start gpg-agent.")
+    (home-page "https://www.funtoo.org/Keychain")
+    (license license:gpl2)))

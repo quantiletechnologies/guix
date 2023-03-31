@@ -40,7 +40,7 @@
   #:use-module (guix search-paths)
   #:use-module (guix profiles)
   #:use-module (guix channels)
-  #:use-module ((guix git) #:select (update-cached-checkout))
+  #:use-module ((guix git) #:select (update-cached-checkout commit-id?))
   #:use-module (guix monads)
   #:use-module (guix store)
   #:use-module (guix derivations)
@@ -69,6 +69,8 @@
             inferior-exception-arguments
             inferior-exception-inferior
             inferior-exception-stack
+            inferior-protocol-error?
+            inferior-protocol-error-inferior
             read-repl-response
 
             inferior-packages
@@ -314,6 +316,10 @@ equivalent.  Return #f if the inferior could not be launched."
   (inferior   inferior-exception-inferior)        ;<inferior> | #f
   (stack      inferior-exception-stack))          ;list of (FILE COLUMN LINE)
 
+(define-condition-type &inferior-protocol-error &error
+  inferior-protocol-error?
+  (inferior  inferior-protocol-error-inferior))   ;<inferior>
+
 (define* (read-repl-response port #:optional inferior)
   "Read a (guix repl) response from PORT and return it as a Scheme object.
 Raise '&inferior-exception' when an exception is read from PORT."
@@ -339,7 +345,11 @@ Raise '&inferior-exception' when an exception is read from PORT."
      (raise (condition (&inferior-exception
                         (arguments (cons key (map sexp->object objects)))
                         (inferior inferior)
-                        (stack '())))))))
+                        (stack '())))))
+    (_
+     ;; Protocol error.
+     (raise (condition (&inferior-protocol-error
+                        (inferior inferior)))))))
 
 (define (read-inferior-response inferior)
   (read-repl-response (inferior-socket inferior)
@@ -833,9 +843,9 @@ CHANNEL's 'commit' field is a full SHA1, return it as-is; if it's a SHA1
 prefix, resolve it; and if 'commit' is unset, fetch CHANNEL's branch tip."
   (let ((commit (channel-commit channel))
         (branch (channel-branch channel)))
-    (if (and commit (= (string-length commit) 40))
+    (if (and commit (commit-id? commit))
         commit
-        (let* ((ref (if commit `(commit . ,commit) `(branch . ,branch)))
+        (let* ((ref (if commit `(tag-or-commit . ,commit) `(branch . ,branch)))
                (cache commit relation
                      (update-cached-checkout (channel-url channel)
                                              #:ref ref

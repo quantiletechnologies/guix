@@ -5,12 +5,13 @@
 ;;; Copyright © 2020, 2021, 2022 Guillaume Le Vaillant <glv@posteo.net>
 ;;; Copyright © 2020 Danny Milosavljevic <dannym@scratchpost.org>
 ;;; Copyright © 2020 Charlie Ritter <chewzerita@posteo.net>
-;;; Copyright © 2020, 2021 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2020–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2021 João Pedro Simas <jpsimas@gmail.com>
 ;;; Copyright © 2021 Jack Hill <jackhill@jackhill.us>
 ;;; Copyright © 2022 Jai Vetrivelan <jaivetrivelan@gmail.com>
 ;;; Copyright © 2022 Sheng Yang <styang@fastmail.com>
 ;;; Copyright © 2022 Greg Hogan <code@greghogan.com>
+;;; Copyright © 2022 Ryan Tolboom <ryan@using.tech>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -89,6 +90,7 @@
   #:use-module (gnu packages readline)
   #:use-module (gnu packages ruby)
   #:use-module (gnu packages sdl)
+  #:use-module (gnu packages serialization)
   #:use-module (gnu packages sphinx)
   #:use-module (gnu packages swig)
   #:use-module (gnu packages tcl)
@@ -173,7 +175,7 @@ used as a drop-in substitute for @code{libfec}.")
 (define-public liquid-dsp
   (package
     (name "liquid-dsp")
-    (version "1.4.0")
+    (version "1.5.0")
     (source
      (origin (method git-fetch)
              (uri (git-reference
@@ -181,21 +183,25 @@ used as a drop-in substitute for @code{libfec}.")
                    (commit (string-append "v" version))))
              (file-name (git-file-name name version))
              (sha256
-              (base32 "0mr86z37yycrqwbrmsiayi1vqrgpjq0pn1c3p1qrngipkw45jnn0"))))
+              (base32 "0m0bhj80rs9yhfwnrlx960lii1cqijz1wr8q93i7m2z91h3v3w0j"))))
     (build-system gnu-build-system)
     (native-inputs
      (list autoconf automake))
     (inputs
      (list fftwf libfec))
     (arguments
-     `(;; For reproducibility, disable use of SSE3, SSE4.1, etc.
-       #:configure-flags '("--enable-simdoverride")
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'install 'delete-static-library
-           (lambda* (#:key outputs #:allow-other-keys)
-             (delete-file (string-append (assoc-ref outputs "out")
-                                         "/lib/libliquid.a")))))))
+     (list
+      ;; For reproducibility, disable use of SSE3, SSE4.1, etc.
+      #:configure-flags #~(list "--enable-simdoverride")
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'install 'delete-static-library
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let ((version #$(version-major+minor
+                                (package-version this-package))))
+                (delete-file (string-append #$output
+                                            "/lib/libliquid.a."
+                                            version))))))))
     (home-page "https://liquidsdr.org")
     (synopsis "Signal processing library for software-defined radios")
     (description
@@ -467,6 +473,86 @@ controls for certain tuners which may be paired with an audio device.")
     (description
      "This package provides RTL-SDR devices support to the SoapySDR library.")
     (license license:expat)))
+
+(define-public python-simplesoapy
+  (package
+    (name "python-simplesoapy")
+    (version "1.5.1")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "SimpleSoapy" version))
+       (sha256
+        (base32 "0bh02m5zj82mp7sxpvwr24ylmrbp3p4r9q7psqcfnxl628w3b4hl"))))
+    (build-system python-build-system)
+    (propagated-inputs
+     (list python-numpy soapysdr))
+    (home-page "https://github.com/xmikos/simplesoapy")
+    (synopsis "Python wrapper for SoapySDR")
+    (description
+     "This package provide a simple pythonic wrapper for the SoapySDR
+library.")
+    (license license:expat)))
+
+(define-public soapy-power
+  (package
+    (name "soapy-power")
+    (version "1.6.1")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "soapy_power" version))
+       (sha256
+        (base32 "1rajmygcqvv5ph7yk65r4w581lfszrz0f48csvfmma1ami0lirdm"))))
+    (build-system python-build-system)
+    (inputs
+     (list python-numpy
+           python-scipy
+           python-simplesoapy
+           python-simplespectral))
+    (home-page "https://github.com/xmikos/soapy_power")
+    (synopsis "Obtain power spectrum from SDR devices")
+    (description "The @code{soapy_power} obtains the power spectrum from SDR
+devices that are supported by the SoapySDR library.")
+    (license license:expat)))
+
+(define-public qspectrumanalyzer
+  (package
+    (name "qspectrumanalyzer")
+    (version "2.1.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "QSpectrumAnalyzer" version))
+       (sha256
+        (base32 "1bhl8zp4z7v3595ailyivx9vb7y5si6kr22aylphb5pf60jxqhn0"))))
+    (build-system python-build-system)
+    (inputs
+     (list bash-minimal
+           python-pyqt
+           python-pyqtgraph
+           python-qt.py
+           python-simplespectral
+           python-simplesoapy
+           soapy-power))
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'install 'wrap-path
+                 ;; Add the location of the default backend to PATH.
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (wrap-program (string-append #$output
+                                                "/bin/qspectrumanalyzer")
+                     `("PATH" ":" prefix
+                       (,(string-append (assoc-ref inputs "soapy-power")
+                                        "/bin")))))))))
+    (home-page "https://github.com/xmikos/qspectrumanalyzer")
+    (synopsis "Spectrum analyzer for multiple SDR platforms")
+    (description
+     "This package provides a spectrum analyzer for multiple SDR platforms.
+It is a GUI for @code{soapy_power}, @code{hackrf_sweep}, @code{rtl_power},
+@code{rx_power} and other backends.")
+    (license license:gpl3)))
 
 (define-public aptdec
   ;; No release since 2013, use commit directly.
@@ -1144,20 +1230,35 @@ you must extend 'udev-service-type' with this package.  E.g.:
         (base32 "11r4i8gmxnb6ixpk4ns38c9xwj3qibp2v3pkhy2z0lhz0xxi1w4b"))))
     (build-system gnu-build-system)
     (native-inputs
-     (list doxygen
-           lua
+     (list autoconf
+           automake
+           doxygen
+           libtool
            pkg-config
            python-wrapper
-           swig
-           tcl))
+           swig))
     (inputs
-     (list gd libusb libxml2 readline))
+     (list gd
+           libusb
+           libxml2
+           lua
+           python
+           readline
+           tcl))
     (arguments
-     `(#:configure-flags '("--disable-static"
-                           "--with-lua-binding"
-                           "--with-python-binding"
-                           "--with-tcl-binding"
-                           "--with-xml-support")))
+     `(#:configure-flags
+       '("--disable-static"
+         "--with-lua-binding"
+         "--with-python-binding"
+         "--with-tcl-binding"
+         "--with-xml-support")
+       #:phases
+       (modify-phases %standard-phases
+         (add-before 'bootstrap 'force-bootstrap
+           ;; The included configure script is misbuilt.  It will never find
+           ;; pkg-config, and hence any libraries that rely on it.  Rebuild it.
+           (lambda _
+             (delete-file "configure"))))))
     (synopsis "Tools and API to control radios")
     (description
      "The Ham Radio Control Library (Hamlib) is a project to provide programs
@@ -1562,7 +1663,7 @@ modes:
 (define-public nanovna-saver
   (package
     (name "nanovna-saver")
-    (version "0.3.9")
+    (version "0.5.3")
     (source
      (origin
        (method git-fetch)
@@ -1571,7 +1672,7 @@ modes:
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1h5k402wjlj7xjniggwf0x7a5srlgglc2x4hy6lz6c30zwa7z8fm"))))
+        (base32 "1h0wzva8j7fqnpf0qy42bw9rdclgq3jdq902ajvd9v5iqcqs78n0"))))
     (build-system python-build-system)
     (native-inputs
      (list python-cython))
@@ -1945,59 +2046,76 @@ defined radio with support for rtl-sdr.")
     (license license:gpl2+)))
 
 (define-public csdr
-  ;; No release since 2017, use commit directly.
-  (let ((commit "6ef2a74206887155290a54c7117636f66742f858")
-        (revision "1"))
-    (package
-      (name "csdr")
-      (version (git-version "0.15" revision commit))
-      (source
-       (origin
-         (method git-fetch)
-         (uri (git-reference
-               (url "https://github.com/ha7ilm/csdr")
-               (commit commit)))
-         (file-name (git-file-name name version))
-         (sha256
-          (base32 "0ic35130lf66lk3wawgc5bcg711l7chv9al1hzdc1xrmq9qf9hri"))))
-      (build-system gnu-build-system)
-      (inputs
-       (list fftwf))
-      (arguments
-       `(#:make-flags
-         (list (string-append "PREFIX=" (assoc-ref %outputs "out"))
-               ;; Don't print summary of SIMD optimized functions.
-               "PARSEVECT=no")
-         #:tests? #f  ; No check phase
-         #:phases
-         (modify-phases %standard-phases
-           (replace 'configure
-             (lambda* (#:key outputs #:allow-other-keys)
-               (substitute* "Makefile"
-                 (("PARAMS_MISC = -Wno-unused-result" all)
-                  ;; The 'validate-runpath' phase fails without this.
-                  (string-append
-                   all " -Wl,-rpath=" (assoc-ref outputs "out") "/lib"))
-                 (("PARAMS_SIMD =.*")
-                  ;; Disable to make reproducibility and cross-compilation work.
-                  "")
-                 (("gcc ")
-                  ,(string-append (cc-for-target) " "))
-                 (("g\\+\\+ ")
-                  ,(string-append (cxx-for-target) " ")))))
-           (add-before 'install 'make-installation-directories
-             (lambda* (#:key outputs #:allow-other-keys)
-               (let ((out (assoc-ref outputs "out")))
-                 (mkdir-p (string-append out "/bin"))
-                 (mkdir-p (string-append out "/lib"))))))))
-      (home-page "https://github.com/ha7ilm/csdr")
-      (synopsis "DSP for software defined radio")
-      (description
-       "This package includes the @code{libcsdr} library of
+  (package
+    (name "csdr")
+    (version "0.18.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/jketterl/csdr")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "0sdni0p9qcf4yw1wf5jz1pyb9wv6wmdblirh2q6s7jblh50vfwz1"))))
+    (build-system cmake-build-system)
+    (native-inputs
+     (list pkg-config))
+    (inputs
+     (list fftwf libsamplerate))
+    (arguments
+     (list #:tests? #f)) ; No check phase
+    (home-page "https://github.com/jketterl/csdr")
+    (synopsis "DSP for software defined radio")
+    (description
+     "This package includes the @code{libcsdr} library of
 @acronym{DSP, Digital Signal Processing} functions for
 @acronym{SDRs, Software Defined Radios}, and the @code{csdr} command line
 program that can be used to build simple signal processing flow graphs.")
-      (license license:gpl3+))))
+    (license license:gpl3+)))
+
+(define-public convert-samples
+  (package
+    (name "convert-samples")
+    (version "3.0.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/glv2/convert-samples")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1d9w9m5agi8fiv1wk8nhjrbm2jkm2fks4ymbxkn0xphbwj3gwr7i"))))
+    (build-system gnu-build-system)
+    (native-inputs
+     (list autoconf automake))
+    (inputs
+     (list liquid-dsp))
+    (synopsis "SDR samples converter")
+    (description
+     "@code{convert-samples} is a command-line program to convert samples
+received from software defined radios from one format to another.
+
+Supported formats:
+@itemize
+@item s8: signed 8 bit integer
+@item u8: unsigned 8 bit integer
+@item s16: signed 16 bit integer
+@item u16: unsigned 16 bit integer
+@item s32: signed 32 bit integer
+@item u32: unsigned 32 bit integer
+@item f32: 32 bit float
+@item cs8: complex made of signed 8 bit integers
+@item cu8: complex made of unsigned 8 bit integers
+@item cs16: complex made of signed 16 bit integers
+@item cu16: complex made of unsigned 16 bit integers
+@item cs32: complex made of signed 32 bit integers
+@item cu32: complex made of unsigned 32 bit integers
+@item cf32: complex made of 32 bit floats
+@end itemize")
+    (home-page "https://github.com/glv2/convert-samples")
+    (license license:gpl3+)))
 
 (define-public serialdv
   (package
@@ -2192,6 +2310,18 @@ voice formats.")
                                #$(this-package-input "soapysdr")))
        #:phases
        (modify-phases %standard-phases
+         (add-after 'unpack 'fix-CPU-extension-detection
+           ;; ‘Fix’ in the static sense.  TODO: Make this -tune'able.
+           (lambda _
+             (let ((file "cmake/Modules/DetectArchitecture.cmake"))
+               ;; Disable all build-time CPU extension detection…
+               (substitute* file
+                 (("detect_extensions\\(.*") ""))
+               (when ,(target-x86-64?)
+                 ;; …but force extensions that are guaranteed to be available.
+                 (substitute* file
+                   ((".*cmake_pop_check_state" eof)
+                    (string-append "force_ext_available(SSE2)\n" eof)))))))
          (add-after 'unpack 'fix-boost-compatibility
            (lambda _
              (substitute*
@@ -2570,4 +2700,41 @@ Radios.")
 the navigation message, computation of observables and, finally, computation of
 position fixes) the signals of the BeiDou, Galileo, GLONASS and GPS Global
 Navigation Satellite System.")
+    (license license:gpl3+)))
+
+(define-public qdmr
+  (package
+    (name "qdmr")
+    (version "0.10.3")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                     (url "https://github.com/hmatuschek/qdmr")
+                     (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "037vkwk974zrwacxafslkb3mbw9258v9sdpwdvb23msjzbc3snrn"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list #:tests? #f ;no tests
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'patch-paths
+                 (lambda _
+                   (substitute* "lib/CMakeLists.txt"
+                     (("(DESTINATION \")/etc/udev/" _ directive)
+                      (string-append directive #$output "/lib/udev/"))))))))
+    (inputs (list libusb qtbase-5 qtlocation qtserialport yaml-cpp))
+    (native-inputs (list qttools-5))
+    (home-page "https://dm3mat.darc.de/qdmr/")
+    (synopsis "GUI application and command line tool to program DMR radios")
+    (description
+     "qdmr is a graphical user interface (GUI) application that allows one to
+program several types of DMR radios.  It is comparable to the Customer
+Programming Software (CPS) bundled with these radios but aims to be a more
+universal tool.
+
+To install the qdmr udev rules, you must extend @code{udev-service-type} with this
+package.  E.g.: @code{(udev-rules-service 'qdmr qdmr)}")
     (license license:gpl3+)))

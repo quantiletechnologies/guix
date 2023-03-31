@@ -5,6 +5,7 @@
 ;;; Copyright © 2019 Alex Vong <alexvong1995@gmail.com>
 ;;; Copyright © 2020 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2020 Julien Lepiller <julien@lepiller.eu>
+;;; Copyright © 2022 Milran <milranmike@protonmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -425,13 +426,14 @@ specifications in the document.")
 (define-public libstemmer
   (package
     (name "libstemmer")
-    (version "2.0.0")
+    (version "2.2.0")
     (source
      (origin
        (method url-fetch)
-       (uri "https://snowballstem.org/dist/libstemmer_c.tgz")
+       (uri (string-append "https://snowballstem.org/dist/libstemmer_c-"
+                           version ".tar.gz"))
        (sha256
-        (base32 "1z2xvrjsaaypc04lwz7dg8mjm5cq1gzmn0l544pn6y2ll3r7ckh5"))))
+        (base32 "1hvphdl8pfq1q3cgh7bshsabsxc7id6wswrqilplwszkkkzdjhdr"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f                      ; No tests exist
@@ -450,13 +452,14 @@ specifications in the document.")
                     (out-lib (string-append out "/lib")))
                (install-file "stemwords" out-bin)
                (install-file "include/libstemmer.h" out-include)
-               (rename-file "libstemmer.o" "libstemmer.a")
-               (install-file "libstemmer.a" out-lib)
-               #t))))))
+               (install-file "libstemmer.a" out-lib)))))))
     (synopsis "Stemming Library")
     (description "LibStemmer provides stemming library, supporting several
 languages.")
     (home-page "https://snowballstem.org/")
+    (properties
+     '((release-monitoring-url . "https://snowballstem.org/download.html")
+       (upstream-name . "libstemmer_c")))
     (license license:bsd-3)))
 
 (define-public perl-lingua-en-findnumber
@@ -921,3 +924,31 @@ noun phrases, verb phrases, etc.).")
 analysis (pitch, formant, intensity, ...), speech synthesis, labelling, segmenting
 and manipulation.")
     (license license:gpl2+)))
+
+(define-public libskk
+  (package
+    (name "libskk")
+    (version "1.0.5")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/ueno/libskk")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0y279pcgs3jrsi9vzx086xhz9jbz23dqqijp4agygc9ackp9sxy5"))))
+    (build-system gnu-build-system)
+    (native-inputs (list autoconf
+                         automake
+                         gettext-minimal
+                         gobject-introspection
+                         libtool
+                         pkg-config
+                         vala))
+    (inputs (list libgee json-glib libxkbcommon))
+    (home-page "https://github.com/ueno/libskk")
+    (synopsis "Dealing with Japanese kana-to-kanji conversion")
+    (description
+     "libskk is a library to deal with Japanese kana-to-kanji conversion method.")
+    (license license:gpl3+)))

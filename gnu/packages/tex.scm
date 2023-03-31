@@ -159,6 +159,7 @@ copied to their outputs; otherwise the TEXLIVE-BUILD-SYSTEM is used."
     (file-name (string-append "hyph-utf8-scripts-"
                               (number->string %texlive-revision)
                               "-checkout"))
+    (patches (search-patches "texlive-hyph-utf8-no-byebug.patch"))
     (sha256
      (base32
       "04xzf5gr3ylyh3ls09imrx4mwq3qp1k97r9njzlan6hlff875rx2"))))
@@ -188,7 +189,8 @@ files from LOCATIONS with expected checksum HASH.  CODE is not currently in use.
                          (string-append root "/tex/generic/hyph-utf8/patterns/quote")))
                    (mkdir "scripts")
                    (copy-recursively
-                    (assoc-ref inputs "hyph-utf8-scripts") "scripts")
+                    (dirname (search-input-file inputs "hyph-utf8.rb"))
+                    "scripts")
 
                    ;; Prepare target directories
                    (mkdir-p patterns)
@@ -226,9 +228,7 @@ files from LOCATIONS with expected checksum HASH.  CODE is not currently in use.
                         (string-append "File.join(\"" ptex "\"")))
                      (invoke "ruby" "generate-ptex-patterns.rb")))))))))
       (native-inputs
-       `(("ruby" ,ruby)
-         ("ruby-hydra" ,ruby-hydra)
-         ("hyph-utf8-scripts" ,hyph-utf8-scripts)))
+       (list ruby ruby-hydra-minimal hyph-utf8-scripts))
       (home-page "https://ctan.org/pkg/hyph-utf8"))))
 
 (define texlive-extra-src
@@ -1636,7 +1636,7 @@ discussed in the book).")
 lines by words rather than, as done by TeX, by characters.  The primary use for
 these facilities is to aid the generation of messages sent to the log file or
 console output to display messages to the user.  Package authors may also find
-this useful when writing out arbitary text to an external file.")
+this useful when writing out arbitrary text to an external file.")
     (license license:lppl1.3+)))
 
 (define-public texlive-helvetic
@@ -3075,7 +3075,7 @@ contain.")
     (home-page "https://www.ctan.org/pkg/atveryend")
     (synopsis "Hooks at the very end of a document")
     (description
-     "This LaTeX packages provides two hooks for @code{\\end@{document@}}
+     "This LaTeX package provides two hooks for @code{\\end@{document@}}
 that are executed after the hook of @code{\\AtEndDocument}:
 @code{\\AfterLastShipout} can be used for code that is to be executed right
 after the last @code{\\clearpage} before the @file{.aux} file is closed.
@@ -3429,12 +3429,10 @@ XML, using UTF-8 or a suitable 8-bit encoding.")
              texlive-latex-refcount
              texlive-latex-rerunfilecheck
              texlive-url
-             ;; TODO: Add this in next rebuild cycle.
-             ;;texlive-cm
-             ;;texlive-latex-graphics    ;for keyval
-             ;;texlive-stringenc
-             ;;texlive-zapfding
-             ))
+             texlive-cm
+             texlive-latex-graphics     ;for keyval
+             texlive-stringenc
+             texlive-zapfding))
       (home-page "https://www.ctan.org/pkg/hyperref")
       (synopsis "Extensive support for hypertext in LaTeX")
       (description
@@ -3994,6 +3992,47 @@ definitions.")
       (license license:lppl1.3c+))))
 
 (define-deprecated-package texlive-latex-amsmath texlive-amsmath)
+
+(define-public texlive-mathdots
+  (let ((template
+         (simple-texlive-package
+          "texlive-mathdots"
+          (list "doc/generic/mathdots/"
+                "source/generic/mathdots/"
+                "tex/generic/mathdots/")
+          (base32"1jaffj343p1chdxs2g7s6lpckvihk0jfw22nw0vmijyjxfiy9yg0"))))
+    (package
+      (inherit template)
+      (outputs '("out" "doc"))
+      (arguments
+       (substitute-keyword-arguments (package-arguments template)
+         ((#:tex-directory _ '())
+          "generic/mathdots")
+         ((#:build-targets _ '())
+          '(list "mathdots.ins"))
+         ((#:phases phases)
+          #~(modify-phases #$phases
+              (add-after 'unpack 'chdir
+                (lambda _
+                  (chdir "source/generic/mathdots")))
+              (replace 'copy-files
+                (lambda* (#:key inputs outputs #:allow-other-keys)
+                  (let ((origin (assoc-ref inputs "source"))
+                        (source (string-append (assoc-ref outputs "out")
+                                               "/share/texmf-dist/source"))
+                        (doc (string-append (assoc-ref outputs "doc")
+                                            "/share/texmf-dist/doc")))
+                    (copy-recursively (string-append origin "/source") source)
+                    (copy-recursively (string-append origin "/doc") doc))))))))
+      (home-page "https://ctan.org/macros/generic/mathdots")
+      (synopsis "Commands to produce dots in math that respect font size")
+      (description
+       "Mathdots redefines @code{\\ddots} and @code{\\vdots}, and defines
+@code{\\iddots}.  The dots produced by @code{\\iddots} slant in the opposite
+direction to @code{\\ddots}.  All the commands are designed to change size
+appropriately in scripts, as well as in response to LaTeX size changing
+commands.  The commands may also be used in plain TeX.")
+      (license license:lppl))))
 
 (define-public texlive-amscls
   (let ((template (simple-texlive-package
@@ -4954,6 +4993,23 @@ that are compatible with @code{natbib}: @code{plainnat}, @code{unsrtnat},
 designed from the start to be compatible with @code{natbib}.")
     (license license:lppl)))
 
+(define-public texlive-latex-newfloat
+  (package
+    (inherit (simple-texlive-package
+              "texlive-latex-newfloat"
+              (list "doc/latex/newfloat/"
+                    "tex/latex/newfloat/")
+              (base32 "1047max3li9ni15njgsvc7qglakgrjy2l0s72imgzdmwgb2h8jyf")
+              #:trivial? #t))
+    (build-system texlive-build-system)
+    (home-page "https://ctan.org/pkg/newfloat")
+    (synopsis "Define new floating environments")
+    (description
+     "This package offers the command @code{\\DeclareFloatingEnvironment},
+which the user may use to define new floating environments which behave like
+the LaTeX standard foating environments @code{figure} and @code{table}.")
+    (license license:lppl)))
+
 (define-public texlive-latex-newunicodechar
   (package
     (inherit (simple-texlive-package
@@ -5085,6 +5141,27 @@ recent classes such as powerdot or beamer, both of which are tuned to
     (license license:lppl1.2+)))
 
 (define-deprecated-package texlive-latex-seminar texlive-seminar)
+
+(define-public texlive-latex-seqsplit
+  (package
+    (inherit (simple-texlive-package
+              "texlive-latex-seqsplit"
+              (list "doc/latex/seqsplit/"
+                    "tex/latex/seqsplit/")
+              (base32 "1vwzs90520qsk22djl6gs6gpqx83y4b19kziirwj2xwbivcfk1h4")
+              #:trivial? #t))
+    (build-system texlive-build-system)
+    (home-page "https://ctan.org/pkg/seqsplit")
+    (synopsis "Split long sequences of characters in a neutral way")
+    (description
+     "@code{seqsplit} provides a command @code{\\seqsplit}, which makes its
+argument splittable anywhere, and then leaves the TeX paragraph-maker to do the
+splitting.  The package is suitable for situations when one needs to type long
+sequences of letters or of numbers in which there is no obvious break points to
+be found, such as in base-sequences in genes or calculations of transcendental
+numbers.  While the package may obviously be used to typeset DNA sequences, the
+user may consider the @code{dnaseq} as a rather more powerful alternative.")
+    (license license:lppl1.3+)))
 
 (define-public texlive-latex-stackengine
   (package
@@ -5515,6 +5592,25 @@ is like @code{\\newcommand} or @code{\\renewcommand} except it
 always (re)defines a command.  There is also @code{\\makeenvironment} and
 @code{\\provideenvironment} for environments.")
     (license license:lppl1.3c+)))
+
+(define-public texlive-latex-marginfix
+  (package
+    (inherit (simple-texlive-package
+              "texlive-latex-marginfix"
+              (list "doc/latex/marginfix/"
+                    "tex/latex/marginfix/")
+              (base32 "1qinf42mjry8bi5h3kgbi6hcymnk8fw0w43527wm95nc365dq0mf")
+              #:trivial? #t))
+    (build-system texlive-build-system)
+    (home-page "https://ctan.org/pkg/marginfix")
+    (synopsis "Patch \\marginpar to avoid overfull margins")
+    (description
+     "Authors using LaTeX to typeset books with significant margin material
+often run into the problem of long notes running off the bottom of the page.
+This package implements a solution to make marginpars ``just work'' by keeping
+a list of floating inserts and arranging them intelligently in the output
+routine.")
+    (license license:lppl)))
 
 (define-public texlive-metalogo
   (package
@@ -6154,6 +6250,45 @@ the same place.  The package also has a range of techniques for labelling
 footnotes with symbols rather than numbers.")
     (license license:lppl1.3+)))
 
+(define-public texlive-latex-frankenstein
+  (package
+    (name "texlive-latex-frankenstein")
+    (version (number->string %texlive-revision))
+    (source (origin
+              (method svn-fetch)
+              (uri (svn-reference (url (string-append
+                                        "svn://www.tug.org/texlive/tags/"
+                                        %texlive-tag "/Master/texmf-dist/"
+                                        "/tex/latex/frankenstein"))
+                                  (revision %texlive-revision)))
+              (file-name (string-append name "-" version "-checkout"))
+              (sha256
+               (base32
+                "1zhdvn3zgdarlzfcyq8nzilvw0v0bqgl4m0y7j233cbqw8wiil4z"))))
+    (build-system trivial-build-system)
+    (arguments
+     `(#:modules ((guix build utils))
+       #:builder (begin
+                   (use-modules (guix build utils))
+                   (let ((target (string-append (assoc-ref %outputs "out")
+                                  "/share/texmf-dist/tex/latex/frankenstein")))
+                     (mkdir-p target)
+                     (copy-recursively (assoc-ref %build-inputs "source")
+                                       target) #t))))
+    (home-page "https://ctan.org/pkg/frankenstein")
+    (synopsis "Collection of unrelated LaTeX packages")
+    (description
+     "Frankenstein is a bundle of LaTeX packages serving various purposes and a
+BibTeX bibliography style.  The individual packages are: @code{abbrevs},
+@code{achicago}, @code{achicago} bibstyle, @code{attrib}, @code{blkcntrl},
+@code{compsci}, @code{dialogue}, @code{lips}, @code{moredefs}, @code{newclude},
+@code{slemph} and @code{titles}.  Note: The installation follows the suboptimal
+``Quick and dirty'' recipe, rendering some features unavailable.")
+    ;; README mentions an unspecified version of GNU GPL and points to COPYING,
+    ;; which is missing. However, the individual files mention LPPL 1.2 or
+    ;; later.
+    (license license:lppl1.2+)))
+
 (define-public texlive-latex-letltxmacro
   (package
     (inherit (simple-texlive-package
@@ -6468,6 +6603,26 @@ Adobe's basic set.")
     ;; No license version specified.
     (license license:gpl3+)))
 
+(define-public texlive-zhspacing
+  (package
+    (inherit
+     (simple-texlive-package "texlive-zhspacing"
+                             (list "doc/generic/zhspacing/"
+                                   "tex/context/third/zhspacing/"
+                                   "tex/generic/zhspacing/"
+                                   "tex/xelatex/zhspacing/")
+                             (base32
+                              "02hwa7yjwb6wxkkib83mjdbara5zcsixbp5xlawri8n9ah54vxjm")
+                             #:trivial? #t))
+    (home-page "https://ctan.org/macros/xetex/generic/zhspacing")
+    (synopsis "Spacing for mixed CJK-English documents in XeTeX")
+    (description
+     "The package manages spacing in a CJK document; between consecutive Chinese
+letters, spaces are ignored, but a consistent space is inserted between Chinese
+text and English (or mathematics).  The package may be used by any document
+format under XeTeX.")
+    (license license:lppl1.3+)))
+
 (define-public texlive-zref
   (package
     (inherit (simple-texlive-package
@@ -6671,6 +6826,39 @@ splines, and filled circles and ellipses.  The package uses @code{tpic}
 @code{\\special} commands.")
     (license license:public-domain)))
 
+(define-public texlive-latex-enotez
+  (package
+    (inherit (simple-texlive-package
+              "texlive-latex-enotez"
+              (list "doc/latex/enotez/"
+                    "tex/latex/enotez/")
+              (base32 "1s1wyq6m5932gpbpvvkiw857q94jn1rp7xy9y7hysz9aafjqjyk2")
+              #:trivial? #t))
+    (build-system texlive-build-system)
+    (home-page "https://ctan.org/pkg/enotez")
+    (synopsis "Support for end-notes")
+    (description
+     "This package allows nested endnotes, supports @code{hyperref} and
+provides means for easy customization of the list of notes.")
+    (license license:lppl1.3c+)))
+
+(define-public texlive-endnotes
+  (package
+    (inherit (simple-texlive-package
+              "texlive-endnotes"
+              (list "doc/latex/endnotes/"
+                    "tex/latex/endnotes/")
+              (base32
+               "1s7j5sg8fbhifng0gfqnghbvalbbh0p7j9v06r660w089364ypwz")
+              #:trivial? #t))
+    (home-page "https://www.ctan.org/pkg/endnotes")
+    (synopsis "Deal with endnotesings in strings")
+    (description
+     "Accumulates notes (using the @code{\\endnote} command, which can be used
+as a replacement for @code{\\footnote}), and places them at the end of
+the section, chapter or document.")
+    (license license:lppl1.0+)))
+
 (define-public texlive-enumitem
   (package
     (inherit
@@ -6782,6 +6970,23 @@ that is untidy; this package (though it is no substitute for a properly
 designed class) helps alleviate this untidiness.")
     (license license:lppl)))
 
+(define-public texlive-latex-pbox
+  (package
+    (inherit (simple-texlive-package
+              "texlive-latex-pbox"
+              (list "doc/latex/pbox/"
+                    "tex/latex/pbox/")
+              (base32 "0902snjidmhjml01zcppcpp4j6pidin1sdvfi7gnbb5v86zd5f0n")
+              #:trivial? #t))
+    (build-system texlive-build-system)
+    (home-page "https://ctan.org/pkg/pbox")
+    (synopsis "\\parbox with a variable width")
+    (description
+     "@code{pbox} defines a \\pbox{<max width>}{<text>} command which adjusts
+the box width to that of the enclosed text, up to the maximum width given.  The
+package also defines some associated length commands.")
+    (license license:gpl3+)))
+
 (define-public texlive-latex-pdfpages
   (package
     (name "texlive-latex-pdfpages")
@@ -6840,6 +7045,24 @@ printers, and others working in the scientific, medical, and technical fields.
 They combine a comprehensive Unicode-based collection of mathematical symbols
 and alphabets with a set of text faces suitable for professional publishing.")
       (license license:silofl1.1))))
+
+(define-public texlive-latex-sidecap
+  (package
+    (inherit (simple-texlive-package
+              "texlive-latex-sidecap"
+              (list "doc/latex/sidecap/"
+                    "tex/latex/sidecap/")
+              (base32 "1biyxvh7fm70pq1rxqrla2vs013bpsd1j8jvlyl3vjg433d5bly3")
+              #:trivial? #t))
+    (build-system texlive-build-system)
+    (home-page "https://ctan.org/pkg/sidecap")
+    (synopsis "Typeset captions sideways")
+    (description
+     "@code{sidecap} defines environments called @code{SCfigure} and
+@code{SCtable} (analogous to @code{figure} and @code{table}) to typeset
+captions sideways.  Options include @code{outercaption}, @code{innercaption},
+@code{leftcaption} and @code{rightcaption}.")
+    (license license:lppl1.0+)))
 
 (define-public texlive-stmaryrd
   (let ((template (simple-texlive-package
@@ -8029,46 +8252,64 @@ develop documents with LaTeX, in a single application.")
     (license license:gpl2+)))
 
 (define-public teximpatient
-  (package
-    (name "teximpatient")
-    (version "2.4")
-    (source (origin
-              (method url-fetch/tarbomb)
-              (uri (string-append "mirror://gnu/" name "/" name "-"
-                                  version ".tar.gz"))
-              (sha256
-               (base32
-                "0h56w22d99dh4fgld4ssik8ggnmhmrrbnrn1lnxi1zr0miphn1sd"))))
-    (build-system gnu-build-system)
-    (arguments
-     `(#:tests? #f ; there are none
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'fix-packaging-error
-           (lambda* (#:key inputs #:allow-other-keys)
-             ;; This file should have been part of the tarball.
-             (install-file (car
-                            (find-files
-                             (assoc-ref inputs "automake")
-                             "^install-sh$"))
-                           ".")
-             ;; Remove generated file.
-             (delete-file "book.pdf")
-             #t)))))
-    (native-inputs
-     `(("texlive" ,(texlive-updmap.cfg (list texlive-amsfonts
-                                        texlive-palatino
-                                        texlive-zapfding
-                                        texlive-knuth-lib
-                                        texlive-mflogo-font
-                                        texlive-pdftex)))
-       ("automake" ,automake)))
-    (home-page "https://www.gnu.org/software/teximpatient/")
-    (synopsis "Book on TeX, plain TeX and Eplain")
-    (description "@i{TeX for the Impatient} is a ~350 page book on TeX,
+  ;; The homepage seems to be distributing this version which is currently the
+  ;; most recent commit
+  (let ((commit "e3666abff186832fd9c467ceda3958058f30bac2")
+        (revision "0"))
+    (package
+      (name "teximpatient")
+      (version (git-version "2.4" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url
+                       "https://git.savannah.gnu.org/git/teximpatient.git/")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0r30383nmly7w29il6v3vmilnnyrzak0x0qmabjvnpaga9ansjmi"))))
+      (build-system gnu-build-system)
+      (arguments
+       `(#:tests? #f ;there are none
+         #:allowed-references ("out")
+         #:phases (modify-phases %standard-phases
+                    (add-after 'unpack 'fix-build
+                      (lambda* (#:key inputs #:allow-other-keys)
+                        (chdir "teximpatient")
+
+                        ;; Remove generated files
+                        (for-each delete-file
+                                  '("book.pdf"
+                                    "book.aux"
+                                    "book.ccs"
+                                    "book.log"
+                                    "book.idx"
+                                    "config.log"
+                                    "config.status"
+                                    "configure"
+                                    "Makefile"))
+                        (delete-file-recursively "autom4te.cache")
+
+                        ;; make build reproducible
+                        (substitute* "eplain.tex"
+                          (("timestamp.*%")
+                           (string-append "timestamp{"
+                                          ,version "}"))))))))
+      (native-inputs (list autoconf automake
+                           (texlive-updmap.cfg (list texlive-amsfonts
+                                                     texlive-palatino
+                                                     texlive-zapfding
+                                                     texlive-knuth-lib
+                                                     texlive-mflogo-font
+                                                     texlive-pdftex))))
+      (home-page "https://www.gnu.org/software/teximpatient/")
+      (synopsis "Book on TeX, plain TeX and Eplain")
+      (description
+       "@i{TeX for the Impatient} is a ~350 page book on TeX,
 plain TeX, and Eplain, originally written by Paul Abrahams, Kathryn Hargreaves,
 and Karl Berry.")
-    (license license:fdl1.3+)))
+      (license license:fdl1.3+))))
 
 (define-public lyx
   (package
@@ -8750,7 +8991,7 @@ as plain TeX.")
                "1vbdjmm9bi9ngzz2z1b8jnf6nzf9xsaj5pvyswg13y4dr00mnz6n")
               #:trivial? #t))
     (home-page "https://www.ctan.org/pkg/pdfescape")
-    (synopsis "pdfTeX's escape features for plain TeX")
+    (synopsis "Use escape features from pdfTeX with plain TeX")
     (description
      "This package implements pdfTeX's escape features (@code{\\pdfescapehex},
 @code{\\pdfunescapehex}, @code{\\pdfescapename}, @code{\\pdfescapestring})
@@ -9682,6 +9923,28 @@ section.
 @end enumerate\n")
       (license license:lppl1.3c))))
 
+(define-public texlive-biblatex-apa
+  (package
+    ;; Version 9.16 2022-06-22
+    (inherit (simple-texlive-package
+              "texlive-biblatex-apa"
+              (list "doc/latex/biblatex-apa/"
+                    "tex/latex/biblatex-apa/")
+              (base32
+               "0ivf7xbzj4xd57sqfbi87hbr73rraqifkzvx06yxgq0gmzz0x6wl")
+              #:trivial? #t))
+    (propagated-inputs
+     (list texlive-biblatex biber texlive-csquotes))
+    (home-page
+     "https://www.ctan.org/pkg/biblatex-apa")
+    (synopsis "BibLaTeX citation and reference style for APA")
+    (description
+     "This is a fairly complete BibLaTeX style (citations and references) for
+@acronym{APA, American Psychological Association} publications.  It implements
+and automates most of the guidelines in the APA 7th edition style guide for
+citations and references.")
+    (license license:lppl1.3c)))
+
 (define-public texlive-todonotes
   (let ((template (simple-texlive-package
                    "texlive-todonotes"
@@ -9765,8 +10028,8 @@ of compatibility notes, for other packages, is provided in the
 documentation.  The package also provides the \"caption outside
 float\" facility, in the same way that simpler packages like
 @code{capt-ofcapt-of} do.  The package supersedes @code{caption2}.
-Packages @code{bicaption}, @code{ltcaption}, @code{newfloat},
-@code{subcaption} and @code{totalcount} are included in the bundle.")
+Packages @code{bicaption}, @code{ltcaption} and @code{subcaption} are
+included in the bundle.")
       (license license:lppl1.3+))))
 
 (define-public texlive-symbol
@@ -10625,6 +10888,29 @@ are valid as arguments for the macros.  The package may be used under
 LaTeX and plain TeX.")
     (license (license:fsf-free "file:/binhex.dtx"))))
 
+(define-public texlive-latex-translations
+  (package
+    (inherit (simple-texlive-package
+              "texlive-latex-translations"
+              (list "doc/latex/translations/"
+                    "tex/latex/translations/")
+              (base32 "0vl7ckpbkjvz3a5snzppb96ncwgmhpwb2p6cg30grfyn421kap3v")
+              #:trivial? #t))
+    (build-system texlive-build-system)
+    (home-page "https://ctan.org/pkg/translations")
+    (synopsis "Internationalisation of LaTeX2e packages")
+    (description
+     ;; Polish not mentioned on CTAN, but there is a
+     ;; translations-basic-dictionary-polish.trsl file.
+     "This package (once part of the @code{exsheets} package), provides a
+framework for providing multilingual features to a LaTeX package.  The package
+has its own basic dictionaries for English, Brazilian, Catalan, Dutch, French,
+German, Polish and Spanish.  It aims to use translation material for English,
+Dutch, French, German, Italian, Spanish, Catalan, Turkish, Croatian, Hungarian,
+Danish and Portuguese from babel or polyglossia if either is in use in the
+document.")
+    (license license:lppl1.3c+)))
+
 (define-public texlive-translator
   (package
     (inherit (simple-texlive-package
@@ -10900,6 +11186,20 @@ and selecting references used in a publication.")
               (base32
                "08jn8piyaad4zln33c0gikyhdkcsk2s3ms9l992riq2hbpbm9lcf")
               #:trivial? #t))
+    (propagated-inputs (list texlive-apacite
+                             texlive-babel
+                             texlive-booktabs
+                             texlive-endnotes
+                             texlive-etoolbox
+                             texlive-generic-xstring
+                             texlive-latex-draftwatermark
+                             texlive-latex-fancyhdr
+                             texlive-latex-float
+                             texlive-latex-graphics
+                             texlive-lm
+                             texlive-substr
+                             texlive-times
+                             texlive-tools))
     (home-page "https://www.ctan.org/pkg/apa6")
     (synopsis "Format documents in APA style (6th edition)")
     (description "The class formats documents in APA style (6th
@@ -10912,6 +11212,28 @@ for copies for use in masked peer review.
 The class is a development of the apa class (which is no longer
 maintained).")
     (license license:lppl1.3c+)))
+
+(define-public texlive-apacite
+  (package
+    (inherit (simple-texlive-package
+              "texlive-apacite"
+              (list "tex/latex/apacite/")
+              (base32
+               "0bcfpcmflhvxwzmdj8dgf43mzaywx2asahp52nqn3wwvq64bqym6")
+              #:trivial? #t))
+    (propagated-inputs (list texlive-latex-natbib
+                             texlive-tools))
+    (home-page "https://www.ctan.org/pkg/apacite")
+    (synopsis "Citation style following the rules of the APA")
+    (description "Apacite provides a BibTeX style and a LaTeX package which
+are designed to match the requirements of the American Psychological
+Association’s style for citations.  The package follows the 6th edition
+of the APA manual, and is designed to work with the apa6 class.  A test
+document is provided.  The package is compatible with chapterbib and
+(to some extent) with hyperref (for limits of compatibility, see the
+documentation).  The package also includes a means of generating an author
+index for a document.")
+    (license license:lppl1.3+)))
 
 (define-public texlive-endfloat
   (package
@@ -11003,6 +11325,33 @@ possible through the LaTeX @code{\\ref} and @code{\\pageref} cross reference
 mechanism.  Line numbering may be extended to footnote lines, using the
 fnlineno package.")
     (license license:lppl1.3a+)))
+
+(define-public texlive-babel-czech
+  (let ((template (simple-texlive-package
+                   "texlive-babel-czech"
+                   (list "/source/generic/babel-czech/")
+                   (base32
+                    "1274pzgdya7gkvxjmdm3v5rb7hc0sj6mqn9pd8y9418yx5449spg"))))
+    (package
+      (inherit template)
+      (arguments
+       (substitute-keyword-arguments (package-arguments template)
+         ((#:tex-directory _ '())
+          "generic/babel-czech")
+         ((#:build-targets _ '())
+          ''("czech.ins")) ; TODO: use dtx and build documentation
+         ((#:phases phases)
+          `(modify-phases ,phases
+             (add-after 'unpack 'chdir
+               (lambda _
+                 (chdir "source/generic/babel-czech")))))))
+      (home-page "https://www.ctan.org/pkg/babel-czech")
+      (synopsis "Babel support for Czech")
+      (description
+       "This package provides the language definition file for support of
+Czech in @code{babel}.  Some shortcuts are defined, as well as translations to
+Czech of standard ``LaTeX names''.")
+      (license license:lppl1.3+))))
 
 (define-public texlive-babel-dutch
   (let ((template (simple-texlive-package
@@ -11105,6 +11454,33 @@ Danish in @code{babel}.  It provides all the necessary macros, definitions and
 settings to typeset Danish documents.")
       (license license:lppl1.3c+))))
 
+(define-public texlive-babel-polish
+  (let ((template (simple-texlive-package
+                   "texlive-babel-polish"
+                   (list "/source/generic/babel-polish/")
+                   (base32
+                    "1jymxl98mwxmq0yq90mhrr7bq7c613rh1rnhl7l3bih36af55rwr"))))
+    (package
+      (inherit template)
+      (arguments
+       (substitute-keyword-arguments (package-arguments template)
+         ((#:tex-directory _ '())
+          "generic/babel-polish")
+         ((#:build-targets _ '())
+          ''("polish.ins")) ; TODO: use dtx and build documentation
+         ((#:phases phases)
+          `(modify-phases ,phases
+             (add-after 'unpack 'chdir
+               (lambda _
+                 (chdir "source/generic/babel-polish")))))))
+      (home-page "https://www.ctan.org/pkg/babel-polish")
+      (synopsis "Babel support for Polish")
+      (description
+       "This package provides the language definition file for support of
+Polish in @code{babel}.  Some shortcuts are defined, as well as translations to
+Polish of standard ``LaTeX names''.")
+      (license license:lppl1.3+))))
+
 (define-public texlive-mdframed
   (package
     (inherit
@@ -11141,7 +11517,8 @@ lines in a document.  Package options include @code{singlespacing},
 @code{onehalfspacing}, and @code{doublespacing}.  Alternatively the spacing
 can be changed as required with the @code{\\singlespacing},
 @code{\\onehalfspacing}, and @code{\\doublespacing} commands.  Other size
-spacings also available.")))
+spacings also available.")
+    (license license:lppl)))
 
 (define-public texlive-pgfgantt
   (package
@@ -11533,3 +11910,165 @@ use of the fonts in LaTeX (Type 1) and XeLaTeX/LuaLaTeX (OTF).")
 Adobe in both Adobe Type 1 and OpenType formats, plus macros supporting the
 use of the fonts in LaTeX (Type 1) and XeLaTeX/LuaLaTeX (OTF).")
     (license (list license:lppl1.3+ license:silofl1.1))))
+
+(define-public texlive-latex-hyphenat
+  (package
+    (inherit (simple-texlive-package
+              "texlive-latex-hyphenat"
+              (list "doc/latex/hyphenat/"
+                    "tex/latex/hyphenat/")
+              (base32 "0b3jx2yvryx95am0ll9h6yc99niw2lwgsbq7r89j84z2qyp2llsq")
+              #:trivial? #t))
+    (build-system texlive-build-system)
+    (home-page "https://ctan.org/pkg/hyphenat")
+    (synopsis "Disable/enable hyphenation")
+    (description
+     "This package can disable all hyphenation or enable hyphenation of
+non-alphabetics or monospaced fonts.  The package can also enable hyphenation
+within ‘words’ that contain non-alphabetic characters (e.g., that include
+underscores), and hyphenation of text typeset in monospaced (e.g., cmtt)
+fonts.")
+    (license license:lppl1.3c+)))
+
+(define-public texlive-latex-lastpage
+  (package
+    (inherit (simple-texlive-package
+              "texlive-latex-lastpage"
+              (list "doc/latex/lastpage/"
+                    "tex/latex/lastpage/")
+              (base32 "0q6x743b8fkw9r82lrxy49f9xsg81bffynwvpnvpnp3h4mkafvdb")
+              #:trivial? #t))
+    (build-system texlive-build-system)
+    (home-page "https://ctan.org/pkg/lastpage")
+    (synopsis "Reference last page for Page N of M type footers")
+    (description
+     "This package enables referencing the number of pages in a LaTeX document
+through the introduction of a new label which can be referenced like
+@code{\\pageref{LastPage}} to give a reference to the last page of a document.
+It is particularly useful in the page footer that says: Page N of M.")
+    (license license:lppl1.3c+)))
+
+(define-public texlive-latex-tabto-ltx
+  (package
+    (name "texlive-latex-tabto-ltx")
+    (version (number->string %texlive-revision))
+    (source (origin
+              (method svn-fetch)
+              (uri (svn-reference (url (string-append
+                                        "svn://www.tug.org/texlive/tags/"
+                                        %texlive-tag "/Master/texmf-dist/"
+                                        "/tex/latex/tabto-ltx"))
+                                  (revision %texlive-revision)))
+              (file-name (string-append name "-" version "-checkout"))
+              (sha256
+               (base32
+                "1vq9s3n0mdgx2w84bjdsqxp3vcasfb824agjy56713902li1g8vm"))))
+    (build-system trivial-build-system)
+    (arguments
+     `(#:modules ((guix build utils))
+       #:builder (begin
+                   (use-modules (guix build utils))
+                   (let ((target (string-append (assoc-ref %outputs "out")
+                                  "/share/texmf-dist/tex/latex/tabto")))
+                     (mkdir-p target)
+                     (copy-recursively (assoc-ref %build-inputs "source")
+                                       target) #t))))
+    (home-page "https://ctan.org/pkg/tabto-ltx")
+    (synopsis "``Tab'' to a measured position in the line")
+    (description
+     "This package provides @code{\\tabto{<length>}}, which moves the
+typesetting position to @code{<length>} from the left margin of the paragraph.
+If the typesetting position is already further along, @code{\\tabto} starts a
+new line; the command @code{\\tabto*} will move position backwards if
+necessary, so that previous text may be overwritten.  In addition, the command
+@code{\\TabPositions} may be used to define a set of tabbing positions, after
+which the command @code{\\tab} advances typesetting position to the next
+defined ``tab stop''.")
+    (license license:lppl1.3+)))
+
+(define-public texlive-generic-soul
+  (let ((template (simple-texlive-package
+                   "texlive-generic-soul"
+                   (list "/doc/generic/soul/"
+                         "/tex/generic/soul/")
+                   (base32
+                    "11jdgvfpcv10y5j898495lf29k2m03x39v9jzb4v79w4cgxcmfps")
+                   #:trivial? #t)))
+    (package
+      (inherit template)
+      (home-page "http://www.ctan.org/pkg/soul")
+      (synopsis "Hyphenation for letterspacing, underlining, and more")
+      (description
+       "@code{soul} enables hyphenatable spacing out (letterspacing),
+underlining, striking out, etc., using the TeX hyphenation algorithm to find
+the proper hyphens automatically.  The package also provides a mechanism that
+can be used to implement similar tasks, that have to treat text syllable by
+syllable.  The package itself does not support UTF-8 input in ordinary
+(PDF)LaTeX; some UTF-8 support is offered by package @code{soulutf8}.")
+      (license license:lppl))))
+
+(define-public texlive-generic-xstring
+  (let ((template (simple-texlive-package
+                   "texlive-generic-xstring"
+                   (list "/doc/generic/xstring/"
+                         "/tex/generic/xstring/")
+                   (base32
+                    "1azpq855kq1l4686bjp8haxim5c8wycz1b6lcg5q7x8kb4g9sppn")
+                   #:trivial? #t)))
+    (package
+      (inherit template)
+      (home-page "http://www.ctan.org/pkg/xstring")
+      (synopsis "String manipulation for (La)TeX")
+      (description
+       "@code{xstring} package provides macros for manipulating strings --
+testing a string's contents, extracting substrings, substitution of substrings
+and providing numbers such as string length, position of, or number of
+recurrences of, a substring.  The package works equally in Plain TeX and LaTeX
+(though e-TeX is always required).  The strings to be processed may contain
+(expandable) macros.")
+      (license license:lppl1.3c))))
+
+(define-public texlive-substr
+  (package
+    (inherit (simple-texlive-package
+              "texlive-substr"
+              (list "doc/latex/substr/"
+                    "tex/latex/substr/")
+              (base32
+               "0kfd4kq5yrg65f2mpric1cs1xr416wgj9bdixpibgjsdg5fb73sw")
+              #:trivial? #t))
+    (home-page "https://www.ctan.org/pkg/substr")
+    (synopsis "Deal with substrings in strings")
+    (description
+     "The package provides commands to deal with substrings of strings.  Macros
+are provided to:
+
+@itemize
+@item determine if one string is a substring of another,
+@item return the parts of a string before or after a substring, and
+@item count the number of occurrences of a substring.
+@end itemize")
+    (license license:lppl1.0+)))
+
+(define-public texlive-latex-totcount
+  (package
+    (inherit (simple-texlive-package
+              "texlive-latex-totcount"
+              (list "doc/latex/totcount/"
+                    "tex/latex/totcount/")
+              (base32 "0z4mijyk3z7555q8da41aiji602plis5z261z4rr1fl8sndhnhn1")
+              #:trivial? #t))
+    (build-system texlive-build-system)
+    (home-page "https://ctan.org/pkg/totcount")
+    (synopsis "Find the last value of a counter")
+    (description
+     "This package records the value that was last set, for any counter of
+interest.  Since most such counters are simply incremented when they are
+changed, the recorded value will usually be the maximum value.")
+    (license license:lppl1.3c+)))
+
+;;;
+;;; Avoid adding new packages to the end of this file. To reduce the chances
+;;; of a merge conflict, place them above by existing packages with similar
+;;; functionality or similar names.
+;;;

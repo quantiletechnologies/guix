@@ -47,7 +47,6 @@
   #:use-module (guix derivations)
   #:use-module (guix ui)
   #:autoload   (guix colors) (supports-hyperlinks? file-hyperlink)
-  #:use-module (guix grafts)
   #:use-module (guix packages)
   #:use-module (guix profiles)
   #:use-module (guix store)
@@ -476,7 +475,7 @@ resulting from command-line parsing."
   (define (ensure-home-environment file-or-exp obj)
     (ensure-profile-directory)
     (unless (home-environment? obj)
-      (leave (G_ "'~a' does not return a home environment ~%")
+      (leave (G_ "'~a' does not return a home environment~%")
              file-or-exp))
     obj)
 
@@ -706,7 +705,7 @@ deploy the home environment described by these files.\n")
 (define (service-type-description-string type)
   "Return the rendered and localised description of TYPE, a service type."
   (and=> (service-type-description type)
-         (compose texi->plain-text P_)))
+         (compose texi->plain-text G_)))
 
 (define %service-type-metrics
   ;; Metrics used to estimate the relevance of a search result.

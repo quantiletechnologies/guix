@@ -42,7 +42,7 @@
 ;;; Copyright © 2020 James Smith <jsubuntuxp@disroot.org>
 ;;; Copyright © 2020 B. Wilson <elaexuotee@wilsonb.com>
 ;;; Copyright © 2020, 2021 Zheng Junjie <873216071@qq.com>
-;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021, 2022 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2021 Xinglu Chen <public@yoctocell.xyz>
 ;;; Copyright © 2021 Renzo Poddighe <renzo@poddighe.nl>
@@ -93,8 +93,10 @@
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages bison)
+  #:use-module (gnu packages build-tools)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages datastructures)
   #:use-module (gnu packages documentation)
   #:use-module (gnu packages flex)
   #:use-module (gnu packages fontutils)
@@ -110,6 +112,7 @@
   #:use-module (gnu packages haskell-xyz)
   #:use-module (gnu packages icu4c)
   #:use-module (gnu packages image)
+  #:use-module (gnu packages kde-frameworks)
   #:use-module (gnu packages libbsd)
   #:use-module (gnu packages libevent)
   #:use-module (gnu packages linux)
@@ -312,7 +315,7 @@ used to further tweak the behaviour of the different profiles.")
 (define-public bemenu
   (package
     (name "bemenu")
-    (version "0.6.4")
+    (version "0.6.13")
     (source
      (origin
        (method git-fetch)
@@ -321,27 +324,28 @@ used to further tweak the behaviour of the different profiles.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "18vplvnymgc6576sdh84lm5rlwyb9d038plqpjs638hzskf4q577"))))
+        (base32 "0pjlm3gl85k7yhj594pmvfg6xfr1r3rmb68bb7212r4mxhj80rk0"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:tests? #f
-       #:make-flags (list ,(string-append "CC=" (cc-for-target))
-                          "CFLAGS=-O2 -fPIC"
-                          (string-append "LDFLAGS=-Wl,-rpath="
-                                         (assoc-ref %outputs "out") "/lib")
-                          (string-append "PREFIX=" (assoc-ref %outputs "out")))
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure))))         ; no configure script
+     (list
+      #:tests? #f
+      #:make-flags
+      #~(list (string-append "CC=" #$(cc-for-target))
+              "CFLAGS=-O2 -fPIC"
+              (string-append "LDFLAGS=-Wl,-rpath=" #$output "/lib")
+              (string-append "PREFIX=" #$output))
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure))))         ; no configure script
     (inputs
-     `(("cairo" ,cairo)
-       ("libx11" ,libx11)
-       ("libxkbcomon" ,libxkbcommon)
-       ("libxinerama" ,libxinerama)
-       ("ncurses" ,ncurses)
-       ("pango" ,pango)
-       ("wayland" ,wayland)
-       ("wayland-protocols" ,wayland-protocols)))
+     (list cairo
+           libx11
+           libxkbcommon
+           libxinerama
+           ncurses
+           pango
+           wayland
+           wayland-protocols))
     (native-inputs
      (list doxygen pkg-config))
     (home-page "https://github.com/Cloudef/bemenu")
@@ -356,7 +360,7 @@ with X11 or Wayland, or in a text terminal with ncurses.")
 (define-public copyq
 (package
   (name "copyq")
-  (version "3.9.3")
+  (version "6.3.2")
   (source (origin
             (method git-fetch)
             (uri (git-reference
@@ -365,13 +369,23 @@ with X11 or Wayland, or in a text terminal with ncurses.")
             (file-name (git-file-name name version))
             (sha256
              (base32
-              "0wlwq9xg8rzsbj0b29z358k4mbrqy04iraa8x0p26pa95yskgcma"))))
+              "0qdf7lr6bdmsnz1k5nnzmbv4h0xj8jqg92x6089qdaz5s87x7vqr"))))
   (build-system cmake-build-system)
   (arguments
-   `(#:configure-flags '("-DCMAKE_BUILD_TYPE=Release")
-     #:tests? #f)) ; Test suite is a rather manual process.
+   (list
+    #:configure-flags #~(list "-DCMAKE_BUILD_TYPE=Release")
+    #:tests? #f)) ; Test suite is a rather manual process.
   (inputs
-   (list qtbase-5 qtscript qtsvg-5 qtx11extras))
+   (list qtbase-5
+         qtscript
+         qtsvg-5
+         qtx11extras
+         qtdeclarative-5
+         qtwayland-5
+         wayland
+         knotifications))
+  (native-inputs
+   (list extra-cmake-modules qttools-5))
   (synopsis "Clipboard manager with advanced features")
   (description "CopyQ is clipboard manager with editing and scripting
 features.  CopyQ monitors system clipboard and saves its content in customized
@@ -502,7 +516,12 @@ avoiding password prompts when X11 forwarding has already been setup.")
            wayland-protocols
            xkeyboard-config))
     (native-inputs
-     (list bison doxygen pkg-config python))
+     (append (list bison doxygen pkg-config python)
+             (if (%current-target-system)
+                 ;; wayland-scanner is required at build time.
+                 ;; TODO: Remove this conditional on core-updates.
+                 (list pkg-config-for-build wayland)
+                 '())))
     (arguments
      `(#:configure-flags
        (list (string-append "-Dxkb-config-root="
@@ -1126,19 +1145,19 @@ transparent text on your screen.")
 (define-public wob
   (package
     (name "wob")
-    (version "0.13")
+    (version "0.14.2")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://github.com/francma/wob/releases/download/"
                            version "/wob-" version ".tar.gz"))
        (sha256
-        (base32 "0i8y6kq37qcgdq85ll4rapisjl7zw6aa11yx2f2xw2d3j93kdxh8"))))
+        (base32 "12s9pc0dhqgawq6jiqhamj1zq9753kgpswny1rcsdx1lkpzrgaq1"))))
     (build-system meson-build-system)
     (native-inputs
      (list pkg-config scdoc))
     (inputs
-     (list libseccomp wayland wayland-protocols))
+     (list libinih libseccomp wayland wayland-protocols))
     (home-page "https://github.com/francma/wob")
     (synopsis "Lightweight overlay bar for Wayland")
     (description
@@ -1343,28 +1362,39 @@ Escape key when Left Control is pressed and released on its own.")
 (define-public libwacom
   (package
     (name "libwacom")
-    (version "1.10")
+    (version "2.4.0")
     (source (origin
               (method url-fetch)
               (uri (string-append
                     "https://github.com/linuxwacom/libwacom/releases/download/"
-                    "libwacom-" version "/libwacom-" version ".tar.bz2"))
+                    "libwacom-" version "/libwacom-" version ".tar.xz"))
               (sha256
                (base32
-                "14aj4ss1chxxgaprs9sfriia2ch9wj9rqay0ndkzk1m7jx2qrjgn"))))
-    (build-system glib-or-gtk-build-system)
+                "056l5dndd8654bmwlxxhvx8082s7pp9bg0wm68zb56iz3rv25l6h"))))
+    (build-system meson-build-system)
     (arguments
-     `(#:configure-flags '("--disable-static")))
+     (list
+      #:configure-flags #~(list "--default-library=shared")
+      #:phases #~(modify-phases %standard-phases
+                   (add-after 'unpack 'fix-tests
+                     (lambda _
+                       ;; Do not attempt to run systemd-specific commands.
+                       (substitute* "test/test_udev_rules.py"
+                         (("(systemd-hwdb|systemctl)")
+                          "true")))))))
     (native-inputs
      (list pkg-config
            ;; For tests.
-           python))
+           python
+           python-evdev
+           python-libevdev
+           python-pytest
+           python-pyudev))
     (inputs
-     (list gtk+ libgudev eudev libxml2))
+     (list gtk+ eudev libxml2))
     (propagated-inputs
-     ;; libwacom includes header files that include GLib, and libinput uses
-     ;; those header files.
-     (list glib))
+     ;; libwacom.pc 'Requires' these:
+     (list glib libgudev))
     (home-page "https://linuxwacom.github.io/")
     (synopsis "Helper library for Wacom tablet settings")
     (description
@@ -1377,7 +1407,7 @@ Wacom tablet applet.")
 (define-public xf86-input-wacom
   (package
     (name "xf86-input-wacom")
-    (version "0.39.0")
+    (version "1.1.0")
     (source
      (origin
        (method url-fetch)
@@ -1386,25 +1416,19 @@ Wacom tablet applet.")
              "xf86-input-wacom-" version "/"
              "xf86-input-wacom-" version ".tar.bz2"))
        (sha256
-        (base32 "11qk58az6qwii774ga45h5yqzipwn56f0d74kdbajqdv45p85gqj"))))
+        (base32 "04ks577ag2yir7kssv8zhig4rx9xqj2wifmlrcmy4k9lgw379di3"))))
     (arguments
-     `(#:configure-flags
-       (list (string-append "--with-sdkdir="
-                            (assoc-ref %outputs "out")
-                            "/include/xorg")
-             (string-append "--with-xorg-conf-dir="
-                            (assoc-ref %outputs "out")
-                            "/share/X11/xorg.conf.d"))))
+     (list #:configure-flags
+           #~(list (string-append "--with-sdkdir=" #$output "/include/xorg")
+                   (string-append "--with-xorg-conf-dir=" #$output
+                                  "/share/X11/xorg.conf.d"))))
     (build-system gnu-build-system)
-    (native-inputs
-     (list pkg-config))
-    (inputs
-     (list xorg-server libxrandr libxinerama libxi eudev))
+    (native-inputs (list pkg-config))
+    (inputs (list xorg-server libxrandr libxinerama libxi eudev))
     (home-page "https://linuxwacom.github.io/")
     (synopsis "Wacom input driver for X")
-    (description
-     "The xf86-input-wacom driver is the wacom-specific X11 input driver for
-the X.Org X Server version 1.7 and later (X11R7.5 or later).")
+    (description "The xf86-input-wacom driver is the wacom-specific X11 input
+driver for the X.Org X Server version 1.7 and later (X11R7.5 or later).")
     (license license:x11)))
 
 (define-public redshift
@@ -1575,7 +1599,7 @@ to an arbitrary balanced color.")
 (define-public gammastep
   (package
     (name "gammastep")
-    (version "2.0.8")
+    (version "2.0.9")
     (source
      (origin
        (method git-fetch)
@@ -1584,20 +1608,20 @@ to an arbitrary balanced color.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "071f3iqdbblb3awnx48j19kspk6l2g3658za80i2mf4gacgq9fm1"))))
+        (base32 "1rcciccnwhxh97wlr9gcirdxv33za369jsrgrfzcp3042824pm8i"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-after 'install 'wrap-python-and-typelib
-           (lambda* (#:key outputs #:allow-other-keys)
-             ;; Gammastep GUI needs Typelib files from GTK and access
-             ;; to Python libraries.
-             (wrap-program (string-append (assoc-ref outputs "out")
-                                          "/bin/gammastep-indicator")
-               `("PYTHONPATH" ":" prefix (,(getenv "GUIX_PYTHONPATH")))
-               `("GI_TYPELIB_PATH" ":" prefix
-                 (,(getenv "GI_TYPELIB_PATH")))))))))
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'install 'wrap-python-and-typelib
+            (lambda _
+              ;; Gammastep GUI needs Typelib files from GTK and access to
+              ;; Python libraries.
+              (wrap-program (string-append #$output "/bin/gammastep-indicator")
+                `("PYTHONPATH" ":" prefix (,(getenv "GUIX_PYTHONPATH")))
+                `("GI_TYPELIB_PATH" ":" prefix
+                  (,(getenv "GI_TYPELIB_PATH")))))))))
     (native-inputs
      (list autoconf
            automake
@@ -1803,7 +1827,7 @@ connectivity of the X server running on a particular @code{DISPLAY}.")
 (define-public rofi
   (package
     (name "rofi")
-    (version "1.7.3")
+    (version "1.7.5")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://github.com/davatorium/rofi/"
@@ -1811,7 +1835,7 @@ connectivity of the X server running on a particular @code{DISPLAY}.")
                                   version "/rofi-" version ".tar.xz"))
               (sha256
                (base32
-                "0yxn9pmn9zp0k5ygnjqbj1pmp73g53wa47r145a8qcwqzxl8p1i5"))))
+                "138c4bl60p7namsb2pk8q5cdlxbdkli7zny192vk5jv5s5kczzya"))))
     (build-system gnu-build-system)
     (native-inputs
      (list bison
@@ -1846,13 +1870,37 @@ connectivity of the X server running on a particular @code{DISPLAY}.")
              (substitute* '("test/helper-expand.c")
                (("~root") "/root")
                (("~") "")
-               (("g_get_home_dir \\(\\)") "\"/\"")))))))
+               (("g_get_home_dir\\(\\)") "\"/\"")))))))
     (home-page "https://github.com/davatorium/rofi")
     (synopsis "Application launcher")
     (description "Rofi is a minimalist application launcher.  It memorizes which
 applications you regularly use and also allows you to search for an application
 by name.")
     (license license:expat)))
+
+(define-public rofi-wayland
+  (let ((base rofi))
+    (package
+      (inherit rofi)
+      (name "rofi-wayland")
+      (version "1.7.5+wayland1")
+      (source (origin
+                (method url-fetch)
+                (uri (string-append "https://github.com/lbonn/rofi"
+                                    "/releases/download/" version
+                                    "/rofi-" version ".tar.xz"))
+                (sha256
+                 (base32
+                  "09n71wv3nxpzpjmvqmxlxk0zfln3x2l8admfq571781p9hw0w6wp"))))
+      (build-system meson-build-system)
+      (inputs
+       (modify-inputs (package-inputs base)
+         (append wayland wayland-protocols)))
+      (description
+       (string-append
+        (package-description base)
+        "  This package, @code{rofi-wayland}, provides additional wayland
+support.")))))
 
 (define-public rofi-calc
   (package
@@ -1908,6 +1956,7 @@ natural language input and provide results.")
               (uri (git-reference
                     (url (string-append "https://gitlab.com/o9000/" name "/"))
                     (commit version)))
+              (file-name (git-file-name name version))
               (sha256
                (base32
                 "123apmgs6x2zfv1q57dyl4mwqf0vsw5ndh5jsg6p3fvhr66l1aja"))))
@@ -2431,7 +2480,7 @@ binary to setuid-binaries:
 (define-public wl-clipboard
   (package
     (name "wl-clipboard")
-    (version "2.0.0")
+    (version "2.1.0")
     (source
      (origin
        (method git-fetch)
@@ -2440,20 +2489,25 @@ binary to setuid-binaries:
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0c4w87ipsw09aii34szj9p0xfy0m00wyjpll0gb0aqmwa60p0c5d"))))
+        (base32 "1g6hcsn4klapvz3bw0k8syixwyyi4cl1c7vbc6f1a2hjpcf4pawn"))))
     (build-system meson-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'patch-file-names
-           (lambda* (#:key inputs #:allow-other-keys)
-             (substitute* (find-files "src" "\\.c$")
-               (("\"(cat|rm)\"" _ command)
-                (string-append "\"" (assoc-ref inputs "coreutils")
-                               "/bin/" command "\""))
-               (("\"xdg-mime\"")
-                (string-append "\"" (assoc-ref inputs "xdg-utils")
-                               "/bin/xdg-mime\""))))))))
+     (list #:configure-flags
+           #~(list (string-append "-Dzshcompletiondir=" #$output
+                                  "/share/zsh/site-functions")
+                   (string-append "-Dfishcompletiondir=" #$output
+                                  "/share/fish/completions"))
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'patch-file-names
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (substitute* (find-files "src" "\\.c$")
+                     (("\"(cat|rm)\"" _ command)
+                      (string-append "\"" (assoc-ref inputs "coreutils")
+                                     "/bin/" command "\""))
+                     (("\"xdg-mime\"")
+                      (string-append "\"" (assoc-ref inputs "xdg-utils")
+                                     "/bin/xdg-mime\""))))))))
     (native-inputs
      (list pkg-config))
     (inputs
@@ -2534,7 +2588,7 @@ The cutbuffer and clipboard selection are always synchronized.")
 (define-public jgmenu
   (package
     (name "jgmenu")
-    (version "4.4.0")
+    (version "4.4.1")
     (source
      (origin
        (method git-fetch)
@@ -2543,7 +2597,7 @@ The cutbuffer and clipboard selection are always synchronized.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "08dyygclayyipa0p2qsxqa3fsfyflkrkhpi25dkc3ybkicvynk24"))))
+        (base32 "1a9irlrpa3mi3101cn9hi1ch5k1v4p0h83ni5j63qmlc5g7pcbsh"))))
     (build-system gnu-build-system)
     (native-inputs
      (list cppcheck perl pkg-config))
@@ -2563,8 +2617,7 @@ The cutbuffer and clipboard selection are always synchronized.")
            (lambda* (#:key outputs #:allow-other-keys)
              (setenv "CC" ,(cc-for-target))
              (invoke "./configure"
-                     (string-append "--prefix=" (assoc-ref outputs "out")))
-             #t)))))
+                     (string-append "--prefix=" (assoc-ref outputs "out"))))))))
     (synopsis "Simple X11 menu")
     (description
      "This is a simple menu for X11 designed for scripting and tweaking.  It
@@ -2887,7 +2940,7 @@ create layout indicator widgets.")
                 "1gxpgifzy0hnpd0ymw3r32amzr32z3bgb90ldjzl438p6h1q0i26"))))
     (build-system cmake-build-system)
     (native-inputs
-     (list catch-framework2))
+     (list catch2))
     (arguments
      `(#:configure-flags '("-DWITH_GIT_CATCH=off")
        #:phases
@@ -2908,10 +2961,46 @@ using @command{dmenu}.")
     (home-page "https://github.com/enkore/j4-dmenu-desktop")
     (license license:gpl3+)))
 
+(define-public fuzzel
+  (package
+    (name "fuzzel")
+    (version "1.8.2")
+    (home-page "https://codeberg.org/dnkl/fuzzel")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference (url home-page) (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1d6xy4q5s8p5ckvd9wy3zzj9gh7nh9v1qhn3938b1wfhfzjdzrg6"))))
+    (build-system meson-build-system)
+    (arguments
+     (list #:build-type "release"
+           #:configure-flags #~(list "-Denable-cairo=enabled"
+                                     "-Dpng-backend=libpng"
+                                     "-Dsvg-backend=librsvg")))
+    (native-inputs (list pkg-config scdoc tllist))
+    (inputs (list cairo
+                  fcft
+                  fontconfig
+                  libpng
+                  libxkbcommon
+                  librsvg ;if librsvg is not used, bundled nanosvg is used
+                  pixman
+                  wayland
+                  wayland-protocols))
+    (synopsis "Wayland-native application launcher")
+    (description
+     "@command{fuzzel} is a Wayland-native application launcher, similar to
+rofi's drun mode.  It has Emacs key bindings and remembers frequently launched
+applications.  The font and colors can be configured.")
+    (license (list license:expat ;fuzzel
+                   license:zlib)))) ;; bundled nanosvg
+
 (define-public wofi
   (package
     (name "wofi")
-    (version "1.2.4")
+    (version "1.3")
     (source (origin
               (method hg-fetch)
               (uri (hg-reference
@@ -2920,15 +3009,14 @@ using @command{dmenu}.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1bnf078fg1kwslzwm1mjxwcqqq3bhk1dzymwfw9gk3brqbxrl75c"))))
+                "1k6b46n0vwdqrr6rfps0n8hghcgivnc42gc7z61phhjgf08j64qv"))))
     (build-system meson-build-system)
     (arguments
-     `(#:glib-or-gtk? #t))
+     (list #:glib-or-gtk? #t))
     (native-inputs
      (list pkg-config))
     (inputs
-     `(("gtk3" ,gtk+)
-       ("wayland" ,wayland)))
+     (list gtk+ wayland))
     (synopsis "Launcher/menu program for wayland")
     (description
      "Wofi is a launcher/menu program for wlroots based wayland compositors
@@ -3152,8 +3240,29 @@ MouseKeys-acceleration management.")
     (synopsis "Day/night gamma adjustments for Wayland compositors")
     (home-page "https://sr.ht/~kennylevinsen/wlsunset/")
     (description
-     "wlunset adjusts gamma based on day-night cycles on Wayland compositors
+     "Wlsunset adjusts gamma based on day-night cycles on Wayland compositors
 that support @samp{wlr-gamma-control-unstable-v1}.  It is also known as a blue
 light filter or night light.")
     (license license:expat)))
 
+(define-public ydotool
+  (package
+    (name "ydotool")
+    (version "1.0.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/ReimuNotMoe/ydotool")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1h19dh7kai0iikssr7sq0wfkh0sb18dylyfg7c3dkwc158cdg9cr"))))
+    (build-system cmake-build-system)
+    (arguments '(#:tests? #f))          ; no tests
+    (native-inputs (list scdoc))
+    (home-page "https://github.com/ReimuNotMoe/ydotool")
+    (synopsis "Generic Linux command-line automation tool (no X!)")
+    (description "@code{ydotool} is a Linux command-line tool that simulates
+keyboard input, mouse actions, etc.  programmatically or manually.")
+    (license license:agpl3+)))

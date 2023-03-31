@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2014, 2015, 2016, 2021 Ludovic Courtès <ludo@gnu.org>
-;;; Copyright © 2016, 2017, 2018, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016, 2017, 2018, 2020-2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016 Sou Bunnbu <iyzsong@gmail.com>
 ;;; Copyright © 2017, 2018, 2019, 2021 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2018, 2019, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
@@ -8,6 +8,7 @@
 ;;; Copyright © 2018 Arun Isaac <arunisaac@systemreboot.net>
 ;;; Copyright © 2019 Pierre Langlois <pierre.langlois@gmx.com>
 ;;; Copyright © 2020 Lu hux <luhux@outlook.com>
+;;; Copyright © 2022 ROCKTAKEY <rocktakey@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -156,14 +157,14 @@ work, such as sentence length and other readability measures.")
 (define-public ding
   (package
     (name "ding")
-    (version "1.8.1")
+    (version "1.9")
     (source (origin
               (method url-fetch)
-              (uri (string-append "http://ftp.tu-chemnitz.de/pub/Local/urz/" name
+              (uri (string-append "https://ftp.tu-chemnitz.de/pub/Local/urz/" name
                                   "/" name "-" version ".tar.gz"))
               (sha256
                (base32
-                "0chjqs3z9zs1w3l7b5lsaj682rgnkf9kibcbzhggqqcn1pbvl5sq"))))
+                "1rcqn04l6hvsf15mqqai533p31nc04r2yd9s0mn2hnkqrwgwi9k9"))))
     (build-system gnu-build-system)
     (inputs (list tk))
     (arguments
@@ -238,7 +239,7 @@ and a Python library.")
 (define-public translate-shell
   (package
     (name "translate-shell")
-    (version "0.9.6.12")
+    (version "0.9.7")
     (source
       (origin
         (method git-fetch)
@@ -247,7 +248,7 @@ and a Python library.")
                (commit (string-append "v" version))))
         (file-name (git-file-name name version))
         (sha256
-         (base32 "075vqnha21rhr1b61dim7dqlfwm1yffyzcaa83s36rpk9r5sddzx"))))
+         (base32 "03p00v8g0y2xs3sza2r2kmhwiajaz9viab6xk9snw7chzw2cddiq"))))
     (build-system gnu-build-system)
     (arguments
      `(#:phases
@@ -256,8 +257,7 @@ and a Python library.")
          (add-after 'unpack 'remove-unnecessary-file
            ;; This file gets generated during the build phase.
            (lambda _
-             (delete-file "translate")
-             #t))
+             (delete-file "translate")))
          (add-after 'install 'wrap-binary
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (let* ((out     (assoc-ref outputs "out"))
@@ -270,8 +270,7 @@ and a Python library.")
                                (,(string-append out "/bin:"
                                                 curl "/bin:"
                                                 fribidi "/bin:"
-                                                rlwrap "/bin")))))
-             #t))
+                                                rlwrap "/bin")))))))
          (add-after 'install 'emacs-install
            (assoc-ref emacs:%standard-phases 'install))
          (add-after 'emacs-install 'emacs-make-autoloads
@@ -431,3 +430,41 @@ intelligible and easily correctable.")
     (description "sdcv is simple text-based utility for work with dictionaries
 in StarDict's format.")
     (license license:gpl2+)))
+
+(define-public skk-jisyo
+  (let ((commit "38c81dbc74cdbdead843364023dea837f239a48c")
+        (revision "0"))
+    (package
+      (name "skk-jisyo")
+      (version (git-version "0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/skk-dev/dict")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "121j73bgd7fvj7zvaidqvgzfdvimig3f0vsyfv4vndwfgskh2r7z"))))
+      (build-system copy-build-system)
+      (arguments
+       '(#:install-plan '(("./" "share/skk"
+                           #:include-regexp ("SKK-JISYO\\.*")
+                           #:exclude-regexp ("\\.gz$" "\\.md5$")
+                           #:exclude ("SKK-JISYO.pubdic+"
+                                      "SKK-JISYO.wrong.annotated"
+                                      "SKK-JISYO.wrong")))
+         #:phases (modify-phases %standard-phases
+                    (add-before 'install 'decompress
+                      (lambda* (#:key outputs #:allow-other-keys)
+                        (map (lambda (arg)
+                               (invoke "gzip" "-v" "-d" arg))
+                             (find-files "." "SKK-JISYO\\..*\\.gz$"))
+                        (invoke "tar" "xvf" "zipcode.tar.gz"))))))
+      (home-page "https://skk-dev.github.io/dict/")
+      (synopsis "Jisyo (dictionary) files for the SKK Japanese-input software")
+      (description
+       "This package provides @file{SKK-JISYO.L}, the standard dictionary file
+for SKK Japanese input systems, and various dictionary files.
+@file{SKK-JISYO.L} can be used with @code{emacs-ddskk} or @code{uim} package.")
+      (license license:gpl2+))))

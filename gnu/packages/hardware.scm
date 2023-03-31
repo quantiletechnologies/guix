@@ -38,6 +38,8 @@
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages bison)
+  #:use-module (gnu packages bootloaders)
+  #:use-module (gnu packages cdrom)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages check)
   #:use-module (gnu packages cpp)
@@ -56,9 +58,11 @@
   #:use-module (gnu packages gnome)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages guile)
+  #:use-module (gnu packages high-availability)
   #:use-module (gnu packages libusb)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages lxqt)
+  #:use-module (gnu packages mtools)
   #:use-module (gnu packages package-management)
   #:use-module (gnu packages ncurses)
   #:use-module (gnu packages networking)
@@ -476,14 +480,14 @@ RGB animations.")
 (define-public ddcutil
   (package
     (name "ddcutil")
-    (version "1.2.2")
+    (version "1.3.2")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://www.ddcutil.com/tarballs/"
                            "ddcutil-" version ".tar.gz"))
        (sha256
-        (base32 "18fbd45h2r3r702dvmlmyrwgs3ymr4mhm4f12lgv9jqb5csalbw2"))))
+        (base32 "0hm0cm4m4hk1jjy7kddg613mynvwlii3kp8al0j9v3c6mcx3p4mx"))))
     (build-system gnu-build-system)
     (native-inputs
      (list pkg-config))
@@ -520,7 +524,7 @@ calibrated, and restored when the calibration is applied.")
 (define-public ddcui
   (package
     (name "ddcui")
-    (version "0.2.1")
+    (version "0.3.0")
     (source
      (origin
        (method git-fetch)
@@ -529,10 +533,10 @@ calibrated, and restored when the calibration is applied.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0a9xfv80dpimx9wi9igjbbfydyfsgnbk6dv1plhjzyp2a9shdibb"))))
+        (base32 "0gypfmwxhjmgyfwk29k8hfbgr0698kbcq2yj4izxv1i59zm63irz"))))
     (build-system cmake-build-system)
     (arguments
-     '(#:tests? #f))                    ; No test suite
+     (list #:tests? #f))                    ; No test suite
     (native-inputs
      (list pkg-config qttools-5))
     (inputs
@@ -648,7 +652,7 @@ hardware works with a fully free operating system or not.")
 (define-public headsetcontrol
   (package
     (name "headsetcontrol")
-    (version "2.6")
+    (version "2.6.1")
     (source
      (origin
        (method git-fetch)
@@ -657,7 +661,7 @@ hardware works with a fully free operating system or not.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0a7zimzi71416pmn6z0l1dn1c2x8p702hkd0k6da9rsznff85a88"))))
+        (base32 "1pkgi87wjyris53frw3qmjdqvkzyyl55ikjgn8cidnbr6i3rqls9"))))
     (build-system cmake-build-system)
     (inputs
      (list hidapi))
@@ -798,48 +802,63 @@ specific SMBIOS tables.")
 (define-public memtest86+
   (package
     (name "memtest86+")
-    ;; Update the description when/if UEFI support is released.
-    (version "5.01")
+    (version "6.00")
     (source
      (origin
-       (method url-fetch)
-       (uri (string-append "https://www.memtest.org/download/5.01/memtest86+-"
-                           version ".tar.gz"))
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/memtest86plus/memtest86plus")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
        (sha256
-        (base32 "0fch1l55753y6jkk0hj8f6vw4h1kinkn9ysp22dq5g9zjnvjf88l"))))
+        (base32 "0fv605blaf4z0jyl1wp37x5x014dkp0z0a0fh114ws62fhnhdnlv"))
+       (patches
+        (search-patches "memtest86+-build-reproducibly.patch"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:system "i686-linux"            ; the result runs outside of any OS
-       #:tests? #f                      ; no way to test this
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)            ; no configure script
-         (replace 'build
-           ;; The default 'make all' does wonderful things, like scp(1) a file to
-           ;; 192.168.0.12. Build the bootable images and nothing more.
-           (lambda _
-             (invoke "make"
-                     "memtest"          ; ELF executable
-                     "memtest.bin")))   ; DOS/MBR boot sector
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (lib (string-append out "/lib/memtest86+"))
-                    (doc (string-append out "/share/doc/memtest86+-" ,version)))
-               (for-each
-                (lambda (file)
-                  (install-file file lib))
-                (list "memtest"
-                      "memtest.bin"))
-               (for-each
-                (lambda (file)
-                  (install-file file doc))
-                (list "FAQ"
-                      "README"))
-               #t))))))
+     (list
+      #:tests? #f                       ; no way to test this
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'patch-broken-Makefiles
+            (lambda _
+              (substitute* (list "build32/Makefile"
+                                 "build64/Makefile")
+                (("/sbin/(mkdosfs)" _ command)
+                 command))))
+          (delete 'configure)           ; no configure script
+          (add-before 'build 'enter-build-directory
+            (lambda _
+              (chdir #$(if (target-x86-32?)
+                           "build32"
+                           "build64"))))
+          (replace 'build
+            (lambda* (#:key inputs make-flags #:allow-other-keys)
+              (apply invoke
+                     "make" "all" "grub-iso" ; more options than memtest.iso
+                     (string-append "GRUB_FONT_DIR="
+                                    (search-input-directory inputs
+                                                            "share/grub"))
+                     (string-append "GRUB_LIB_DIR="
+                                    (search-input-directory inputs
+                                                            "lib/grub"))
+                     make-flags)))
+          (replace 'install
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let* ((out (assoc-ref outputs "out"))
+                     (lib (string-append out "/lib/memtest86+"))
+                     (doc (string-append out "/share/doc/memtest86+-"
+                                         #$version)))
+                (for-each
+                 (lambda (file)
+                   (install-file file lib))
+                 (list "grub-memtest.iso"
+                       "memtest.bin"
+                       "memtest.efi"))
+                (chdir "..")
+                (install-file "README.md" doc)))))))
     (native-inputs
-     ;; Newer GCCs fail with a deluge of "multiple definition of `__foo'" errors.
-     (list gcc-4.9))
+     (list dosfstools grub-hybrid mtools xorriso))
     (supported-systems (list "i686-linux" "x86_64-linux"))
     (home-page "https://www.memtest.org/")
     (synopsis "Thorough real-mode memory tester")
@@ -850,9 +869,7 @@ again, and verifies whether the result is the same as what was written.  This
 can help debug even intermittent and non-deterministic errors.
 
 It runs independently of any operating system, at computer boot-up, so that it
-can scan as much of your RAM as possible for hardware defects.
-
-Memtest86+ cannot currently be used on computers booted with UEFI.")
+can scan as much of your RAM as possible for hardware defects.")
     (license license:gpl2)))
 
 (define-public memtester
@@ -1117,37 +1134,10 @@ supported by the Linux kernel.")
 as the Pinebook Pro.")
       (license license:gpl2+))))
 
-(define-public libqb
-  (package
-    (name "libqb")
-    ;; NOTE: We are using a Release Candidate version (for 2.0) here because
-    ;; of the linker issues with the previous release.
-    (version "1.9.1")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append
-                    "https://github.com/ClusterLabs/libqb/releases/download/v"
-                    version "/libqb-" version ".tar.xz"))
-              (sha256
-               (base32
-                "008vvw504kh40br5v2xkqavnp9vpmjvf768faqzv1d00fd53ingn"))))
-    (build-system gnu-build-system)
-    (native-inputs
-     (list pkg-config libxml2))
-    (home-page "https://clusterlabs.github.io/libqb/")
-    (synopsis "Library providing high performance logging, tracing, ipc, and poll")
-    (description "Libqb is a library with the primary purpose of providing
-high-performance, reusable features for client-server architecture, such as
-logging, tracing, inter-process communication (IPC), and polling.  Libqb is
-not intended to be an all-encompassing library, but instead provide focused
-APIs that are highly tuned for maximum performance for client-server
-applications.")
-    (license license:lgpl2.1)))
-
 (define-public usbguard
   (package
     (name "usbguard")
-    (version "1.1.1")
+    (version "1.1.2")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1155,7 +1145,7 @@ applications.")
                     (commit (string-append "usbguard-" version))))
               (file-name (git-file-name name version))
               (sha256
-               (base32 "0lpyhkz5nr0c9mq57mgcvam5c8qfqqwjc4xd46n2ldqc9vhfsask"))))
+               (base32 "10qqjk7hsycc6hk51abwcld7i48038zqi1jzli59cfvc76ikrxj5"))))
     (build-system gnu-build-system)
     (arguments
      (list

@@ -28,7 +28,7 @@
 ;;; Copyright © 2020 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2020 Zhu Zihao <all_but_last@163.com>
-;;; Copyright © 2020, 2021 Vinicius Monego <monego@posteo.net>
+;;; Copyright © 2020, 2021, 2022 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2021 Sharlatan Hellseher <sharlatanus@gmail.com>
 ;;; Copyright © 2021 Nicolò Balzarotti <nicolo@nixo.xyz>
 ;;; Copyright © 2021 Alexandr Vityazev <avityazev@posteo.org>
@@ -58,6 +58,7 @@
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages boost)
+  #:use-module (gnu packages build-tools)
   #:use-module (gnu packages check)
   #:use-module (gnu packages cmake)
   #:use-module (gnu packages cpp)
@@ -978,7 +979,7 @@ Metafile}, and @acronym{EMF+, Enhanced Metafile Plus} files.")
 (define-public imlib2
   (package
     (name "imlib2")
-    (version "1.9.0")
+    (version "1.9.1")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -986,7 +987,7 @@ Metafile}, and @acronym{EMF+, Enhanced Metafile Plus} files.")
                     "/imlib2-" version ".tar.xz"))
               (sha256
                (base32
-                "0l662h74i3mzl5ligj1352rf8bf48drasj97wygr2037gk5fijas"))))
+                "0hsdfs7wa5f7fwb5nfgqzvf29bp59rgy0i0c4m6mvgpzpww408ja"))))
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags (list "--disable-static")))
@@ -1273,7 +1274,7 @@ language bindings to VIGRA.")
 (define-public libwebp
   (package
     (name "libwebp")
-    (version "1.2.0")
+    (version "1.2.2")
     (source
      (origin
        ;; No tarballs are provided for >0.6.1.
@@ -1284,14 +1285,14 @@ language bindings to VIGRA.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "1rgblphsd56033w7lpkrzl7m5w0fi7wavxri1ayzlg8fhpmmqp4k"))))
+         "1khqkm5j9aiii9jfsbxzzyz3x33sifzcx537cyjyb3a2g2rl969k"))))
     (build-system gnu-build-system)
     (inputs
-     `(("freeglut" ,freeglut)
-       ("giflib" ,giflib)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libtiff" ,libtiff)))
+     (list freeglut
+           giflib
+           libjpeg-turbo
+           libpng
+           libtiff))
     (native-inputs
      (list autoconf automake libtool))
     (arguments
@@ -1326,9 +1327,7 @@ channels.")
     (build-system gnu-build-system)
     (propagated-inputs
      ;; These are all in the 'Libs.private' field of libmng.pc.
-     `(("lcms" ,lcms)
-       ("libjpeg" ,libjpeg-turbo)
-       ("zlib" ,zlib)))
+     (list lcms libjpeg-turbo zlib))
     (home-page "https://www.libmng.com/")
     (synopsis "Library for handling MNG files")
     (description
@@ -1520,32 +1519,32 @@ differences in file encoding, image quality, and other small variations.")
                 "18bxlhbdc3zsmxj84i417xjh0q28kv26q449k23n0a72ldwziix2"))
               (patches (list (search-patch "steghide-fixes.patch")))))
     (build-system gnu-build-system)
-    (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("libtool" ,libtool)
-       ("perl" ,perl)))                 ;for tests
-    (inputs
-     `(("libmhash" ,libmhash)
-       ("libmcrypt" ,libmcrypt)
-       ("libjpeg" ,libjpeg-turbo)
-       ("zlib" ,zlib)))
     (arguments
-     `(#:make-flags '("CXXFLAGS=-fpermissive")    ;required for MHashPP.cc
-
-       #:phases (modify-phases %standard-phases
-                  (add-before 'configure 'set-perl-search-path
-                    (lambda _
-                      ;; Work around "dotless @INC" build failure.
-                      (setenv "PERL5LIB"
-                              (string-append (getcwd) "/tests:"
-                                             (getenv "PERL5LIB")))
-                      #t)))))
+     (list #:make-flags
+           #~(list "CXXFLAGS=-fpermissive")  ; required for MHashPP.cc
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-before 'configure 'set-perl-search-path
+                 (lambda _
+                   ;; Work around "dotless @INC" build failure.
+                   (setenv "PERL5LIB"
+                           (string-append (getcwd) "/tests:"
+                                          (getenv "PERL5LIB"))))))))
+    (native-inputs
+     (list gettext-minimal libtool perl))
+    (inputs
+     (list libjpeg-turbo libmhash libmcrypt zlib))
     (home-page "http://steghide.sourceforge.net")
-    (synopsis "Image and audio steganography")
+    (synopsis "`Hide' (nonconfidential) data in image or audio files")
     (description
-     "Steghide is a program to hide data in various kinds of image and audio
-files (known as @dfn{steganography}).  Neither color nor sample frequencies are
-changed, making the embedding resistant against first-order statistical tests.")
+     "Steghide is a program to `hide' data in various kinds of image and audio
+files.  This practice is known as @dfn{steganography}, but the method used by
+steghide is not very secure and should not be used where security is at stake.
+Even if a password is used, steghide offers little plausible deniability.
+
+Nonetheless, neither color nor sample frequencies are changed, making the
+embedding resistant against first-order statistical tests not aimed
+specifically at this tool.")
     (license license:gpl2+)))
 
 (define-public optipng
@@ -2235,57 +2234,56 @@ Format) file format decoder and encoder.")
     (license license:lgpl3+)))
 
 (define-public libjxl
-  (let ((commit "b7076f1869914eee47b3eae107750f3a3ce43a76")
-        (revision "0"))
-    (package
-      (name "libjxl")
-      (version (git-version "0.6.1" revision commit))
-      (source
-       (origin
-         (method git-fetch)
-         (uri (git-reference
-               (url "https://github.com/libjxl/libjxl")
-               (commit commit)
-               (recursive? #t)))
-         (file-name (git-file-name name version))
-         (sha256
-          (base32 "0jx0hkd2nk15mmnzlk7y7fp644w336il7nsnp5yhf14j8zfaiqz8"))
-         (modules '((guix build utils)))
-         (snippet
-          ;; Delete the bundles that will not be used. libjxl bundles LCMS,
-          ;; which is in Guix, but a newer version is required.
-          '(begin
-             (for-each (lambda (directory)
-                         (delete-file-recursively
-                          (string-append "third_party/" directory)))
-                       '("brotli" "googletest" "highway"))))))
-      (build-system cmake-build-system)
-      (arguments
-       `(#:configure-flags
-         (list "-DJPEGXL_FORCE_SYSTEM_GTEST=true"
-               "-DJPEGXL_FORCE_SYSTEM_BROTLI=true"
-               ;; "-DJPEGXL_FORCE_SYSTEM_LCMS2=true" ; requires lcms@2.13
-               "-DJPEGXL_FORCE_SYSTEM_HWY=true")))
-      (native-inputs
-       (list asciidoc doxygen googletest pkg-config python))
-      (inputs
-       (list freeglut
-             gflags
-             giflib
-             google-brotli
-             google-highway
-             imath
-             ;; lcms ; requires lcms@2.13
-             libavif
-             libjpeg-turbo
-             libpng
-             libwebp
-             openexr))
-      (home-page "https://github.com/libjxl/libjxl")
-      (synopsis "JPEG XL image format reference implementation")
-      (description "This package contains a reference implementation of JPEG XL
+  (package
+    (name "libjxl")
+    (version "0.7.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/libjxl/libjxl")
+             (commit (string-append "v" version))
+             (recursive? #t)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1ysh7kd30wwnq0gc1l8c0j9b6wzd15k0kkvfaacjvjqcz11lnc7l"))
+       (modules '((guix build utils)))
+       (snippet
+        ;; Delete the bundles that will not be used. libjxl bundles LCMS,
+        ;; which is in Guix, but a newer version is required.
+        '(begin
+           (for-each (lambda (directory)
+                       (delete-file-recursively
+                        (string-append "third_party/" directory)))
+                     '("brotli" "googletest" "highway"))))))
+    (build-system cmake-build-system)
+    (arguments
+     `(#:configure-flags
+       (list "-DJPEGXL_FORCE_SYSTEM_GTEST=true"
+             "-DJPEGXL_FORCE_SYSTEM_BROTLI=true"
+             ;; "-DJPEGXL_FORCE_SYSTEM_LCMS2=true" ; requires lcms@2.13
+             "-DJPEGXL_FORCE_SYSTEM_HWY=true")))
+    (native-inputs
+     (list asciidoc doxygen googletest pkg-config python))
+    (inputs
+     (list freeglut
+           gflags
+           giflib
+           imath
+           ;; lcms ; requires lcms@2.13
+           libavif
+           libjpeg-turbo
+           libpng
+           libwebp
+           openexr))
+    ;; These are in Requires.private of libjxl.pc.
+    (propagated-inputs
+     (list brotli google-highway))
+    (home-page "https://github.com/libjxl/libjxl")
+    (synopsis "JPEG XL image format reference implementation")
+    (description "This package contains a reference implementation of JPEG XL
 (encoder and decoder).")
-      (license license:bsd-3))))
+    (license license:bsd-3)))
 
 (define-public mtpaint
   (package

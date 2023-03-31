@@ -166,6 +166,7 @@ MODULES =					\
   guix/build-system/maven.scm			\
   guix/build-system/node.scm			\
   guix/build-system/perl.scm			\
+  guix/build-system/pyproject.scm		\
   guix/build-system/python.scm			\
   guix/build-system/renpy.scm			\
   guix/build-system/ocaml.scm			\
@@ -222,6 +223,7 @@ MODULES =					\
   guix/build/minetest-build-system.scm		\
   guix/build/node-build-system.scm		\
   guix/build/perl-build-system.scm		\
+  guix/build/pyproject-build-system.scm		\
   guix/build/python-build-system.scm		\
   guix/build/ocaml-build-system.scm		\
   guix/build/qt-build-system.scm		\
@@ -397,10 +399,10 @@ AUX_FILES =						\
   gnu/packages/aux-files/chromium/master-preferences.json		\
   gnu/packages/aux-files/emacs/guix-emacs.el		\
   gnu/packages/aux-files/guix.vim			\
-  gnu/packages/aux-files/linux-libre/5.18-arm.conf	\
-  gnu/packages/aux-files/linux-libre/5.18-arm64.conf	\
-  gnu/packages/aux-files/linux-libre/5.18-i686.conf	\
-  gnu/packages/aux-files/linux-libre/5.18-x86_64.conf	\
+  gnu/packages/aux-files/linux-libre/6.0-arm.conf	\
+  gnu/packages/aux-files/linux-libre/6.0-arm64.conf	\
+  gnu/packages/aux-files/linux-libre/6.0-i686.conf	\
+  gnu/packages/aux-files/linux-libre/6.0-x86_64.conf	\
   gnu/packages/aux-files/linux-libre/5.15-arm.conf	\
   gnu/packages/aux-files/linux-libre/5.15-arm64.conf	\
   gnu/packages/aux-files/linux-libre/5.15-i686.conf	\
@@ -424,6 +426,7 @@ AUX_FILES =						\
   gnu/packages/aux-files/linux-libre/4.9-x86_64.conf	\
   gnu/packages/aux-files/pack-audit.c			\
   gnu/packages/aux-files/python/sanity-check.py		\
+  gnu/packages/aux-files/python/sanity-check-next.py	\
   gnu/packages/aux-files/python/sitecustomize.py	\
   gnu/packages/aux-files/renpy/renpy.in	\
   gnu/packages/aux-files/run-in-namespace.c
@@ -533,6 +536,7 @@ SCM_TESTS =					\
   tests/services.scm				\
   tests/services/file-sharing.scm		\
   tests/services/configuration.scm		\
+  tests/services/lightdm.scm			\
   tests/services/linux.scm			\
   tests/services/telephony.scm			\
   tests/sets.scm				\
@@ -657,49 +661,49 @@ dist_fishcompletion_DATA = etc/completion/fish/guix.fish
 nodist_selinux_policy_DATA = etc/guix-daemon.cil
 
 EXTRA_DIST +=						\
-  HACKING						\
-  ROADMAP						\
-  TODO							\
-  CODE-OF-CONDUCT					\
   .dir-locals.el					\
   .guix-authorizations					\
   .guix-channel						\
-  scripts/guix.in					\
+  CODE-OF-CONDUCT					\
+  HACKING						\
+  ROADMAP						\
+  TODO							\
+  bootstrap						\
+  build-aux/build-self.scm				\
+  build-aux/check-channel-news.scm			\
+  build-aux/check-final-inputs-self-contained.scm	\
+  build-aux/compile-all.scm				\
+  build-aux/compile-as-derivation.scm			\
+  build-aux/config.rpath				\
+  build-aux/convert-xref.scm			\
+  build-aux/cuirass/hurd-manifest.scm			\
+  build-aux/generate-authors.scm			\
+  build-aux/test-driver.scm				\
+  build-aux/update-NEWS.scm				\
+  build-aux/update-guix-package.scm			\
+  doc/build.scm						\
   etc/disarchive-manifest.scm				\
   etc/guix-install.sh					\
+  etc/historical-authorizations				\
   etc/news.scm						\
   etc/release-manifest.scm				\
   etc/source-manifest.scm				\
   etc/system-tests.scm					\
   etc/time-travel-manifest.scm				\
-  etc/historical-authorizations				\
-  build-aux/build-self.scm				\
-  build-aux/compile-all.scm				\
-  build-aux/cuirass/hurd-manifest.scm			\
-  build-aux/check-final-inputs-self-contained.scm	\
-  build-aux/check-channel-news.scm			\
-  build-aux/compile-as-derivation.scm			\
-  build-aux/convert-xref.scm			\
-  build-aux/generate-authors.scm			\
-  build-aux/test-driver.scm				\
-  build-aux/update-guix-package.scm			\
-  build-aux/update-NEWS.scm				\
-  tests/test.drv					\
+  scripts/guix.in					\
   tests/cve-sample.json					\
-  tests/keys/signing-key.pub				\
-  tests/keys/signing-key.sec				\
   tests/keys/civodul.pub				\
-  tests/keys/rsa.pub					\
   tests/keys/dsa.pub					\
-  tests/keys/ed25519.pub				\
-  tests/keys/ed25519.sec				\
   tests/keys/ed25519-2.pub				\
   tests/keys/ed25519-2.sec				\
   tests/keys/ed25519-3.pub				\
   tests/keys/ed25519-3.sec				\
-  build-aux/config.rpath				\
-  bootstrap						\
-  doc/build.scm						\
+  tests/keys/ed25519.pub				\
+  tests/keys/ed25519.sec				\
+  tests/keys/rsa.pub					\
+  tests/keys/signing-key.pub				\
+  tests/keys/signing-key.sec				\
+  tests/test.drv					\
   $(TESTS)
 
 if !BUILD_DAEMON_OFFLOAD
@@ -748,20 +752,35 @@ endef
 # in <https://issues.guix.gnu.org/48963>.  Each 'eval' call below creates a
 # 'make-*-go' phony target that builds the corresponding subset.
 
-MODULES_CORE     = guix.scm $(filter-out guix/scripts/%,$(filter guix/%,$(MODULES)))
-MODULES_PACKAGES = $(filter gnu/packages/%,$(MODULES))
-MODULES_SYSTEM   = gnu.scm $(filter-out gnu/packages/%,$(filter gnu/%,$(MODULES)))
-MODULES_CLI      = $(filter guix/scripts/%,$(MODULES))
-MODULES_PO       = guix/build/po.scm
+first_half :=								\
+  gnu/packages/a% gnu/packages/b% gnu/packages/c% gnu/packages/d%	\
+  gnu/packages/e% gnu/packages/f% gnu/packages/g% gnu/packages/h%	\
+  gnu/packages/i% gnu/packages/j% gnu/packages/k% gnu/packages/l%
+
+MODULES_CORE      := guix.scm $(filter-out guix/scripts/%,$(filter guix/%,$(MODULES)))
+MODULES_PACKAGES1 := $(filter $(first_half),$(MODULES))
+MODULES_PACKAGES2 := $(filter-out $(first_half),$(filter gnu/packages/%,$(MODULES)))
+MODULES_PACKAGES  := $(MODULES_PACKAGES1) $(MODULES_PACKAGES2)
+MODULES_SYSTEM    := gnu.scm $(filter-out gnu/packages/%,$(filter gnu/%,$(MODULES)))
+MODULES_CLI       := $(filter guix/scripts/%,$(MODULES))
+MODULES_PO        := guix/build/po.scm
 
 $(eval $(call guile-compilation-rule,make-core-go,	\
   $(MODULES_CORE) guix/config.scm $(dist_noinst_DATA),	\
   0))
 .PHONY: make-core-go
 
-$(eval $(call guile-compilation-rule,make-packages-go,	\
-  $(MODULES_PACKAGES) make-core-go,			\
+$(eval $(call guile-compilation-rule,make-packages1-go,	\
+  $(MODULES_PACKAGES1) make-core-go,			\
   $(words $(MODULES_CORE))))
+.PHONY: make-packages1-go
+
+$(eval $(call guile-compilation-rule,make-packages2-go,	\
+  $(MODULES_PACKAGES2) make-core-go make-packages1-go,	\
+  $(words $(MODULES_CORE) $(MODULES_PACKAGES1))))
+.PHONY: make-packages2-go
+
+make-packages-go: make-packages1-go make-packages2-go
 .PHONY: make-packages-go
 
 $(eval $(call guile-compilation-rule,make-system-go,	\
@@ -984,7 +1003,7 @@ release: dist-with-updated-version all
 	      -v1 --no-grafts --fallback
 # Generate the ISO installation images.
 	for system in $(GUIX_SYSTEM_SUPPORTED_SYSTEMS) ; do				\
-	  GUIX_DISPLAYED_VERSION="`git describe --match=v* | sed -'es/^v//v'`" ;	\
+	  GUIX_DISPLAYED_VERSION="`git describe --match=v* | sed -'es/^v//'`" ;		\
 	  image=`$(top_builddir)/pre-inst-env						\
 	    guix system image -t iso9660						\
 	    --label="GUIX_$${system}_$(VERSION)"					\
@@ -1000,7 +1019,7 @@ release: dist-with-updated-version all
 	done
 # Generate the VM images.
 	for system in $(GUIX_SYSTEM_VM_SYSTEMS) ; do					\
-	  GUIX_DISPLAYED_VERSION="`git describe --match=v* | sed -'es/^v//v'`" ;	\
+	  GUIX_DISPLAYED_VERSION="`git describe --match=v* | sed -'es/^v//'`" ;		\
 	  image=`$(top_builddir)/pre-inst-env						\
 	    guix system image -t qcow2 $(GUIX_SYSTEM_VM_IMAGE_FLAGS)			\
 	    --save-provenance								\

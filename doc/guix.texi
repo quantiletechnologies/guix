@@ -10,8 +10,8 @@
 @include version.texi
 
 @c Identifier of the OpenPGP key used to sign tarballs and such.
-@set OPENPGP-SIGNING-KEY-ID 27D586A4F8900854329FF09F1260E46482E63562
-@set OPENPGP-SIGNING-KEY-URL https://sv.gnu.org/people/viewgpg.php?user_id=127547
+@set OPENPGP-SIGNING-KEY-ID 3CE464558A84FDC69DB40CFB090B11993D9AEBB5
+@set OPENPGP-SIGNING-KEY-URL https://sv.gnu.org/people/viewgpg.php?user_id=15145
 
 @c Base URL for downloads.
 @set BASE-URL https://ftp.gnu.org/gnu/guix
@@ -49,7 +49,7 @@ Copyright @copyright{} 2017 humanitiesNerd@*
 Copyright @copyright{} 2017, 2021 Christine Lemmer-Webber@*
 Copyright @copyright{} 2017, 2018, 2019, 2020, 2021, 2022 Marius Bakke@*
 Copyright @copyright{} 2017, 2019, 2020, 2022 Hartmut Goebel@*
-Copyright @copyright{} 2017, 2019, 2020, 2021 Maxim Cournoyer@*
+Copyright @copyright{} 2017, 2019, 2020, 2021, 2022 Maxim Cournoyer@*
 Copyright @copyright{} 2017–2022 Tobias Geerinckx-Rice@*
 Copyright @copyright{} 2017 George Clemmer@*
 Copyright @copyright{} 2017 Andy Wingo@*
@@ -60,7 +60,7 @@ Copyright @copyright{} 2018, 2021 Oleg Pykhalov@*
 Copyright @copyright{} 2018 Mike Gerwitz@*
 Copyright @copyright{} 2018 Pierre-Antoine Rouby@*
 Copyright @copyright{} 2018, 2019 Gábor Boskovits@*
-Copyright @copyright{} 2018, 2019, 2020 Florian Pelz@*
+Copyright @copyright{} 2018, 2019, 2020, 2022 Florian Pelz@*
 Copyright @copyright{} 2018 Laura Lazzati@*
 Copyright @copyright{} 2018 Alex Vong@*
 Copyright @copyright{} 2019 Josh Holland@*
@@ -98,7 +98,7 @@ Copyright @copyright{} 2021 pukkamustard@*
 Copyright @copyright{} 2021 Alice Brenon@*
 Copyright @copyright{} 2021, 2022 Josselin Poiret@*
 Copyright @copyright{} 2021 muradm@*
-Copyright @copyright{} 2021 Andrew Tropin@*
+Copyright @copyright{} 2021, 2022 Andrew Tropin@*
 Copyright @copyright{} 2021 Sarah Morgensen@*
 Copyright @copyright{} 2022 Remco van 't Veer@*
 Copyright @copyright{} 2022 Aleksandr Vityazev@*
@@ -106,6 +106,9 @@ Copyright @copyright{} 2022 Philip M@sup{c}Grath@*
 Copyright @copyright{} 2022 Karl Hallsby@*
 Copyright @copyright{} 2022 Justin Veilleux@*
 Copyright @copyright{} 2022 Reily Siegel@*
+Copyright @copyright{} 2022 Simon Streit@*
+Copyright @copyright{} 2022 (@*
+Copyright @copyright{} 2022 John Kehayias@*
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -161,8 +164,9 @@ package management tool written for the GNU system.
 This manual is also available in Simplified Chinese (@pxref{Top,,, guix.zh_CN,
 GNU Guix参考手册}), French (@pxref{Top,,, guix.fr, Manuel de référence de GNU
 Guix}), German (@pxref{Top,,, guix.de, Referenzhandbuch zu GNU Guix}),
-Spanish (@pxref{Top,,, guix.es, Manual de referencia de GNU Guix}), and
-Russian (@pxref{Top,,, guix.ru, Руководство GNU Guix}).  If you
+Spanish (@pxref{Top,,, guix.es, Manual de referencia de GNU Guix}),
+Brazilian Portuguese (@pxref{Top,,, guix.pt_BR, Manual de referência do
+GNU Guix}), and Russian (@pxref{Top,,, guix.ru, Руководство GNU Guix}).  If you
 would like to translate it in your native language, consider joining
 @uref{https://translate.fedoraproject.org/projects/guix/documentation-manual,
 Weblate} (@pxref{Translating Guix}).
@@ -182,6 +186,8 @@ Weblate} (@pxref{Translating Guix}).
 * System Configuration::        Configuring the operating system.
 * Home Configuration::          Configuring the home environment.
 * Documentation::               Browsing software user manuals.
+* Platforms::                   Defining platforms.
+* System Images::               Creating system images.
 * Installing Debugging Files::  Feeding the debugger.
 * Using TeX and LaTeX::         Typesetting.
 * Security Updates::            Deploying security fixes quickly.
@@ -385,6 +391,7 @@ Services
 * DNS Services::                DNS daemons.
 * VPN Services::                VPN daemons.
 * Network File System::         NFS related services.
+* Samba Services::              Samba services.
 * Continuous Integration::      Cuirass and Laminar services.
 * Power Management Services::   Extending battery life.
 * Audio Services::              The MPD.
@@ -404,6 +411,18 @@ Defining Services
 * Service Reference::           API reference.
 * Shepherd Services::           A particular type of service.
 * Complex Configurations::      Defining bindings for complex configurations.
+
+Platforms
+
+* platform Reference::          Detail of platform declarations.
+* Supported Platforms::         Description of the supported platforms.
+
+System Images
+
+* image Reference::             Detail of image declarations.
+* Instantiate an Image::        How to instantiate an image record.
+* image-type Reference::        Detail of image types declaration.
+* Image Modules::               Definition of image modules.
 
 Installing Debugging Files
 
@@ -932,9 +951,11 @@ version 3.0.3 or later;
 @item @url{https://notabug.org/cwebber/guile-gcrypt, Guile-Gcrypt}, version
 0.1.0 or later;
 @item
-@uref{https://gnutls.org/, GnuTLS}, specifically its Guile bindings
-(@pxref{Guile Preparations, how to install the GnuTLS bindings for
-Guile,, gnutls-guile, GnuTLS-Guile});
+@uref{https://gitlab.com/gnutls/guile/, Guile-GnuTLS} (@pxref{Guile
+Preparations, how to install the GnuTLS bindings for Guile,,
+gnutls-guile, GnuTLS-Guile})@footnote{The Guile bindings to
+@uref{https://gnutls.org/, GnuTLS} were distributed as part of GnuTLS
+until version 3.7.8 included.};
 @item
 @uref{https://notabug.org/guile-sqlite3/guile-sqlite3, Guile-SQLite3}, version 0.1.0
 or later;
@@ -1388,7 +1409,7 @@ when transferring files to and from build machines.
 File name of the Unix-domain socket @command{guix-daemon} is listening
 to on that machine.
 
-@item @code{overload-threshold} (default: @code{0.6})
+@item @code{overload-threshold} (default: @code{0.8})
 The load threshold above which a potential offload machine is
 disregarded by the offload scheduler.  The value roughly translates to
 the total processor usage of the build machine, ranging from 0.0 (0%) to
@@ -1574,7 +1595,7 @@ effectively running @code{guix-daemon} executable is upgraded.
 
 @node Invoking guix-daemon
 @section Invoking @command{guix-daemon}
-
+@cindex @command{guix-daemon}
 The @command{guix-daemon} program implements all the functionality to
 access the store.  This includes launching build processes, running the
 garbage collector, querying the availability of a build result, etc.  It
@@ -2078,6 +2099,19 @@ want to avoid auto-loading the Emacs packages installed with Guix, you
 can do so by running Emacs with the @option{--no-site-file} option
 (@pxref{Init File,,, emacs, The GNU Emacs Manual}).
 
+@quotation Note
+Emacs can now compile packages natively.  Under the default
+configuration, this means that Emacs packages will now be
+just-in-time (JIT) compiled as you use them, and the results
+stored in a subdirectory of your @code{user-emacs-directory}.
+
+Furthermore, the build system for Emacs packages transparently
+supports native compilation, but note, that
+@code{emacs-minimal}---the default Emacs for building
+packages---has been configured without native compilation.
+To natively compile your emacs packages ahead of time, use a
+transformation like @option{--with-input=emacs-minimal=emacs}.
+@end quotation
 
 @node Upgrading Guix
 @section Upgrading Guix
@@ -2200,6 +2234,9 @@ Wireless-Core Revision 5), which corresponds to the @code{b43-open}
 Linux-libre driver.  Free firmware exists for both and is available
 out-of-the-box on Guix System, as part of @code{%base-firmware}
 (@pxref{operating-system Reference, @code{firmware}}).
+
+The installer warns you early on if it detects devices that are known
+@emph{not} to work due to the lack of free firmware or free drivers.
 
 @cindex RYF, Respects Your Freedom
 The @uref{https://www.fsf.org/, Free Software Foundation} runs
@@ -2923,11 +2960,12 @@ chroot /mnt /bin/sh
 @end example
 
 @item
-Source your @var{user} profile to setup the environment, where
-@var{user} is the user name used for the Guix System you are attempting
-to repair:
+Source the system profile as well as your @var{user} profile to setup
+the environment, where @var{user} is the user name used for the Guix
+System you are attempting to repair:
 
 @example sh
+source /var/guix/profiles/system/profile/etc/profile
 source /home/@var{user}/.guix-profile/etc/profile
 @end example
 
@@ -3298,6 +3336,7 @@ retaining precise @dfn{provenance tracking} of the software.
 @cindex package installation
 @cindex package removal
 @cindex profile
+@cindex @command{guix package}
 The @command{guix package} command is the tool that allows users to
 install, upgrade, and remove packages, as well as rolling back to
 previous configurations.  These operations work on a user
@@ -3384,18 +3423,24 @@ The @var{options} can be among the following:
 @itemx -i @var{package} @dots{}
 Install the specified @var{package}s.
 
-Each @var{package} may specify either a simple package name, such as
-@code{guile}, or a package name followed by an at-sign and version number,
-such as @code{guile@@1.8.8} or simply @code{guile@@1.8} (in the latter
-case, the newest version prefixed by @code{1.8} is selected).
+Each @var{package} may specify a simple package name, such as
+@code{guile}, optionally followed by an at-sign and version number,
+such as @code{guile@@3.0.7} or simply @code{guile@@3.0}.  In the latter
+case, the newest version prefixed by @code{3.0} is selected.
 
-If no version number is specified, the
-newest available version will be selected.  In addition, @var{package}
+If no version number is specified, the newest available version will be
+selected.  In addition, such a @var{package} specification
 may contain a colon, followed by the name of one of the outputs of the
 package, as in @code{gcc:doc} or @code{binutils@@2.22:lib}
-(@pxref{Packages with Multiple Outputs}).  Packages with a corresponding
+(@pxref{Packages with Multiple Outputs}).
+
+Packages with a corresponding
 name (and optionally version) are searched for among the GNU
 distribution modules (@pxref{Package Modules}).
+
+Alternatively, a @var{package} can directly specify a store file name
+such as @file{/gnu/store/...-guile-3.0.7}, as produced by, e.g.,
+@code{guix build}.
 
 @cindex propagated inputs
 Sometimes packages have @dfn{propagated inputs}: these are dependencies
@@ -4291,6 +4336,7 @@ guix package}).
 
 @cindex garbage collector
 @cindex disk space
+@cindex @command{guix gc}
 Packages that are installed, but not used, may be @dfn{garbage-collected}.
 The @command{guix gc} command allows users to explicitly run the garbage
 collector to reclaim space from the @file{/gnu/store} directory.  It is
@@ -4495,6 +4541,18 @@ import, unless it was started with @option{--disable-deduplication}
 this option is primarily useful when the daemon was running with
 @option{--disable-deduplication}.
 
+@item --vacuum-database
+@cindex vacuum the store database
+@comment Avoid words like 'repair,' 'compress,' and 'optimize.'
+Guix uses an sqlite database to keep track of the items in (@pxref{The Store}).
+Over time it is possible that the database may grow to a large size and become
+fragmented.  As a result, one may wish to clear the freed space and join the
+partially used pages in the database left behind from removed packages or after
+running the garbage collector.  Running @command{sudo guix gc
+--vacuum-database} will lock the database and @code{VACUUM} the store,
+defragmenting the database and purging freed pages, unlocking the database when
+it finishes.
+
 @end table
 
 @node Invoking guix pull
@@ -4511,7 +4569,7 @@ the distribution currently available on your local machine.  To update
 that distribution, along with the Guix tools, you must run @command{guix
 pull}: the command downloads the latest Guix source code and package
 descriptions, and deploys it.  Source code is downloaded from a
-@uref{https://git-scm.com, Git} repository, by default the official
+@uref{https://git-scm.com/book/en/, Git} repository, by default the official
 GNU@tie{}Guix repository, though this can be customized.  @command{guix
 pull} ensures that the code it downloads is @emph{authentic} by
 verifying that commits are signed by Guix developers.
@@ -4611,7 +4669,7 @@ but it supports the following options:
 @itemx --branch=@var{branch}
 Download code for the @code{guix} channel from the specified @var{url}, at the
 given @var{commit} (a valid Git commit ID represented as a hexadecimal
-string), or @var{branch}.
+string or the name of a tag), or @var{branch}.
 
 @cindex @file{channels.scm}, configuration file
 @cindex configuration file for channels
@@ -4763,6 +4821,34 @@ of Guix to be used is defined by a commit or by a channel
 description file created by @command{guix describe}
 (@pxref{Invoking guix describe}).
 
+Let's assume that you want to travel to those days of November 2020 when
+version 1.2.0 of Guix was released and, once you're there, run the
+@command{guile} of that time:
+
+@example
+guix time-machine --commit=v1.2.0 -- \
+  environment -C --ad-hoc guile -- guile
+@end example
+
+The command above fetches Guix@tie{}1.2.0 and runs its @command{guix
+environment} command to spawn an environment in a container running
+@command{guile} (@command{guix environment} has since been subsumed by
+@command{guix shell}; @pxref{Invoking guix shell}).  It's like driving a
+DeLorean@footnote{If you don't know what a DeLorean is, consider
+traveling back to the 1980's.}!  The first @command{guix time-machine}
+invocation can be expensive: it may have to download or even build a
+large number of packages; the result is cached though and subsequent
+commands targeting the same commit are almost instantaneous.
+
+@quotation Note
+The history of Guix is immutable and @command{guix time-machine}
+provides the exact same software as they are in a specific Guix
+revision.  Naturally, no security fixes are provided for old versions
+of Guix or its channels.  A careless use of @command{guix time-machine}
+opens the door to security vulnerabilities.  @xref{Invoking guix pull,
+@option{--allow-downgrades}}.
+@end quotation
+
 The general syntax is:
 
 @example
@@ -4779,7 +4865,7 @@ this revision are the same as for @command{guix pull} (@pxref{Invoking guix pull
 @itemx --branch=@var{branch}
 Use the @code{guix} channel from the specified @var{url}, at the
 given @var{commit} (a valid Git commit ID represented as a hexadecimal
-string), or @var{branch}.
+string or the name of a tag), or @var{branch}.
 
 @item --channels=@var{file}
 @itemx -C @var{file}
@@ -4936,6 +5022,7 @@ declaration, and so on.
 
 @cindex reproducibility
 @cindex replicating Guix
+@cindex @command{guix describe}
 Often you may want to answer questions like: ``Which revision of Guix am I
 using?'' or ``Which channels am I using?''  This is useful information in many
 situations: if you want to @emph{replicate} an environment on a different
@@ -5031,6 +5118,8 @@ Display information about @var{profile}.
 
 @cindex @command{guix archive}
 @cindex archive
+@cindex exporting files from the store
+@cindex importing files to the store
 The @command{guix archive} command allows users to @dfn{export} files
 from the store into a single archive, and to later @dfn{import} them on
 a machine that runs Guix.
@@ -5789,6 +5878,7 @@ easily distributed to users who do not run Guix.
 @cindex reproducible build environments
 @cindex development environments
 @cindex @command{guix environment}
+@cindex @command{guix shell}
 @cindex environment, package build environment
 The purpose of @command{guix shell} is to make it easy to create one-off
 software environments, without changing one's profile.  It is typically
@@ -6171,6 +6261,33 @@ directory:
 guix shell --container --expose=$HOME=/exchange guile -- guile
 @end example
 
+@cindex symbolic links, guix shell
+@item --symlink=@var{spec}
+@itemx -S @var{spec}
+For containers, create the symbolic links specified by @var{spec}, as
+documented in @ref{pack-symlink-option}.
+
+@cindex file system hierarchy standard (FHS)
+@cindex FHS (file system hierarchy standard)
+@item --emulate-fhs
+@itemx -F
+When used with @option{--container}, emulate a
+@uref{https://refspecs.linuxfoundation.org/fhs.shtml, Filesystem
+Hierarchy Standard (FHS)} configuration within the container, providing
+@file{/bin}, @file{/lib}, and other directories and files specified by
+the FHS.
+
+As Guix deviates from the FHS specification, this
+option sets up the container to more closely mimic that of other
+GNU/Linux distributions.  This is useful for reproducing other
+development environments, testing, and using programs which expect the
+FHS specification to be followed.  With this option, the container will
+include a version of glibc that will read
+@file{/etc/ld.so.cache} within the container for the shared library
+cache (contrary to glibc in regular Guix usage) and set up the
+expected FHS directories: @file{/bin}, @file{/etc}, @file{/lib}, and
+@file{/usr} from the container's profile.
+
 @item --rebuild-cache
 @cindex caching, of profiles
 @cindex caching, in @command{guix shell}
@@ -6218,6 +6335,8 @@ package transformation options (@pxref{Package Transformation Options}).
 
 @node Invoking guix environment
 @section Invoking @command{guix environment}
+
+@cindex @command{guix environment}
 
 The purpose of @command{guix environment} is to assist in creating
 development environments.
@@ -6588,6 +6707,22 @@ directory:
 guix environment --container --expose=$HOME=/exchange --ad-hoc guile -- guile
 @end example
 
+@item --emulate-fhs
+@item -F
+For containers, emulate a Filesystem Hierarchy Standard (FHS)
+configuration within the container, see
+@uref{https://refspecs.linuxfoundation.org/fhs.shtml, the official
+specification}.  As Guix deviates from the FHS specification, this
+option sets up the container to more closely mimic that of other
+GNU/Linux distributions.  This is useful for reproducing other
+development environments, testing, and using programs which expect the
+FHS specification to be followed.  With this option, the container will
+include a version of @code{glibc} which will read
+@code{/etc/ld.so.cache} within the container for the shared library
+cache (contrary to @code{glibc} in regular Guix usage) and set up the
+expected FHS directories: @code{/bin}, @code{/etc}, @code{/lib}, and
+@code{/usr} from the container's profile.
+
 @end table
 
 @command{guix environment}
@@ -6597,6 +6732,8 @@ transformation options (@pxref{Package Transformation Options}).
 
 @node Invoking guix pack
 @section Invoking @command{guix pack}
+
+@cindex @command{guix pack}
 
 Occasionally you want to pass software to people who are not (yet!)
 lucky enough to be using Guix.  You'd tell them to run @command{guix
@@ -6922,6 +7059,7 @@ Compress the resulting tarball using @var{tool}---one of @code{gzip},
 @code{zstd}, @code{bzip2}, @code{xz}, @code{lzip}, or @code{none} for no
 compression.
 
+@anchor{pack-symlink-option}
 @item --symlink=@var{spec}
 @itemx -S @var{spec}
 Add the symlinks specified by @var{spec} to the pack.  This option can
@@ -7015,6 +7153,8 @@ for Fortran development.  For other languages, please use
 
 @node Invoking guix git authenticate
 @section Invoking @command{guix git authenticate}
+
+@cindex @command{guix git authenticate}
 
 The @command{guix git authenticate} command authenticates a Git checkout
 following the same rule as for channels (@pxref{channel-authentication,
@@ -7321,6 +7461,14 @@ unavailable to the build process, possibly leading to a build failure.
 @end itemize
 
 @xref{package Reference}, for a full description of possible fields.
+
+@quotation Going further
+@cindex Scheme programming language, getting started
+Intimidated by the Scheme language or curious about it?  The Cookbook
+has a short section to get started that recaps some of the things shown
+above and explains the fundamentals.  @xref{A Scheme Crash Course,,,
+guix-cookbook, GNU Guix Cookbook}, for more information.
+@end quotation
 
 Once a package definition is in place, the
 package may actually be built using the @code{guix build} command-line
@@ -7947,20 +8095,20 @@ following forms:
 @item (delete @var{name}@dots{})
 Delete from the inputs packages with the given @var{name}s (strings).
 
-@item (append @var{package}@dots{})
-Add @var{package}s to the end of the input list.
-
 @item (prepend @var{package}@dots{})
 Add @var{package}s to the front of the input list.
+
+@item (append @var{package}@dots{})
+Add @var{package}s to the end of the input list.
 @end table
 
 The example below removes the GMP and ACL inputs of Coreutils and adds
-libcap to the back of the input list:
+libcap to the front of the input list:
 
 @lisp
 (modify-inputs (package-inputs coreutils)
   (delete "gmp" "acl")
-  (append libcap))
+  (prepend libcap))
 @end lisp
 
 The example below replaces the @code{guile} package from the inputs of
@@ -7971,7 +8119,7 @@ The example below replaces the @code{guile} package from the inputs of
   (replace "guile" guile-2.2))
 @end lisp
 
-The last type of clause is @code{prepend}, to add inputs to the front of
+The last type of clause is @code{append}, to add inputs at the back of
 the list.
 @end deffn
 
@@ -9203,7 +9351,37 @@ instead of the default @code{"out"} output. This is useful for packages that
 include a Python package as only a part of the software, and thus want to
 combine the phases of @code{python-build-system} with another build system.
 Python bindings are a common usecase.
+@end defvr
 
+@defvr {Scheme Variable} pyproject-build-system
+This is a variable exported by @code{guix build-system pyproject}.  It
+is based on @var{python-build-system}, and adds support for
+@file{pyproject.toml} and @url{https://peps.python.org/pep-0517/, PEP 517}.
+It also supports a variety of build backends and test frameworks.
+
+The API is slightly different from @var{python-build-system}:
+@itemize
+@item
+@code{#:use-setuptools?} and @code{#:test-target} is removed.
+@item
+@code{#:build-backend} is added.  It defaults to @code{#false} and will try
+to guess the appropriate backend based on @file{pyproject.toml}.
+@item
+@code{#:test-backend} is added.  It defaults to @code{#false} and will guess
+an appropriate test backend based on what is available in package inputs.
+@item
+@code{#:test-flags} is added.  The default is @code{'()}.  These flags are
+passed as arguments to the test command.  Note that flags for verbose output
+is always enabled on supported backends.
+@end itemize
+
+It is considered ``experimental'' in that the implementation details are
+not set in stone yet, however users are encouraged to try it for new
+Python projects (even those using @file{setup.py}).  The API is subject to
+change, but any breaking changes in the Guix channel will be dealt with.
+
+Eventually this build system will be deprecated and merged back into
+@var{python-build-system}, probably some time in 2024.
 @end defvr
 
 @defvr {Scheme Variable} perl-build-system
@@ -11528,8 +11706,7 @@ This is the declarative counterpart of @code{text-file}.
 @end deffn
 
 @deffn {Scheme Procedure} computed-file @var{name} @var{gexp} @
-          [#:local-build? #t]
-          [#:options '()]
+  [#:local-build? #t] [#:options '()]
 Return an object representing the store item @var{name}, a file or
 directory computed by @var{gexp}.  When @var{local-build?} is true (the
 default), the derivation is built locally.  @var{options} is a list of
@@ -11773,6 +11950,7 @@ replaced with some arbitrary object -- currently the list
 @node Invoking guix repl
 @section Invoking @command{guix repl}
 
+@cindex @command{guix repl}
 @cindex REPL, read-eval-print loop, script
 The @command{guix repl} command makes it easier to program Guix in Guile
 by launching a Guile @dfn{read-eval-print loop} (REPL) for interactive
@@ -12340,14 +12518,15 @@ one provided by the distribution.  The example below downloads
 the @code{ed} package:
 
 @example
-guix build ed --with-source=mirror://gnu/ed/ed-1.7.tar.gz
+guix build ed --with-source=mirror://gnu/ed/ed-1.4.tar.gz
 @end example
 
 As a developer, @option{--with-source} makes it easy to test release
-candidates:
+candidates, and even to test their impact on packages that depend on
+them:
 
 @example
-guix build guile --with-source=../guile-2.0.9.219-e1bb7.tar.xz
+guix build elogind --with-source=@dots{}/shepherd-0.9.0rc1.tar.gz 
 @end example
 
 @dots{} or to build from a checkout in a pristine environment:
@@ -13211,6 +13390,12 @@ The command below imports metadata for the @code{rails} Ruby package:
 guix import gem rails
 @end example
 
+You can also ask for a specific version:
+
+@example
+guix import gem rails@@7.0.4
+@end example
+
 @table @code
 @item --recursive
 @itemx -r
@@ -14071,6 +14256,11 @@ otherwise.
 @node Invoking guix style
 @section Invoking @command{guix style}
 
+@cindex @command{guix style}
+@cindex styling rules
+@cindex lint, code style
+@cindex format, code style
+@cindex format conventions
 The @command{guix style} command helps users and packagers alike style
 their package definitions and configuration files according to the
 latest fashionable trends.  It can either reformat whole files, with the
@@ -15309,6 +15499,7 @@ information about mismatches.
 @node Invoking guix copy
 @section Invoking @command{guix copy}
 
+@cindex @command{guix copy}
 @cindex copy, of store items, over SSH
 @cindex SSH, copy of store items
 @cindex sharing store items across machines
@@ -15426,6 +15617,7 @@ must be PID 1 of the container or one of its child processes.
 @node Invoking guix weather
 @section Invoking @command{guix weather}
 
+@cindex @command{guix weather}
 Occasionally you're grumpy because substitutes are lacking and you end
 up building packages by yourself (@pxref{Substitutes}).  The
 @command{guix weather} command reports on substitute availability on the
@@ -15556,6 +15748,7 @@ Display the list of store items for which substitutes are missing.
 @node Invoking guix processes
 @section Invoking @command{guix processes}
 
+@cindex @command{guix processes}
 The @command{guix processes} command can be useful to developers and system
 administrators, especially on multi-user machines and on build farms: it lists
 the current sessions (connections to the daemon), as well as information about
@@ -16259,7 +16452,7 @@ The default set includes core utilities and it is good practice to
 install non-core utilities in user profiles (@pxref{Invoking guix
 package}).
 
-@item @code{timezone}
+@item @code{timezone} (default: @code{"Etc/UTC"})
 A timezone identifying string---e.g., @code{"Europe/Paris"}.
 
 You can run the @command{tzselect} command to find out which timezone
@@ -16420,6 +16613,7 @@ This is a list of symbols denoting mount flags.  Recognized flags
 include @code{read-only}, @code{bind-mount}, @code{no-dev} (disallow
 access to special files), @code{no-suid} (ignore setuid and setgid
 bits), @code{no-atime} (do not update file access times),
+@code{no-diratime} (likewise for directories only),
 @code{strict-atime} (update file access time), @code{lazy-time} (only
 update time on the in-memory version of the file inode),
 @code{no-exec} (disallow program execution), and @code{shared} (make the
@@ -17474,6 +17668,17 @@ Service xorg-server has been stopped.
 Service xorg-server has been started.
 @end example
 
+@cindex configuration, action for shepherd services
+@cindex configuration file, of a shepherd service
+For some services, @command{herd configuration} returns the name of the
+service's configuration file, which can be handy to inspect its
+configuration:
+
+@example
+# herd configuration sshd
+/gnu/store/@dots{}-sshd_config
+@end example
+
 The following sections document the available services, starting with
 the core services, that may be used in an @code{operating-system}
 declaration.
@@ -17500,8 +17705,10 @@ declaration.
 * Web Services::                Web servers.
 * Certificate Services::        TLS certificates via Let's Encrypt.
 * DNS Services::                DNS daemons.
+* VNC Services::                VNC daemons.
 * VPN Services::                VPN daemons.
 * Network File System::         NFS related services.
+* Samba Services::              Samba services.
 * Continuous Integration::      Cuirass and Laminar services.
 * Power Management Services::   Extending battery life.
 * Audio Services::              The MPD.
@@ -17552,17 +17759,19 @@ and the second element is its target.  By default it is:
 @cindex @file{/bin/sh}
 @cindex @file{sh}, in @file{/bin}
 @lisp
-`(("/bin/sh" ,(file-append bash "/bin/sh")))
+`(("/bin/sh" ,(file-append bash "/bin/sh"))
+  ("/usr/bin/env" ,(file-append coreutils "/bin/env")))
 @end lisp
 
 @cindex @file{/usr/bin/env}
 @cindex @file{env}, in @file{/usr/bin}
-If you want to add, say, @code{/usr/bin/env} to your system, you can
+If you want to add, say, @code{/bin/bash} to your system, you can
 change it to:
 
 @lisp
 `(("/bin/sh" ,(file-append bash "/bin/sh"))
-  ("/usr/bin/env" ,(file-append coreutils "/bin/env")))
+  ("/usr/bin/env" ,(file-append coreutils "/bin/env"))
+  ("/bin/bash" ,(file-append bash "/bin/bash")))
 @end lisp
 
 Since this is part of @code{%base-services}, you can use
@@ -18559,6 +18768,13 @@ the 'root' account has just been created.
 @item @code{terminals} (default: @code{'()})
 List of @code{greetd-terminal-configuration} per terminal for which
 @code{greetd} should be started.
+
+@item @code{greeter-supplementary-groups} (default: @code{'()})
+List of groups which should be added to @code{greeter} user. For instance:
+@lisp
+(greeter-supplementary-groups '("seat" "video"))
+@end lisp
+Note that this example will fail if @code{seat} group does not exist.
 @end table
 @end deftp
 
@@ -18616,6 +18832,81 @@ before starting command. One should note that, @code{extra-env} variables
 are set right after mentioned variables, so that they can be overriden.
 
 @end table
+@end deftp
+
+@deftp {Data Type} greetd-wlgreet-session
+Generic configuration record for the wlgreet greetd greeter.
+
+@table @asis
+@item @code{wlgreet} (default: @code{wlgreet})
+The package with the @command{/bin/wlgreet} command.
+
+@item @code{command} (default: @code{(file-append sway "/bin/sway")})
+Command to be started by @command{/bin/wlgreet} on successful login.
+
+@item @code{command-args} (default: @code{'()})
+Command arguments to pass to command.
+
+@item @code{output-mode} (default: @code{"all"})
+Option to use for @code{outputMode} in the TOML configuration file.
+
+@item @code{scale} (default: @code{1})
+Option to use for @code{scale} in the TOML configuration file.
+
+@item @code{background} (default: @code{'(0 0 0 0.9)})
+RGBA list to use as the background colour of the login prompt.
+
+@item @code{headline} (default: @code{'(1 1 1 1)})
+RGBA list to use as the headline colour of the UI popup.
+
+@item @code{prompt} (default: @code{'(1 1 1 1)})
+RGBA list to use as the prompt colour of the UI popup.
+
+@item @code{prompt-error} (default: @code{'(1 1 1 1)})
+RGBA list to use as the error colour of the UI popup.
+
+@item @code{border} (default: @code{'(1 1 1 1)})
+RGBA list to use as the border colour of the UI popup.
+
+@item @code{extra-env} (default: @code{'()})
+Extra environment variables to set on login.
+
+@end table
+@end deftp
+
+@deftp {Data Type} greetd-wlgreet-sway-session
+Sway-specific configuration record for the wlgreet greetd greeter.
+
+@table @asis
+@item @code{wlgreet-session} (default: @code{(greetd-wlgreet-session)})
+A @code{greetd-wlgreet-session} record for generic wlgreet configuration,
+on top of the Sway-specific @code{greetd-wlgreet-sway-session}.
+
+@item @code{sway} (default: @code{sway})
+The package providing the @command{/bin/sway} command.
+
+@item @code{sway-configuration} (default: #f)
+File-like object providing an additional Sway configuration file to be
+prepended to the mandatory part of the configuration.
+
+@end table
+
+Here is an example of a greetd configuration that uses wlgreet and Sway:
+
+@lisp
+  (greetd-configuration
+   ;; We need to give the greeter user these permissions, otherwise
+   ;; Sway will crash on launch.
+   (greeter-supplementary-groups (list "video" "input" "seat"))
+   (terminals
+    (list (greetd-terminal-configuration
+           (terminal-vt "1")
+           (terminal-switch #t)
+           (default-session-command
+            (greetd-wlgreet-sway-session
+             (sway-configuration
+              (local-file "sway-greetd.conf"))))))))
+@end lisp
 @end deftp
 
 @node Scheduled Job Execution
@@ -18753,20 +19044,33 @@ words, it is possible to define services that provide additional mcron
 jobs to run.
 @end defvr
 
+@c Generated via (generate-documentation) at the bottom of (gnu services
+@c mcron).
+@c %start of fragment
 @deftp {Data Type} mcron-configuration
-Data type representing the configuration of mcron.
+Available @code{mcron-configuration} fields are:
 
 @table @asis
-@item @code{mcron} (default: @var{mcron})
+@item @code{mcron} (default: @code{mcron}) (type: file-like)
 The mcron package to use.
 
-@item @code{jobs}
+@item @code{jobs} (default: @code{()}) (type: list-of-gexps)
 This is a list of gexps (@pxref{G-Expressions}), where each gexp
 corresponds to an mcron job specification (@pxref{Syntax, mcron job
-specifications,, mcron, GNU@tie{}mcron}).
+specifications,, mcron,GNU@tie{}mcron}).
+
+@item @code{log?} (default: @code{#t}) (type: boolean)
+Log messages to standard output.
+
+@item @code{log-format} (default: @code{"~1@@*~a ~a: ~a~%"}) (type: string)
+@code{(ice-9 format)} format string for log messages.  The default value
+produces messages like "@samp{@var{pid} @var{name}: @var{message}"}
+(@pxref{Invoking mcron, Invoking,, mcron,GNU@tie{}mcron}).  Each message
+is also prefixed by a timestamp by GNU Shepherd.
+
 @end table
 @end deftp
-
+@c %end of fragment
 
 @node Log Rotation
 @subsection Log Rotation
@@ -19137,8 +19441,8 @@ This is the data type representing a network route.
 
 @table @asis
 @item @code{destination}
-The route destination (a string), either an IP address or
-@code{"default"} to denote the default route.
+The route destination (a string), either an IP address and network mask
+or @code{"default"} to denote the default route.
 
 @item @code{source} (default: @code{#f})
 The route source.
@@ -19189,9 +19493,25 @@ the user mode network stack,,, QEMU, QEMU Documentation}).
 @cindex DHCP, networking service
 @defvr {Scheme Variable} dhcp-client-service-type
 This is the type of services that run @var{dhcp}, a Dynamic Host Configuration
-Protocol (DHCP) client, on all the non-loopback network interfaces.  Its value
-is the DHCP client package to use, @code{isc-dhcp} by default.
+Protocol (DHCP) client.
 @end defvr
+
+@deftp {Data Type} dhcp-client-configuration
+Data type representing the configuration of the DHCP client service.
+
+@table @asis
+@item @code{package} (default: @code{isc-dhcp})
+DHCP client package to use.
+
+@item @code{interfaces} (default: @code{'all})
+Either @code{'all} or the list of interface names that the DHCP client
+should listen on---e.g., @code{'("eno1")}.
+
+When set to @code{'all}, the DHCP client listens on all the available
+non-loopback interfaces that can be activated.  Otherwise the DHCP
+client listens only on the specified interfaces.
+@end table
+@end deftp
 
 @cindex NetworkManager
 
@@ -19422,7 +19742,7 @@ For example:
 The package that provides the DHCP daemon.  This package is expected to
 provide the daemon at @file{sbin/dhcpd} relative to its output
 directory.  The default package is the
-@uref{https://www.isc.org/products/DHCP, ISC's DHCP server}.
+@uref{https://www.isc.org/dhcp/, ISC's DHCP server}.
 @item @code{config-file} (default: @code{#f})
 The configuration file to use.  This is required.  It will be passed to
 @code{dhcpd} via its @code{-cf} option.  This may be any ``file-like''
@@ -20984,6 +21304,7 @@ started by the @dfn{login manager}, by default the GNOME Display Manager (GDM).
 
 @cindex GDM
 @cindex GNOME, login manager
+@anchor{gdm}
 GDM of course allows users to log in into window managers and desktop
 environments other than GNOME; for those using GNOME, GDM is required for
 features such as automatic screen locking.
@@ -21029,6 +21350,12 @@ When @code{auto-login?} is false, GDM presents a log-in screen.
 When @code{auto-login?} is true, GDM logs in directly as
 @code{default-user}.
 
+@item @code{auto-suspend?} (default @code{#t})
+When true, GDM will automatically suspend to RAM when nobody is
+physically connected.  When a machine is used via remote desktop or SSH,
+this should be set to false to avoid GDM interrupting remote sessions or
+rendering the machine unavailable.
+
 @item @code{debug?} (default: @code{#f})
 When true, GDM writes debug messages to its log.
 
@@ -21040,6 +21367,12 @@ Configuration of the Xorg graphical server.
 
 @item @code{x-session} (default: @code{(xinitrc)})
 Script to run before starting a X session.
+
+@item @code{xdmcp?} (default: @code{#f})
+When true, enable the X Display Manager Control Protocol (XDMCP).  This
+should only be enabled in trusted environments, as the protocol is not
+secure.  When enabled, GDM listens for XDMCP queries on the UDP port
+177.
 
 @item @code{dbus-daemon} (default: @code{dbus-daemon-wrapper})
 File name of the @code{dbus-daemon} executable.
@@ -21271,13 +21604,217 @@ Relogin after logout.
 @end table
 @end deftp
 
+@cindex lightdm, graphical login manager
+@cindex display manager, lightdm
+@anchor{lightdm}
+@defvr {Scheme Variable} lightdm-service-type
+This is the type of the service to run the
+@url{https://github.com/canonical/lightdm,LightDM display manager}.  Its
+value must be a @code{lightdm-configuration} record, which is documented
+below.  Among its distinguishing features are TigerVNC integration for
+easily remoting your desktop as well as support for the XDMCP protocol,
+which can be used by remote clients to start a session from the login
+manager.
+
+In its most basic form, it can be used simply as:
+
+@lisp
+(service lightdm-service-type)
+@end lisp
+
+A more elaborate example making use of the VNC capabilities and enabling
+more features and verbose logs could look like:
+
+@lisp
+(service lightdm-service-type
+         (lightdm-configuration
+          (allow-empty-passwords? #t)
+          (xdmcp? #t)
+          (vnc-server? #t)
+          (vnc-server-command
+           (file-append tigervnc-server "/bin/Xvnc"
+                        "  -SecurityTypes None"))
+          (seats
+           (list (lightdm-seat-configuration
+                  (name "*")
+                  (user-session "ratpoison"))))))
+@end lisp
+@end defvr
+
+@c The LightDM service documentation can be auto-generated via the
+@c 'generate-doc' procedure at the bottom of the (gnu services lightdm)
+@c module.
+@c %start of fragment
+@deftp {Data Type} lightdm-configuration
+Available @code{lightdm-configuration} fields are:
+
+@table @asis
+@item @code{lightdm} (default: @code{lightdm}) (type: file-like)
+The lightdm package to use.
+
+@item @code{allow-empty-passwords?} (default: @code{#f}) (type: boolean)
+Whether users not having a password set can login.
+
+@item @code{debug?} (default: @code{#f}) (type: boolean)
+Enable verbose output.
+
+@item @code{xorg-configuration} (type: xorg-configuration)
+The default Xorg server configuration to use to generate the Xorg server
+start script.  It can be refined per seat via the @code{xserver-command}
+of the @code{<lightdm-seat-configuration>} record, if desired.
+
+@item @code{greeters} (type: list-of-greeter-configurations)
+The LightDM greeter configurations specifying the greeters to use.
+
+@item @code{seats} (type: list-of-seat-configurations)
+The seat configurations to use.  A LightDM seat is akin to a user.
+
+@item @code{xdmcp?} (default: @code{#f}) (type: boolean)
+Whether a XDMCP server should listen on port UDP 177.
+
+@item @code{xdmcp-listen-address} (type: maybe-string)
+The host or IP address the XDMCP server listens for incoming
+connections.  When unspecified, listen on for any hosts/IP addresses.
+
+@item @code{vnc-server?} (default: @code{#f}) (type: boolean)
+Whether a VNC server is started.
+
+@item @code{vnc-server-command} (type: file-like)
+The Xvnc command to use for the VNC server, it's possible to provide
+extra options not otherwise exposed along the command, for example to
+disable security:
+
+@lisp
+(vnc-server-command (file-append tigervnc-server "/bin/Xvnc"
+                                 " -SecurityTypes None" ))
+@end lisp
+
+Or to set a PasswordFile for the classic (unsecure) VncAuth
+mecanism:
+
+@lisp
+(vnc-server-command (file-append tigervnc-server "/bin/Xvnc"
+                                 " -PasswordFile /var/lib/lightdm/.vnc/passwd"))
+@end lisp
+
+The password file should be manually created using the
+@command{vncpasswd} command.  Note that LightDM will create new sessions
+for VNC users, which means they need to authenticate in the same way as
+local users would.
+
+@item @code{vnc-server-listen-address} (type: maybe-string)
+The host or IP address the VNC server listens for incoming connections.
+When unspecified, listen for any hosts/IP addresses.
+
+@item @code{vnc-server-port} (default: @code{5900}) (type: number)
+The TCP port the VNC server should listen to.
+
+@item @code{extra-config} (default: @code{()}) (type: list-of-strings)
+Extra configuration values to append to the LightDM configuration file.
+
+@end table
+@end deftp
+
+
+@c %end of fragment
+@c %start of fragment
+
+@deftp {Data Type} lightdm-gtk-greeter-configuration
+Available @code{lightdm-gtk-greeter-configuration} fields are:
+
+@table @asis
+@item @code{lightdm-gtk-greeter} (default: @code{lightdm-gtk-greeter}) (type: file-like)
+The lightdm-gtk-greeter package to use.
+
+@item @code{assets} @
+(default: @code{(adwaita-icon-theme gnome-themes-extrahicolor-icon-theme)}) @
+(type: list-of-file-likes)
+The list of packages complementing the greeter, such as package
+providing icon themes.
+
+@item @code{theme-name} (default: @code{"Adwaita"}) (type: string)
+The name of the theme to use.
+
+@item @code{icon-theme-name} (default: @code{"Adwaita"}) (type: string)
+The name of the icon theme to use.
+
+@item @code{cursor-theme-name} (default: @code{"Adwaita"}) (type: string)
+The name of the cursor theme to use.
+
+@item @code{cursor-theme-size} (default: @code{16}) (type: number)
+The size to use for the cursor theme.
+
+@item @code{allow-debugging?} (type: maybe-boolean)
+Set to #t to enable debug log level.
+
+@item @code{background} (type: file-like)
+The background image to use.
+
+@item @code{at-spi-enabled?} (default: @code{#f}) (type: boolean)
+Enable accessibility support through the Assistive Technology Service
+Provider Interface (AT-SPI).
+
+@item @code{a11y-states} @
+(default: @code{(contrast font keyboard reader)}) (type: list-of-a11y-states)
+The accessibility features to enable, given as list of symbols.
+
+@item @code{reader} (type: maybe-file-like)
+The command to use to launch a screen reader.
+
+@item @code{extra-config} (default: @code{()}) (type: list-of-strings)
+Extra configuration values to append to the LightDM GTK Greeter
+configuration file.
+
+@end table
+@end deftp
+
+@c %end of fragment
+@c %start of fragment
+
+@deftp {Data Type} lightdm-seat-configuration
+Available @code{lightdm-seat-configuration} fields are:
+
+@table @asis
+@item @code{name} (type: seat-name)
+The name of the seat.  An asterisk (*) can be used in the name to apply
+the seat configuration to all the seat names it matches.
+
+@item @code{user-session} (type: maybe-string)
+The session to use by default.  The session name must be provided as a
+lowercase string, such as @code{"gnome"}, @code{"ratpoison"}, etc.
+
+@item @code{type} (default: @code{local}) (type: seat-type)
+The type of the seat, either the @code{local} or @code{xremote} symbol.
+
+@item @code{autologin-user} (type: maybe-string)
+The username to automatically log in with by default.
+
+@item @code{greeter-session} @
+(default: @code{lightdm-gtk-greeter}) (type: greeter-session)
+The greeter session to use, specified as a symbol.  Currently, only
+@code{lightdm-gtk-greeter} is supported.
+
+@item @code{xserver-command} (type: maybe-file-like)
+The Xorg server command to run.
+
+@item @code{session-wrapper} (type: file-like)
+The xinitrc session wrapper to use.
+
+@item @code{extra-config} (default: @code{()}) (type: list-of-strings)
+Extra configuration values to append to the seat configuration section.
+
+@end table
+@end deftp
+@c %end of fragment
+
 
 @cindex Xorg, configuration
 @deftp {Data Type} xorg-configuration
-This data type represents the configuration of the Xorg graphical display
-server.  Note that there is no Xorg service; instead, the X server is started
-by a ``display manager'' such as GDM, SDDM, and SLiM@.  Thus, the configuration
-of these display managers aggregates an @code{xorg-configuration} record.
+This data type represents the configuration of the Xorg graphical
+display server.  Note that there is no Xorg service; instead, the X
+server is started by a ``display manager'' such as GDM, SDDM, LightDM or
+SLiM@.  Thus, the configuration of these display managers aggregates an
+@code{xorg-configuration} record.
 
 @table @asis
 @item @code{modules} (default: @code{%default-xorg-modules})
@@ -22539,15 +23076,16 @@ Enable polling the kernel for battery level changes.
 @item @code{ignore-lid?} (default: @code{#f})
 Ignore the lid state, this can be useful if it's incorrect on a device.
 
-@item @code{use-percentage-for-policy?} (default: @code{#f})
-Whether battery percentage based policy should be used.  The default is to use
-the time left, change to @code{#t} to use the percentage.
+@item @code{use-percentage-for-policy?} (default: @code{#t})
+Whether to use a policy based on battery percentage rather than on
+estimated time left.  A policy based on battery percentage is usually
+more reliable.
 
-@item @code{percentage-low} (default: @code{10})
+@item @code{percentage-low} (default: @code{20})
 When @code{use-percentage-for-policy?} is @code{#t}, this sets the percentage
 at which the battery is considered low.
 
-@item @code{percentage-critical} (default: @code{3})
+@item @code{percentage-critical} (default: @code{5})
 When @code{use-percentage-for-policy?} is @code{#t}, this sets the percentage
 at which the battery is considered critical.
 
@@ -23189,6 +23727,30 @@ input), without requiring the applications needing access to be root.
   %base-services)
 
 @end lisp
+
+@code{seatd} operates over a UNIX domain socket, with @code{libseat}
+providing the client side of the protocol.  Applications that acquire
+access to the shared resources via @code{seatd} (e.g. @code{sway})
+need to be able to talk to this socket.
+This can be achieved by adding the user they run under to the group
+owning @code{seatd}'s socket (usually ``seat''), like so:
+
+@lisp
+(user-account
+  (name "alice")
+  (group "users")
+  (supplementary-groups '("wheel"   ; allow use of sudo, etc.
+                          "seat"    ; seat management
+                          "audio"   ; sound card
+                          "video"   ; video devices such as webcams
+                          "cdrom")) ; the good ol' CD-ROM
+  (comment "Bob's sister"))
+@end lisp
+
+Depending on your setup, you will have to not only add regular users,
+but also system users to this group.  For instance, some greetd greeters
+require graphics and therefore also need to negotiate with seatd.
+
 @end defvr
 
 @deftp {Data Type} seatd-configuration
@@ -23198,10 +23760,7 @@ Configuration record for the seatd daemon service.
 @item @code{seatd} (default: @code{seatd})
 The seatd package to use.
 
-@item @code{user} (default: @samp{"root"})
-User to own the seatd socket.
-
-@item @code{group} (default: @samp{"users"})
+@item @code{group} (default: @samp{"seat"})
 Group to own the seatd socket.
 
 @item @code{socket} (default: @samp{"/run/seatd.sock"})
@@ -26308,7 +26867,7 @@ When left unspecified, the value from the account archive prevails.
 Whether peer discovery should be enabled.  Peer discovery is used to
 discover other OpenDHT nodes on the local network, which can be useful
 to maintain communication between devices on such network even when the
-connection to the the Internet has been lost.  When left unspecified,
+connection to the Internet has been lost.  When left unspecified,
 the value from the account archive prevails.
 
 @item @code{bootstrap-hostnames} (type: maybe-string-list)
@@ -28602,6 +29161,14 @@ types, or alternatively, a config file can be provided.
 @item @code{nginx} (default: @code{nginx})
 The nginx package to use.
 
+@item @code{shepherd-requirement} (default: @code{'()})
+This is a list of symbols naming Shepherd services the nginx service
+will depend on.
+
+This is useful if you would like @command{nginx} to be started after a
+back-end web server or a logging service such as Anonip has been
+started.
+
 @item @code{log-directory} (default: @code{"/var/log/nginx"})
 The directory to which NGinx will write log files.
 
@@ -30514,6 +31081,158 @@ Defaults to @samp{()}.
 
 @c %end of fragment
 
+@node VNC Services
+@subsection VNC Services
+@cindex VNC (virtual network computing)
+@cindex XDMCP (x display manager control protocol)
+
+The @code{(gnu services vnc)} module provides services related to
+@dfn{Virtual Network Computing} (VNC), which makes it possible to
+locally use graphical Xorg applications running on a remote machine.
+Combined with a graphical manager that supports the @dfn{X Display
+Manager Control Protocol}, such as GDM (@pxref{gdm}) or LightDM
+(@pxref{lightdm}), it is possible to remote an entire desktop for a
+multi-user environment.
+
+@subsubheading Xvnc
+
+Xvnc is a VNC server that spawns its own X window server; which means it
+can run on headless servers.  The Xvnc implementations provided by the
+@code{tigervnc-server} and @code{turbovnc} aim to be fast and efficient.
+
+@defvar {Scheme Variable} xvnc-service-type
+
+The @code{xvnc-server-type} service can be configured via the
+@code{xvnc-configuration} record, documented below.  A second virtual
+display could be made available on a remote machine via the
+following configuration:
+@end defvar
+
+@lisp
+(service xvnc-service-type
+         (xvnc-configuration (display-number 10)))
+@end lisp
+
+As a demonstration, the @command{xclock} command could then be started
+on the remote machine on display number 10, and it could be displayed
+locally via the @command{vncviewer} command:
+@example
+# Start xclock on the remote machine.
+ssh -L5910:localhost:5910 -- guix shell xclock -- env DISPLAY=:10 xclock
+# Access it via VNC.
+guix shell tigervnc-client -- vncviewer localhost:5910
+@end example
+
+The following configuration combines XDMCP and Inetd to allow multiple
+users to concurrently use the remote system, login in graphically via
+the GDM display manager:
+
+@lisp
+(operating-system
+  [...]
+  (services (cons*
+             [...]
+             (service xvnc-service-type (xvnc-configuration
+                                         (display-number 5)
+                                         (localhost? #f)
+                                         (xdmcp? #t)
+                                         (inetd? #t)))
+             (modify-services %desktop-services
+               (gdm-service-type config => (gdm-configuration
+                                            (inherit config)
+                                            (auto-suspend? #f)
+                                            (xdmcp? #t)))))))
+@end lisp
+
+A remote user could then connect to it by using the @command{vncviewer}
+command or a compatible VNC client and start a desktop session of their
+choosing:
+@example
+vncviewer remote-host:5905
+@end example
+
+@quotation Warning
+Unless your machine is in a controlled environment, for security
+reasons, the @code{localhost?} configuration of the
+@code{xvnc-configuration} record should be left to its default @code{#t}
+value and exposed via a secure means such as an SSH port forward.  The
+XDMCP port, UDP 177 should also be blocked from the outside by a
+firewall, as it is not a secure protocol and can expose login
+credentials in clear.
+@end quotation
+
+@c Use (configuration->documentation 'xvnc-configuration) to regenerate
+@c the documentation.
+@c %start of fragment
+@deftp {Data Type} xvnc-configuration
+Available @code{xvnc-configuration} fields are:
+
+@table @asis
+@item @code{xvnc} (default: @code{tigervnc-server}) (type: file-like)
+The package that provides the Xvnc binary.
+
+@item @code{display-number} (default: @code{0}) (type: number)
+The display number used by Xvnc.  You should set this to a number not
+already used a Xorg server.
+
+@item @code{geometry} (default: @code{"1024x768"}) (type: string)
+The size of the desktop to be created.
+
+@item @code{depth} (default: @code{24}) (type: color-depth)
+The pixel depth in bits of the desktop to be created.  Accepted values
+are 16, 24 or 32.
+
+@item @code{port} (type: maybe-port)
+The port on which to listen for connections from viewers.  When left
+unspecified, it defaults to 5900 plus the display number.
+
+@item @code{ipv4?} (default: @code{#t}) (type: boolean)
+Use IPv4 for incoming and outgoing connections.
+
+@item @code{ipv6?} (default: @code{#t}) (type: boolean)
+Use IPv6 for incoming and outgoing connections.
+
+@item @code{password-file} (type: maybe-string)
+The password file to use, if any.  Refer to vncpasswd(1) to learn how to
+generate such a file.
+
+@item @code{xdmcp?} (default: @code{#f}) (type: boolean)
+Query the XDMCP server for a session.  This enables users to log in a
+desktop session from the login manager screen.  For a multiple users
+scenario, you'll want to enable the @code{inetd?} option as well, so
+that each connection to the VNC server is handled separately rather than
+shared.
+
+@item @code{inetd?} (default: @code{#f}) (type: boolean)
+Use an Inetd-style service, which runs the Xvnc server on demand.
+
+@item @code{frame-rate} (default: @code{60}) (type: number)
+The maximum number of updates per second sent to each client.
+
+@item @code{security-types} (default: @code{("None")}) (type: security-types)
+The allowed security schemes to use for incoming connections.  The
+default is "None", which is safe given that Xvnc is configured to
+authenticate the user via the display manager, and only for local
+connections.  Accepted values are any of the following: ("None"
+"VncAuth" "Plain" "TLSNone" "TLSVnc" "TLSPlain" "X509None" "X509Vnc")
+
+@item @code{localhost?} (default: @code{#t}) (type: boolean)
+Only allow connections from the same machine.  It is set to #true by
+default for security, which means SSH or another secure means should be
+used to expose the remote port.
+
+@item @code{log-level} (default: @code{30}) (type: log-level)
+The log level, a number between 0 and 100, 100 meaning most verbose
+output.  The log messages are output to syslog.
+
+@item @code{extra-options} (default: @code{()}) (type: strings)
+This can be used to provide extra Xvnc options not exposed via this
+<xvnc-configuration> record.
+
+@end table
+
+@end deftp
+@c %end of fragment
 
 @node VPN Services
 @subsection VPN Services
@@ -30818,6 +31537,24 @@ the file does not exist.
 The authorized peers on this interface.  This is a list of
 @var{wireguard-peer} records.
 
+@item @code{pre-up} (default: @code{'()})
+The script commands to be run before setting up the interface.
+
+@item @code{post-up} (default: @code{'()})
+The script commands to be run after setting up the interface.
+
+@item @code{pre-down} (default: @code{'()})
+The script commands to be run before tearing down the interface.
+
+@item @code{post-down} (default: @code{'()})
+The script commands to be run after tearing down the interface.
+
+@item @code{table} (default: @code{"auto"})
+The routing table to which routes are added, as a string.  There are two
+special values: @code{"off"} that disables the creation of routes
+altogether, and @code{"auto"} (the default) that adds routes to the
+default table and enables special handling of default routes.
+
 @end table
 @end deftp
 
@@ -31040,6 +31777,158 @@ If it is @code{#f} then the daemon will use the host's fully qualified domain na
 
 @item @code{verbosity} (default: @code{0})
 The verbosity level of the daemon.
+
+@end table
+@end deftp
+
+@node Samba Services, Continuous Integration, Network File System, Services
+@subsection Samba Services
+
+@cindex Samba
+@cindex SMB
+The @code{(gnu services samba)} module provides service definitions for
+Samba as well as additional helper services.  Currently it provides the
+following services.
+
+@subsubheading Samba
+
+@uref{https://www.samba.org, Samba} provides network shares for folders
+and printers using the SMB/CIFS protocol commonly used on Windows.  It
+can also act as an Active Directory Domain Controller (AD DC) for other
+hosts in an heterougenious network with different types of Computer
+systems.
+
+@defvar {Scheme variable} samba-service-type
+
+The service type to enable the samba services @code{samba}, @code{nmbd},
+@code{smbd} and @code{winbindd}.  By default this service type does not
+run any of the Samba daemons; they must be enabled individually.
+
+Below is a basic example that configures a simple, anonymous
+(unauthenticated) Samba file share exposing the @file{/public}
+directory.
+
+@quotation Tip
+The @file{/public} directory and its contents must be world
+readable/writable, so you'll want to run @samp{chmod -R 777 /public} on
+it.
+@end quotation
+
+@quotation Caution
+Such a Samba configuration should only be used in controlled
+environments, and you should not share any private files using it, as
+anyone connecting to your network would be able to access them.
+@end quotation
+
+@lisp
+(service samba-service-type (samba-configuration
+                             (enable-smbd? #t)
+                             (config-file (plain-file "smb.conf" "\
+[global]
+map to guest = Bad User
+logging = syslog@@1
+
+[public]
+browsable = yes
+path = /public
+read only = no
+guest ok = yes
+guest only = yes\n"))))
+@end lisp
+
+@end defvar
+
+@deftp{Data Type} samba-service-configuration
+Configuration record for the Samba suite.
+
+@table @asis
+@item @code{package} (default: @code{samba})
+The samba package to use.
+
+@item @code{config-file} (default: @code{#f})
+The config file to use.  To learn about its syntax, run @samp{man
+smb.conf}.
+
+@item @code{enable-samba?} (default: @code{#f})
+Enable the @code{samba} daemon.
+
+@item @code{enable-smbd?} (default: @code{#f})
+Enable the @code{smbd} daemon.
+
+@item @code{enable-nmbd?} (default: @code{#f})
+Enable the @code{nmbd} daemon.
+
+@item @code{enable-winbindd?} (default: @code{#f})
+Enable the @code{winbindd} daemon.
+
+@end table
+@end deftp
+
+@cindex wsdd, Web service discovery daemon
+@subsubheading Web Service Discovery Daemon
+
+The @acronym{WSDD, Web Service Discovery daemon} implements the
+@uref{http://docs.oasis-open.org/ws-dd/discovery/1.1/os/wsdd-discovery-1.1-spec-os.html,
+Web Services Dynamic Discovery} protocol that enables host discovery
+over Multicast DNS, similar to what Avahi does.  It is a drop-in
+replacement for SMB hosts that have had SMBv1 disabled for security
+reasons.
+
+@defvr {Scheme Variable} wsdd-service-type
+Service type for the WSD host daemon.  The value for
+this service type is a @code{wsdd-configuration} record.  The details
+for the @code{wsdd-configuration} record type are given below.
+@end defvr
+
+@deftp {Data Type} wsdd-configuration
+This data type represents the configuration for the wsdd service.
+
+@table @asis
+
+@item @code{package} (default: @code{wsdd})
+The wsdd package to use.
+
+@item @code{ipv4only?} (default: @code{#f})
+Only listen to IPv4 addresses.
+
+@item @code{ipv6only} (default: @code{#f})
+Only listen to IPv6 addresses.  Please note: Activating both options is
+not possible, since there would be no IP versions to listen to.
+
+@item @code{chroot} (default: @code{#f})
+Chroot into a separate directory to prevent access to other directories.
+This is to increase security in case there is a vulnerability in
+@command{wsdd}.
+
+@item @code{hop-limit} (default: @code{1})
+Limit to the level of hops for multicast packets.  The default is
+@var{1} which should prevent packets from leaving the local network.
+
+@item @code{interface} (default: @code{'()})
+Limit to the given list of interfaces to listen to.  By default wsdd
+will listen to all interfaces.  Except the loopback interface is never
+used.
+
+@item @code{uuid-device} (default: @code{#f})
+The WSD protocol requires a device to have a UUID.  Set this to manually
+assign the service a UUID.
+
+@item @code{domain} (default: @code{#f})
+Notify this host is a member of an Active Directory.
+
+@item @code{host-name} (default: @code{#f})
+Manually set the hostname rather than letting @command{wsdd} inherit
+this host's hostname.  Only the host name part of a possible FQDN will
+be used in the default case.
+
+@item @code{preserve-case?} (default: @code{#f})
+By default @command{wsdd} will convert the hostname in workgroup to all
+uppercase.  The opposite is true for hostnames in domains.  Setting this
+parameter will preserve case.
+
+@item @code{workgroup} (default: @var{"WORKGROUP"})
+Change the name of the workgroup.  By default @command{wsdd} reports
+this host being member of a workgroup.
 
 @end table
 @end deftp
@@ -33114,7 +34003,7 @@ cluster node that supports multiple storage backends, and installs the
 @end lisp
 
 Users are advised to read the
-@url{http://docs.ganeti.org/ganeti/master/html/admin.html,Ganeti
+@url{https://docs.ganeti.org/docs/ganeti/3.0/html/admin.html,Ganeti
 administrators guide} to learn about the various cluster options and
 day-to-day operations.  There is also a
 @url{https://guix.gnu.org/blog/2020/running-a-ganeti-cluster-on-guix/,blog post}
@@ -33203,12 +34092,30 @@ The name for this OS provider.  It is only used to specify where the
 configuration ends up.  Setting it to ``debootstrap'' will create
 @file{/etc/ganeti/instance-debootstrap}.
 
-@item @code{extension}
-The file extension for variants of this OS type.  For example
-@file{.conf} or @file{.scm}.
+@item @code{extension} (default: @code{#f})
+The file extension for variants of this OS type.  For example @file{.conf}
+or @file{.scm}.  It will be appended to the variant file name if set.
 
 @item @code{variants} (default: @code{'()})
-List of @code{ganeti-os-variant} objects for this OS.
+This must be either a list of @code{ganeti-os-variant} objects for this OS,
+or a ``file-like'' object (@pxref{G-Expressions, file-like objects})
+representing the variants directory.
+
+To use the Guix OS provider with variant definitions residing in a local
+directory instead of declaring individual variants (see @var{guix-variants}
+below), you can do:
+
+@lisp
+(ganeti-os
+ (name "guix")
+ (variants (local-file "ganeti-guix-variants"
+                       #:recursive? #true)))
+@end lisp
+
+Note that you will need to maintain the @file{variants.list} file
+(see @code{@url{https://docs.ganeti.org/docs/ganeti/3.0/man/ganeti-os-interface.html,
+ganeti-os-interface(7)}})
+manually in this case.
 
 @end table
 @end deftp
@@ -33491,7 +34398,7 @@ via a JSON-based RPC protocol.
 Most query operations are allowed without authentication (unless
 @var{require-authentication?} is set), whereas write operations require
 explicit authorization via the @file{/var/lib/ganeti/rapi/users} file.  See
-the @url{http://docs.ganeti.org/ganeti/master/html/rapi.html, Ganeti Remote
+the @url{https://docs.ganeti.org/docs/ganeti/3.0/html/rapi.html, Ganeti Remote
 API documentation} for more information.
 
 The value of this service must be a @code{ganeti-rapi-configuration} object.
@@ -34823,7 +35730,21 @@ Data type representing the configuration for @code{gitolite-service-type}.
 
 @table @asis
 @item @code{package} (default: @var{gitolite})
-Gitolite package to use.
+Gitolite package to use.  There are optional Gitolite dependencies that
+are not included in the default package, such as Redis and git-annex.
+These features can be made available by using the @code{make-gitolite}
+procedure in the @code{(gnu packages version-control}) module to produce
+a variant of Gitolite with the desired additional dependencies.
+
+The following code returns a package in which the Redis and git-annex
+programs can be invoked by Gitolite's scripts:
+
+@example
+(use-modules (gnu packages databases)
+             (gnu packages haskell-apps)
+             (gnu packages version-control))
+(make-gitolite (list redis git-annex))
+@end example
 
 @item @code{user} (default: @var{git})
 User to use for Gitolite.  This will be user that you use when accessing
@@ -34864,6 +35785,15 @@ contents.
 A value like @code{#o0027} will give read access to the group used by Gitolite
 (by default: @code{git}).  This is necessary when using Gitolite with software
 like cgit or gitweb.
+
+@item @code{local-code} (default: @code{"$rc@{GL_ADMIN_BASE@}/local"})
+Allows you to add your own non-core programs, or even override the
+shipped ones with your own.
+
+Please supply the FULL path to this variable. By default, directory
+called "local" in your gitolite clone is used, providing the benefits of
+versioning them as well as making changes to them without having to log
+on to the server.
 
 @item @code{unsafe-pattern} (default: @code{#f})
 An optional Perl regular expression for catching unsafe configurations in
@@ -35235,6 +36165,9 @@ will use the current system it's running on as the default.
 
 @item @code{max-parallel-builds} (default: @code{1})
 The number of builds to perform in parallel.
+
+@item @code{max-allocated-builds} (default: @code{#f})
+The maximum number of builds this agent can be allocated.
 
 @item @code{max-1min-load-average} (default: @code{#f})
 Load average value to look at when considering starting new builds, if
@@ -36190,7 +37123,7 @@ This is the data type representing the configuration of rshiny.
 @item @code{package} (default: @code{r-shiny})
 The package to use.
 
-@item @code{binary} (defaunlt @code{"rshiny"})
+@item @code{binary} (default @code{"rshiny"})
 The name of the binary or shell script located at @code{package/bin/} to
 run when the service is run.
 
@@ -36282,6 +37215,257 @@ file.
 Extra command line options for @code{nix-service-type}.
 @end table
 @end deftp
+
+@cindex Fail2Ban
+@subsubheading Fail2Ban service
+
+@uref{http://www.fail2ban.org/, @code{fail2ban}} scans log files
+(e.g. @code{/var/log/apache/error_log}) and bans IP addresses that show
+malicious signs -- repeated password failures, attempts to make use of
+exploits, etc.
+
+@code{fail2ban-service-type} service type is provided by the @code{(gnu
+services security)} module.
+
+This service type runs the @code{fail2ban} daemon.  It can be configured
+in various ways, which are:
+
+@table @asis
+@item Basic configuration
+The basic parameters of the Fail2Ban service can be configured via its
+@code{fail2ban} configuration, which is documented below.
+
+@item User-specified jail extensions
+The @code{fail2ban-jail-service} function can be used to add new
+Fail2Ban jails.
+
+@item Shepherd extension mechanism
+Service developers can extend the @code{fail2ban-service-type} service
+type itself via the usual service extension mechanism.
+@end table
+
+@defvr {Scheme Variable} fail2ban-service-type
+
+This is the type of the service that runs @code{fail2ban} daemon.  Below
+is an example of a basic, explicit configuration:
+
+@lisp
+(append
+ (list
+  (service fail2ban-service-type
+           (fail2ban-configuration
+            (extra-jails
+             (list
+              (fail2ban-jail-configuration
+               (name "sshd")
+               (enabled? #t))))))
+  ;; There is no implicit dependency on an actual SSH
+  ;; service, so you need to provide one.
+  (service openssh-service-type))
+ %base-services)
+@end lisp
+@end defvr
+
+@deffn {Scheme Procedure} fail2ban-jail-service @var{svc-type} @var{jail}
+Extend @var{svc-type}, a @code{<service-type>} object with @var{jail}, a
+@code{fail2ban-jail-configuration} object.
+
+For example:
+
+@lisp
+(append
+ (list
+  (service
+   ;; The 'fail2ban-jail-service' procedure can extend any service type
+   ;; with a fail2ban jail.  This removes the requirement to explicitly
+   ;; extend services with fail2ban-service-type.
+   (fail2ban-jail-service
+    openssh-service-type
+    (fail2ban-jail-configuration
+     (name "sshd")
+     (enabled? #t)))
+   (openssh-configuration ...))))
+@end lisp
+@end deffn
+
+Below is the reference for the different @code{jail-service-type}
+configuration records.
+
+@c The documentation is to be auto-generated via
+@c 'generate-documentation'.  See at the bottom of (gnu services
+@c security).
+
+@deftp {Data Type} fail2ban-configuration
+Available @code{fail2ban-configuration} fields are:
+
+@table @asis
+@item @code{fail2ban} (default: @code{fail2ban}) (type: package)
+The @code{fail2ban} package to use.  It is used for both binaries and as
+base default configuration that is to be extended with
+@code{<fail2ban-jail-configuration>} objects.
+
+@item @code{run-directory} (default: @code{"/var/run/fail2ban"}) (type: string)
+The state directory for the @code{fail2ban} daemon.
+
+@item @code{jails} (default: @code{()}) (type: list-of-fail2ban-jail-configurations)
+Instances of @code{<fail2ban-jail-configuration>} collected from
+extensions.
+
+@item @code{extra-jails} (default: @code{()}) (type: list-of-fail2ban-jail-configurations)
+Instances of @code{<fail2ban-jail-configuration>} explicitly provided.
+
+@item @code{extra-content} (default: @code{()}) (type: text-config)
+Extra raw content to add to the end of the @file{jail.local} file,
+provided as a list of file-like objects.
+
+@end table
+
+@end deftp
+
+@deftp {Data Type} fail2ban-ignore-cache-configuration
+Available @code{fail2ban-ignore-cache-configuration} fields are:
+
+@table @asis
+@item @code{key} (type: string)
+Cache key.
+
+@item @code{max-count} (type: integer)
+Cache size.
+
+@item @code{max-time} (type: integer)
+Cache time.
+
+@end table
+
+@end deftp
+
+@deftp {Data Type} fail2ban-jail-action-configuration
+Available @code{fail2ban-jail-action-configuration} fields are:
+
+@table @asis
+@item @code{name} (type: string)
+Action name.
+
+@item @code{arguments} (default: @code{()}) (type: list-of-arguments)
+Action arguments.
+
+@end table
+
+@end deftp
+
+@deftp {Data Type} fail2ban-jail-configuration
+Available @code{fail2ban-jail-configuration} fields are:
+
+@table @asis
+@item @code{name} (type: string)
+Required name of this jail configuration.
+
+@item @code{enabled?} (default: @code{#t}) (type: boolean)
+Whether this jail is enabled.
+
+@item @code{backend} (type: maybe-symbol)
+Backend to use to detect changes in the @code{log-path}.  The default is
+'auto.  To consult the defaults of the jail configuration, refer to the
+@file{/etc/fail2ban/jail.conf} file of the @code{fail2ban} package.
+
+@item @code{max-retry} (type: maybe-integer)
+The number of failures before a host get banned (e.g.  @code{(max-retry
+5)}).
+
+@item @code{max-matches} (type: maybe-integer)
+The number of matches stored in ticket (resolvable via tag
+@code{<matches>}) in action.
+
+@item @code{find-time} (type: maybe-string)
+The time window during which the maximum retry count must be reached for
+an IP address to be banned.  A host is banned if it has generated
+@code{max-retry} during the last @code{find-time} seconds (e.g.
+@code{(find-time "10m")}).  It can be provided in seconds or using
+Fail2Ban's "time abbreviation format", as described in @command{man 5
+jail.conf}.
+
+@item @code{ban-time} (type: maybe-string)
+The duration, in seconds or time abbreviated format, that a ban should
+last.  (e.g.  @code{(ban-time "10m")}).
+
+@item @code{ban-time-increment?} (type: maybe-boolean)
+Whether to consider past bans to compute increases to the default ban
+time of a specific IP address.
+
+@item @code{ban-time-factor} (type: maybe-string)
+The coefficient to use to compute an exponentially growing ban time.
+
+@item @code{ban-time-formula} (type: maybe-string)
+This is the formula used to calculate the next value of a ban time.
+
+@item @code{ban-time-multipliers} (type: maybe-string)
+Used to calculate next value of ban time instead of formula.
+
+@item @code{ban-time-max-time} (type: maybe-string)
+The maximum number of seconds a ban should last.
+
+@item @code{ban-time-rnd-time} (type: maybe-string)
+The maximum number of seconds a randomized ban time should last.  This
+can be useful to stop ``clever'' botnets calculating the exact time an
+IP address can be unbanned again.
+
+@item @code{ban-time-overall-jails?} (type: maybe-boolean)
+When true, it specifies the search of an IP address in the database
+should be made across all jails.  Otherwise, only the current jail of
+the ban IP address is considered.
+
+@item @code{ignore-self?} (type: maybe-boolean)
+Never ban the local machine's own IP address.
+
+@item @code{ignore-ip} (default: @code{()}) (type: list-of-strings)
+A list of IP addresses, CIDR masks or DNS hosts to ignore.
+@code{fail2ban} will not ban a host which matches an address in this
+list.
+
+@item @code{ignore-cache} (type: maybe-fail2ban-ignore-cache-configuration)
+Provide cache parameters for the ignore failure check.
+
+@item @code{filter} (type: maybe-fail2ban-jail-filter-configuration)
+The filter to use by the jail, specified via a
+@code{<fail2ban-jail-filter-configuration>} object.  By default, jails
+have names matching their filter name.
+
+@item @code{log-time-zone} (type: maybe-string)
+The default time zone for log lines that do not have one.
+
+@item @code{log-encoding} (type: maybe-symbol)
+The encoding of the log files handled by the jail.  Possible values are:
+@code{'ascii}, @code{'utf-8} and @code{'auto}.
+
+@item @code{log-path} (default: @code{()}) (type: list-of-strings)
+The file names of the log files to be monitored.
+
+@item @code{action} (default: @code{()}) (type: list-of-fail2ban-jail-actions)
+A list of @code{<fail2ban-jail-action-configuration>}.
+
+@item @code{extra-content} (default: @code{()}) (type: text-config)
+Extra content for the jail configuration, provided as a list of file-like
+objects.
+
+@end table
+
+@end deftp
+
+@deftp {Data Type} fail2ban-jail-filter-configuration
+Available @code{fail2ban-jail-filter-configuration} fields are:
+
+@table @asis
+@item @code{name} (type: string)
+Filter to use.
+
+@item @code{mode} (type: maybe-string)
+Mode for filter.
+
+@end table
+
+@end deftp
+
+@c End of auto-generated fail2ban documentation.
 
 @node Setuid Programs
 @section Setuid Programs
@@ -36710,15 +37894,17 @@ here is how to use it and customize it further.
 @cindex initrd
 @cindex initial RAM disk
 @deffn {Scheme Procedure} raw-initrd @var{file-systems} @
-       [#:linux-modules '()] [#:mapped-devices '()] @
-       [#:keyboard-layout #f] @
-       [#:helper-packages '()] [#:qemu-networking? #f] [#:volatile-root? #f]
+       [#:linux-modules '()] [#:pre-mount #t] [#:mapped-devices '()] @
+       [#:keyboard-layout #f] [#:helper-packages '()] @
+       [#:qemu-networking? #f] [#:volatile-root? #f]
 Return a derivation that builds a raw initrd.  @var{file-systems} is
 a list of file systems to be mounted by the initrd, possibly in addition to
 the root file system specified on the kernel command line via @option{root}.
 @var{linux-modules} is a list of kernel modules to be loaded at boot time.
 @var{mapped-devices} is a list of device mappings to realize before
 @var{file-systems} are mounted (@pxref{Mapped Devices}).
+@var{pre-mount} is a G-expression to evaluate before realizing
+@var{mapped-devices}.
 @var{helper-packages} is a list of packages to be copied in the initrd.
        It may
 include @code{e2fsck/static} or other packages needed by the initrd to check
@@ -36960,6 +38146,15 @@ corresponds to COM1 (@pxref{Serial terminal,,, grub,GNU GRUB manual}).
 The speed of the serial interface, as an integer.  For GRUB, the
 default value is chosen at run-time; currently GRUB chooses
 9600@tie{}bps (@pxref{Serial terminal,,, grub,GNU GRUB manual}).
+
+@item @code{device-tree-support?} (default: @code{#t})
+Whether to support Linux @uref{https://en.wikipedia.org/wiki/Devicetree,
+device tree} files loading.
+
+This option in enabled by default.  In some cases involving the
+@code{u-boot} bootloader, where the device tree has already been loaded
+in RAM, it can be handy to disable the option by setting it to
+@code{#f}.
 @end table
 
 @end deftp
@@ -37048,6 +38243,24 @@ The list of commands for loading Multiboot modules.  For example:
              @dots{}))
 @end lisp
 
+@item @code{chain-loader} (default: @code{#f})
+A string that can be accepted by @code{grub}'s @code{chainloader}
+directive. This has no effect if either @code{linux} or
+@code{multiboot-kernel} fields are specified. The following is an
+example of chainloading a different GNU/Linux system.
+
+@lisp
+(bootloader
+ (bootloader-configuration
+  ;; @dots{}
+  (menu-entries
+   (list
+    (menu-entry
+     (label "GNU/Linux")
+     (device (uuid "1C31-A17C" 'fat))
+     (chain-loader "/EFI/GNULinux/grubx64.efi"))))))
+@end lisp
+
 @end table
 @end deftp
 
@@ -37090,8 +38303,9 @@ like
 @end lisp
 
 @node Invoking guix system
-@section Invoking @code{guix system}
+@section Invoking @command{guix system}
 
+@cindex @command{guix system}
 Once you have written an operating system declaration as seen in the
 previous section, it can be @dfn{instantiated} using the @command{guix
 system} command.  The synopsis is:
@@ -37533,6 +38747,11 @@ Installation Image}).
 Attempt to build for @var{system} instead of the host system type.
 This works as per @command{guix build} (@pxref{Invoking guix build}).
 
+@item --target=@var{triplet}
+Cross-build for @var{triplet}, which must be a valid GNU triplet, such
+as @code{"aarch64-linux-gnu"} (@pxref{Specifying target triplets, GNU
+configuration triplets,, autoconf, Autoconf}).
+
 @item --derivation
 @itemx -d
 Return the derivation file name of the given operating system without
@@ -37731,8 +38950,9 @@ Again, the default output format is Dot/Graphviz, but you can pass
 @end table
 
 @node Invoking guix deploy
-@section Invoking @code{guix deploy}
+@section Invoking @command{guix deploy}
 
+@cindex @command{guix deploy}
 We've already seen @code{operating-system} declarations used to manage a
 machine's configuration locally.  Suppose you need to configure multiple
 machines, though---perhaps you're managing a service on the web that's
@@ -38001,9 +39221,9 @@ image -t qcow2} on x86_64 hardware:
 @example
 $ qemu-system-x86_64 \
    -nic user,model=virtio-net-pci \
-   -enable-kvm -m 1024 \
+   -enable-kvm -m 2048 \
    -device virtio-blk,drive=myhd \
-   -drive if=none,file=/tmp/qemu-image,id=myhd
+   -drive if=none,file=guix-system-vm-image-@value{VERSION}.x86_64-linux.qcow2,id=myhd
 @end example
 
 Here is what each of these options means:
@@ -38028,7 +39248,7 @@ virtual machine support (KVM) of the Linux kernel will make things run
 faster.
 
 @c To run Xfce + 'guix pull', we need at least 1G of RAM.
-@item -m 1024
+@item -m 2048
 RAM available to the guest OS, in mebibytes.  Defaults to 128@tie{}MiB,
 which may be insufficient for some operations.
 
@@ -38039,8 +39259,9 @@ better performance than if it were emulating a complete disk drive.  See the
 QEMU and KVM documentation for more info.
 
 @item -drive if=none,file=/tmp/qemu-image,id=myhd
-Use our QCOW image, the @file{/tmp/qemu-image} file, as the backing
-store of the ``myhd'' drive.
+Use our QCOW image, the
+@file{guix-system-vm-image-@value{VERSION}.x86_64-linux.qcow2} file, as
+the backing store of the ``myhd'' drive.
 @end table
 
 The default @command{run-vm.sh} script that is returned by an invocation of
@@ -38804,6 +40025,39 @@ This, as you can see, is a fairly sophisticated way to say hello.
 info on actions.
 @end deftp
 
+@cindex configuration file, of Shepherd services
+@deffn {Scheme Procedure} shepherd-configuration-action
+Return a @code{configuration} action to display @var{file}, which should
+be the name of the service's configuration file.
+
+It can be useful to equip services with that action.  For example, the
+service for the Tor anonymous router (@pxref{Networking Services,
+@code{tor-service-type}}) is defined roughly like this:
+
+@lisp
+(let ((torrc (plain-file "torrc" @dots{})))
+  (shepherd-service
+    (provision '(tor))
+    (requirement '(user-processes loopback syslogd))
+
+    (start #~(make-forkexec-constructor
+              (list #$(file-append tor "/bin/tor") "-f" #$torrc)
+              #:user "tor" #:group "tor"))
+    (stop #~(make-kill-destructor))
+    (actions (list (shepherd-configuration-action torrc)))
+    (documentation "Run the Tor anonymous network overlay.")))
+@end lisp
+
+Thanks to this action, administrators can inspect the configuration file
+passed to @command{tor} with this shell command:
+
+@example
+cat $(herd configuration tor)
+@end example
+
+This can come in as a handy debugging tool!
+@end deffn
+
 @defvr {Scheme Variable} shepherd-root-service-type
 The service type for the Shepherd ``root service''---i.e., PID@tie{}1.
 
@@ -39447,12 +40701,13 @@ services)}.
 
 @menu
 * Essential Home Services::  Environment variables, packages, on-* scripts.
-* Shells: Shells Home Services.          POSIX shells, Bash, Zsh.
-* Mcron: Mcron Home Service.             Scheduled User's Job Execution.
-* Shepherd: Shepherd Home Service.       Managing User's Daemons.
-* SSH: Secure Shell.                     Setting up the secure shell client.
-* Desktop: Desktop Home Services.        Services for graphical environments.
-* Guix: Guix Home Services.              Services for Guix.
+* Shells: Shells Home Services.                        POSIX shells, Bash, Zsh.
+* Mcron: Mcron Home Service.                           Scheduled User's Job Execution.
+* Power Management: Power Management Home Services.    Services for battery power.
+* Shepherd: Shepherd Home Service.                     Managing User's Daemons.
+* SSH: Secure Shell.                                   Setting up the secure shell client.
+* Desktop: Desktop Home Services.                      Services for graphical environments.
+* Guix: Guix Home Services.                            Services for Guix.
 @end menu
 @c In addition to that Home Services can provide
 
@@ -39887,16 +41142,106 @@ jobs to run.
 @end defvr
 
 @deftp {Data Type} home-mcron-configuration
-Data type representing the configuration of mcron.
+Available @code{home-mcron-configuration} fields are:
 
+@c Auto-generated with (gnu home services mcron)'s
+@c generate-documentation procedure.
+@c %start of fragment
 @table @asis
-@item @code{mcron} (default: @var{mcron})
+@item @code{mcron} (default: @code{mcron}) (type: file-like)
 The mcron package to use.
 
-@item @code{jobs}
+@item @code{jobs} (default: @code{()}) (type: list-of-gexps)
 This is a list of gexps (@pxref{G-Expressions}), where each gexp
 corresponds to an mcron job specification (@pxref{Syntax, mcron job
-specifications,, mcron, GNU@tie{}mcron}).
+specifications,, mcron,GNU@tie{}mcron}).
+
+@item @code{log?} (default: @code{#t}) (type: boolean)
+Log messages to standard output.
+
+@item @code{log-format} (default: @code{"~1@@*~a ~a: ~a~%"}) (type: string)
+@code{(ice-9 format)} format string for log messages.  The default value
+produces messages like "@samp{@var{pid} @var{name}: @var{message}"}
+(@pxref{Invoking mcron, Invoking,, mcron,GNU@tie{}mcron}).  Each message
+is also prefixed by a timestamp by GNU Shepherd.
+
+@end table
+@end deftp
+@c %end of fragment
+
+@node Power Management Home Services
+@subsection Power Management Home Services
+
+@cindex power management
+The @code{(gnu home services pm)} module provides home services
+pertaining to battery power.
+
+@defvr {Scheme Variable} home-batsignal-service-type
+Service for @code{batsignal}, a program that monitors battery levels
+and warns the user through desktop notifications when their battery
+is getting low.  You can also configure a command to be run when the
+battery level passes a point deemed ``dangerous''.  This service is
+configured with the @code{home-batsignal-configuration} record.
+@end defvr
+
+@deftp {Data Type} home-batsignal-configuration
+Data type representing the configuration for batsignal.
+
+@table @asis
+@item @code{warning-level} (default: @code{15})
+The battery level to send a warning message at.
+
+@item @code{warning-message} (default: @code{#f})
+The message to send as a notification when the battery level reaches
+the @code{warning-level}.  Setting to @code{#f} uses the default
+message.
+
+@item @code{critical-level} (default: @code{5})
+The battery level to send a critical message at.
+
+@item @code{critical-message} (default: @code{#f})
+The message to send as a notification when the battery level reaches
+the @code{critical-level}.  Setting to @code{#f} uses the default
+message.
+
+@item @code{danger-level} (default: @code{2})
+The battery level to run the @code{danger-command} at.
+
+@item @code{danger-command} (default: @code{#f})
+The command to run when the battery level reaches the @code{danger-level}.
+Setting to @code{#f} disables running the command entirely.
+
+@item @code{full-level} (default: @code{#f})
+The battery level to send a full message at.  Setting to @code{#f}
+disables sending the full message entirely.
+
+@item @code{full-message} (default: @code{#f})
+The message to send as a notification when the battery level reaches
+the @code{full-level}.  Setting to @code{#f} uses the default message.
+
+@item @code{batteries} (default: @code{'()})
+The batteries to monitor.  Setting to @code{'()} tries to find batteries
+automatically.
+
+@item @code{poll-delay} (default: @code{60})
+The time in seconds to wait before checking the batteries again.
+
+@item @code{icon} (default: @code{#f})
+A file-like object to use as the icon for battery notifications.  Setting
+to @code{#f} disables notification icons entirely.
+
+@item @code{notifications?} (default: @code{#t})
+Whether to send any notifications.
+
+@item @code{notifications-expire?} (default: @code{#f})
+Whether notifications sent expire after a time.
+
+@item @code{notification-command} (default: @code{#f})
+Command to use to send messages.  Setting to @code{#f} sends a notification
+through @code{libnotify}.
+
+@item @code{ignore-missing?} (default: @code{#f})
+Whether to ignore missing battery errors.
 @end table
 @end deftp
 
@@ -40193,6 +41538,20 @@ format.
 
 @end deftp
 
+@defvr {Scheme Variable} home-dbus-service-type
+This is the service type for running a session-specific D-Bus, for
+unprivileged applications that require D-Bus to be running.
+@end defvr
+
+@deftp {Data Type} home-dbus-configuration
+The configuration record for @code{home-dbus-service-type}.
+
+@table @asis
+@item @code{dbus} (default: @code{dbus})
+The package providing the @code{/bin/dbus-daemon} command.
+@end table
+@end deftp
+
 @node Guix Home Services
 @subsection Guix Home Services
 
@@ -40221,12 +41580,14 @@ A typical extension for adding a channel might look like this:
                 (list
                  (channel
                   (name 'variant-packages)
-                  (url "https://example.org/variant-packages.git")))
+                  (url "https://example.org/variant-packages.git"))))
 @end lisp
 @end defvr
 
 @node Invoking guix home
-@section Invoking @code{guix home}
+@section Invoking @command{guix home}
+
+@cindex @command{guix home}
 
 Once you have written a home environment declaration (@pxref{Declaring
 the Home Environment,,,,}, it can be @dfn{instantiated} using the
@@ -40629,6 +41990,623 @@ reader,, info-stnd, Stand-alone GNU Info}) and its Emacs counterpart
 (@pxref{Misc Help,,, emacs, The GNU Emacs Manual}) provide intuitive key
 bindings to navigate manuals.  @xref{Getting Started,,, info, Info: An
 Introduction}, for an introduction to Info navigation.
+
+@node Platforms
+@chapter Platforms
+
+The packages and systems built by Guix are intended, like most computer
+programs, to run on a CPU with a specific instruction set, and under a
+specific operating system.  Those programs are often also targeting a
+specific kernel and system library.  Those constraints are captured by
+Guix in @code{platform} records.
+
+@menu
+* platform Reference::          Detail of platform declarations.
+* Supported Platforms::         Description of the supported platforms.
+@end menu
+
+@node platform Reference
+@section @code{platform} Reference
+
+The @code{platform} data type describes a @dfn{platform}: an
+@acronym{ISA, instruction set architecture}, combined with an operating
+system and possibly additional system-wide settings such as the
+@acronym{ABI, application binary interface}.
+
+@deftp {Data Type} platform
+This is the data type representing a platform.
+
+@table @asis
+@item @code{target}
+This field specifies the platform's GNU triplet as a string
+(@pxref{Specifying Target Triplets, GNU configuration triplets,,
+autoconf, Autoconf}).
+
+@item @code{system}
+This string is the system type as it is known to Guix and passed,
+for instance, to the @option{--system} option of most commands.
+
+It usually has the form @code{"@var{cpu}-@var{kernel}"}, where
+@var{cpu} is the target CPU and @var{kernel} the target operating
+system kernel.
+
+It can be for instance @code{"aarch64-linux"} or @code{"armhf-linux"}.
+You will encounter system types when you perform native builds
+(@pxref{Native Builds}).
+
+@item @code{linux-architecture} (default: @code{#false})
+This optional string field is only relevant if the kernel is Linux.  In
+that case, it corresponds to the ARCH variable used when building Linux,
+@code{"mips"} for instance.
+
+@item @code{glibc-dynamic-linker}
+This field is the name of the GNU C Library dynamic linker for the
+corresponding system, as a string.  It can be
+@code{"/lib/ld-linux-armhf.so.3"}.
+
+@end table
+@end deftp
+
+@node Supported Platforms
+@section Supported Platforms
+
+The @code{(guix platforms @dots{})} modules export the following
+variables, each of which is bound to a @code{platform} record.
+
+@defvr {Scheme Variable} armv7-linux
+Platform targeting ARM v7 CPU running GNU/Linux.
+@end defvr
+
+@defvr {Scheme Variable} aarch64-linux
+Platform targeting ARM v8 CPU running GNU/Linux.
+@end defvr
+
+@defvr {Scheme Variable} mips64-linux
+Platform targeting MIPS little-endian 64-bit CPU running GNU/Linux.
+@end defvr
+
+@defvr {Scheme Variable} powerpc-linux
+Platform targeting PowerPC big-endian 32-bit CPU running GNU/Linux.
+@end defvr
+
+@defvr {Scheme Variable} powerpc64le-linux
+Platform targeting PowerPC little-endian 64-bit CPU running GNU/Linux.
+@end defvr
+
+@defvr {Scheme Variable} riscv64-linux
+Platform targeting RISC-V 64-bit CPU running GNU/Linux.
+@end defvr
+
+@defvr {Scheme Variable} i686-linux
+Platform targeting x86 CPU running GNU/Linux.
+@end defvr
+
+@defvr {Scheme Variable} x86_64-linux
+Platform targeting x86 64-bit CPU running GNU/Linux.
+@end defvr
+
+@defvr {Scheme Variable} i686-mingw
+Platform targeting x86 CPU running Windows, with run-time support from
+MinGW.
+@end defvr
+
+@defvr {Scheme Variable} x86_64-mingw
+Platform targeting x86 64-bit CPU running Windows, with run-time support
+from MinGW.
+@end defvr
+
+@defvr {Scheme Variable} i586-gnu
+Platform targeting x86 CPU running GNU/Hurd (also referred to as
+``GNU'').
+@end defvr
+
+@node System Images
+@chapter Creating System Images
+
+@cindex system images
+When it comes to installing Guix System for the first time on a new
+machine, you can basically proceed in three different ways.  The first
+one is to use an existing operating system on the machine to run the
+@command{guix system init} command (@pxref{Invoking guix system}).  The
+second one, is to produce an installation image (@pxref{Building the
+Installation Image}). This is a bootable system which role is to
+eventually run @command{guix system init}.  Finally, the third option
+would be to produce an image that is a direct instantiation of the
+system you wish to run.  That image can then be copied on a bootable
+device such as an USB drive or a memory card.  The target machine would
+then directly boot from it, without any kind of installation procedure.
+
+The @command{guix system image} command is able to turn an operating
+system definition into a bootable image.  This command supports
+different image types, such as @code{efi-raw}, @code{iso9660} and
+@code{docker}.  Any modern @code{x86_64} machine will probably be able
+to boot from an @code{iso9660} image.  However, there are a few machines
+out there that require specific image types.  Those machines, in general
+using @code{ARM} processors, may expect specific partitions at specific
+offsets.
+
+This chapter explains how to define customized system images and how to
+turn them into actual bootable images.
+
+@menu
+* image Reference::        Detail of image declarations.
+* Instantiate an Image::   How to instantiate an image record.
+* image-type Reference::   Detail of image types declaration.
+* Image Modules::          Definition of image modules.
+@end menu
+
+@node image Reference
+@section @code{image} Reference
+
+The @code{image} record, described right after, allows you to define a
+customized bootable system image.
+
+@deftp {Data Type} image
+This is the data type representing a system image.
+
+@table @asis
+@item @code{name} (default: @code{#false})
+The image name as a symbol, @code{'my-iso9660} for instance.  The name
+is optional and it defaults to @code{#false}.
+
+@item @code{format}
+The image format as a symbol.  The following formats are supported:
+
+@itemize
+@item @code{disk-image}, a raw disk image composed of one or multiple
+partitions.
+
+@item @code{compressed-qcow2}, a compressed qcow2 image composed of
+one or multiple partitions.
+
+@item @code{docker}, a Docker image.
+
+@item @code{iso9660}, an ISO-9660 image.
+
+@item @code{tarball}, a tar.gz image archive.
+
+@item @code{wsl2}, a WSL2 image.
+
+@end itemize
+
+@item @code{platform} (default: @code{#false})
+The @code{platform} record the image is targeting (@pxref{Platforms}),
+@code{aarch64-linux} for instance.  By default, this field is set to
+@code{#false} and the image will target the host platform.
+
+@item @code{size} (default: @code{'guess})
+The image size in bytes or @code{'guess}.  The @code{'guess} symbol,
+which is the default, means that the image size will be inferred based
+on the image content.
+
+@item @code{operating-system}
+The image's @code{operating-system} record that is instanciated.
+
+@item @code{partition-table-type} (default: @code{'mbr})
+The image partition table type as a symbol.  Possible values are
+@code{'mbr} and @code{'gpt}.  It default to @code{'mbr}.
+
+@item @code{partitions} (default: @code{'()})
+The image partitions as a list of @code{partition} records
+(@pxref{partition Reference}).
+
+@item @code{compression?} (default: @code{#true})
+Whether the image content should be compressed, as a boolean.  It
+defaults to @code{#true} and only applies to @code{'iso9660} image
+formats.
+
+@item @code{volatile-root?} (default: @code{#true})
+Whether the image root partition should be made volatile, as a boolean.
+
+This is achieved by using a RAM backed file system (overlayfs) that is
+mounted on top of the root partition by the initrd.  It defaults to
+@code{#true}.  When set to @code{#false}, the image root partition is
+mounted as read-write partition by the initrd.
+
+@item @code{shared-store?} (default: @code{#false})
+Whether the image's store should be shared with the host system, as a
+boolean.  This can be useful when creating images dedicated to virtual
+machines.  When set to @code{#false}, which is the default, the image's
+@code{operating-system} closure is copied to the image.  Otherwise, when
+set to @code{#true}, it is assumed that the host store will be made
+available at boot, using a @code{9p} mount for instance.
+
+@item @code{shared-network?} (default: @code{#false})
+Whether to use the host network interfaces within the image, as a
+boolean.  This is only used for the @code{'docker} image format.  It
+defaults to @code{#false}.
+
+@item @code{substitutable?} (default: @code{#true})
+Whether the image derivation should be substitutable, as a boolean.  It
+defaults to @code{true}.
+
+@end table
+@end deftp
+
+@node partition Reference
+@subsection @code{partition} Reference
+
+In @code{image} record may contain some partitions.
+
+@deftp {Data Type} partition
+This is the data type representing an image partition.
+
+@table @asis
+@item @code{size} (default: @code{'guess})
+The partition size in bytes or @code{'guess}.  The @code{'guess} symbol,
+which is the default, means that the partition size will be inferred
+based on the partition content.
+
+@item @code{offset} (default: @code{0})
+The partition's start offset in bytes, relative to the image start or
+the previous partition end.  It defaults to @code{0} which means that
+there is no offset applied.
+
+@item @code{file-system} (default: @code{"ext4"})
+The partition file system as a string, defaulting to @code{"ext4"}.  The
+supported values are @code{"vfat"}, @code{"fat16"}, @code{"fat32"} and
+@code{"ext4"}.
+
+@item @code{file-system-options} (default: @code{'()})
+The partition file system creation options that should be passed to the
+partition creation tool, as a list of strings.  This is only supported
+when creating @code{"ext4"} partitions.
+
+See the @code{"extended-options"} man page section of the
+@code{"mke2fs"} tool for a more complete reference.
+
+@item @code{label}
+The partition label as a mandatory string, @code{"my-root"} for
+instance.
+
+@item @code{uuid} (default: @code{#false})
+The partition UUID as an @code{uuid} record (@pxref{File Systems}).  By
+default it is @code{#false}, which means that the partition creation
+tool will attribute a random UUID to the partition.
+
+@item @code{flags} (default: @code{'()})
+The partition flags as a list of symbols.  Possible values are
+@code{'boot} and @code{'esp}.  The @code{'boot} flags should be set if
+you want to boot from this partition.  Exactly one partition should have
+this flag set, usually the root one. The @code{'esp} flag identifies a
+UEFI System Partition.
+
+@item @code{initializer} (default: @code{#false})
+The partition initializer procedure as a gexp.  This procedure is called
+to populate a partition.  If no initializer is passed, the
+@code{initialize-root-partition} procedure from the @code{(gnu build
+image)} module is used.
+
+@end table
+@end deftp
+
+@node Instantiate an Image
+@section Instantiate an Image
+
+Let's say you would like to create an MBR image with three distinct
+partitions:
+
+@itemize
+@item The @acronym{ESP, EFI System Partition}, a partition of
+40@tie{}MiB at offset 1024@tie{}KiB with a vfat file system.
+
+@item an ext4 partition of 50@tie{}MiB data file, and labeled ``data''.
+
+@item an ext4 bootable partition containing the @code{%simple-os}
+operating-system.
+@end itemize
+
+You would then write the following image definition in a
+@code{my-image.scm} file for instance.
+
+@lisp
+(use-modules (gnu)
+             (gnu image)
+             (gnu tests)
+             (gnu system image)
+             (guix gexp))
+
+(define MiB (expt 2 20))
+
+(image
+ (format 'disk-image)
+ (operating-system %simple-os)
+ (partitions
+  (list
+   (partition
+    (size (* 40 MiB))
+    (offset (* 1024 1024))
+    (label "GNU-ESP")
+    (file-system "vfat")
+    (flags '(esp))
+    (initializer (gexp initialize-efi-partition)))
+   (partition
+    (size (* 50 MiB))
+    (label "DATA")
+    (file-system "ext4")
+    (initializer #~(lambda* (root . rest)
+                     (mkdir root)
+                     (call-with-output-file
+                         (string-append root "/data")
+                       (lambda (port)
+                         (format port "my-data"))))))
+   (partition
+    (size 'guess)
+    (label root-label)
+    (file-system "ext4")
+    (flags '(boot))
+    (initializer (gexp initialize-root-partition))))))
+@end lisp
+
+Note that the first and third partitions use generic initializers
+procedures, initialize-efi-partition and initialize-root-partition
+respectively.  The initialize-efi-partition installs a GRUB EFI loader
+that is loading the GRUB bootloader located in the root partition.  The
+initialize-root-partition instantiates a complete system as defined by
+the @code{%simple-os} operating-system.
+
+You can now run:
+
+@example
+guix system image my-image.scm
+@end example
+
+to instantiate the @code{image} definition.  That produces a disk image
+which has the expected structure:
+
+@example
+$ parted $(guix system image my-image.scm) print
+@dots{}
+Model:  (file)
+Disk /gnu/store/yhylv1bp5b2ypb97pd3bbhz6jk5nbhxw-disk-image: 1714MB
+Sector size (logical/physical): 512B/512B
+Partition Table: msdos
+Disk Flags:
+
+Number  Start   End     Size    Type     File system  Flags
+ 1      1049kB  43.0MB  41.9MB  primary  fat16        esp
+ 2      43.0MB  95.4MB  52.4MB  primary  ext4
+ 3      95.4MB  1714MB  1619MB  primary  ext4         boot
+@end example
+
+The size of the @code{boot} partition has been inferred to @code{1619MB}
+so that it is large enough to host the @code{%simple-os}
+operating-system.
+
+You can also use existing @code{image} record definitions and inherit
+from them to simplify the @code{image} definition.  The @code{(gnu
+system image)} module provides the following @code{image} definition
+variables.
+
+@defvr {Scheme Variable} efi-disk-image
+A MBR disk-image composed of two partitions: a 64 bits ESP partition and
+a ROOT boot partition.  This image can be used on most @code{x86_64} and
+@code{i686} machines, supporting BIOS or UEFI booting.
+@end defvr
+
+@defvr {Scheme Variable} efi32-disk-image
+Same as @code{efi-disk-image} but with a 32 bits EFI partition.
+@end defvr
+
+@defvr {Scheme Variable} iso9660-image
+An ISO-9660 image composed of a single bootable partition.  This image
+can also be used on most @code{x86_64} and @code{i686} machines.
+@end defvr
+
+@defvr {Scheme Variable} docker-image
+A Docker image that can be used to spawn a Docker container.
+@end defvr
+
+Using the @code{efi-disk-image} we can simplify our previous
+@code{image} declaration this way:
+
+@lisp
+(use-modules (gnu)
+             (gnu image)
+             (gnu tests)
+             (gnu system image)
+             (guix gexp)
+             (ice-9 match))
+
+(define MiB (expt 2 20))
+
+(define data
+  (partition
+   (size (* 50 MiB))
+   (label "DATA")
+   (file-system "ext4")
+   (initializer #~(lambda* (root . rest)
+                    (mkdir root)
+                    (call-with-output-file
+                        (string-append root "/data")
+                      (lambda (port)
+                        (format port "my-data")))))))
+
+(image
+ (inherit efi-disk-image)
+ (operating-system %simple-os)
+ (partitions
+  (match (image-partitions efi-disk-image)
+    ((esp root)
+     (list esp data root)))))
+@end lisp
+
+This will give the exact same @code{image} instantiation but the
+@code{image} declaration is simpler.
+
+@node image-type Reference
+@section image-type Reference
+
+The @command{guix system image} command can, as we saw above, take a
+file containing an @code{image} declaration as argument and produce an
+actual disk image from it.  The same command can also handle a file
+containing an @code{operating-system} declaration as argument.  In that
+case, how is the @code{operating-system} turned into an image?
+
+That's where the @code{image-type} record intervenes.  This record
+defines how to transform an @code{operating-system} record into an
+@code{image} record.
+
+@deftp {Data Type} image-type
+This is the data type representing an image-type.
+
+@table @asis
+@item @code{name}
+The image-type name as a mandatory symbol, @code{'efi32-raw} for
+instance.
+
+@item @code{constructor}
+The image-type constructor, as a mandatory procedure that takes an
+@code{operating-system} record as argument and returns an @code{image}
+record.
+
+@end table
+@end deftp
+
+There are several @code{image-type} records provided by the @code{(gnu
+system image)} and the @code{(gnu system images @dots{})} modules.
+
+@defvr {Scheme Variable} efi-raw-image-type
+Build an image based on the @code{efi-disk-image} image.
+@end defvr
+
+@defvr {Scheme Variable} efi32-raw-image-type
+Build an image based on the @code{efi32-disk-image} image.
+@end defvr
+
+@defvr {Scheme Variable} qcow2-image-type
+Build an image based on the @code{efi-disk-image} image but with the
+@code{compressed-qcow2} image format.
+@end defvr
+
+@defvr {Scheme Variable} iso-image-type
+Build a compressed image based on the @code{iso9660-image} image.
+@end defvr
+
+@defvr {Scheme Variable} uncompressed-iso-image-type
+Build an image based on the @code{iso9660-image} image but with the
+@code{compression?} field set to @code{#false}.
+@end defvr
+
+@defvr {Scheme Variable} docker-image-type
+Build an image based on the @code{docker-image} image.
+@end defvr
+
+@defvr {Scheme Variable} raw-with-offset-image-type
+Build an MBR image with a single partition starting at a @code{1024KiB}
+offset.  This is useful to leave some room to install a bootloader in
+the post-MBR gap.
+@end defvr
+
+@defvr {Scheme Variable} pinebook-pro-image-type
+Build an image that is targeting the Pinebook Pro machine.  The MBR
+image contains a single partition starting at a @code{9MiB} offset.  The
+@code{u-boot-pinebook-pro-rk3399-bootloader} bootloader will be
+installed in this gap.
+@end defvr
+
+@defvr {Scheme Variable} rock64-image-type
+Build an image that is targeting the Rock64 machine.  The MBR image
+contains a single partition starting at a @code{16MiB} offset.  The
+@code{u-boot-rock64-rk3328-bootloader} bootloader will be installed in
+this gap.
+@end defvr
+
+@defvr {Scheme Variable} novena-image-type
+Build an image that is targeting the Novena machine.  It has the same
+characteristics as @code{raw-with-offset-image-type}.
+@end defvr
+
+@defvr {Scheme Variable} pine64-image-type
+Build an image that is targeting the Pine64 machine.  It has the same
+characteristics as @code{raw-with-offset-image-type}.
+@end defvr
+
+@defvr {Scheme Variable} hurd-image-type
+Build an image that is targeting a @code{i386} machine running the Hurd
+kernel.  The MBR image contains a single ext2 partitions with specific
+@code{file-system-options} flags.
+@end defvr
+
+@defvr {Scheme Variable} hurd-qcow2-image-type
+Build an image similar to the one built by the @code{hurd-image-type}
+but with the @code{format} set to @code{'compressed-qcow2}.
+@end defvr
+
+@defvr {Scheme Variable} wsl2-image-type
+Build an image for the @acronym{WSL2, Windows Subsystem for Linux 2}.
+It can be imported by running:
+
+@example
+wsl --import Guix ./guix ./wsl2-image.tar.gz
+wsl -d Guix
+@end example
+
+@end defvr
+
+So, if we get back to the @code{guix system image} command taking an
+@code{operating-system} declaration as argument.  By default, the
+@code{efi-raw-image-type} is used to turn the provided
+@code{operating-system} into an actual bootable image.
+
+To use a different @code{image-type}, the @code{--image-type} option can
+be used.  The @code{--list-image-types} option will list all the
+supported image types.  It turns out to be a textual listing of all the
+@code{image-types} variables described just above (@pxref{Invoking guix
+system}).
+
+@node Image Modules
+@section Image Modules
+
+Let's take the example of the Pine64, an ARM based machine.  To be able
+to produce an image targeting this board, we need the following
+elements:
+
+@itemize
+@item An @code{operating-system} record containing at least
+an appropriate kernel (@code{linux-libre-arm64-generic}) and bootloader
+@code{u-boot-pine64-lts-bootloader}) for the Pine64.
+
+@item Possibly, an @code{image-type} record providing a way to
+turn an @code{operating-system} record to an @code{image} record
+suitable for the Pine64.
+
+@item An actual @code{image} that can be instantiated with the
+@command{guix system image} command.
+
+@end itemize
+
+The @code{(gnu system images pine64)} module provides all those
+elements: @code{pine64-barebones-os}, @code{pine64-image-type} and
+@code{pine64-barebones-raw-image} respectively.
+
+The module returns the @code{pine64-barebones-raw-image} in order for
+users to be able to run:
+
+@example
+guix system image gnu/system/images/pine64.scm
+@end example
+
+Now, thanks to the @code{pine64-image-type} record declaring the
+@code{'pine64-raw} @code{image-type}, one could also prepare a
+@code{my-pine.scm} file with the following content:
+
+@lisp
+(use-modules (gnu system images pine64))
+(operating-system
+  (inherit pine64-barebones-os)
+  (timezone "Europe/Athens"))
+@end lisp
+
+to customize the @code{pine64-barebones-os}, and run:
+
+@example
+$ guix system image --image-type=pine64-raw my-pine.scm
+@end example
+
+Note that there are other modules in the @code{gnu/system/images}
+directory targeting @code{Novena}, @code{Pine64}, @code{PinebookPro} and
+@code{Rock64} machines.
 
 @node Installing Debugging Files
 @chapter Installing Debugging Files
@@ -41369,7 +43347,7 @@ connection between a GNU triplet (@pxref{Specifying Target Triplets, GNU
 configuration triplets,, autoconf, Autoconf}), the equivalent
 @var{system} in Nix notation, the name of the
 @var{glibc-dynamic-linker}, and the corresponding Linux architecture
-name if applicable.
+name if applicable (@pxref{Platforms}).
 
 Once the bootstrap tarball are built, the @code{(gnu packages
 bootstrap)} module needs to be updated to refer to these binaries on the

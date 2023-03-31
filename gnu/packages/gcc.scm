@@ -702,14 +702,14 @@ It also includes runtime support libraries for these languages.")
   (package
     (inherit gcc-11)
     ;; Note: 'compiler-cpu-architectures' is unchanged compared to GCC 11.
-    (version "12.1.0")
+    (version "12.2.0")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://gnu/gcc/gcc-"
                                   version "/gcc-" version ".tar.xz"))
               (sha256
                (base32
-                "0ywws66myjxcwsmla721g35d2ymlckq6ii7j9av0477ki5467zb2"))
+                "1zrhca90c7hqnjz3jgr1vl675q3h5lrd92b5ggi00jjryffcyjg5"))
               (patches (search-patches "gcc-12-strmov-store-file-names.patch"
                                        "gcc-5.0-libvtv-runpath.patch"))
               (modules '((guix build utils)))
@@ -745,7 +745,10 @@ It also includes runtime support libraries for these languages.")
                   (delete-file-recursively "texinfo")
                   (substitute* "configure"
                     (("host_tools=(.*)texinfo" _ before)
-                     (string-append "host_tools=" before)))))))
+                     (string-append "host_tools=" before)))
+                  ;; Fix building on arm* with gcc-4+
+                  (substitute* "gcc/config/arm/arm.c"
+                    (("arm_prog_mode") "arm_prgmode"))))))
     (supported-systems (fold delete %supported-systems
                              '("powerpc64le-linux" "riscv64-linux")))
     (native-inputs (list texinfo dejagnu))
@@ -776,6 +779,10 @@ It also includes runtime support libraries for these languages.")
                                     "gcc/config/mips/linux.h"
                                     "gcc/config/rs6000/linux.h")
                        (("/lib/ld\\.so\\.1")
+                        (search-input-file
+                          inputs #$(glibc-dynamic-linker matching-system))))
+                     (substitute* "gcc/config/i386/gnu.h"
+                       (("/lib/ld\\.so")
                         (search-input-file
                           inputs #$(glibc-dynamic-linker matching-system))))
                      (substitute* '("gcc/config/alpha/linux-elf.h"
@@ -968,31 +975,43 @@ as the 'native-search-paths' field."
    (custom-gcc gcc-11 "gdc" '("d")
                %generic-search-paths)))
 
-(define-public libgccjit
+(define-public (make-libgccjit gcc)
   (package
-    (inherit gcc-9)
+    (inherit gcc)
     (name "libgccjit")
     (outputs (delete "lib" (package-outputs gcc)))
     (properties (alist-delete 'hidden? (package-properties gcc)))
     (arguments
-     (substitute-keyword-arguments `(#:modules ((guix build gnu-build-system)
-                                                (guix build utils)
-                                                (ice-9 regex)
-                                                (srfi srfi-1)
-                                                (srfi srfi-26))
-                                     ,@(package-arguments gcc))
+     (substitute-keyword-arguments (package-arguments gcc)
+       ((#:modules _ '())
+        '((guix build gnu-build-system)
+          (guix build utils)
+          (ice-9 regex)
+          (srfi srfi-1)
+          (srfi srfi-26)))
        ((#:configure-flags flags)
-        `(append `("--enable-host-shared"
-                   ,(string-append "--enable-languages=jit"))
+        #~(cons* "--disable-bootstrap"
+                 "--disable-libatomic"
+                 "--disable-libgomp"
+                 "--disable-libquadmath"
+                 "--disable-libssp"
+                 "--enable-host-shared"
+                 "--enable-checking=release"
+                 "--enable-languages=jit"
                  (remove (cut string-match "--enable-languages.*" <>)
-                         ,flags)))
+                         #$flags)))
        ((#:phases phases)
-        `(modify-phases ,phases
-           (add-after 'install 'remove-broken-or-conflicting-files
-             (lambda* (#:key outputs #:allow-other-keys)
-               (for-each delete-file
-                         (find-files (string-append (assoc-ref outputs "out") "/bin")
-                                     ".*(c\\+\\+|cpp|g\\+\\+|gcov|gcc|gcc-.*)"))))))))
+        #~(modify-phases #$phases
+            (add-after 'install 'remove-broken-or-conflicting-files
+              (lambda* (#:key outputs #:allow-other-keys)
+                (for-each delete-file
+                          (find-files
+                           (string-append (assoc-ref outputs "out") "/bin")
+                           ".*(c\\+\\+|cpp|g\\+\\+|gcov|gcc|gcc-.*)"))))))))
+    (inputs (modify-inputs (package-inputs gcc)
+              (delete "libstdc++")))
+    (native-inputs (modify-inputs (package-native-inputs gcc)
+                     (prepend gcc)))
     (synopsis "GCC library generating machine code on-the-fly at runtime")
     (description
      "This package is part of the GNU Compiler Collection and provides an
@@ -1002,6 +1021,13 @@ other such programs that want to generate machine code on-the-fly at run-time.
 It can also be used for ahead-of-time code generation for building standalone
 compilers.  The just-in-time (jit) part of the name is now something of a
 misnomer.")))
+
+(define-public libgccjit-9 (make-libgccjit gcc-9))
+(define-public libgccjit-10 (make-libgccjit gcc-10))
+(define-public libgccjit-11 (make-libgccjit gcc-11))
+(define-public libgccjit-12 (make-libgccjit gcc-12))
+
+(define-public libgccjit libgccjit-10)
 
 (define (make-gccgo gcc)
   "Return a gccgo package based on GCC."
@@ -1223,7 +1249,6 @@ provides the GNU compiler for the Go programming language."))
     (version "0.23")
     (source (origin
              (method url-fetch)
-             ;; Used to be at isl.gforge.inria.fr.
              (uri (list (string-append "mirror://sourceforge/libisl/isl-"
                                        version ".tar.bz2")
                         (string-append %gcc-infrastructure

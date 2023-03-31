@@ -38,9 +38,9 @@
                (sqlite-register store-database-file call-with-database)
   #:autoload   (guix build store-copy) (copy-store-item)
   #:use-module (guix describe)
-  #:use-module (guix grafts)
   #:use-module (guix gexp)
   #:use-module (guix derivations)
+  #:use-module (guix diagnostics)
   #:use-module (guix packages)
   #:use-module (guix utils)
   #:use-module (guix monads)
@@ -91,6 +91,7 @@
   #:use-module (ice-9 match)
   #:use-module (rnrs bytevectors)
   #:export (guix-system
+            read-operating-system
 
             service-node-type
             shepherd-service-node-type))
@@ -105,6 +106,11 @@
   (make-user-module '((gnu system)
                       (gnu services)
                       (gnu system shadow))))
+
+;; Note: The procedure below is used in external projects such as Emacs-Guix.
+(define (read-operating-system file)
+  "Read the operating-system declaration from FILE and return it."
+  (load* file %user-module))
 
 
 ;;;
@@ -1039,12 +1045,16 @@ Some ACTIONS support additional ARGS.\n"))
   (newline)
   (display (G_ "
       --graph-backend=BACKEND
-                         use BACKEND for 'extension-graphs' and 'shepherd-graph'"))
+                         use BACKEND for 'extension-graph' and 'shepherd-graph'"))
   (newline)
   (display (G_ "
   -I, --list-installed[=REGEXP]
                          for 'describe' and 'list-generations', list installed
                          packages matching REGEXP"))
+  (newline)
+  (show-cross-build-options-help)
+  (newline)
+  (show-native-build-options-help)
   (newline)
   (display (G_ "
   -h, --help             display this help and exit"))
@@ -1136,14 +1146,6 @@ Some ACTIONS support additional ARGS.\n"))
                    (let ((level (string->number* arg)))
                      (alist-cons 'verbosity level
                                  (alist-delete 'verbosity result)))))
-         (option '(#\s "system") #t #f
-                 (lambda (opt name arg result)
-                   (alist-cons 'system arg
-                               (alist-delete 'system result eq?))))
-         (option '("target") #t #f
-                 (lambda (opt name arg result)
-                   (alist-cons 'target arg
-                               (alist-delete 'target result eq?))))
          (option '(#\r "root") #t #f
                  (lambda (opt name arg result)
                    (alist-cons 'gc-root arg result)))
@@ -1153,7 +1155,9 @@ Some ACTIONS support additional ARGS.\n"))
          (option '(#\I "list-installed") #f #t
                  (lambda (opt name arg result)
                    (alist-cons 'list-installed (or arg "") result)))
-         %standard-build-options))
+         (append %standard-build-options
+                 %standard-cross-build-options
+                 %standard-native-build-options)))
 
 (define %default-options
   ;; Alist of default option values.
@@ -1259,7 +1263,10 @@ resulting from command-line parsing."
                          (size image-size)
                          (volatile-root? volatile?)
                          (shared-network? shared-network?))))
-         (os          (image-operating-system image))
+         (os          (or (image-operating-system image)
+                          (raise
+                           (formatted-message
+                            (G_ "image lacks an operating-system")))))
          (target-file (match args
                         ((first second) second)
                         (_ #f)))

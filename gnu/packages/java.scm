@@ -252,12 +252,9 @@ JNI.")
                 "1cg0lga887qz5iizh6mlkxp01lciymrhmp7wzxpl6zpnldxmzrjx"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:imported-modules ((guix build syscalls)
-                           ,@%gnu-build-system-modules)
-       #:modules ((srfi srfi-1)
+     `(#:modules ((srfi srfi-1)
                   (guix build gnu-build-system)
-                  (guix build utils)
-                  (guix build syscalls))
+                  (guix build utils))
        #:tests? #f ; no "check" target
        #:phases
        (modify-phases %standard-phases
@@ -302,7 +299,7 @@ JNI.")
          (add-after 'build 'strip-jar-timestamps ;based on ant-build-system
            (lambda* (#:key outputs #:allow-other-keys)
              (define (repack-archive jar)
-               (let* ((dir (mkdtemp! "jar-contents.XXXXXX"))
+               (let* ((dir (mkdtemp "jar-contents.XXXXXX"))
                       (manifest (string-append dir "/META-INF/MANIFESTS.MF")))
                  (with-directory-excursion dir
                    (invoke "unzip" jar))
@@ -1375,7 +1372,6 @@ IcedTea build harness.")
       (arguments
        `(#:imported-modules
          ((guix build ant-build-system)
-          (guix build syscalls)
           ,@%gnu-build-system-modules)
 
          #:disallowed-references ,(list (gexp-input icedtea-7 "jdk"))
@@ -1538,10 +1534,6 @@ new Date();"))
     (arguments
      `(#:tests? #f; require jtreg
        #:make-flags '("all")
-       #:imported-modules
-       ((guix build syscalls)
-        ,@%gnu-build-system-modules)
-
        #:disallowed-references ,(list (gexp-input icedtea-8)
                                       (gexp-input icedtea-8 "jdk"))
 
@@ -1655,9 +1647,8 @@ new Date();"))
              #t))
          (add-after 'install 'strip-zip-timestamps
            (lambda* (#:key outputs #:allow-other-keys)
-             (use-modules (guix build syscalls))
              (for-each (lambda (zip)
-                         (let ((dir (mkdtemp! "zip-contents.XXXXXX")))
+                         (let ((dir (mkdtemp "zip-contents.XXXXXX")))
                            (with-directory-excursion dir
                              (invoke "unzip" zip))
                            (delete-file zip)
@@ -1781,511 +1772,394 @@ new Date();"))
                 "0di91nnms2iq1svgq72r5y17am17r4vh2lq43k0bkcwpc84d6nd8"))
               (modules '((guix build utils)))
               (snippet
-               `(begin
-                  (for-each delete-file (find-files "." ".*.(bin|exe|jar)$"))
-                  #t))))
+               '(for-each delete-file (find-files "." ".*.(bin|exe|jar)$")))))
     (build-system gnu-build-system)
     (outputs '("out" "jdk" "doc"))
     (arguments
-     `(#:imported-modules ((guix build syscalls)
-                           ,@%gnu-build-system-modules)
+     (list
+      #:modules `((guix build gnu-build-system)
+                  (guix build utils)
+                  (ice-9 match)
+                  (srfi srfi-1)
+                  (srfi srfi-26))
+      #:disallowed-references (list (gexp-input openjdk10)
+                                    (gexp-input openjdk10 "jdk"))
 
-       #:disallowed-references ,(list (gexp-input openjdk10)
-                                      (gexp-input openjdk10 "jdk"))
-
-       #:tests? #f; requires jtreg
-       ;; TODO package jtreg
-       #:configure-flags
-       `(;; Add flags for compilation with gcc >= 10
-         ,(string-append "--with-extra-cflags=-fcommon"
-                         " -fno-delete-null-pointer-checks"
-                         " -fno-lifetime-dse")
-         "--disable-option-checking" ; --enable-fast-install default flag errors otherwise
+      #:tests? #f                       ; requires jtreg
+      ;; TODO package jtreg
+      #:configure-flags
+      #~(list
+         ;; Add flags for compilation with gcc >= 10.
+         #$(string-append "--with-extra-cflags=-fcommon"
+                          " -fno-delete-null-pointer-checks"
+                          " -fno-lifetime-dse")
+         ;; Otherwise, the '--enable-fast-install' causes an error.
+         "--disable-option-checking"
          "--disable-warnings-as-errors"
-         ;; make validate-runpath pass, see: http://issues.guix.info/issue/32894
+         ;; Make validate-runpath pass (see:
+         ;; http://issues.guix.info/issue/32894).
          "--with-native-debug-symbols=zipped"
-         ;; do not use the bundled libraries
+         ;; Do not use the bundled libraries.
          "--with-giflib=system"
          "--with-lcms=system"
          "--with-libjpeg=system"
          "--with-libpng=system"
          "--with-version-pre="
-         ;; allow the build system to locate the system freetype
-         ,(string-append "--with-freetype-include="
-                         (assoc-ref %build-inputs "freetype") "/include")
-         ,(string-append "--with-freetype-lib="
-                         (assoc-ref %build-inputs "freetype") "/lib"))
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'patch-source-shebangs 'fix-java-shebangs
-           (lambda _
-             ;; This file was "fixed" by patch-source-shebangs, but it requires
-             ;; this exact first line.
-             (substitute* "make/data/blockedcertsconverter/blocked.certs.pem"
-               (("^#!.*") "#! java BlockedCertsConverter SHA-256\n"))
-             #t))
-         (add-after 'unpack 'patch-jni-libs
-           ;; Hardcode dynamically loaded libraries.
-           (lambda _
-             (define remove
-               (@ (srfi srfi-1) remove))
+         ;; Allow the build system to locate the system freetype.
+         (string-append "--with-freetype-include="
+                        #$(this-package-input "freetype") "/include")
+         (string-append "--with-freetype-lib="
+                        #$(this-package-input "freetype") "/lib"))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'patch-source-shebangs 'fix-java-shebangs
+            (lambda _
+              ;; This file was "fixed" by patch-source-shebangs, but it requires
+              ;; this exact first line.
+              (substitute* "make/data/blockedcertsconverter/blocked.certs.pem"
+                (("^#!.*") "#! java BlockedCertsConverter SHA-256\n"))))
+          (add-after 'unpack 'patch-jni-libs
+            ;; Hardcode dynamically loaded libraries.
+            (lambda _
+              (define remove
+                (@ (srfi srfi-1) remove))
 
-             (define (icedtea-or-openjdk? path)
-               (or (string-contains path "openjdk")
-                   (string-contains path "icedtea")))
+              (define (icedtea-or-openjdk? path)
+                (or (string-contains path "openjdk")
+                    (string-contains path "icedtea")))
 
-             (let* ((library-path (remove icedtea-or-openjdk?
-                                          (search-path-as-string->list
-                                           (getenv "LIBRARY_PATH"))))
-                    (find-library (lambda (name)
-                                    (or (search-path
-                                         library-path
-                                         (string-append "lib" name ".so"))
-                                        (string-append "lib" name ".so")))))
-               (for-each
-                (lambda (file)
-                  (catch 'decoding-error
-                    (lambda ()
-                      (substitute* file
-                        (("VERSIONED_JNI_LIB_NAME\\(\"(.*)\", \"(.*)\"\\)"
-                          _ name version)
-                         (string-append "\"" (find-library name) "\""))
-                        (("JNI_LIB_NAME\\(\"(.*)\"\\)" _ name)
-                         (string-append "\"" (find-library name) "\""))))
-                    (lambda _
-                      ;; Those are safe to skip.
-                      (format (current-error-port)
-                              "warning: failed to substitute: ~a~%"
-                              file))))
-                (find-files "."
-                            "\\.c$|\\.h$"))
-               #t)))
-         (add-before 'build 'write-source-revision-file
-           (lambda _
-             (with-output-to-file ".src-rev"
-               (lambda _
-                 (display ,version)))
-             #t))
-         (replace 'build
-           (lambda* (#:key parallel-build? make-flags #:allow-other-keys)
-             (apply invoke "make" "all"
-                    `(,@(if parallel-build?
-                            (list (string-append "JOBS="
-                                                 (number->string (parallel-job-count))))
-                            '())
-                      ,@make-flags))))
-         ;; jdk 11 does not build jre by default any more
-         ;; building it anyways
-         ;; for further information see:
-         ;; https://github.com/AdoptOpenJDK/openjdk-build/issues/356
-         (add-after 'build 'build-jre
-           (lambda* (#:key parallel-build? make-flags #:allow-other-keys)
-             (apply invoke "make" "legacy-jre-image"
-                    `(,@(if parallel-build?
-                            (list (string-append "JOBS="
-                                                 (number->string (parallel-job-count))))
-                            '())
-                      ,@make-flags))))
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out"))
-                   (jdk (assoc-ref outputs "jdk"))
-                   (doc (assoc-ref outputs "doc"))
-                   (images (car (find-files "build" ".*-server-release"
-                                            #:directories? #t))))
-               (copy-recursively (string-append images "/images/jdk") jdk)
-               (copy-recursively (string-append images "/images/jre") out)
-               (copy-recursively (string-append images "/images/docs") doc))
-             #t))
-         ;; Some of the libraries in the lib/ folder link to libjvm.so.
-         ;; But that shared object is located in the server/ folder, so it
-         ;; cannot be found.  This phase creates a symbolic link in the
-         ;; lib/ folder so that the other libraries can find it.
-         ;;
-         ;; See:
-         ;; https://lists.gnu.org/archive/html/guix-devel/2017-10/msg00169.html
-         ;;
-         ;; FIXME: Find the bug in the build system, so that this symlink is
-         ;; not needed.
-         (add-after 'install 'install-libjvm
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let* ((lib-out (string-append (assoc-ref outputs "out")
-                                            "/lib"))
-                    (lib-jdk (string-append (assoc-ref outputs "jdk")
-                                            "/lib")))
-               (symlink (string-append lib-jdk "/server/libjvm.so")
-                        (string-append lib-jdk "/libjvm.so"))
-               (symlink (string-append lib-out "/server/libjvm.so")
-                        (string-append lib-out "/libjvm.so")))
-             #t))
-         (add-after 'install 'strip-character-data-timestamps
-           (lambda* (#:key outputs #:allow-other-keys)
-             (use-modules (guix build syscalls))
-             (let ((archive (string-append
-                             (assoc-ref outputs "jdk") "/lib/src.zip"))
-                   (dir (mkdtemp! "zip-contents.XXXXXX")))
-               (with-directory-excursion dir
-                 (invoke "unzip" archive))
-               (delete-file archive)
-               (with-directory-excursion dir
-                 (let ((char-data-files (find-files "." "CharacterData.*")))
-                   (for-each (lambda (file)
-                               (substitute* file
-                                 (((string-append "This file was generated "
+              (let* ((library-path (remove icedtea-or-openjdk?
+                                           (search-path-as-string->list
+                                            (getenv "LIBRARY_PATH"))))
+                     (find-library (lambda (name)
+                                     (or (search-path
+                                          library-path
+                                          (string-append "lib" name ".so"))
+                                         (string-append "lib" name ".so")))))
+                (for-each
+                 (lambda (file)
+                   (catch 'decoding-error
+                     (lambda ()
+                       (substitute* file
+                         (("VERSIONED_JNI_LIB_NAME\\(\"(.*)\", \"(.*)\"\\)"
+                           _ name version)
+                          (string-append "\"" (find-library name) "\""))
+                         (("JNI_LIB_NAME\\(\"(.*)\"\\)" _ name)
+                          (string-append "\"" (find-library name) "\""))))
+                     (lambda _
+                       ;; Those are safe to skip.
+                       (format (current-error-port)
+                               "warning: failed to substitute: ~a~%"
+                               file))))
+                 (find-files "."
+                             "\\.c$|\\.h$")))))
+          (add-before 'build 'write-source-revision-file
+            (lambda _
+              (with-output-to-file ".src-rev"
+                (lambda _
+                  (display #$version)))))
+          (replace 'build
+            (lambda* (#:key parallel-build? make-flags #:allow-other-keys)
+              (apply invoke "make" "all"
+                     `(,@(if parallel-build?
+                             (list (string-append "JOBS="
+                                                  (number->string (parallel-job-count))))
+                             '())
+                       ,@make-flags))))
+          ;; jdk 11 does not build jre by default any more; so explicitly build
+          ;; it (see:
+          ;; https://github.com/AdoptOpenJDK/openjdk-build/issues/356).
+          (add-after 'build 'build-jre
+            (lambda* (#:key parallel-build? make-flags #:allow-other-keys)
+              (apply invoke "make" "legacy-jre-image"
+                     `(,@(if parallel-build?
+                             (list (string-append "JOBS="
+                                                  (number->string (parallel-job-count))))
+                             '())
+                       ,@make-flags))))
+          (replace 'install
+            (lambda _
+              (let ((images (car (find-files "build" ".*-server-release"
+                                             #:directories? #t))))
+                (copy-recursively (string-append images "/images/jdk")
+                                  #$output:jdk)
+                (copy-recursively (string-append images "/images/jre")
+                                  #$output)
+                (copy-recursively (string-append images "/images/docs")
+                                  #$output:doc))))
+          ;; Some of the libraries in the lib/ folder link to libjvm.so.
+          ;; But that shared object is located in the server/ folder, so it
+          ;; cannot be found.  This phase creates a symbolic link in the
+          ;; lib/ folder so that the other libraries can find it.
+          ;;
+          ;; See:
+          ;; https://lists.gnu.org/archive/html/guix-devel/2017-10/msg00169.html
+          ;;
+          ;; FIXME: Find the bug in the build system, so that this symlink is
+          ;; not needed.
+          (add-after 'install 'install-libjvm
+            (lambda _
+              (let ((lib-out (string-append #$output "/lib"))
+                    (lib-jdk (string-append #$output:jdk "/lib")))
+                (symlink (string-append lib-jdk "/server/libjvm.so")
+                         (string-append lib-jdk "/libjvm.so"))
+                (symlink (string-append lib-out "/server/libjvm.so")
+                         (string-append lib-out "/libjvm.so")))))
+          (add-after 'install 'strip-character-data-timestamps
+            (lambda _
+              (let ((archive (string-append #$output:jdk "/lib/src.zip"))
+                    (dir (mkdtemp "zip-contents.XXXXXX")))
+                (with-directory-excursion dir
+                  (invoke "unzip" archive))
+                (delete-file archive)
+                (with-directory-excursion dir
+                  (let ((char-data-files (find-files "." "CharacterData.*")))
+                    (for-each (lambda (file)
+                                (substitute* file
+                                  (((string-append "This file was generated "
+                                                   "AUTOMATICALLY from a template "
+                                                   "file.*"))
+                                   (string-append "This file was generated "
                                                   "AUTOMATICALLY from a template "
-                                                  "file.*"))
-                                  (string-append "This file was generated "
-                                                 "AUTOMATICALLY from a template "
-                                                 "file"))))
-                             char-data-files)))
-               (with-directory-excursion dir
-                 (let ((files (find-files "." ".*" #:directories? #t)))
-                   (apply invoke "zip" "-0" "-X" archive files))))))
-         (add-after 'strip-character-data-timestamps 'strip-archive-timestamps
-           (lambda* (#:key outputs #:allow-other-keys)
-             (use-modules (guix build syscalls)
-                          (ice-9 binary-ports)
-                          (rnrs bytevectors))
-             (letrec ((repack-archive
-                       (lambda (archive)
-                         (let ((dir (mkdtemp! "zip-contents.XXXXXX")))
-                           (with-directory-excursion dir
-                             (invoke "unzip" archive))
-                           (delete-file archive)
-                           (for-each (compose repack-archive canonicalize-path)
-                                     (find-files dir "(ct.sym|.*.jar)$"))
-                           (let ((reset-file-timestamp
-                                  (lambda (file)
-                                    (let ((s (lstat file)))
-                                      (unless (eq? (stat:type s) 'symlink)
-                                        (format #t "reset ~a~%" file)
-                                        (utime file 0 0 0 0))))))
-                             (for-each reset-file-timestamp
-                                       (find-files dir #:directories? #t)))
-                           (with-directory-excursion dir
-                             (let ((files (find-files "." ".*" #:directories? #t)))
-                               (apply invoke "zip" "-0" "-X" archive files)))))))
-               (for-each repack-archive
-                         (find-files (assoc-ref outputs "doc") ".*.zip$"))
-               (for-each repack-archive
-                         (find-files (assoc-ref outputs "jdk")
-                                     ".*.(zip|jar|diz)$"))
-               (repack-archive (string-append (assoc-ref outputs "jdk") "/lib/ct.sym"))
-               (let ((repack-jmod
-                      (lambda (file-name)
-                        (call-with-input-file file-name
-                          (lambda (file)
-                            (let ((header #vu8(#x4a #x4d #x01 #x00)))
-                              (if (equal? (get-bytevector-n
-                                           file (bytevector-length header))
-                                          header)
-                                  (let* ((header-length (bytevector-length header))
-                                         (temp-file (mkstemp!
-                                                     (string-copy
-                                                      "temp-file.XXXXXX")))
-                                         (temp-filename (port-filename temp-file))
-                                         (content-length
-                                          (- (stat:size (stat file))
-                                             header-length)))
-                                    (sendfile temp-file file content-length header-length)
-                                    (delete-file file-name)
-                                    (close-port temp-file)
-                                    (repack-archive (canonicalize-path temp-filename))
-                                    (call-with-output-file file-name
-                                      (lambda (file)
-                                        (put-bytevector file header)
-                                        (call-with-input-file temp-filename
-                                          (lambda (temp-file)
-                                            (sendfile
-                                             file temp-file
-                                             (stat:size (stat temp-file)) 0)))))))))))))
-                 (for-each repack-jmod
-                           (find-files (assoc-ref outputs "jdk") ".*.jmod$")))
-               #t)))
-         (add-after 'install 'remove-timestamp-from-api-summary
-           (lambda* (#:key outputs #:allow-other-keys)
-             (substitute* (string-append (assoc-ref outputs "doc")
-                                         "/api/overview-summary.html")
-               (("Generated by javadoc \\(11-internal\\).*$")
-                "Generated by javadoc (11-internal) -->\n"))
-             #t)))))
+                                                  "file"))))
+                              char-data-files)))
+                (with-directory-excursion dir
+                  (let ((files (find-files "." ".*" #:directories? #t)))
+                    (apply invoke "zip" "-0" "-X" archive files))))))
+          (add-after 'strip-character-data-timestamps 'remove-extraneous-files
+            (lambda* (#:key outputs #:allow-other-keys)
+              ;; Remove the *.diz and src.zip files for space considerations.
+              ;; The former are compressed debuginfo files not typically
+              ;; shipped with Java distributions, while the later corresponds
+              ;; to Java core API source files.
+              (for-each delete-file
+                        (append-map (cut find-files <> "(^src\\.zip|\\.diz)$")
+                                    (map (match-lambda
+                                           ((name . dir)
+                                            dir))
+                                         outputs)))))
+          (add-after 'remove-diz-file 'strip-archive-timestamps
+            (lambda _
+              (use-modules (ice-9 binary-ports)
+                           (rnrs bytevectors))
+              (letrec ((repack-archive
+                        (lambda (archive)
+                          (let ((dir (mkdtemp "zip-contents.XXXXXX")))
+                            (with-directory-excursion dir
+                              (invoke "unzip" archive))
+                            (delete-file archive)
+                            (for-each (compose repack-archive canonicalize-path)
+                                      (find-files dir "(ct.sym|\\.jar)$"))
+                            (let ((reset-file-timestamp
+                                   (lambda (file)
+                                     (let ((s (lstat file)))
+                                       (unless (eq? (stat:type s) 'symlink)
+                                         (format #t "reset ~a~%" file)
+                                         (utime file 0 0 0 0))))))
+                              (for-each reset-file-timestamp
+                                        (find-files dir #:directories? #t)))
+                            (with-directory-excursion dir
+                              (let ((files (find-files "." ".*" #:directories? #t)))
+                                (apply invoke "zip" "-0" "-X" archive files)))))))
+                (for-each repack-archive
+                          (find-files #$output:doc "\\.zip$"))
+                (for-each repack-archive
+                          (find-files #$output:jdk "\\.(zip|jar)$"))
+                (repack-archive (string-append #$output:jdk "/lib/ct.sym"))
+                (let ((repack-jmod
+                       (lambda (file-name)
+                         (call-with-input-file file-name
+                           (lambda (file)
+                             (let ((header #vu8(#x4a #x4d #x01 #x00)))
+                               (if (equal? (get-bytevector-n
+                                            file (bytevector-length header))
+                                           header)
+                                   (let* ((header-length (bytevector-length header))
+                                          (temp-file (mkstemp!
+                                                      (string-copy
+                                                       "temp-file.XXXXXX")))
+                                          (temp-filename (port-filename temp-file))
+                                          (content-length
+                                           (- (stat:size (stat file))
+                                              header-length)))
+                                     (sendfile temp-file file content-length header-length)
+                                     (delete-file file-name)
+                                     (close-port temp-file)
+                                     (repack-archive (canonicalize-path temp-filename))
+                                     (call-with-output-file file-name
+                                       (lambda (file)
+                                         (put-bytevector file header)
+                                         (call-with-input-file temp-filename
+                                           (lambda (temp-file)
+                                             (sendfile
+                                              file temp-file
+                                              (stat:size (stat temp-file)) 0)))))))))))))
+                  (for-each repack-jmod
+                            (find-files #$output:jdk "\\.jmod$"))))))
+          (add-after 'install 'remove-timestamp-from-api-summary
+            (lambda _
+              (substitute* (string-append #$output:doc
+                                          "/api/overview-summary.html")
+                (("Generated by javadoc \\(11-internal\\).*$")
+                 "Generated by javadoc (11-internal) -->\n")))))))
     (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("cups" ,cups)
-       ("fontconfig" ,fontconfig)
-       ("freetype" ,freetype)
-       ("giflib" ,giflib)
-       ("lcms" ,lcms)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libx11" ,libx11)
-       ("libxext" ,libxext)
-       ("libxrandr" ,libxrandr)
-       ("libxrender" ,libxrender)
-       ("libxt" ,libxt)
-       ("libxtst" ,libxtst)))
+     (list alsa-lib
+           cups
+           fontconfig
+           freetype
+           giflib
+           lcms
+           libjpeg-turbo
+           libpng
+           libx11
+           libxext
+           libxrandr
+           libxrender
+           libxt
+           libxtst))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("openjdk10" ,openjdk10)
-       ("openjdk10:jdk" ,openjdk10 "jdk")
-       ("make" ,gnu-make-4.2)
-       ("pkg-config" ,pkg-config)
-       ("unzip" ,unzip)
-       ("which" ,which)
-       ("zip" ,zip)))
+     (list autoconf
+           openjdk10
+           `(,openjdk10 "jdk")
+           gnu-make-4.2
+           pkg-config
+           unzip
+           which
+           zip))
     (home-page "https://openjdk.java.net/projects/jdk/11/")
     (synopsis "Java development kit")
     (description
      "This package provides the Java development kit OpenJDK.")
     (license license:gpl2+)))
 
+(define-syntax make-openjdk
+  ;; Return an OpenJDK package at VERSION with checksum HASH, using BOOTSTRAP,
+  ;; the bootstrap package.  One or more FIELD can be provided to further
+  ;; refine the package definition; for convenience, the BASE, NAME and
+  ;; VERSION are defined in their scope.
+  (lambda (x)
+    (syntax-case x ()
+      ((_ bootstrap version* hash field ...)
+       (with-syntax ((base (datum->syntax x 'base))
+                     (name (datum->syntax x 'name))
+                     (version (datum->syntax x 'version)))
+         #'(let ((base (package
+                         (inherit bootstrap)
+                         (name "openjdk")
+                         (version version*)
+                         (source
+                          (origin
+                            (inherit (package-source bootstrap))
+                            (method git-fetch)
+                            (uri (git-reference
+                                  (url (format
+                                        #f "https://github.com/openjdk/jdk~au"
+                                        (version-major version*)))
+                                  (commit (string-append "jdk-" version*
+                                                         "-ga"))))
+                            (file-name (git-file-name name version))
+                            (sha256 (base32 hash))))
+                         (native-inputs
+                          (modify-inputs (package-native-inputs bootstrap)
+                            (replace "openjdk" bootstrap)))
+                         (home-page (string-append
+                                     "https://openjdk.java.net/projects/jdk/"
+                                     (version-major version)))))
+                 (name "openjdk")
+                 (version version*))
+             (package
+               (inherit base)
+               field
+               ...)))))))
+
 (define-public openjdk12
-  (package
-    (inherit openjdk11)
-    (name "openjdk")
-    (version "12.33")
-    (source (origin
-              (method url-fetch)
-              (uri "http://hg.openjdk.java.net/jdk/jdk/archive/0276cba45aac.tar.bz2")
-              (file-name (string-append name "-" version ".tar.bz2"))
-              (sha256
-               (base32
-                "0mbhdrk12b6878kby0flnbak7444dlpm0ihlmf92vk59y1c02bc2"))
-              (modules '((guix build utils)))
-              (snippet
-               `(begin
-                  (for-each delete-file (find-files "." ".*.(bin|exe|jar)$"))
-                  #t))))
-    (arguments
-     (substitute-keyword-arguments (package-arguments openjdk11)
-       ((#:phases phases)
-        `(modify-phases ,phases
+  (make-openjdk
+   openjdk11 "12.33" "0mbhdrk12b6878kby0flnbak7444dlpm0ihlmf92vk59y1c02bc2"
+   (source
+    (origin
+      (method url-fetch)
+      (uri "http://hg.openjdk.java.net/jdk/jdk/archive/0276cba45aac.tar.bz2")
+      (file-name (string-append name "-" version ".tar.bz2"))
+      (sha256
+       (base32
+        "0mbhdrk12b6878kby0flnbak7444dlpm0ihlmf92vk59y1c02bc2"))
+      (modules '((guix build utils)))
+      (snippet
+       '(for-each delete-file (find-files "." "\\.(bin|exe|jar)$")))))
+   (arguments
+    (substitute-keyword-arguments (package-arguments openjdk11)
+      ((#:phases phases)
+       #~(modify-phases #$phases
            (replace 'fix-java-shebangs
              (lambda _
-               ;; This file was "fixed" by patch-source-shebangs, but it requires
-               ;; this exact first line.
-               (substitute* "make/data/blacklistedcertsconverter/blacklisted.certs.pem"
-                 (("^#!.*") "#! java BlacklistedCertsConverter SHA-256\n"))))))))
-    (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("cups" ,cups)
-       ("fontconfig" ,fontconfig)
-       ("freetype" ,freetype)
-       ("giflib" ,giflib)
-       ("lcms" ,lcms)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libx11" ,libx11)
-       ("libxext" ,libxext)
-       ("libxrandr" ,libxrandr)
-       ("libxrender" ,libxrender)
-       ("libxt" ,libxt)
-       ("libxtst" ,libxtst)))
-    (native-inputs
-     `(("autoconf" ,autoconf)
-       ("openjdk11" ,openjdk11)
-       ("openjdk11:jdk" ,openjdk11 "jdk")
-       ("make@4.2" ,gnu-make-4.2)
-       ("pkg-config" ,pkg-config)
-       ("unzip" ,unzip)
-       ("which" ,which)
-       ("zip" ,zip)))
-    (home-page "https://openjdk.java.net/projects/jdk/12")))
+               ;; 'blocked' was renamed to 'blacklisted' in this version for
+               ;; some reason.
+               (substitute* "make/data/blacklistedcertsconverter/\
+blacklisted.certs.pem"
+                 (("^#!.*")
+                  "#! java BlacklistedCertsConverter SHA-256\n"))))))))))
 
 (define-public openjdk13
-  (package
-    (inherit openjdk12)
-    (name "openjdk")
-    (version "13.0.7")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url "https://github.com/openjdk/jdk13u")
-                    (commit (string-append "jdk-" version "-ga"))))
-              (file-name (git-file-name name version))
-              (sha256
-               (base32
+  (make-openjdk openjdk12 "13.0.7"
                 "0wrrr0d7lz1v8qqm752mn4gz5l2vpl2kmx4ac3ysvk4mljc924hp"))
-              (modules '((guix build utils)))
-              (snippet
-               `(begin
-                  (for-each delete-file (find-files "." ".*.(bin|exe|jar)$"))
-                  #t))))
-    (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("cups" ,cups)
-       ("fontconfig" ,fontconfig)
-       ("freetype" ,freetype)
-       ("giflib" ,giflib)
-       ("lcms" ,lcms)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libx11" ,libx11)
-       ("libxext" ,libxext)
-       ("libxrandr" ,libxrandr)
-       ("libxrender" ,libxrender)
-       ("libxt" ,libxt)
-       ("libxtst" ,libxtst)))
-    (native-inputs
-     `(("autoconf" ,autoconf)
-       ("openjdk12:jdk" ,openjdk12 "jdk")
-       ("make@4.2" ,gnu-make-4.2)
-       ("pkg-config" ,pkg-config)
-       ("unzip" ,unzip)
-       ("which" ,which)
-       ("zip" ,zip)))
-    (home-page "https://openjdk.java.net/projects/jdk/13")))
 
 (define-public openjdk14
-  (package
-    (inherit openjdk13)
-    (name "openjdk")
-    (version "14.0.2")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url "https://github.com/openjdk/jdk14u")
-                    (commit (string-append "jdk-" version "-ga"))))
-              (file-name (git-file-name name version))
-              (sha256
-               (base32
-                "07k9bsbxwyf2z2n50z96nvhsdai916mxdxcr5lm44jz7f6xrwfq6"))
-              (modules '((guix build utils)))
-              (snippet
-               `(begin
-                  ;; The m4 macro uses 'help' to search for builtins, which is
-                  ;; not available in bash-minimal
-                  (substitute* "make/autoconf/basics.m4"
-                    (("if help") "if command -v"))
-                  (for-each delete-file (find-files "." ".*.(bin|exe|jar)$"))
-                  #t))))
-    (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("cups" ,cups)
-       ("fontconfig" ,fontconfig)
-       ("freetype" ,freetype)
-       ("giflib" ,giflib)
-       ("lcms" ,lcms)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libx11" ,libx11)
-       ("libxext" ,libxext)
-       ("libxrandr" ,libxrandr)
-       ("libxrender" ,libxrender)
-       ("libxt" ,libxt)
-       ("libxtst" ,libxtst)))
-    (native-inputs
-     `(("autoconf" ,autoconf)
-       ("make@4.2" ,gnu-make-4.2)
-       ("openjdk13:jdk" ,openjdk13 "jdk")
-       ("pkg-config" ,pkg-config)
-       ("unzip" ,unzip)
-       ("which" ,which)
-       ("zip" ,zip)))
-    (home-page "https://openjdk.java.net/projects/jdk/14")))
+  (make-openjdk
+   openjdk13 "14.0.2"
+   "07k9bsbxwyf2z2n50z96nvhsdai916mxdxcr5lm44jz7f6xrwfq6"
+   (source (origin
+             (inherit (package-source base))
+             (snippet                   ;override snippet
+              '(begin
+                 ;; The m4 macro uses 'help' to search for builtins, which is
+                 ;; not available in bash-minimal
+                 (substitute* "make/autoconf/basics.m4"
+                   (("if help") "if command -v"))
+                 (for-each delete-file (find-files "." "\\.(bin|exe|jar)$"))))))))
 
 (define-public openjdk15
-  (package
-    (inherit openjdk14)
-    (name "openjdk")
-    (version "15.0.3")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url "https://github.com/openjdk/jdk15u")
-                    (commit (string-append "jdk-" version "-ga"))))
-              (file-name (git-file-name name version))
-              (sha256
-               (base32
-                "168cr08nywp0q3vyj8njkhsmmnyd8rz9r58hk4xhzdzc6bdfkl1i"))
-              (patches
-                (search-patches "openjdk-15-xcursor-no-dynamic.patch"))))
-    (inputs
-     (cons `("libxcursor" ,libxcursor) ; for our patch to work
-           (package-inputs openjdk14)))
-    (native-inputs
-     `(("autoconf" ,autoconf)
-       ("openjdk14:jdk" ,openjdk14 "jdk")
-       ("pkg-config" ,pkg-config)
-       ("unzip" ,unzip)
-       ("which" ,which)
-       ("zip" ,zip)))
-    (home-page "https://openjdk.java.net/projects/jdk/15")))
+  (make-openjdk
+   openjdk14 "15.0.3"
+   "168cr08nywp0q3vyj8njkhsmmnyd8rz9r58hk4xhzdzc6bdfkl1i"
+   (source (origin
+             (inherit (package-source base))
+             (modules '())
+             (snippet #f)
+             (patches
+              (search-patches "openjdk-15-xcursor-no-dynamic.patch"))))
+   (inputs
+    (modify-inputs (package-inputs base)
+      (append libxcursor)))             ;for our patch to work
+   (native-inputs
+    (modify-inputs (package-native-inputs base)
+      (delete "make"                    ;remove old gnu-make-4.2
+              "openjdk")                ;to remove non-jdk output
+      (append `(,openjdk14 "jdk"))))))
 
 (define-public openjdk16
-  (package
-    (inherit openjdk15)
-    (name "openjdk")
-    (version "16.0.1")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url "https://github.com/openjdk/jdk16u")
-                    (commit (string-append "jdk-" version "-ga"))))
-              (file-name (git-file-name name version))
-              (sha256
-               (base32
+  (make-openjdk openjdk15 "16.0.1"
                 "1ggddsbsar4dj2fycfqqqagqil7prhb30afvq6933rz7pa9apm2f"))
-              (patches
-                (search-patches "openjdk-15-xcursor-no-dynamic.patch"))))
-    (native-inputs
-     `(("autoconf" ,autoconf)
-       ("openjdk15:jdk" ,openjdk15 "jdk")
-       ("pkg-config" ,pkg-config)
-       ("unzip" ,unzip)
-       ("which" ,which)
-       ("zip" ,zip)))
-    (arguments
-     (substitute-keyword-arguments (package-arguments openjdk15)
-       ((#:phases phases)
-        `(modify-phases ,phases
-           (add-after 'unpack 'make-templates-writable
-             (lambda _
-               ;; The build system copies a few .template files from the
-               ;; source directory into the build directory and then modifies
-               ;; them in-place.  So these files have to be writable.
-               (for-each make-file-writable
-                (find-files "src/java.base/share/classes/jdk/internal/misc/"
-                            "\\.template$"))))))))
-    (home-page "https://openjdk.java.net/projects/jdk/16")))
 
 (define-public openjdk17
-  (package
-    (inherit openjdk16)
-    (name "openjdk")
-    (version "17.0.3")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url "https://github.com/openjdk/jdk17u")
-                    (commit (string-append "jdk-" version "-ga"))))
-              (file-name (git-file-name name version))
-              (sha256
-               (base32
-                "0slmd6ww947gxpp4yr2wmr5z975bg86qh7zqfp2radf2q77ql65b"))
-              (patches
-                (search-patches "openjdk-15-xcursor-no-dynamic.patch"))))
-    (native-inputs
-     `(("autoconf" ,autoconf)
-       ("openjdk16:jdk" ,openjdk16 "jdk")
-       ("pkg-config" ,pkg-config)
-       ("unzip" ,unzip)
-       ("which" ,which)
-       ("zip" ,zip)))
-    (arguments
-     (substitute-keyword-arguments (package-arguments openjdk16)
-       ((#:phases phases)
-        `(modify-phases ,phases
+  (make-openjdk
+   openjdk16 "17.0.3"
+   "0slmd6ww947gxpp4yr2wmr5z975bg86qh7zqfp2radf2q77ql65b"
+   (arguments
+    (substitute-keyword-arguments (package-arguments openjdk16)
+      ((#:phases phases)
+       #~(modify-phases #$phases
            (replace 'fix-java-shebangs
              (lambda _
-               ;; This file was "fixed" by patch-source-shebangs, but it requires
-               ;; this exact first line.
+               ;; 'blacklisted' was renamed back to 'blocked'.
                (substitute* "make/data/blockedcertsconverter/blocked.certs.pem"
-                 (("^#!.*") "#! java BlockedCertsConverter SHA-256\n"))))))))
-    (home-page "https://openjdk.java.net/projects/jdk/17")))
+                 (("^#!.*") "#! java BlockedCertsConverter SHA-256\n"))))))))))
+
+(define-public openjdk18
+  (make-openjdk openjdk17 "18"
+                "1bv6bdhkmwvn10l0xy8yi9xibds640hs5zsvx0jp7wrxa3qw4qy8"))
 
 ;;; Convenience alias to point to the latest version of OpenJDK.
-(define-public openjdk openjdk17)
+(define-public openjdk openjdk18)
 
 (define-public icedtea icedtea-8)
 
@@ -5310,6 +5184,42 @@ every feature for every plugin.")))
     (description "The modello XPP3 plugin generates XML readers and writers based
 on the XPP3 API (XML Pull Parser).")))
 
+(define-public java-ow-util-ant-tasks
+  (package
+    (name "java-ow-util-ant-tasks")
+    (version "1.3.2")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                     "mirror://debian/pool/main/o/ow-util-ant-tasks/"
+                     "ow-util-ant-tasks_" version ".orig.tar.gz"))
+              (sha256
+               (base32
+                "1y5ln1g36aligwcadqksdj18i5ghqnxn523wjbzy2zyd7w58fgy5"))))
+    (build-system ant-build-system)
+    (arguments
+     `(#:jar-name "ow-util-ant-tasks.jar"
+       #:tests? #f; no tests
+       #:phases
+       (modify-phases %standard-phases
+         (add-before 'build 'delete-cyclic-dependency
+           (lambda _
+             ;; This file depends on asm-3, which depends on this package
+             (delete-file "src/org/objectweb/util/ant/DependencyAnalyzer.java")
+             ;; This file depends on xalan
+             (delete-file "src/org/objectweb/util/ant/Xalan2Liaison.java")))
+         (add-before 'build 'fix-new-ant
+           (lambda _
+             (substitute* "src/org/objectweb/util/ant/MultipleCopy.java"
+               ((", destFile.getAbsolutePath\\(\\)")
+                ", new String[] { destFile.getAbsolutePath() }")))))))
+    (home-page "https://packages.debian.org/source/stretch/ow-util-ant-tasks")
+    (synopsis "Replacement for base ant tasks")
+    (description "This library is used in the legacy build process of several
+key frameworks developed by ObjectWeb, among them legacy versions of the
+ObjectWeb ASM bytecode manipulation framework.")
+    (license license:lgpl2.0+)))
+
 (define-public java-asm
   (package
     (name "java-asm")
@@ -5408,6 +5318,31 @@ including java-asm.")
      (substitute-keyword-arguments (package-arguments java-asm)
        ((#:tests? _) #f)))
     (native-inputs `())))
+
+(define-public java-asm-3
+  (package
+    (inherit java-asm)
+    (version "3.1")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                     (url "https://gitlab.ow2.org/asm/asm")
+                     (commit "ASM_3_1")))
+              (file-name (git-file-name "java-asm" version))
+              (sha256
+               (base32
+                "0xbyf2sl8j6mrvfpg2da0vjdp906rac62l66gkk82x5cn3vc30h4"))
+              (modules '((guix build utils)))
+              (snippet `(for-each delete-file (find-files "." "\\.jar$")))))
+    (arguments
+     `(#:build-target "jar"
+       #:test-target "test"
+       #:tests? #f; require legacy test software
+       #:phases
+       (modify-phases %standard-phases
+         (replace 'install (install-jars "output/dist"))
+         (delete 'generate-jar-indices))))
+    (native-inputs (list java-ow-util-ant-tasks))))
 
 (define-public java-asm-8
   (package
@@ -6421,14 +6356,14 @@ reduce that load.")
 (define-public java-commons-jcs
   (package
     (name "java-commons-jcs")
-    (version "2.2.1")
+    (version "3.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://apache/commons/jcs/source/"
-                                  "commons-jcs-dist-" version "-src.tar.gz"))
+                                  "commons-jcs3-dist-" version "-src.tar.gz"))
               (sha256
                (base32
-                "0syhq2npjbrl0azqfjm0gvash1qd5qjy4qmysxcrqjsk0nf9fa1q"))))
+                "0y1lm1xnsj99bf7y9mkvbzqfy8dr7ac8zcbkpsjgzb9vhabfsbac"))))
     (build-system ant-build-system)
     (arguments
      `(#:jar-name "commons-jcs.jar"
@@ -6437,20 +6372,16 @@ reduce that load.")
        #:tests? #f; requires hsqldb
        #:phases
        (modify-phases %standard-phases
-         (add-before 'build 'prepare
+         (add-before 'build 'copy-resources
            (lambda _
-             (with-directory-excursion
-               "commons-jcs-core/src/main/java/org/apache/commons/jcs"
-               (substitute*
-                 "auxiliary/disk/jdbc/dsfactory/SharedPoolDataSourceFactory.java"
-                 (("commons.dbcp") "commons.dbcp2")
-                 ((".*\\.setMaxActive.*") ""))
-               ;;; Remove dependency on velocity-tools
-               (delete-file "admin/servlet/JCSAdminServlet.java"))
-             #t)))))
+             (copy-recursively "commons-jcs-core/src/main/resources"
+                               "build/classes"))))))
     (propagated-inputs
-     (list java-classpathx-servletapi java-commons-logging-minimal
-           java-commons-httpclient java-commons-dbcp))
+     (list java-classpathx-servletapi
+           java-commons-dbcp
+           java-httpcomponents-httpclient
+           java-httpcomponents-httpcore
+           java-log4j-api))
     (native-inputs
      (list java-junit))
     (home-page "https://commons.apache.org/proper/commons-jcs/")
@@ -6880,40 +6811,29 @@ programs.")
 (define-public java-commons-compress
   (package
     (name "java-commons-compress")
-    (version "1.13")
+    (version "1.21")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://apache/commons/compress/source/"
                                   "commons-compress-" version "-src.tar.gz"))
               (sha256
                (base32
-                "1vjqvavrn0babffn1kciz6v52ibwq2vwhzlb95hazis3lgllnxc8"))))
+                "1rkpb6xcyly1wnbx4q6iq6p5hrr0h1d0ppb5r07psc75cbmizjry"))))
     (build-system ant-build-system)
     (arguments
      `(#:jar-name "commons-compress.jar"
+       #:source-dir "src/main/java"
+       #:tests? #f; requires java-mockito-3
        #:phases
        (modify-phases %standard-phases
-         (add-after 'unpack 'delete-bad-tests
-           (lambda _
-             (with-directory-excursion "src/test/java/org/apache/commons/compress/"
-               ;; FIXME: These tests really should not fail.  Maybe they are
-               ;; indicative of problems with our Java packaging work.
-
-               ;; This test fails with a null pointer exception.
-               (delete-file "archivers/sevenz/SevenZOutputFileTest.java")
-               ;; This test fails to open test resources.
-               (delete-file "archivers/zip/ExplodeSupportTest.java")
-
-               ;; FIXME: This test adds a dependency on powermock, which is hard to
-               ;; package at this point.
-               ;; https://github.com/powermock/powermock
-               (delete-file "archivers/sevenz/SevenZNativeHeapTest.java"))
-             #t))
          (replace 'install (install-from-pom "pom.xml")))))
     (propagated-inputs
-     (list java-xz apache-commons-parent-pom-41))
-    (native-inputs
-     (list java-junit java-mockito-1))
+     (list java-asm-3
+           java-brotli
+           java-osgi-core
+           java-xz
+           java-zstd
+           apache-commons-parent-pom-52))
     (home-page "https://commons.apache.org/proper/commons-compress/")
     (synopsis "Java library for working with compressed files")
     (description "The Apache Commons Compress library defines an API for
@@ -6975,7 +6895,12 @@ Custom formats can be created using a fluent style API.")
     (build-system ant-build-system)
     (arguments
      `(#:tests? #f ; no tests
-       #:jar-name "osgi-annotation.jar"))
+       #:jar-name "osgi-annotation.jar"
+       #:phases
+       (modify-phases %standard-phases
+         (add-before 'install 'create-pom
+           (generate-pom.xml "pom.xml" "osgi" "osgi-annotation" ,version))
+         (replace 'install (install-from-pom "pom.xml")))))
     (home-page "https://www.osgi.org")
     (synopsis "Annotation module of OSGi framework")
     (description
@@ -7000,7 +6925,12 @@ components.")
     (build-system ant-build-system)
     (arguments
      `(#:tests? #f ; no tests
-       #:jar-name "osgi-core.jar"))
+       #:jar-name "osgi-core.jar"
+       #:phases
+       (modify-phases %standard-phases
+         (add-before 'install 'create-pom
+           (generate-pom.xml "pom.xml" "org.osgi" "org.osgi.core" ,version))
+         (replace 'install (install-from-pom "pom.xml")))))
     (inputs
      (list java-osgi-annotation))
     (home-page "https://www.osgi.org")
@@ -8065,12 +7995,14 @@ more efficient storage-wise than an uncompressed bitmap (as implemented in the
     (name "java-slf4j-api")
     (version "1.7.25")
     (source (origin
-              (method url-fetch)
-              (uri (string-append "https://www.slf4j.org/dist/slf4j-"
-                                  version ".tar.gz"))
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/qos-ch/slf4j")
+                    (commit (string-append "v_" version))))
+              (file-name (git-file-name name version))
               (sha256
                (base32
-                "13j51sgzmhhdrfa74gkal5zpip7r1440dh7zsi2c8bpb2zs1v8kb"))
+                "15n42zq3k1iyn752nwdcbs44hxns2rmxhglwjfr4np7lxx56apjl"))
               (modules '((guix build utils)))
               ;; Delete bundled jars.
               (snippet
@@ -8166,6 +8098,38 @@ all events to System.err.  Only messages of level INFO and higher are
 printed.")
     (license license:expat)))
 
+(define-public java-slf4j-nop
+  (package
+    (name "java-slf4j-nop")
+    (version "1.7.25")
+    (source (package-source java-slf4j-api))
+    (build-system ant-build-system)
+    (arguments
+     `(#:jar-name "slf4j-nop.jar"
+       #:source-dir "slf4j-nop/src/main"
+       #:test-dir "slf4j-nop/src/test"
+       #:phases (modify-phases %standard-phases
+                  ;; The tests need some test classes from slf4j-api
+                  (add-before 'check 'build-slf4j-api-test-helpers
+                    (lambda _
+                      ;; Add current dir to CLASSPATH ...
+                      (setenv "CLASSPATH"
+                              (string-append (getcwd) ":"
+                                             (getenv "CLASSPATH")))
+                      ;; ... and build test helper classes here:
+                      (apply invoke
+                             `("javac" "-d" "."
+                               ,@(find-files "slf4j-api/src/test" ".*\\.java")))))
+                  (replace 'install
+                    (install-from-pom "slf4j-nop/pom.xml")))))
+    (propagated-inputs (list java-slf4j-api))
+    (native-inputs (list java-junit java-hamcrest-core))
+    (home-page "https://www.slf4j.org/")
+    (synopsis "SLF4J binding that silently discards all logging messages")
+    (description "Binding/provider for NOP, an implementation that silently
+discards all logging messages.")
+    (license license:expat)))
+
 (define-public antlr2
   (package
     (name "antlr2")
@@ -8194,7 +8158,6 @@ printed.")
     (arguments
      `(#:tests? #f ; no test target
        #:imported-modules ((guix build ant-build-system)
-                           (guix build syscalls)
                            ,@%gnu-build-system-modules)
        #:modules (((guix build ant-build-system) #:prefix ant:)
                   (guix build gnu-build-system)
@@ -8667,7 +8630,7 @@ actual rendering.")
 (define-public java-antlr4-runtime
   (package
     (name "java-antlr4-runtime")
-    (version "4.8")
+    (version "4.10.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -8676,10 +8639,9 @@ actual rendering.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1qal3add26qxskm85nk7r758arladn5rcyjinmhlhznmpbbv9j8m"))
+                "0ldvd9jm4nrivaw7i7wh1q40q6xgzmzirsywiakbhg8sppagqlv7"))
               (patches
-                (search-patches "java-antlr4-Add-standalone-generator.patch"
-                                "java-antlr4-fix-code-too-large.java"))))
+                (search-patches "java-antlr4-Add-standalone-generator.patch"))))
     (build-system ant-build-system)
     (arguments
      `(#:jar-name "java-antlr4-runtime.jar"
@@ -8709,6 +8671,8 @@ sources by ANTLR.")
       ;; TODO: try to run the tests under
       ;; runtime-testsuite/test/org/antlr/v4/test/runtime/cpp with antlr4.
       #:tests? #f                       ;no CMake test target
+      ;; TODO: Building the tests wants to download googletest.
+      #:configure-flags #~'("-DANTLR_BUILD_CPP_TESTS=OFF")
       #:phases
       #~(modify-phases %standard-phases
           (add-after 'unpack 'chdir
@@ -8737,10 +8701,12 @@ generated sources by ANTLR.")))
     (arguments
      `(#:jar-name "antlr4.jar"
        #:source-dir "tool/src"
-       #:test-dir "tool-testsuite/test:runtime-testsuite/test:runtime-testsuite/annotations/src"
+       #:test-dir "tool-testsuite/test:runtime-testsuite/test"
        #:test-include (list "**/Test*.java")
        #:test-exclude (list
-                        ;; no runnable method
+                       ;; These have no runnable methods and fail because
+                       ;; test-include above is too broad.
+                        "**/TestContext.java"
                         "**/TestOutputReading.java"
                         ;; no @Test methods
                         "**/TestParserErrors.java"
@@ -8758,9 +8724,7 @@ generated sources by ANTLR.")))
                         "**/TestFullContextParsing.java"
                         "**/TestCompositeLexers.java"
                         ;; Null pointer exception
-                        "**/TestCompositeGrammars.java"
-                        ;; Wrong assumption on emoji
-                        "**/TestUnicodeData.java")
+                        "**/TestCompositeGrammars.java")
        #:phases
        (modify-phases %standard-phases
          (add-before 'build 'fix-build.xml
@@ -8774,7 +8738,6 @@ generated sources by ANTLR.")))
          (add-after 'bin-install 'check
            (lambda _
              (invoke "ant" "compile-tests")
-             (invoke "ant" "check" "-Dtest.home=runtime-testsuite/annotations/src")
              (invoke "ant" "check" "-Dtest.home=runtime-testsuite/test")
              (invoke "ant" "check" "-Dtest.home=tool-testsuite/test")
              #t))
@@ -13931,6 +13894,41 @@ library and the API is similar.")
 parse command line options/arguments in your CUI application.")
     (license license:expat)))
 
+(define-public java-argparse4j
+  (package
+    (name "java-argparse4j")
+    (version "0.9.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/argparse4j/argparse4j")
+                    (commit (string-append "argparse4j-" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1i0j3zs1ln48n0g8a90vqbv6528mcswhzys6252yp0c8w1ai64fb"))))
+    (build-system ant-build-system)
+    (arguments
+     (list #:jar-name "java-argparse4j.jar"
+           #:source-dir "main/src/main/"
+           #:test-dir "main/src/test/"
+           #:jdk openjdk11
+           #:phases #~(modify-phases %standard-phases
+                        (add-after 'unpack 'copy-resources
+                          (lambda _
+                            (copy-recursively "main/src/test/resources"
+                                              "target/test-classes")
+                            (copy-recursively "main/src/main/resources"
+                                              "build/classes")))
+                        (replace 'install
+                          (install-from-pom "pom.xml")))))
+    (inputs (list java-junit))
+    (home-page "https://argparse4j.github.io/")
+    (synopsis "Java command-line argument parser library")
+    (description "Argparse4j is a command line argument parser library for
+Java based on Python's @code{argparse} module.")
+    (license license:expat)))
+
 (define-public java-metadata-extractor
   (package
     (name "java-metadata-extractor")
@@ -14323,3 +14321,9 @@ The following TLA+ tools are available in this distribution:
 @item The PlusCal translator.
 @end itemize")
       (license license:expat))))
+
+;;;
+;;; Avoid adding new packages to the end of this file. To reduce the chances
+;;; of a merge conflict, place them above by existing packages with similar
+;;; functionality or similar names.
+;;;

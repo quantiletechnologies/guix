@@ -82,32 +82,64 @@
 (define %input-style
   (make-parameter 'variable)) ; or 'specification
 
-(define string->license
-  (match-lambda
-   ("AGPL-3" 'agpl3+)
-   ("Artistic-2.0" 'artistic2.0)
-   ("Apache License 2.0" 'asl2.0)
-   ("BSD_2_clause" 'bsd-2)
-   ("BSD_2_clause + file LICENSE" 'bsd-2)
-   ("BSD_3_clause" 'bsd-3)
-   ("BSD_3_clause + file LICENSE" 'bsd-3)
-   ("GPL" '(list gpl2+ gpl3+))
-   ("GPL (>= 2)" 'gpl2+)
-   ("GPL (>= 3)" 'gpl3+)
-   ("GPL-2" 'gpl2)
-   ("GPL-3" 'gpl3)
-   ("LGPL-2" 'lgpl2.0)
-   ("LGPL-2.1" 'lgpl2.1)
-   ("LGPL-3" 'lgpl3)
-   ("LGPL (>= 2)" 'lgpl2.0+)
-   ("LGPL (>= 2.1)" 'lgpl2.1+)
-   ("LGPL (>= 3)" 'lgpl3+)
-   ("MIT" 'expat)
-   ("MIT + file LICENSE" 'expat)
-   ((x) (string->license x))
-   ((lst ...) `(list ,@(map string->license lst)))
-   (_ #f)))
+(define (string->licenses license-string)
+  (let ((licenses
+         (map string-trim-both
+              (string-tokenize license-string
+                               (char-set-complement (char-set #\|))))))
+    (string->license licenses)))
 
+(define string->license
+  (let ((prefix identity))
+    (match-lambda
+      ("AGPL-3" (prefix 'agpl3))
+      ("AGPL (>= 3)" (prefix 'agpl3+))
+      ("Artistic-2.0" (prefix 'artistic2.0))
+      ((or "Apache License 2.0"
+           "Apache License (== 2.0)")
+       (prefix 'asl2.0))
+      ("BSD_2_clause" (prefix 'bsd-2))
+      ("BSD_2_clause + file LICENSE" (prefix 'bsd-2))
+      ("BSD_3_clause" (prefix 'bsd-3))
+      ("BSD_3_clause + file LICENSE" (prefix 'bsd-3))
+      ("CC0" (prefix 'cc0))
+      ("CC BY-SA 4.0" (prefix 'cc-by-sa4.0))
+      ("CeCILL" (prefix 'cecill))
+      ((or "GPL"
+           "GNU General Public License")
+       `(list ,(prefix 'gpl2+) ,(prefix 'gpl3+)))
+      ((or "GPL (>= 2)"
+           "GPL (>= 2.0)")
+       (prefix 'gpl2+))
+      ((or "GPL (> 2)"
+           "GPL (>= 3)"
+           "GPL (>= 3.0)"
+           "GNU General Public License (>= 3)")
+       (prefix 'gpl3+))
+      ((or "GPL-2"
+           "GNU General Public License version 2")
+       (prefix 'gpl2))
+      ((or "GPL-3"
+           "GNU General Public License version 3")
+       (prefix 'gpl3))
+      ((or "GNU Lesser General Public License"
+           "LGPL")
+       (prefix 'lgpl2.0+))
+      ("LGPL-2" (prefix 'lgpl2.0))
+      ("LGPL-2.1" (prefix 'lgpl2.1))
+      ("LGPL-3" (prefix 'lgpl3))
+      ((or "LGPL (>= 2)"
+           "LGPL (>= 2.0)")
+       (prefix 'lgpl2.0+))
+      ("LGPL (>= 2.1)" (prefix 'lgpl2.1+))
+      ("LGPL (>= 3)" (prefix 'lgpl3+))
+      ("MIT" (prefix 'expat))
+      ("MIT + file LICENSE" (prefix 'expat))
+      ("file LICENSE"
+       `(,(prefix 'fsdg-compatible) "file://LICENSE"))
+      ((x) (string->license x))
+      ((lst ...) `(list ,@(map string->license lst)))
+      (unknown `(,(prefix 'fsdg-compatible) ,unknown)))))
 
 (define (description->alist description)
   "Convert a DESCRIPTION string into an alist."
@@ -156,9 +188,9 @@ package definition."
 (define %cran-canonical-url "https://cran.r-project.org/package=")
 (define %bioconductor-url "https://bioconductor.org/packages/")
 
-;; The latest Bioconductor release is 3.15.  Bioconductor packages should be
+;; The latest Bioconductor release is 3.16.  Bioconductor packages should be
 ;; updated together.
-(define %bioconductor-version "3.15")
+(define %bioconductor-version "3.16")
 
 (define* (bioconductor-packages-list-url #:optional type)
   (string-append "https://bioconductor.org/packages/"
@@ -200,11 +232,11 @@ bioconductor package NAME, or #F if the package is unknown."
 ;; Little helper to download URLs only once.
 (define download
   (memoize
-   (lambda* (url #:key method)
+   (lambda* (url #:key method (ref '()))
      (with-store store
        (cond
         ((eq? method 'git)
-         (latest-repository-commit store url))
+         (latest-repository-commit store url #:ref ref))
         ((eq? method 'hg)
          (call-with-temporary-directory
           (lambda (dir)
@@ -358,11 +390,27 @@ empty list when the FIELD cannot be found."
 ;; The field for system dependencies is often abused to specify non-package
 ;; dependencies (such as c++11).  This list is used to ignore them.
 (define invalid-packages
-  (list "c++11"
+  (list "c++"
+        "c++11"
         "c++14"
-        "linux"
+        "c++17"
         "getopt::long"
+        "posix.1-2001"
+        "linux"
+        "none"
+        "windows"
+        "xcode"
         "xquartz"))
+
+(define (transform-sysname sysname)
+  "Return a Guix package name for the common package name SYSNAME."
+  (match sysname
+    ("java" "openjdk")
+    ("fftw3" "fftw")
+    ("tcl/tk" "tcl")
+    ("booktabs" "texlive-booktabs")
+    ("freetype2" "freetype")
+    (_ sysname)))
 
 (define cran-guix-name (cut guix-name "r-" <>))
 
@@ -474,7 +522,7 @@ from the alist META, which was derived from the R package's DESCRIPTION file."
          (name       (assoc-ref meta "Package"))
          (synopsis   (assoc-ref meta "Title"))
          (version    (assoc-ref meta "Version"))
-         (license    (string->license (assoc-ref meta "License")))
+         (license    (string->licenses (assoc-ref meta "License")))
          ;; Some packages have multiple home pages.  Some have none.
          (home-page  (case repository
                        ((git) (assoc-ref meta 'git))
@@ -516,32 +564,32 @@ from the alist META, which was derived from the R package's DESCRIPTION file."
          (package
            `(package
               (name ,(cran-guix-name name))
-              (version ,(case repository
-                          ((git)
-                           `(git-version ,version revision commit))
-                          ((hg)
-                           `(string-append ,version "-" revision "." changeset))
-                          (else version)))
+              (version ,(cond
+                         (git?
+                          `(git-version ,version revision commit))
+                         (hg?
+                          `(string-append ,version "-" revision "." changeset))
+                         (else version)))
               (source (origin
                         (method ,(cond
                                   (git? 'git-fetch)
                                   (hg?  'hg-fetch)
                                   (else 'url-fetch)))
-                        (uri ,(case repository
-                                ((git)
-                                 `(git-reference
-                                   (url ,(assoc-ref meta 'git))
-                                   (commit commit)))
-                                ((hg)
-                                 `(hg-reference
-                                   (url ,(assoc-ref meta 'hg))
-                                   (changeset changeset)))
-                                (else
-                                 `(,(procedure-name uri-helper) ,name version
-                                   ,@(or (and=> (assoc-ref meta 'bioconductor-type)
-                                                (lambda (type)
-                                                  (list (list 'quote type))))
-                                         '())))))
+                        (uri ,(cond
+                               (git?
+                                `(git-reference
+                                  (url ,(assoc-ref meta 'git))
+                                  (commit commit)))
+                               (hg?
+                                `(hg-reference
+                                  (url ,(assoc-ref meta 'hg))
+                                  (changeset changeset)))
+                               (else
+                                `(,(procedure-name uri-helper) ,name version
+                                  ,@(or (and=> (assoc-ref meta 'bioconductor-type)
+                                               (lambda (type)
+                                                 (list (list 'quote type))))
+                                        '())))))
                         ,@(cond
                            (git?
                             '((file-name (git-file-name name version))))
@@ -558,7 +606,7 @@ from the alist META, which was derived from the R package's DESCRIPTION file."
                     `((properties ,`(,'quasiquote ((,'upstream-name . ,name)))))
                     '())
               (build-system r-build-system)
-              ,@(maybe-inputs sysdepends)
+              ,@(maybe-inputs (map transform-sysname sysdepends))
               ,@(maybe-inputs (map cran-guix-name propagate) 'propagated-inputs)
               ,@(maybe-inputs
                  `(,@(if (needs-fortran? source (not (or git? hg?)))
@@ -571,21 +619,21 @@ from the alist META, which was derived from the R package's DESCRIPTION file."
               (home-page ,(if (string-null? home-page)
                               (string-append base-url name)
                               home-page))
-              (synopsis ,synopsis)
+              (synopsis ,(beautify-synopsis synopsis))
               (description ,(beautify-description (or (assoc-ref meta "Description")
                                                       "")))
               (license ,license))))
     (values
-     (case repository
-       ((git)
-        `(let ((commit ,(assoc-ref meta 'git-commit))
-               (revision "1"))
-           ,package))
-       ((hg)
-        `(let ((changeset ,(assoc-ref meta 'hg-changeset))
-               (revision "1"))
-           ,package))
-       (else package))
+     (cond
+      (git?
+       `(let ((commit ,(assoc-ref meta 'git-commit))
+              (revision "1"))
+          ,package))
+      (hg?
+       `(let ((changeset ,(assoc-ref meta 'hg-changeset))
+              (revision "1"))
+          ,package))
+      (else package))
      propagate)))
 
 (define cran->guix-package

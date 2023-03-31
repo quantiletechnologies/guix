@@ -7,6 +7,7 @@
 ;;; Copyright © 2018, 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2021, 2022 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2022 Garek Dyszel <garekdyszel@disroot.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -39,6 +40,66 @@
 ;;; module should not depend on other modules containing Python packages.
 ;;;
 ;;; Code:
+
+(define-public python-pip
+  (package
+    (name "python-pip")
+    (version "22.2.2")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "pip" version))
+       (sha256
+        (base32
+         "0jwac0bhfp48w4fqibf1ysrs2grksdv92hwqm7bmdw2jn2fr5l9z"))))
+    (build-system python-build-system)
+    (arguments
+     '(#:tests? #f))          ; there are no tests in the pypi archive.
+    (home-page "https://pip.pypa.io/")
+    (synopsis "Package manager for Python software")
+    (description
+     "Pip is a package manager for Python software, that finds packages on the
+Python Package Index (PyPI).")
+    (license license:expat)))
+
+(define-public python-setuptools
+  (package
+    (name "python-setuptools")
+    (version "64.0.3")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "setuptools" version))
+       (sha256
+        (base32
+         "1sllqf0bhsl2yilf1w0xnlz0r4yaksmwaj0ap91zdc6kgbigdjiv"))
+       (modules '((guix build utils)))
+       (snippet
+        ;; TODO: setuptools now bundles the following libraries:
+        ;; packaging, pyparsing, six and appdirs. How to unbundle?
+        ;; Remove included binaries which are used to build self-extracting
+        ;; installers for Windows.
+        '(for-each delete-file (find-files "setuptools"
+                                           "^(cli|gui).*\\.exe$")))))
+    (build-system python-build-system)
+    ;; FIXME: Tests require pytest, which itself relies on setuptools.
+    ;; One could bootstrap with an internal untested setuptools.
+    (arguments (list #:tests? #f))
+    (home-page "https://pypi.org/project/setuptools/")
+    (synopsis "Library designed to facilitate packaging Python projects")
+    (description "Setuptools is a fully-featured, stable library designed to
+facilitate packaging Python projects, where packaging includes:
+@itemize
+@item Python package and module definitions
+@item distribution package metadata
+@item test hooks
+@item project installation
+@item platform-specific details.
+@end itemize")
+    (license (list license:psfl         ;setuptools itself
+                   license:expat        ;six, appdirs, pyparsing
+                   license:asl2.0       ;packaging is dual ASL2/BSD-2
+                   license:bsd-2))))
 
 (define-public python-wheel
   (package
@@ -473,4 +534,26 @@ system, then @code{flit_core} to build the package.")
      "Setuptools_scm handles managing your Python package versions in
 @dfn{software configuration management} (SCM) metadata instead of declaring
 them as the version argument or in a SCM managed file.")
+    (license license:expat)))
+
+(define-public python-editables
+  (package
+    (name "python-editables")
+    (version "0.3")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/pfmoore/editables")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1gbfkgzmrmbd4ycshm09fr2wd4f1n9gq7s567jgkavhfkn7s2pn1"))))
+    (build-system python-build-system)
+    (home-page "https://github.com/pfmoore/editables")
+    (synopsis "Editable installations")
+    (description "This library supports the building of wheels which, when
+installed, will expose packages in a local directory on @code{sys.path} in
+``editable mode''.  In other words, changes to the package source will be
+reflected in the package visible to Python, without needing a reinstall.")
     (license license:expat)))

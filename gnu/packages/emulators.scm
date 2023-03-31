@@ -397,7 +397,7 @@ older games.")
   ;; This is not a patch staging area for DOSBox, but an unaffiliated fork.
   (package
     (name "dosbox-staging")
-    (version "0.78.1")
+    (version "0.79.1")
     (source
      (origin
        (method git-fetch)
@@ -406,7 +406,7 @@ older games.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "16byip1j9ckq0ik7ilrj0fc9dal3495s48xd21drpbb8q9jwb342"))))
+        (base32 "0wdnkz3djjc514hn945fr9g9mnpnvk16fan84ny9g5wxak6dvsqp"))))
     (build-system meson-build-system)
     (arguments
      (list #:configure-flags
@@ -420,19 +420,23 @@ older games.")
            #~(modify-phases %standard-phases
                (add-after 'unpack 'fix-includes
                  (lambda _
+                   ;; This unnecessary file has an encoding error.
+                   (delete-file "./src/libs/sdlcd/macosx/SDLOSXCAGuard.h")
                    (substitute* (find-files "." "\\.(cpp|h)")
                      (("^(#include <)(SDL[_.])" _ include file)
                       (string-append include "SDL2/" file))))))))
     (native-inputs
      (list pkg-config))
     (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("fluidsynth" ,fluidsynth)
-       ("libpng" ,libpng)
-       ("mesa" ,mesa)
-       ("opusfile" ,opusfile)
-       ("sdl2" ,(sdl-union (list sdl2 sdl2-net)))
-       ("zlib" ,zlib)))
+     (list alsa-lib
+           fluidsynth
+           iir
+           libpng
+           mesa
+           opusfile
+           (sdl-union (list sdl2 sdl2-net))
+           speexdsp
+           zlib))
     (home-page "https://dosbox-staging.github.io")
     (synopsis "DOS/x86 PC emulator focusing on ease of use")
     (description
@@ -718,7 +722,7 @@ The following systems are supported:
 (define-public mgba
   (package
     (name "mgba")
-    (version "0.9.3")
+    (version "0.10.0")
     (source
      (origin
        (method git-fetch)
@@ -727,7 +731,7 @@ The following systems are supported:
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1bg4ax5gjkr6d4cpzsgzv3bpa3i2c2b1ckwrjklqiy835b5ni6yi"))
+        (base32 "14miy6fgg4dy2pp0w17pnqzizrj6yf468i5l7rswn3yszpd5rn6s"))
        (modules '((guix build utils)))
        (snippet
         ;; Make sure we don't use the bundled software.
@@ -773,7 +777,7 @@ and Game Boy Color games.")
 (define-public sameboy
   (package
     (name "sameboy")
-    (version "0.15")
+    (version "0.15.6")
     (source
      (origin
        (method git-fetch)
@@ -782,7 +786,7 @@ and Game Boy Color games.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0rhl9khc5pxbikjsq4aha5cpqfxf3bnxalc94idd4haw0zf892q9"))))
+        (base32 "0a2fcsnv7ykj4kk2vpq9jjn8yjrx34n5s186rqvgj3dzm8w6xijs"))))
     (build-system gnu-build-system)
     (native-inputs
      (list rgbds pkg-config))
@@ -1505,31 +1509,31 @@ multi-system game/emulator system.")
 (define-public scummvm
   (package
     (name "scummvm")
-    (version "2.6.0")
+    (version "2.6.1")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://downloads.scummvm.org/frs/scummvm/" version
                            "/scummvm-" version ".tar.xz"))
        (sha256
-        (base32 "05zw9xqdix88f8p3py2rfnyiaxr2sbifkqi9s5gy3nf9s3l3h50w"))))
+        (base32 "1s8psdn3a3hqvvfgmlfxrqqdw8hbr0zyrvirzsnzh6yxmgpvkbwg"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:tests? #f                                 ;require "git"
-       #:configure-flags (list "--enable-release") ;for optimizations
-       #:phases
-       (modify-phases %standard-phases
-         (replace 'configure
-           ;; configure does not work followed by both "SHELL=..." and
-           ;; "CONFIG_SHELL=..."; set environment variables instead
-           (lambda* (#:key inputs outputs configure-flags #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (bash (search-input-file inputs "/bin/bash"))
-                    (flags `(,(string-append "--prefix=" out)
+     (list
+      #:tests? #f                                   ;require "git"
+      #:configure-flags #~(list "--enable-release") ;for optimizations
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'configure
+            ;; configure does not work followed by both "SHELL=..." and
+            ;; "CONFIG_SHELL=..."; set environment variables instead
+            (lambda* (#:key inputs configure-flags #:allow-other-keys)
+              (let ((bash (search-input-file inputs "/bin/bash"))
+                    (flags `(,(string-append "--prefix=" #$output)
                              ,@configure-flags)))
-               (setenv "SHELL" bash)
-               (setenv "CONFIG_SHELL" bash)
-               (apply invoke "./configure" flags)))))))
+                (setenv "SHELL" bash)
+                (setenv "CONFIG_SHELL" bash)
+                (apply invoke "./configure" flags)))))))
     (native-inputs
      (list nasm pkg-config))
     (inputs
@@ -1712,7 +1716,7 @@ This is a part of the TiLP project.")
 (define-public mame
   (package
     (name "mame")
-    (version "0.245")
+    (version "0.249")
     (source
      (origin
        (method git-fetch)
@@ -1721,7 +1725,7 @@ This is a part of the TiLP project.")
              (commit (apply string-append "mame" (string-split version #\.)))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1w34hcvnibnz0xaydh2kdciffng07zins9lnrv041fmzlk4318qb"))
+        (base32 "1akws4l3b7z5mkf09mdaz640rj41sbg3sh1xlv1sp0yhdjqjpi90"))
        (modules '((guix build utils)))
        (snippet
         ;; Remove bundled libraries.
@@ -2490,3 +2494,47 @@ on a Commodore C64, C128 etc.")
     (description "This package provides a development environment for 6502 systems, including macro assembler, C compiler, linker, librarian and several other tools.")
     (home-page "https://cc65.github.io/")
     (license license:zlib)))
+
+(define-public uxn
+  (let ((commit "1b2049e238df96f32335edf1c6db35bd09f8b42d")
+        (revision "1"))
+    (package
+      (name "uxn")
+      (version (git-version "0.1.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://git.sr.ht/~rabbits/uxn")
+                      (commit commit)))
+                (file-name (string-append name "-" version))
+                (sha256
+                 (base32
+                  "0d3hy1db1mfk2l7q7wdxvp1z0vkmyyb9pdp81d9zm58ylpxaq2cp"))))
+      (build-system gnu-build-system)
+      (arguments
+       (list #:tests? #f ;no tests
+             #:phases #~(modify-phases %standard-phases
+                          (delete 'configure)
+                          (replace 'build
+                            (lambda _
+                              (setenv "CC" #$(cc-for-target))
+                              (invoke "./build.sh" "--no-run")))
+                          (replace 'install
+                            (lambda _
+                              (let ((bin (string-append #$output "/bin"))
+                                    (share (string-append #$output
+                                                          "/share/uxn")))
+                                (with-directory-excursion "bin"
+                                  (for-each (lambda (x)
+                                              (install-file x bin))
+                                            '("uxnasm" "uxncli" "uxnemu"))
+                                  (for-each (lambda (x)
+                                              (install-file x share))
+                                            '("asma.rom" "launcher.rom")))))))))
+      (inputs (list sdl2))
+      (home-page "https://100r.co/site/uxn.html")
+      (synopsis "Assembler and emulator for the Uxn stack-machine")
+      (description
+       "This package provides an assembler and emulator for the Uxn
+stack-machine, written in ANSI C.  Graphical output is implemented using SDL2.")
+      (license license:expat))))

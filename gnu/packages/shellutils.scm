@@ -38,6 +38,7 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
+  #:use-module (guix build-system copy)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system go)
   #:use-module (guix build-system python)
@@ -56,6 +57,7 @@
   #:use-module (gnu packages readline)
   #:use-module (gnu packages ruby)
   #:use-module (gnu packages shells)
+  #:use-module (gnu packages textutils)
   #:use-module (gnu packages tmux)
   #:use-module (gnu packages vim))
 
@@ -144,6 +146,30 @@ chart.")
      "This command-line filter program draws ASCII-art boxes around your input
 text.")
     (license license:gpl2)))
+
+(define-public zsh-autopair
+  (package
+    (name "zsh-autopair")
+    (version "1.0")
+    (home-page "https://github.com/hlissner/zsh-autopair")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/hlissner/zsh-autopair.git")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1h0vm2dgrmb8i2pvsgis3lshc5b0ad846836m62y8h3rdb3zmpy1"))))
+    (build-system copy-build-system)
+    (arguments
+     '(#:install-plan '(("autopair.zsh"
+                         "/share/zsh/plugins/zsh-autopair/zsh-autopair.zsh"))))
+    (synopsis "Auto-close and delete matching delimiters in Zsh")
+    (description
+     "This Zsh plugin auto-closes, deletes, and skips over matching delimiters
+in Zsh intelligently.")
+    (license license:expat)))
 
 (define-public zsh-autosuggestions
   (package
@@ -246,6 +272,38 @@ interactive terminal.  This helps in reviewing commands before running them,
 particularly in catching syntax errors.")
     (license license:bsd-3)))
 
+(define-public grml-zsh-config
+  (package
+    (name "grml-zsh-config")
+    (version "0.19.3")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "https://deb.grml.org/pool/main/g/grml-etc-core/grml-etc-core_"
+                    version ".tar.gz"))
+              (sha256
+               (base32
+                "05fri77028znjnvmh8mz3424rn8ilysj7hn8br2hk1qwkp4zzwp9"))))
+    (build-system copy-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases
+            %standard-phases
+          (add-before 'install 'make-doc
+            (lambda _ (with-directory-excursion "doc" (invoke "make")))))
+      #:install-plan
+      #~'(("etc/skel/.zshrc"  "etc/skel/.zshrc")
+          ("etc/zsh/keephack" "etc/zsh/keephack")
+          ("etc/zsh/zshrc"    "etc/zsh/zshrc")
+          ("doc/grmlzshrc.5"  "share/man/man5/grmlzshrc.5"))))
+    (native-inputs (list txt2tags))
+    (home-page "https://grml.org/zsh/")
+    (synopsis "Grml's zsh configuration")
+    (description "This package provides an interactive setup for zsh
+preconfigured by the Grml project.")
+    (license license:gpl2)))
+
 (define-public sh-z
   (package
     (name "sh-z")
@@ -311,7 +369,7 @@ between various shells or commands.")
 (define-public trash-cli
   (package
     (name "trash-cli")
-    (version "0.21.10.24")
+    (version "0.22.10.20")
     (source
      (origin
        (method git-fetch)
@@ -321,37 +379,38 @@ between various shells or commands.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "01is32lk6prwhajvlmgn3xs4fcpmiqivizcqkj9k80jx6mqjifzs"))))
+         "0hkn0hmwrag56g447ddqapib0s399a6b4a9wlliif6zmirxlww9n"))))
     (build-system python-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'patch-path-constants
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let ((libc (assoc-ref inputs "libc"))
-                   (coreutils (assoc-ref inputs "coreutils")))
-               (substitute* "trashcli/list_mount_points.py"
-                 (("\"/lib/libc.so.6\".*")
-                  (string-append "\"" libc "/lib/libc.so.6\"\n"))
-                 (("\"df\"")
-                  (string-append "\"" coreutils "/bin/df\""))))))
-         (add-before 'build 'fix-setup.py
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (bin (string-append out "/bin")))
-               (mkdir-p bin)
-               (substitute* "setup.py"
-                 (("add_script\\('")
-                  (string-append "add_script('" bin "/" ))))))
-         ;; Whenever setup.py is invoked, scripts in out/bin/ are
-         ;; replaced. Thus we cannot invoke setup.py for testing.
-         ;; Upstream also uses pytest.
-         (replace 'check
-           (lambda* (#:key tests? #:allow-other-keys)
-             (when tests?
-               (invoke "pytest")))))))
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-before 'build 'patch-path-constants
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (let ((libc (search-input-file inputs "lib/libc.so.6"))
+                         (df #$(file-append coreutils "/bin/df")))
+                     (substitute* "trashcli/list_mount_points.py"
+                       (("\"/lib/libc.so.6\".*")
+                        (string-append "\"" libc "\"\n"))
+                       (("\"df\"")
+                        (string-append "\"" df "\""))))))
+               (add-before 'build 'fix-setup.py
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   (let ((bin (string-append #$output "/bin")))
+                     (mkdir-p bin)
+                     (substitute* "setup.py"
+                       (("add_script\\('")
+                        (string-append "add_script('" bin "/" ))))))
+               ;; Whenever setup.py is invoked, scripts in out/bin/ are
+               ;; replaced. Thus we cannot invoke setup.py for testing.
+               ;; Upstream also uses pytest.
+               (replace 'check
+                 (lambda* (#:key tests? #:allow-other-keys)
+                   (when tests?
+                     (invoke "pytest")))))))
     (native-inputs
      (list python-pytest
+           python-parameterized
+           python-flexmock
            python-mock
            python-six))
     (inputs (list coreutils))

@@ -12,6 +12,7 @@
 ;;; Copyright © 2020, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2022 Jean-Pierre De Jesus DIAZ <me@jeandudey.tech>
 ;;; Copyright © 2022 Guillaume Le Vaillant <glv@posteo.net>
+;;; Copyright © 2022 Maxime Devos <maximedevos@telenet.be>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -34,6 +35,7 @@
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix build-system gnu)
+  #:use-module (guix build-system copy)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix utils)
   #:use-module (gnu packages)
@@ -185,14 +187,16 @@ external dependencies.")
 (define-public samba
   (package
     (name "samba")
-    (version "4.16.2")
+    (version "4.16.4")
     (source
+     ;; For updaters: the current PGP fingerprint is
+     ;; 81F5E2832BD2545A1897B713AA99442FB680B620.
      (origin
        (method url-fetch)
        (uri (string-append "https://download.samba.org/pub/samba/stable/"
                            "samba-" version ".tar.gz"))
        (sha256
-        (base32 "1745gx36gyd7353a94w4lrgksbmms0502kj9gg63il9zbdns1dx0"))))
+        (base32 "0bvhqinxwpbwp4ayhd9q8ga0w89gnkl1m3nrwpj1fnhjzd4ghclm"))))
     (build-system gnu-build-system)
     (arguments
      (list
@@ -271,7 +275,7 @@ external dependencies.")
            python-pyasn1                ;for krb5 tests
            ;; For generating man pages.
            docbook-xml-4.2
-           docbook-xsl
+           docbook-xsl-next             ;otherwise the man pages are corrupted
            libxslt
            libxml2))                    ;for XML_CATALOG_FILES
     (home-page "https://www.samba.org/")
@@ -286,6 +290,8 @@ Samba is an important component to seamlessly integrate Linux/Unix Servers and
 Desktops into Active Directory environments using the winbind daemon.")
     (license license:gpl3+)))
 
+;;; FIXME: Invert inheritance relationship; the "fixed" package shouldn't be
+;;; susceptible to changes in the free one.
 (define-public samba/fixed
   ;; Version that rarely changes, depended on by libsoup.
   (hidden-package
@@ -297,7 +303,21 @@ Desktops into Active Directory environments using the winbind daemon.")
         (uri (string-append "https://download.samba.org/pub/samba/stable/"
                             "samba-" version ".tar.gz"))
         (sha256
-         (base32 "1nrp85aya0pbbqdqjaqcw82cnzzys16yls37hi2h6mci8d09k4si")))))))
+         (base32 "1nrp85aya0pbbqdqjaqcw82cnzzys16yls37hi2h6mci8d09k4si"))))
+     (native-inputs
+      (list perl-parse-yapp
+            pkg-config
+            python-cryptography         ;for krb5 tests
+            python-dnspython
+            python-iso8601
+            python-markdown
+            rpcsvc-proto                ;for 'rpcgen'
+            python-pyasn1               ;for krb5 tests
+            ;; For generating man pages.
+            docbook-xml-4.2
+            docbook-xsl
+            libxslt
+            libxml2)))))
 
 (define-public talloc
   (package
@@ -502,3 +522,30 @@ and IPV6 and the protocols layered above them, such as TCP and UDP.")
                    license:bsd-4
                    license:gpl2+
                    license:public-domain))))
+
+(define-public wsdd
+  (package
+    (name "wsdd")
+    (version "0.7.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference (url "https://github.com/christgau/wsdd")
+                           (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "04an2w6hamnai668ag4vq8x0i09fsg2jrayb4a7ar0x6bn837k7m"))))
+    (build-system copy-build-system)
+    (inputs
+     `(("python" ,python)))
+    (arguments
+     '(#:install-plan
+       '(("src/wsdd.py" "bin/wsdd")
+         ("man/wsdd.1" "share/man/man1/"))))
+    (home-page "https://github.com/christgau/wsdd")
+    (synopsis "Web Service Discovery host daemon")
+    (description "This daemon allows (Samba) hosts to be found by Web
+Service Dicovery Clients.  It also implements the client side of the
+discovery protocol which searches for devices implementing
+WSD.")
+    (license license:expat)))

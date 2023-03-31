@@ -56,6 +56,10 @@
 ;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2022 muradm <mail@muradm.net>
 ;;; Copyright © 2022 Elais Player <elais@fastmail.com>
+;;; Copyright © 2022 Trevor Richards <trev@trevdev.ca>
+;;; Copyright © 2022 Fredrik Salomonsson <plattfot@posteo.net>
+;;; Copyright © 2022 ( <paren@disroot.org>
+;;; Copyright © 2022 zamfofex <zamfofex@twdb.moe>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -380,6 +384,7 @@ many programming languages.")
               (uri (git-reference
                     (url "https://github.com/Airblader/i3")
                     (commit version)))
+              (file-name (git-file-name name version))
               (sha256
                (base32
                 "0g0qmv2gpv9qbhj9h5f4c4vfs6ndzq2rblgx9md85iharwp5sbb9"))))
@@ -579,7 +584,16 @@ subscribe to events.")
                   (assoc-ref inputs "pango") "/lib/libpango-1.0.so.0\")\n"))
                 (("^pangocairo = ffi.dlopen.*")
                  (string-append "pangocairo = ffi.dlopen(\""
-                  (assoc-ref inputs "pango") "/lib/libpangocairo-1.0.so.0\")\n"))))))))
+                  (assoc-ref inputs "pango") "/lib/libpangocairo-1.0.so.0\")\n")))))
+       (add-after 'install 'install-xsession
+           (lambda* (#:key outputs #:allow-other-keys)
+             (let* ((out (assoc-ref outputs "out"))
+                    (xsessions (string-append out "/share/xsessions"))
+                    (qtile (string-append out "/bin/qtile start")))
+               (mkdir-p xsessions)
+               (copy-file "resources/qtile.desktop" (string-append xsessions "/qtile.desktop"))
+               (substitute* (string-append xsessions "/qtile.desktop")
+                 (("qtile start") qtile))))))))
     (inputs
       (list glib pango pulseaudio))
     (propagated-inputs
@@ -823,14 +837,14 @@ tiled on several screens.")
 (define-public xmobar
   (package
     (name "xmobar")
-    (version "0.40")
+    (version "0.44.2")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://hackage.haskell.org/package/xmobar/"
                                   "xmobar-" version ".tar.gz"))
               (sha256
                (base32
-                "1mrdiblm8vilkm1w23pz6xbi16zh1b1lvql26czjzw5k79vd67sf"))))
+                "0gdphjn5ll5lkb2psdsb34563wsz6g0y2gg3z8cj4jy8lvbbv808"))))
     (build-system haskell-build-system)
     (native-inputs
      (list ghc-hspec hspec-discover))
@@ -1621,7 +1635,7 @@ modules for building a Wayland compositor.")
 (define-public swayidle
   (package
     (name "swayidle")
-    (version "1.7")
+    (version "1.7.1")
     (source
      (origin
        (method git-fetch)
@@ -1630,7 +1644,7 @@ modules for building a Wayland compositor.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0ziya8d5pvvxg16jhy4i04pvq11bdvj68gz5q654ar4dldil17nn"))))
+        (base32 "06iq12p4438d6bv3jlqsf01wjaxrzlnj1bnicn41kad563aq41xl"))))
     (build-system meson-build-system)
     (arguments
      `(#:configure-flags '("-Dlogind-provider=elogind")))
@@ -1644,7 +1658,7 @@ modules for building a Wayland compositor.")
 (define-public swaylock
   (package
     (name "swaylock")
-    (version "1.5")
+    (version "1.6")
     (source
      (origin
        (method git-fetch)
@@ -1653,48 +1667,39 @@ modules for building a Wayland compositor.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0r95p4w11dwm5ra614vddz83r8j7z6gd120z2vcchy7m9b0f15kf"))))
+        (base32 "1ihdvx6gdinzabvnazjmkk3ajrp7ngg0jzfwcjqn4hcjv64s0lam"))))
     (build-system meson-build-system)
     (inputs (list cairo gdk-pixbuf libxkbcommon
                   ;("linux-pam" ,linux-pam) ; FIXME: Doesn't work.
                   wayland))
-    (native-inputs (list pango pkg-config scdoc wayland-protocols))
+    (native-inputs (list pango pkg-config scdoc wayland-protocols-next))
     (home-page "https://github.com/swaywm/sway")
     (synopsis "Screen locking utility for Wayland compositors")
     (description "Swaylock is a screen locking utility for Wayland compositors.")
     (license license:expat))) ; MIT license
 
 (define-public swaylock-effects
-  ;; Latest release is from November 2020, but doesn't support disabling SSE.
-  (let ((commit "5cb9579faaf5662b111f5722311b701eff1c1d00")
-        (revision "1"))
-    (package
-      (inherit swaylock)
-      (name "swaylock-effects")
-      (version (git-version "1.6-3" revision commit))
-      (source
-       (origin
-         (method git-fetch)
-         (uri (git-reference
-               (url "https://github.com/mortie/swaylock-effects")
-               (commit commit)))
-         (file-name (git-file-name name version))
-         (sha256
-          (base32
-           "036dkhfqgk7g9vbr5pxgrs66h5fz0rwdsc67i1w51aa9v01r35ca"))))
-      (arguments
-       `(#:configure-flags '("-Dsse=false")
-         #:phases
-         (modify-phases %standard-phases
-           (add-after 'unpack 'patch-meson
-             (lambda _
-               (substitute* "meson.build"
-                 (("'-mtune=native',") "")))))))
-      (synopsis "Screen locking utility for Wayland compositors with effects")
-      (description "@code{Swaylock-effects} is a fork of swaylock with additional
+  (package
+    (inherit swaylock)
+    (name "swaylock-effects")
+    (version "1.6.10")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/jirutka/swaylock-effects")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "1d8ri7bzwfr53ybgf23acz57wyhcl2f1nqprcda1v9bzfgsqfk2n"))))
+    (arguments
+     (list #:configure-flags #~'("-Dsse=false")))
+    (synopsis "Screen locking utility for Wayland compositors with effects")
+    (description "@code{Swaylock-effects} is a fork of swaylock with additional
 features, such as the ability to take a screenshot as the background image,
 display a clock or apply image manipulation techniques to the background image.")
-      (home-page "https://github.com/mortie/swaylock-effects"))))
+    (home-page "https://github.com/jirutka/swaylock-effects")))
 
 (define-public swaybg
   (package
@@ -1720,7 +1725,7 @@ display a clock or apply image manipulation techniques to the background image."
 (define-public waybar
   (package
     (name "waybar")
-    (version "0.9.9")
+    (version "0.9.15")
     (source
      (origin
        (method git-fetch)
@@ -1729,7 +1734,7 @@ display a clock or apply image manipulation techniques to the background image."
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0bp9ygqv3kawwxf53j1r98r0xxg81cx00jsmymmlrd8psgsd6yy9"))))
+        (base32 "0mvwsd3krrlniga0fq13b0qvsf1fj22mk9nzsfgz49r55lqw8sdv"))))
     (build-system meson-build-system)
     (inputs (list date
                   fmt
@@ -1751,6 +1756,34 @@ display a clock or apply image manipulation techniques to the background image."
     (description "Waybar is a highly customisable Wayland bar for Sway and
 Wlroots based compositors.")
     (license license:expat))) ; MIT license
+
+(define-public waybar-cpu-histogram
+  (package
+    (name "waybar-cpu-histogram")
+    (version "0.4.2")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://git.sr.ht/~plattfot/waybar-cpu-histogram")
+             (commit (string-append version))))
+       (sha256
+        (base32
+         "001pyf1jdmf2478plnggd7dkfi688qwi89db2jwfp4zza3640na6"))
+       (file-name (git-file-name name version))))
+    (build-system meson-build-system)
+    (native-inputs
+     (list pkg-config))
+    (inputs
+     (list jsoncpp
+           fmt))
+    (synopsis "CPU histogram for waybar")
+    (description
+     "Custom module for waybar to show CPU usage as a histogram.  A compact way
+to see how many cores are active, compared to having a bar for each
+core/thread.")
+    (home-page "https://github.com/plattfot/cpu-histogram/")
+    (license license:expat)))
 
 (define-public wlr-randr
   (package
@@ -1777,17 +1810,32 @@ Wlroots based compositors.")
   (package
     (name "mako")
     (version "1.7.1")
-    (source
-     (origin
-       (method git-fetch)
-       (uri (git-reference
-             (url "https://github.com/emersion/mako")
-             (commit (string-append "v" version))))
-       (file-name (git-file-name name version))
-       (sha256
-        (base32 "0vpar1a7zafkd2plmyaackgba6fyg35s9zzyxmj8j7v2q5zxirgz"))))
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/emersion/mako")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0vpar1a7zafkd2plmyaackgba6fyg35s9zzyxmj8j7v2q5zxirgz"))))
     (build-system meson-build-system)
-    (inputs (list basu cairo gdk-pixbuf pango wayland))
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'patch-makoctl
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (substitute* "makoctl"
+                     (("^BUSCTL=.*$")
+                      (string-append
+                       "BUSCTL="
+                       (search-input-file inputs "bin/basuctl")
+                       "\n"))
+                     (("jq ")
+                      (string-append
+                       (search-input-file inputs "bin/jq")
+                       " "))))))))
+    (inputs (list basu cairo gdk-pixbuf jq pango wayland))
     (native-inputs (list pkg-config scdoc wayland-protocols))
     (home-page "https://wayland.emersion.fr/mako")
     (synopsis "Lightweight Wayland notification daemon")
@@ -1798,7 +1846,7 @@ compositors that support the layer-shell protocol.")
 (define-public kanshi
   (package
     (name "kanshi")
-    (version "1.2.0")
+    (version "1.3.0")
     (source
      (origin
        (method git-fetch)
@@ -1807,7 +1855,7 @@ compositors that support the layer-shell protocol.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "10lxagwc2pkq86g2sxkwljjd39sahp3w1j5yx853d3c4d95iwls5"))))
+        (base32 "0sa8k74d24ijw6ml1yyy75dk763r2sbm7fgk033g5xnx28kd394j"))))
     (build-system meson-build-system)
     (inputs (list wayland))
     (native-inputs (list pkg-config scdoc))
@@ -1819,79 +1867,84 @@ Wayland compositors supporting the wlr-output-management protocol.")
     (license license:expat))) ; MIT license
 
 (define-public stumpwm
-  (package
-    (name "stumpwm")
-    (version "22.05")
-    (source
-     (origin
-       (method git-fetch)
-       (uri (git-reference
-             (url "https://github.com/stumpwm/stumpwm")
-             (commit version)))
-       (file-name (git-file-name "stumpwm" version))
-       (sha256
-        (base32 "12hf70mpwy0ixiyvv8sf8pkwrzz8nb12a8ybvsdpibsxfjxgxnan"))))
-    (build-system asdf-build-system/sbcl)
-    (native-inputs
-     (list sbcl-fiasco
-           texinfo
+  ;; Some fixes to make stumpwm work with sbcl>=2.2.7 are not in a release
+  ;; yet, so we use a commit directly.
+  (let ((commit "ff6cb73f48f0df4285948f1009ef3b285c78b351")
+        (revision "1"))
+    (package
+      (name "stumpwm")
+      (version (git-version "22.05" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://github.com/stumpwm/stumpwm")
+               (commit commit)))
+         (file-name (git-file-name "stumpwm" version))
+         (sha256
+          (base32 "0gvr136fv5zs61017gns3kbkz00837n0b52fif9vany5fslx3aj2"))))
+      (build-system asdf-build-system/sbcl)
+      (native-inputs
+       (list sbcl-fiasco
+             texinfo
 
-           ;; To build the manual.
-           autoconf
-           automake))
-    (inputs
-     (list sbcl-alexandria
-           sbcl-cl-ppcre
-           sbcl-clx))
-    (outputs '("out" "lib"))
-    (arguments
-     (list
-      #:phases
-      #~(modify-phases %standard-phases
-          (add-after 'unpack 'fix-tests
-            (lambda _
-              (substitute* "stumpwm-tests.asd"
-                (("\"ALL-TESTS\"")
-                 "\"RUN-PACKAGE-TESTS\" :package"))))
-          (add-after 'create-asdf-configuration 'build-program
-            (lambda* (#:key outputs #:allow-other-keys)
-              (build-program
-               (string-append (assoc-ref outputs "out") "/bin/stumpwm")
-               outputs
-               #:entry-program '((stumpwm:stumpwm) 0))))
-          (add-after 'build-program 'create-desktop-file
-            (lambda* (#:key outputs #:allow-other-keys)
-              (let* ((out (assoc-ref outputs "out"))
-                     (xsessions (string-append out "/share/xsessions")))
-                (mkdir-p xsessions)
-                (call-with-output-file
-                    (string-append xsessions "/stumpwm.desktop")
-                  (lambda (file)
-                    (format file
-                     "[Desktop Entry]~@
-                      Name=stumpwm~@
-                      Comment=The Stump Window Manager~@
-                      Exec=~a/bin/stumpwm~@
-                      TryExec=~@*~a/bin/stumpwm~@
-                      Icon=~@
-                      Type=Application~%"
-                     out))))))
-          (add-after 'install 'install-manual
-            (lambda* (#:key (make-flags '()) outputs #:allow-other-keys)
-              (let* ((out  (assoc-ref outputs "out"))
-                     (info (string-append out "/share/info")))
-                (invoke "./autogen.sh")
-                (invoke "sh" "./configure" "SHELL=sh")
-                (apply invoke "make" "stumpwm.info" make-flags)
-                (install-file "stumpwm.info" info)))))))
-    (synopsis "Window manager written in Common Lisp")
-    (description "Stumpwm is a window manager written entirely in Common Lisp.
+             ;; To build the manual.
+             autoconf
+             automake))
+      (inputs
+       (list sbcl-alexandria
+             sbcl-cl-ppcre
+             sbcl-clx))
+      (outputs '("out" "lib"))
+      (arguments
+       (list
+        #:phases
+        #~(modify-phases %standard-phases
+            (add-after 'unpack 'fix-tests
+              (lambda _
+                (substitute* "stumpwm-tests.asd"
+                  (("\"ALL-TESTS\"")
+                   "\"RUN-PACKAGE-TESTS\" :package"))))
+            (add-after 'create-asdf-configuration 'build-program
+              (lambda* (#:key outputs #:allow-other-keys)
+                (build-program
+                 (string-append (assoc-ref outputs "out") "/bin/stumpwm")
+                 outputs
+                 #:entry-program '((stumpwm:stumpwm) 0))))
+            (add-after 'build-program 'create-desktop-file
+              (lambda* (#:key outputs #:allow-other-keys)
+                (let* ((out (assoc-ref outputs "out"))
+                       (xsessions (string-append out "/share/xsessions")))
+                  (mkdir-p xsessions)
+                  (call-with-output-file
+                      (string-append xsessions "/stumpwm.desktop")
+                    (lambda (file)
+                      (format file
+                       "[Desktop Entry]~@
+                        Name=stumpwm~@
+                        Comment=The Stump Window Manager~@
+                        Exec=~a/bin/stumpwm~@
+                        TryExec=~@*~a/bin/stumpwm~@
+                        Icon=~@
+                        Type=Application~%"
+                       out))))))
+            (add-after 'install 'install-manual
+              (lambda* (#:key (make-flags '()) outputs #:allow-other-keys)
+                (let* ((out  (assoc-ref outputs "out"))
+                       (info (string-append out "/share/info")))
+                  (invoke "./autogen.sh")
+                  (invoke "sh" "./configure" "SHELL=sh")
+                  (apply invoke "make" "stumpwm.info" make-flags)
+                  (install-file "stumpwm.info" info)))))))
+      (synopsis "Window manager written in Common Lisp")
+      (description
+       "Stumpwm is a window manager written entirely in Common Lisp.
 It attempts to be highly customizable while relying entirely on the keyboard
 for input.  These design decisions reflect the growing popularity of
 productive, customizable lisp based systems.")
-    (home-page "https://github.com/stumpwm/stumpwm")
-    (license license:gpl2+)
-    (properties `((cl-source-variant . ,(delay cl-stumpwm))))))
+      (home-page "https://github.com/stumpwm/stumpwm")
+      (license license:gpl2+)
+      (properties `((cl-source-variant . ,(delay cl-stumpwm)))))))
 
 (define-public sbcl-stumpwm
   (deprecated-package "sbcl-stumpwm" stumpwm))
@@ -1976,6 +2029,41 @@ productive, customizable lisp based systems.")
     (synopsis "StumpWM interactive shell")
     (description "This package provides a StumpWM interactive shell.")
     (license (list license:gpl2+ license:gpl3+ license:bsd-2))))
+
+(define-public sbcl-stumpwm-pamixer
+  (let ((commit "aa820533c80ea1af5a0e107cea25eaf34e69dc24")
+        (revision "1"))
+    (package
+      (name "sbcl-stumpwm-pamixer")
+      (version (git-version "0.1.1" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/Junker/stumpwm-pamixer")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0djcrr16bx40l7b60d4j507vk5l42fdgmjpgrnk86z1ba8wlqim8"))))
+      (inputs (list pamixer `(,stumpwm "lib")))
+      (build-system asdf-build-system/sbcl)
+      (arguments
+       (list #:asd-systems ''("pamixer")
+             #:phases
+             #~(modify-phases %standard-phases
+                 (add-after 'unpack 'patch-pamixer
+                   (lambda _
+                     (substitute* "pamixer.lisp"
+                       (("\"pamixer \"")
+                        (string-append "\""
+                                       #$(this-package-input "pamixer")
+                                       "/bin/pamixer \""))))))))
+      (home-page "https://github.com/Junker/stumpwm-pamixer")
+      (synopsis "StumpWM Pamixer Module")
+      (description
+       "This package provides a minimalistic Pulseaudio volume and microphone
+control module for StumpWM.")
+      (license license:gpl3))))
 
 (define-public sbcl-stumpwm+slynk
   (deprecated-package "sbcl-stumpwm-with-slynk" stumpwm+slynk))
@@ -2245,6 +2333,29 @@ one in Emacs.")
     (synopsis "Screenshots for StumpWM")
     (description "This StumpWM module can take screenshots and store them as
 PNG files.")
+    (license license:gpl3+)))
+
+(define-public sbcl-stumpwm-notify
+  (package
+    (inherit stumpwm-contrib)
+    (name "sbcl-stumpwm-notify")
+    (build-system asdf-build-system/sbcl)
+    (inputs
+     (list sbcl-bordeaux-threads
+           sbcl-dbus
+           sbcl-xml-emitter
+           (list stumpwm "lib")))
+    (arguments
+     '(#:asd-systems '("notify")
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'chdir
+           (lambda _ (chdir "util/notify"))))))
+    (home-page "https://github.com/stumpwm/stumpwm-contrib")
+    (synopsis "Notifications server for StumpWM")
+    (description "This module implements org.freedesktop.Notifications
+interface[fn:dbus-spec].  It shows notifications using stumpwm:message
+by default.")
     (license license:gpl3+)))
 
 (define-public lemonbar
@@ -2776,7 +2887,7 @@ Type=Application~%"
 (define-public avizo
   (package
     (name "avizo")
-    (version "1.2")
+    (version "1.2.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -2785,7 +2896,7 @@ Type=Application~%"
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "02h2jbgrbl2hyq6bzwryc1r47mipgdqrdh7zi44skc25w045s6q5"))))
+                "0ddv5ssxfjbzhqskbbhi9qj1yqkraiv3r8svfmp9s5nnfpid8aba"))))
     (build-system meson-build-system)
     (inputs (list gtk+))
     (native-inputs
@@ -2843,3 +2954,36 @@ used for multimedia keys.")
 an interface over @code{grim}, @code{slurp} and @code{jq}, and supports storing
 the screenshot either directly to the clipboard using @code{wl-copy} or to a
 file.")))
+
+(define-public wld
+  (let ((commit "6586736176ef50a88025abae835e29a7ca980126")
+        (revision "1"))
+    (package
+      (name "wld")
+      (version (git-version "0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/michaelforney/wld")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0qkd3q8p1s72x688g83fkcarrz2h20904rpd8z44ql6ksgrj9bp3"))))
+      (build-system gnu-build-system)
+      (arguments
+       `(#:tests? #f                              ; no tests
+         #:make-flags (list (string-append "CC=" ,(cc-for-target))
+                            (string-append "PREFIX=" %output))
+         #:phases (modify-phases %standard-phases
+                    (delete 'configure))))
+      (inputs (list fontconfig
+                    libdrm
+                    pixman
+                    wayland))
+      (propagated-inputs (list fontconfig pixman))
+      (native-inputs (list pkg-config))
+      (home-page "https://github.com/michaelforney/wld")
+      (synopsis "Primitive drawing library for Wayland")
+      (description "wld is a drawing library that targets Wayland.")
+      (license license:expat))))

@@ -89,7 +89,7 @@
 (define-public libxmlb
   (package
     (name "libxmlb")
-    (version "0.3.8")
+    (version "0.3.9")
     (source
      (origin
        (method git-fetch)
@@ -99,9 +99,7 @@
          (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0znz2y1ig2kvlda44a3kxa8x7f222nbg50rjz6nlngzka0ccsgxx"))
-       ;; Drop xb-tool patch after libxmlb 0.3.8, merged upstream
-       (patches (search-patches "libxmlb-install-xb-tool-into-bindir.patch"))))
+        (base32 "1n6ffza134sj9ck9nbngdhq8kvbsk5mvjqki3ph4xc283b1ywr71"))))
     (build-system meson-build-system)
     (arguments
      `(#:glib-or-gtk? #t))
@@ -161,7 +159,7 @@ things the parser might find in the XML document (like start tags).")
 (define expat/fixed
   (package
     (inherit expat)
-    (version "2.4.7")
+    (version "2.4.9")
     (source (let ((dot->underscore (lambda (c) (if (char=? #\. c) #\_ c))))
               (origin
                 (method url-fetch)
@@ -173,19 +171,19 @@ things the parser might find in the XML document (like start tags).")
                             "/expat-" version ".tar.xz")))
                 (sha256
                  (base32
-                  "0zbss0dssn17mjmvk17qfi5cmvm0lcyzs62cwvqr219hhl864xcq")))))))
+                  "0m03zh7al39mx4rf0s2bgdn77r658qqf9k3a7bwx6z2wzql0g33f")))))))
 
 (define-public libebml
   (package
     (name "libebml")
-    (version "1.4.2")
+    (version "1.4.4")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://dl.matroska.org/downloads/libebml/"
                            "libebml-" version ".tar.xz"))
        (sha256
-        (base32 "1wmri5c94b02q2z32bqlpfs4vbw0n0c602321wigna2qw1y27is1"))))
+        (base32 "19w74q2makq4qz1cjsrlbzglwfhb4497bvbnxq539jbc6n1mzp42"))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags
@@ -1069,14 +1067,14 @@ the form of functions.")
 (define-public pugixml
   (package
     (name "pugixml")
-    (version "1.11")
+    (version "1.12.1")
     (source
      (origin
       (method url-fetch)
       (uri (string-append "https://github.com/zeux/pugixml/releases/download/v"
                           version "/pugixml-" version ".tar.gz"))
       (sha256
-       (base32 "0b5apqiisq8yk51x0cwks4h2m0zd2zgjdy0w80qp9h5rccz3v496"))))
+       (base32 "1ixg6fpr7vhkg9bn2g2qmmwpy974z7nx7zq81whm2h6c36lp3xnw"))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags '("-DBUILD_SHARED_LIBS=ON")
@@ -1155,14 +1153,14 @@ XSL-T processor.  It also performs any necessary post-processing.")
 (define-public xmlsec
   (package
     (name "xmlsec")
-    (version "1.2.32")
+    (version "1.2.36")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://www.aleksey.com/xmlsec/download/"
                                   "xmlsec1-" version ".tar.gz"))
               (sha256
                (base32
-                "0hy0nwz57n9r5wwab9xa66gzwlwvzs54nhlfn3jh8q13acl710z3"))))
+                "100wsklff8x30rsg0xp191kg8p3z5va2d0q3iy08a791ic07xngh"))))
     (build-system gnu-build-system)
     (propagated-inputs                  ; according to xmlsec1.pc
      (list libxml2 libxslt))
@@ -1177,6 +1175,8 @@ XSL-T processor.  It also performs any necessary post-processing.")
 supports XML security standards such as XML Signature, XML Encryption,
 Canonical XML (part of Libxml2) and Exclusive Canonical XML (part of
 Libxml2).")
+    (properties
+     '((upstream-name . "xmlsec1")))
     (license (license:x11-style "file://COPYING"
                                 "See 'COPYING' in the distribution."))))
 
@@ -1184,12 +1184,10 @@ Libxml2).")
   (package/inherit xmlsec
     (name "xmlsec-nss")
     (native-inputs
-     ;; For tests.
-     `(("nss:bin" ,nss "bin")           ; for certutil
-       ,@(package-native-inputs xmlsec)))
+     (modify-inputs (package-native-inputs xmlsec)
+       (prepend `(,nss "bin"))))        ;certutil, for tests
     (inputs
-     `(("nss" ,nss)
-       ("libltdl" ,libltdl)))
+     (list nss libltdl))
     (arguments
      ;; NSS no longer supports MD5 since 3.59, don't attempt to use it.
      '(#:configure-flags '("--disable-md5")))
@@ -1199,14 +1197,13 @@ Libxml2).")
   (package/inherit xmlsec
     (name "xmlsec-openssl")
     (inputs
-     `(("openssl" ,openssl)
-       ("libltdl" ,libltdl)))
+     (list openssl libltdl))
     (synopsis "XML Security Library (using OpenSSL instead of GnuTLS)")))
 
 (define-public minixml
   (package
     (name "minixml")
-    (version "3.3")
+    (version "3.3.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://github.com/michaelrsweet/mxml/"
@@ -1214,13 +1211,13 @@ Libxml2).")
                                   "/mxml-" version ".tar.gz"))
               (sha256
                (base32
-                "1n1xzvhnsjsgsqaq1rg9zilwf0b2rydsadbxzy64z3lydwv7dybw"))))
+                "0cncvb0xhbq2i7rszj6pmcs3b97f0a17j081z0cmcfrrzv8kwrhc"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:configure-flags
-       (list (string-append "LDFLAGS=-Wl,-rpath="
-                            (assoc-ref %outputs "out") "/lib"))
-       #:tests? #f))                    ; tests are run during build
+     (list
+      #:configure-flags
+      #~(list (string-append "LDFLAGS=-Wl,-rpath=" #$output "/lib"))
+      #:tests? #f))                    ; tests are run during build
     (home-page "https://www.msweet.org/mxml/")
     (synopsis "Small XML parsing library")
     (description
@@ -1519,7 +1516,7 @@ SAX2 APIs.")
 (define-public xlsxio
   (package
     (name "xlsxio")
-    (version "0.2.29")
+    (version "0.2.33")
     (source
      (origin
        (method git-fetch)
@@ -1528,20 +1525,18 @@ SAX2 APIs.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0jr6ggzhd8aakdvppcl8scy9j9jafg82zbzr4ih996sz8lrj90fn"))))
+        (base32 "16i3yd168kb63za7jpycpb2by4831gz7wi90vzifdf85csc8c70s"))))
     (native-inputs
      (list expat gnu-make minizip which))
     (build-system gnu-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (delete 'configure)
-         (delete 'check)
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (invoke "make" "install"
-                     (string-append
-                      "PREFIX=" (assoc-ref outputs "out"))))))))
+     (list
+      #:make-flags
+      #~(list (string-append "PREFIX=" #$output))
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)
+          (delete 'check))))
     (synopsis "C library for reading and writing .xlsx files")
     (description "XLSX I/O aims to provide a C library for reading and writing
 .xlsx files.  The .xlsx file format is the native format used by Microsoft(R)

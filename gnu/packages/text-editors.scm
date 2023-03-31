@@ -1,12 +1,12 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2016 José Miguel Sánchez García <jmi2k@openmailbox.org>
 ;;; Copyright © 2016 Carlo Zancanaro <carlo@zancanaro.id.au>
-;;; Copyright © 2017, 2018, 2020 Eric Bavier <bavier@posteo.net>
+;;; Copyright © 2017, 2018, 2020, 2022 Eric Bavier <bavier@posteo.net>
 ;;; Copyright © 2017 Feng Shu <tumashu@163.com>
 ;;; Copyright © 2017 Nikita <nikita@n0.is>
 ;;; Copyright © 2014 Taylan Ulrich Bayırlı/Kammer <taylanbayirli@gmail.org>
 ;;; Copyright © 2017–2021 Tobias Geerinckx-Rice <me@tobias.gr>
-;;; Copyright © 2019 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2019, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2019 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2019, 2020, 2021, 2022 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2020-2022 Marius Bakke <marius@gnu.org>
@@ -19,6 +19,8 @@
 ;;; Copyright © 2021 Calum Irwin <calumirwin1@gmail.com>
 ;;; Copyright © 2022 Luis Henrique Gomes Higino <luishenriquegh2701@gmail.com>
 ;;; Copyright © 2022 Foo Chuan Wei <chuanwei.foo@hotmail.com>
+;;; Copyright © 2022 zamfofex <zamfofex@twdb.moe>
+;;; Copyright © 2022 jgart <jgart@dismail.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -45,7 +47,9 @@
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system glib-or-gtk)
+  #:use-module (guix build-system meson)
   #:use-module (guix build-system python)
+  #:use-module (guix build-system qt)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (gnu packages)
   #:use-module (gnu packages aspell)
@@ -56,12 +60,15 @@
   #:use-module (gnu packages code)
   #:use-module (gnu packages cpp)
   #:use-module (gnu packages crates-io)
+  #:use-module (gnu packages curl)
   #:use-module (gnu packages datastructures)
   #:use-module (gnu packages documentation)
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages glib)
+  #:use-module (gnu packages graphics)
+  #:use-module (gnu packages gnome)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages guile)
   #:use-module (gnu packages haskell-xyz)
@@ -81,6 +88,7 @@
   #:use-module (gnu packages qt)
   #:use-module (gnu packages regex)
   #:use-module (gnu packages ruby)
+  #:use-module (gnu packages sdl)
   #:use-module (gnu packages sqlite)
   #:use-module (gnu packages terminals)
   #:use-module (gnu packages texinfo)
@@ -91,7 +99,7 @@
 (define-public vis
   (package
     (name "vis")
-    (version "0.7")                     ; also update the vis-test input
+    (version "0.8")                     ; also update the vis-test input
     (source
      (origin
        (method git-fetch)
@@ -99,7 +107,7 @@
              (url "https://git.sr.ht/~martanne/vis")
              (commit (string-append "v" version))))
        (sha256
-        (base32 "1g05ncsnk57kcqm9wsv6sz8b24kyzj8r5rfpa1wfwj8qkjzx3vji"))
+        (base32 "0ija192c9i13gbikm707jynf6my212i040ls0f8pgkbiyvls7xay"))
        (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     (arguments
@@ -134,14 +142,8 @@
                (substitute* "test/core/ccan-config.c"
                  (("\"cc\"")
                   (format #f "\"~a\"" ,(cc-for-target))))
-
                ;; Use the ‘vis’ executable that we wrapped above.
-               (install-file (string-append out "/bin/vis") ".")
-
-               ;; XXX Delete 2 failing tests.  TODO: make them not fail. :-)
-               (for-each delete-file
-                         (find-files "test/vis/selections" "^complement"))
-               #t))))))
+               (install-file (string-append out "/bin/vis") ".")))))))
     (native-inputs
      `(("vis-test"
         ,(origin
@@ -494,7 +496,7 @@ Wordstar-, EMACS-, Pico, Nedit or vi-like key bindings.  e3 can be used on
 (define-public mg
   (package
     (name "mg")
-    (version "20210609")
+    (version "20221112")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -503,7 +505,7 @@ Wordstar-, EMACS-, Pico, Nedit or vi-like key bindings.  e3 can be used on
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "04c2vqxg31mk15cfrhzrivykis8fmf0m1d8h1qdjdmlfxd4qwaqf"))
+                "1wsib91f277xsx3qi8zmjcd9r9cm078rcf8hii0rwipyn04vxy83"))
               (modules '((guix build utils)))
               (snippet '(begin
                           (substitute* "GNUmakefile"
@@ -651,7 +653,7 @@ scripts/input/X11/C/Shell/HTML/Dired): 49KB.
 (define-public ghostwriter
   (package
     (name "ghostwriter")
-    (version "2.0.2")
+    (version "2.1.4")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -660,7 +662,7 @@ scripts/input/X11/C/Shell/HTML/Dired): 49KB.
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "19cf55b86yj2b5hdazbyw4iyp6xq155243aiyg4m0vhwh0h79nwh"))))
+                "1w8a6vkhmdbp4kzb7aprvfni9ny47dj0vigbcnsh539dn3sp1gan"))))
     (build-system gnu-build-system)
     (native-inputs
      (list pkg-config qttools-5))       ; for lrelease
@@ -675,27 +677,26 @@ scripts/input/X11/C/Shell/HTML/Dired): 49KB.
     (propagated-inputs                  ; To get native-search-path
      (list qtwebengine-5))
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (replace 'configure
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (invoke "qmake" (string-append "PREFIX=" out)))))
-         (add-after 'configure 'create-translations
-           (lambda _
-             ;; `lrelease` will not overwrite, so delete existing .qm files
-             (for-each delete-file (find-files "translations" ".*\\.qm"))
-             (apply invoke "lrelease" (find-files "translations" ".*\\.ts"))))
-         ;; Ensure that icons are found at runtime.
-         (add-after 'install 'wrap-executable
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (wrap-program (string-append out "/bin/ghostwriter")
-                 `("QT_PLUGIN_PATH" ":" prefix
-                   ,(map (lambda (label)
-                           (string-append (assoc-ref inputs label)
-                                          "/lib/qt5/plugins/"))
-                         '("qtsvg-5" "qtmultimedia-5"))))))))))
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'configure
+            (lambda* (#:key outputs #:allow-other-keys)
+              (invoke "qmake" (string-append "PREFIX=" #$output))))
+          (add-after 'configure 'create-translations
+            (lambda _
+              ;; `lrelease` will not overwrite, so delete existing .qm files
+              (for-each delete-file (find-files "translations" ".*\\.qm"))
+              (apply invoke "lrelease" (find-files "translations" ".*\\.ts"))))
+          ;; Ensure that icons are found at runtime.
+          (add-after 'install 'wrap-executable
+            (lambda* (#:key inputs outputs #:allow-other-keys)
+              (wrap-program (string-append #$output "/bin/ghostwriter")
+                `("QT_PLUGIN_PATH" ":" prefix
+                  #$(map (lambda (label)
+                           (file-append (this-package-input label)
+                                        "/lib/qt5/plugins"))
+                         '("qtsvg" "qtmultimedia")))))))))
     (home-page "https://wereturtle.github.io/ghostwriter/")
     (synopsis "Write without distractions")
     (description
@@ -873,19 +874,19 @@ editors.")
            qtsvg-5
            sqlite))
     (arguments
-     `(#:tests? #f                      ; no check target
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'fix-icon-directory
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out")))
-               (substitute* "packages/linux/icons.sh"
-                 (("/usr/share")
-                  (string-append out "/share"))))))
-         (add-before 'configure 'gzip-flags
-           (lambda _
-             (substitute* "Makefile.in"
-               (("^GZIP = gzip -f") "GZIP = gzip -f -n")))))))
+     (list
+      #:tests? #f                       ; no check target
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'fix-icon-directory
+            (lambda _
+              (substitute* "packages/linux/icons.sh"
+                (("/usr/share")
+                 (string-append #$output "/share")))))
+          (add-before 'configure 'gzip-flags
+            (lambda _
+              (substitute* "Makefile.in"
+                (("^GZIP = gzip -f") "GZIP = gzip -f -n")))))))
     (synopsis "Editing platform with special features for scientists")
     (description
      "GNU TeXmacs is a text editing platform which is specialized for
@@ -896,17 +897,108 @@ Octave.  TeXmacs is completely extensible via Guile.")
     (license license:gpl3+)
     (home-page "https://www.texmacs.org/tmweb/home/welcome.en.html")))
 
+(define-public mogan
+  (package
+    (inherit texmacs)
+    (name "mogan")
+    (version "1.1.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/XmacsLabs/mogan")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "04wz6xmimjv2l6baxgzm8vyq5grg102m3l4wq8i6bglv529yp4ff"))))
+    (build-system qt-build-system)
+    (inputs
+     (modify-inputs (package-inputs texmacs)
+       ;; Replaced by S7 scheme
+       ;; TODO: Maybe unbundle S7
+       (delete "guile")
+       (prepend curl)))
+    (arguments
+     (substitute-keyword-arguments (package-arguments texmacs)
+       ((#:phases orig)
+        #~(modify-phases #$orig
+            ;; The non-deterministic compression issue is solved in Mogan.
+            (delete 'gzip-flags)))))
+    (home-page "https://github.com/XmacsLabs/mogan")
+    (synopsis "Scientific structural text editor")
+    (description
+     "Mogan is a scientific structural text editor, a fork of GNU TeXmacs.")
+    (license license:gpl3+)))
+
+(define-public textpieces
+  (package
+    (name "textpieces")
+    (version "3.2.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/liferooter/textpieces")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "14zq2c7js80m4cq8wpdb3kyz5sw96l8znbz027w8s94gqhm632ff"))))
+    (arguments
+     '(;; The test suite fails to validate appstream file due to lack of
+       ;; network access
+       #:tests? #f
+       #:glib-or-gtk? #t))
+    (build-system meson-build-system)
+    (native-inputs
+     (list appstream-glib
+           blueprint-compiler
+           desktop-file-utils
+           gettext-minimal
+           `(,glib "bin")
+           `(,gtk "bin")
+           pkg-config
+           vala))
+    (inputs
+     (list gtk
+           gtksourceview
+           json-glib
+           libadwaita
+           libgee
+           python
+           python-pygobject
+           python-pyyaml))
+    (home-page "https://github.com/liferooter/textpieces")
+    (synopsis "Quick text processor")
+    (description
+     "Text Pieces is a tool for quick text transformations such as checksums,
+encoding, decoding, etc.
+
+The basic features of Text Pieces are:
+@itemize
+@item Base64 encoding and decoding
+@item SHA-1, SHA-2 and MD5 checksums
+@item Prettify and minify JSON
+@item Covert JSON to YAML and vice versa
+@item Count lines, symbols and words
+@item Escape and unescape string, URL and HTML
+@item Remove leading and trailing whitespaces
+@item Sort and reverse sort lines
+@item Reverse lines and whole text
+@item You can write your own scripts and create custom tools
+@end itemize")
+    (license license:gpl3)))
+
 (define-public scintilla
   (package
     (name "scintilla")
-    (version "5.2.4")
+    (version "5.3.1")
     (source
      (origin
        (method url-fetch)
        (uri (let ((v (apply string-append (string-split version #\.))))
               (string-append "https://www.scintilla.org/scintilla" v ".tgz")))
        (sha256
-        (base32 "0rncbac9r9ahkxgmv7faj4dms4wy0ik2axmb0lp1ffx4r6419vsa"))))
+        (base32 "13xh55qv8lqbnba4x0zhd3vp8flhs2vn4i8r79p7ix9yqimvamqg"))))
     (build-system gnu-build-system)
     (arguments
      (list
@@ -1074,7 +1166,8 @@ card.  It offers:
     (arguments
      `(#:tests? #f
        #:make-flags
-       (list "CC=gcc"
+       (list "STRIP=true"               ; don't
+             (string-append "CC=" ,(cc-for-target))
              (string-append "PREFIX=" (assoc-ref %outputs "out"))
              (string-append "LDFLAGS=-L" (assoc-ref %build-inputs "ncurses")
                             "/lib"))
@@ -1261,3 +1354,39 @@ scriptable rc file, macros, search and replace (PCRE), window
 splitting, multiple cursors, and integration with various shell
 commands.")
     (license license:asl2.0)))
+
+(define-public lite-xl
+  (package
+    (name "lite-xl")
+    (version "2.0.5")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/lite-xl/lite-xl")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0l2i9mvbkc4kqkwk2p17zd1rlm5v41acdyp2xivi53p2hkj4x6pf"))
+              (modules '((guix build utils)))
+              (snippet '(substitute* "meson.build"
+                          (("dependency\\('lua5\\.2',")
+                           "dependency('lua-5.2',")))))
+    (build-system meson-build-system)
+    (inputs (list agg
+                  freetype
+                  lua-5.2
+                  pcre2
+                  reproc
+                  sdl2))
+    (native-inputs (list pkg-config))
+    (home-page "https://lite-xl.com")
+    (synopsis "Lightweight text editor written in Lua")
+    (description
+     "Lite XL is derived from lite.  It is a lightweight text editor written
+mostly in Lua.  It aims to provide something practical, pretty, small and fast
+easy to modify and extend, or to use without doing either.
+
+The aim of Lite XL compared to lite is to be more user-friendly, improve the
+quality of font rendering, and reduce CPU usage.")
+    (license license:expat)))

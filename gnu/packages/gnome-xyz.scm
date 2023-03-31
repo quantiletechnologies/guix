@@ -55,6 +55,7 @@
   #:use-module (gnu packages bash)
   #:use-module (gnu packages build-tools)
   #:use-module (gnu packages check)
+  #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gnome)
@@ -69,7 +70,8 @@
   #:use-module (gnu packages tls)
   #:use-module (gnu packages ruby)
   #:use-module (gnu packages web)
-  #:use-module (gnu packages xml))
+  #:use-module (gnu packages xml)
+  #:use-module (gnu packages xorg))
 
 (define-public arc-icon-theme
   (package
@@ -303,6 +305,97 @@ and products.  Plots is designed to integrate well with the GNOME desktop and
 takes advantage of modern hardware using OpenGL.")
     (license license:gpl3+)))
 
+(define-public portfolio
+  (package
+    (name "portfolio")
+    (version "0.9.14")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/tchx84/Portfolio")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0h09v8lhz3kv6qmwjhx3gr7rp6ccfhrzm54gjnaixl4dcg9zddls"))))
+    (arguments
+     (list #:glib-or-gtk? #t
+           #:imported-modules `(,@%meson-build-system-modules
+                                (guix build python-build-system))
+           #:modules '((guix build meson-build-system)
+                       ((guix build python-build-system)
+                        #:prefix python:)
+                       (guix build utils))
+           #:phases #~(modify-phases %standard-phases
+                        (add-after 'install 'rename-executable
+                          (lambda _
+                            (with-directory-excursion (string-append #$output
+                                                                     "/bin")
+                              (symlink "dev.tchx84.Portfolio" "portfolio"))))
+                        (add-after 'glib-or-gtk-wrap 'python-and-gi-wrap
+                          (lambda* (#:key inputs outputs #:allow-other-keys)
+                            (wrap-program (search-input-file outputs
+                                                             "bin/dev.tchx84.Portfolio")
+                              `("GUIX_PYTHONPATH" =
+                                (,(getenv "GUIX_PYTHONPATH") ,(python:site-packages
+                                                               inputs
+                                                               outputs)))
+                              `("GI_TYPELIB_PATH" =
+                                (,(getenv "GI_TYPELIB_PATH")))))))))
+    (build-system meson-build-system)
+    (inputs (list bash-minimal python-pygobject gtk+ libhandy))
+    (native-inputs
+     (list desktop-file-utils
+           gettext-minimal
+           `(,glib "bin")
+           `(,gtk+ "bin")
+           python))
+    (home-page "https://github.com/tchx84/Portfolio")
+    (synopsis "Minimalist file manager for Linux mobile devices")
+    (description
+     "Portfolio is a minimalist file manager for those who want to use Linux
+mobile devices.  Tap to activate and long press to select, to browse, open,
+copy, move, delete, or edit your files.")
+    (license license:gpl3+)))
+
+(define-public gnome-shell-extension-unite-shell
+  (package
+    (name "gnome-shell-extension-unite-shell")
+    (version "65")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/hardpixel/unite-shell")
+                    (commit "127edac6396b89cdedec003bdff38820e6a0f91f")))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1lzhf7hlvzg62nxjfpv265315qibcjz5dv08dzpfckf2dx68nab4"))))
+    (build-system copy-build-system)
+    (native-inputs (list `(,glib "bin") gettext-minimal))
+    (inputs (list xprop))
+    (arguments
+     (list #:install-plan ''(("./unite@hardpixel.eu"
+                              "share/gnome-shell/extensions/unite@hardpixel.eu"))
+           #:phases #~(modify-phases %standard-phases
+                        (add-after 'unpack 'patch-xprop-bin
+                          (lambda _
+                            (substitute* "unite@hardpixel.eu/window.js"
+                              (("xprop")
+                               (string-append #$(this-package-input "xprop")
+                                              "/bin/xprop")))))
+                        (add-before 'install 'compile-schemas
+                          (lambda _
+                            (with-directory-excursion "unite@hardpixel.eu/schemas"
+                              (invoke "glib-compile-schemas" ".")))))))
+    (home-page "https://github.com/hardpixel/unite-shell")
+    (synopsis "Top panel and window decoration extension for GNOME Shell")
+    (description
+     "Unite is a GNOME Shell extension which makes a few layout
+tweaks to the top panel and removes window decorations to make it look like
+Ubuntu Unity Shell.")
+    (license license:gpl3)))
+
 (define-public gnome-shell-extension-appindicator
   (package
     (name "gnome-shell-extension-appindicator")
@@ -330,7 +423,7 @@ GNOME Shell.")
 (define-public gnome-shell-extension-clipboard-indicator
   (package
     (name "gnome-shell-extension-clipboard-indicator")
-    (version "39")
+    (version "42")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -342,7 +435,7 @@ GNOME Shell.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1kq6bzxki7lwmw690f4qml8pvfwafpqpsfnq2kyjhrp8nh39axwi"))
+                "0wf2k33pbwjdf8i4y3aw32fgvjbh751qh7504lwhnl02rcq5dc88"))
               (modules '((guix build utils)))
               (snippet
                ;; Remove pre-compiled settings schemas and translations from
@@ -449,7 +542,7 @@ easier to keep track of applications running in the background.")
 (define-public gnome-shell-extension-dash-to-dock
   (package
     (name "gnome-shell-extension-dash-to-dock")
-    (version "71")
+    (version "73")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -458,7 +551,7 @@ easier to keep track of applications running in the background.")
                                            version))))
               (sha256
                (base32
-                "12b6ljzs5071zs0kcf5yj4jfhq10b1gnldv0hmbksnqzz5g719wf"))
+                "1l0isbrgfc8v46l1yc5l4myz7qnlxzyfyiifipp86z9d79d8klzw"))
               (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     (arguments
@@ -487,17 +580,17 @@ faster window switching.")
 (define-public gnome-shell-extension-gsconnect
   (package
     (name "gnome-shell-extension-gsconnect")
-    (version "48")
+    (version "50")       ; See GNOME Shell supported versions in metadata.json
     (source (origin
               (method git-fetch)
               (uri (git-reference
-                    (url (string-append "https://github.com/andyholmes"
+                    (url (string-append "https://github.com/GSConnect"
                                         "/gnome-shell-extension-gsconnect.git"))
                     (commit (string-append "v" version))))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "15agblnm7k1wqnnz6gwhwym992fzqkdz8mkm04805783bx60b8bh"))))
+                "0vg87fdihs5kp7apgyd32ldjmwzmrxaimsc005yjyy8m3f65sjmr"))))
     (build-system meson-build-system)
     (arguments
      `(#:tests? #f ;; every test fails
@@ -568,7 +661,7 @@ faster window switching.")
        ("gobject-introspection" ,gobject-introspection)
        ("libxml2" ,libxml2)
        ("pkg-config" ,pkg-config)))
-    (home-page "https://github.com/andyholmes/gnome-shell-extension-gsconnect/wiki")
+    (home-page "https://github.com/GSConnect/gnome-shell-extension-gsconnect/wiki")
     (synopsis "Connect GNOME Shell with your Android phone")
     (description "GSConnect is a complete implementation of KDE Connect
 especially for GNOME Shell, allowing devices to securely share content, like
@@ -627,7 +720,7 @@ currently focused application in the top panel of the GNOME shell.")
 (define-public gnome-shell-extension-just-perfection
   (package
     (name "gnome-shell-extension-just-perfection")
-    (version "20.0")
+    (version "22.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -636,7 +729,7 @@ currently focused application in the top panel of the GNOME shell.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1b1hzibgryn861av2bjnfh5bmzs2bxfcsyl0ardkaj97228xsjzy"))))
+                "0r4rflppcp05kwhzmh07dzi7znc4kch4nc8mzw61arj3qsfq2qqj"))))
     (build-system copy-build-system)
     (arguments
      `(#:install-plan
@@ -678,7 +771,7 @@ certain elements or change animation speeds.")
 (define-public gnome-shell-extension-dash-to-panel
   (package
     (name "gnome-shell-extension-dash-to-panel")
-    (version "45")
+    (version "51")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -686,7 +779,7 @@ certain elements or change animation speeds.")
                     (commit (string-append "v" version))))
               (sha256
                (base32
-                "05bfd3b1g9zd86pl1rpgfqsmip271lasyfj8phpqf1gdds5yz6f6"))
+                "103pl77dhafi2ayds5yma2smv3b58zcysnd6vl5m5zavjvk35sz7"))
               (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     (arguments
@@ -714,27 +807,31 @@ into a single panel, similar to that found in KDE Plasma and Windows 7+.")
     (license license:gpl2+)))
 
 (define-public gnome-shell-extension-noannoyance
-  (package
-    (name "gnome-shell-extension-noannoyance")
-    (version "5")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url "https://github.com/BjoernDaase/noannoyance")
-                    (commit "e37b5b3c31f577b4698bc6659bc9fec5ea9ac5d4")))
-              (sha256
-               (base32
-                "0fa8l3xlh8kbq07y4385wpb908zm6x53z81q16xlmin97dln32hh"))
-              (file-name (git-file-name name version))))
-    (build-system copy-build-system)
-    (arguments
-     '(#:install-plan
-       '(("." "share/gnome-shell/extensions/noannoyance@daase.net"))))
-    (synopsis "Remove 'Window is ready' annotation")
-    (description "One of the many extensions that remove this message.
+  (let ((revision "1")
+        (commit "b759d10fd2799bc084007fdd927b62637c3dbd2c"))
+    (package
+      (name "gnome-shell-extension-noannoyance")
+      ;; XXX: There is no version noted anywhere in the source.  Thus, infer it
+      ;;      from <https://extensions.gnome.org/extension/2182/noannoyance/>.
+      (version (git-version "16" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/bdaase/noannoyance")
+                      (commit commit)))
+                (sha256
+                 (base32
+                  "0hh7fdqvx54h9j41ia2jl0nq1d5i66k7blw41ya6hkh7201r4anp"))
+                (file-name (git-file-name name version))))
+      (build-system copy-build-system)
+      (arguments
+       '(#:install-plan
+         '(("." "share/gnome-shell/extensions/noannoyance@daase.net"))))
+      (synopsis "Remove 'Window is ready' annotation")
+      (description "One of the many extensions that remove this message.
 It uses ES6 syntax and claims to be more actively maintained than others.")
-    (home-page "https://extensions.gnome.org/extension/2182/noannoyance/")
-    (license license:gpl2)))
+      (home-page "https://extensions.gnome.org/extension/2182/noannoyance/")
+      (license license:gpl2))))
 
 (define-public gnome-shell-extension-paperwm
   (package
@@ -776,7 +873,7 @@ notebooks and tiling window managers.")
 (define-public gpaste
   (package
     (name "gpaste")
-    (version "3.42.2")
+    (version "42.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -785,19 +882,25 @@ notebooks and tiling window managers.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1k5qvgzwl357k72qfim5zfas2a0n6j24jnlm1v472l7h6gb6lssm"))
+                "1dlqa69zvzzdxyh21qfrx2nhpfy0fbihxpgkxqmramcgv3h5k4q3"))
               (patches
                (search-patches "gpaste-fix-paths.patch"))))
     (build-system meson-build-system)
     (native-inputs
-     (list autoconf automake gettext-minimal gobject-introspection
+     (list gettext-minimal
+           gobject-introspection
            (list glib "bin")            ; for glib-compile-resources
-           libtool pkg-config vala))
+           pkg-config
+           vala))
     (inputs
-     (list appstream-glib libarchive gjs mutter graphene))
+     (list appstream-glib
+           gjs
+           gtk
+           mutter
+           libadwaita
+           libarchive))
     (arguments
-     (list #:meson meson-0.59      ;positional arguments error with meson 0.60
-           #:glib-or-gtk? #true
+     (list #:glib-or-gtk? #true
            #:configure-flags
            #~(list
               (string-append "-Dcontrol-center-keybindings-dir="
@@ -809,12 +912,11 @@ notebooks and tiling window managers.")
            #:phases
            #~(modify-phases %standard-phases
                (add-after 'unpack 'fix-introspection-install-dir
-                 (lambda* (#:key outputs #:allow-other-keys)
-                   (let ((out (assoc-ref outputs "out")))
-                     (substitute* '("src/gnome-shell/extension.js"
-                                    "src/gnome-shell/prefs.js")
-                       (("@typelibPath@")
-                        (string-append out "/lib/girepository-1.0/")))))))))
+                 (lambda _
+                   (substitute* '("src/gnome-shell/extension.js"
+                                  "src/gnome-shell/prefs.js")
+                     (("@typelibPath@")
+                      (string-append #$output "/lib/girepository-1.0/"))))))))
     (home-page "https://github.com/Keruspe/GPaste")
     (synopsis "Clipboard management system for GNOME Shell")
     (description "GPaste is a clipboard manager, a tool which allows you to
@@ -828,7 +930,7 @@ copies you now want to paste.")
 (define-public gnome-shell-extension-vertical-overview
   (package
     (name "gnome-shell-extension-vertical-overview")
-    (version "8")
+    (version "9")
     (source
      (origin
        (method git-fetch)
@@ -837,7 +939,7 @@ copies you now want to paste.")
              (commit (string-append "v" version))))
        (sha256
         (base32
-         "01vz48p3bh7p3ybdyw0s0ahs18lk2kzk9x4ad46s0dnwmmsyhww9"))
+         "0pkby00rjipj04z68d6i3rr7mzm01dckf2vl3iz6yvbl39602icl"))
        (file-name (git-file-name name version))
        (snippet
         '(begin (delete-file "schemas/gschemas.compiled")))))
@@ -909,7 +1011,7 @@ position when the mouse is moved rapidly.")
 (define-public gnome-shell-extension-burn-my-windows
   (package
     (name "gnome-shell-extension-burn-my-windows")
-    (version "15")
+    (version "21")
     (source
      (origin
        (method git-fetch)
@@ -918,7 +1020,7 @@ position when the mouse is moved rapidly.")
              (commit (string-append "v" version))))
        (sha256
         (base32
-         "1gabnqdk11n6345jzv9sc4yjmfrdgg0lsz6zc29gc5afzgirkhm5"))
+         "07ckfl47pq83nhb77v230zfxlz3imga3s8nn3sr9cq4zxvbkj2r4"))
        (file-name (git-file-name name version))))
     (build-system copy-build-system)
     (arguments
@@ -948,7 +1050,7 @@ animation of closing windowed applications.")
 (define-public gnome-shell-extension-blur-my-shell
   (package
     (name "gnome-shell-extension-blur-my-shell")
-    (version "29")
+    (version "44")
     (source
      (origin
        (method git-fetch)
@@ -958,22 +1060,21 @@ animation of closing windowed applications.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "13x7zgaj3dz7lypdv1bgmpmh0f2w53q567zxmhmqimi1gy5mjrvk"))
-       (snippet
-        '(begin (delete-file "src/schemas/gschemas.compiled")))))
+         "0h7yfvrrg5r821mzrp42c09jws06mw6v9avvkfykqj8n8qnslmyx"))))
     (build-system copy-build-system)
     (arguments
-     `(#:install-plan
-       '(("." ,(string-append
-                "share/gnome-shell/extensions/"
-                "blur-my-shell@aunetx")
-          #:include-regexp ("\\.js(on)?$" "\\.css$" "\\.ui$" "\\.png$"
-                            "\\.xml$" "\\.compiled$")))
+     '(#:install-plan
+       (let ((extension "share/gnome-shell/extensions/blur-my-shell@aunetx"))
+         `(("src/" ,extension)
+           ("resources/" ,extension
+            #:include-regexp ("\\.svg$" "\\.ui"))
+           ("." ,extension
+            #:exclude-regexp ("src/" "resources/")
+            #:include-regexp ("\\.js(on)?$" "\\.css$" "\\.ui$" "\\.png$"
+                              "\\.xml$" "\\.compiled$"))))
        #:phases
        (modify-phases %standard-phases
-         (add-after 'unpack 'cd-src
-           (lambda _ (chdir "src")))
-         (add-before 'install 'compile-schemas
+         (add-after 'unpack 'compile-schemas
            (lambda _
              (with-directory-excursion "schemas"
                (invoke "glib-compile-schemas" ".")))))))
@@ -1084,7 +1185,7 @@ of windows.")
 (define-public arc-theme
   (package
     (name "arc-theme")
-    (version "20210412")
+    (version "20220405")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1093,7 +1194,7 @@ of windows.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0zs44dagp6baiyszlr1kj5ncap43fg32dv07rl46nxbds2p65lh4"))))
+                "1gjwf75sg4xyfypb08qiy2cmqyr2mamjc4i46ifrq7snj15gy608"))))
     (build-system meson-build-system)
     (arguments
      '(#:configure-flags
@@ -1102,8 +1203,7 @@ of windows.")
        (modify-phases %standard-phases
          (add-before 'build 'set-home   ;placate Inkscape
            (lambda _
-             (setenv "HOME" (getcwd))
-             #t)))))
+             (setenv "HOME" (getcwd)))))))
     (native-inputs
      (list `(,glib "bin") ; for glib-compile-resources
            gnome-shell
@@ -1111,6 +1211,7 @@ of windows.")
            inkscape/stable
            optipng
            pkg-config
+           python
            sassc/libsass-3.5))
     (synopsis "Flat GTK+ theme with transparent elements")
     (description "Arc is a flat theme with transparent elements for GTK 3, GTK
@@ -1240,13 +1341,13 @@ Cinnamon, MATE, Unity, Xfce, LightDM, GDM, Chrome theme, etc.")
        #:tests? #f
        #:phases
        (modify-phases %standard-phases
-         (delete 'configure))))             ; no configure script
+         (delete 'configure))))         ; no configure script
     (native-inputs
-     `(("glib:bin" ,glib "bin")             ; for glib-compile-schemas
-       ("gnome-shell" ,gnome-shell)
-       ("gtk+" ,gtk+)
-       ("xmllint" ,libxml2)
-       ("ruby-sass" ,ruby-sass)))
+     (list `(,glib "bin")               ; for glib-compile-schemas
+           gnome-shell
+           gtk+
+           libxml2
+           ruby-sass))
     (synopsis "Flat theme with light and dark elements")
     (description "Numix is a modern flat theme with a combination of light and
 dark elements.  It supports GNOME, Unity, Xfce, and Openbox.")

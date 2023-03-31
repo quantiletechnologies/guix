@@ -11,6 +11,7 @@
 ;;; Copyright © 2021, 2022 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2022 Jai Vetrivelan <jaivetrivelan@gmail.com>
 ;;; Copyright © 2022 Arun Isaac <arunisaac@systemreboot.net>
+;;; Copyright © 2022 Michael Rohleder <mike@rohleder.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -361,20 +362,21 @@ Search Engine.  It is written in C and based on GTK3.")
 (define-public recoll
   (package
     (name "recoll")
-    (version "1.31.2")
+    (version "1.32.7")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://www.lesbonscomptes.com/recoll/"
                            "recoll-" version ".tar.gz"))
        (sha256
-        (base32 "0m1w5hf2n09lbzmzvlrm2lks4lci9vvjxy2mcmgb2avgly7v5vfk"))))
+        (base32 "1fkx6dk8s808ay4hf7ycfcs38kywmavsjqm02pwrnl8bpgsac26a"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags
        (list "--disable-webkit"
              "--disable-python-module"
              "--without-systemd"
+             "--with-inotify"
              (string-append "QMAKEPATH=" (assoc-ref %build-inputs "qtbase")
                             "/bin/qmake"))
        #:phases
@@ -673,14 +675,14 @@ bibliographic data and simple document and bibtex retrieval.")
 (define-public ugrep
   (package
     (name "ugrep")
-    (version "3.8.3")
+    (version "3.9.2")
     (source (origin
               (method git-fetch)
               (uri (git-reference
                     (url "https://github.com/Genivia/ugrep")
                     (commit (string-append "v" version))))
               (sha256
-               (base32 "03b3lahc3zzsznaqnrk47f1cnd5jwakvwrkz0r4m2crk09cpfv57"))
+               (base32 "0dhzrrdyi1aj16mdndkic7cqqvg6w28c8j13r7x42zab6ah0zkpm"))
               (file-name (git-file-name name version))
               (modules '((guix build utils)))
               (snippet

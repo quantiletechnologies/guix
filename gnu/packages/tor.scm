@@ -61,14 +61,14 @@
 (define-public tor
   (package
     (name "tor")
-    (version "0.4.7.10")
+    (version "0.4.7.11")
     (source (origin
              (method url-fetch)
              (uri (string-append "https://dist.torproject.org/tor-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "0nss8g6hx42nqiir6l03dj15r433fvygq9r00nmnv8wylpgmczk4"))))
+               "0vhk5bingy0m70wri44jzynmw00as7b783jlq38mzg5xxnzayg6g"))))
     (build-system gnu-build-system)
     (arguments
      (list #:configure-flags
@@ -185,12 +185,14 @@ This package only provides a client to the Tor Network.")))
                (("getcap=.*")
                 (string-append "getcap=" (which "getcap") "\n"))))))))
     (home-page "https://www.torproject.org/")
-    (synopsis "Transparently route an application's traffic through Tor.")
+    (synopsis "Transparently route an application's traffic through Tor")
     (description
      "Torsocks allows you to use most applications in a safe way with Tor.  It
 ensures that DNS requests are handled safely and explicitly rejects UDP
 traffic from the application you're using.")
-
+    (properties
+     '((release-monitoring-url
+         . "https://gitlab.torproject.org/tpo/core/torsocks/-/tags")))
     ;; All the files explicitly say "version 2 only".
     (license license:gpl2)))
 

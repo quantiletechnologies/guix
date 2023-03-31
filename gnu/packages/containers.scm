@@ -1,6 +1,8 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2021 Timmy Douglas <mail@timmydouglas.com>
 ;;; Copyright © 2022 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2022 Zhu Zihao <all_but_last@163.com>
+;;; Copyright © 2022 Michael Rohleder <mike@rohleder.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -154,7 +156,7 @@ runtime (like runc or crun) for a single container.")
 (define-public libslirp
   (package
     (name "libslirp")
-    (version "4.6.1")
+    (version "4.7.0")
     (source
      (origin
        (method git-fetch)
@@ -162,10 +164,11 @@ runtime (like runc or crun) for a single container.")
              (url "https://gitlab.freedesktop.org/slirp/libslirp")
              (commit (string-append "v" version))))
        (sha256
-        (base32 "1b4cn51xvzbrxd63g6w1033prvbxfxsnsn1l0fa5i311xv28vkh0"))
+        (base32 "0dny8187a8qh6akaa37aa9b5pjxx88f02wh6achp4mygff0ipxba"))
        (file-name (git-file-name name version))))
     (build-system meson-build-system)
-    (inputs
+    (propagated-inputs
+     ;; In Requires of slirp.pc.
      (list glib))
     (native-inputs
      (list pkg-config))
@@ -179,7 +182,7 @@ containers or various tools.")
 (define-public slirp4netns
   (package
     (name "slirp4netns")
-    (version "1.1.12")
+    (version "1.2.0")
     (source
      (origin
        (method git-fetch)
@@ -187,7 +190,7 @@ containers or various tools.")
              (url "https://github.com/rootless-containers/slirp4netns")
              (commit (string-append "v" version))))
        (sha256
-        (base32 "03llv4dlf7qqxwz4zdyk926g4bigfj2gb50glm70ciflpvzs8081"))
+        (base32 "1rlzwp5fx1x3q179j9s2jp02imjag5pgj333z110nrvi7azl22l8"))
        (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     (arguments
@@ -271,7 +274,7 @@ configure network interfaces in Linux containers.")
 (define-public podman
   (package
     (name "podman")
-    (version "3.4.4")
+    (version "4.2.1")
     (source
      (origin
        (method git-fetch)
@@ -279,46 +282,53 @@ configure network interfaces in Linux containers.")
              (url "https://github.com/containers/podman")
              (commit (string-append "v" version))))
        (sha256
-        (base32 "1q09qsl1wwiiy5njvb97n1j5f5jin4ckmzj5xbdfs28czb2kx3g5"))
+        (base32 "0ph8gf5gk9z1hm1v5kv924dipswvgrz0sgk23plnh2q0vbnh4wvv"))
        (file-name (git-file-name name version))))
 
     (build-system gnu-build-system)
     (arguments
-     `(#:make-flags (list ,(string-append "CC=" (cc-for-target))
-                          (string-append "PREFIX=" %output))
-       #:tests? #f ; /sys/fs/cgroup not set up in guix sandbox
-       #:test-target "test"
-       #:phases (modify-phases %standard-phases
-                  (delete 'configure)
-                  (add-after 'unpack 'set-env
-                    (lambda* (#:key inputs #:allow-other-keys)
-                      ;; when running go, things fail because
-                      ;; HOME=/homeless-shelter.
-                      (setenv "HOME" "/tmp")))
-                  (replace 'check
-                    (lambda* (#:key tests? #:allow-other-keys)
-                      (when tests?
-                        ;; (invoke "strace" "-f" "bin/podman" "version")
-                        (invoke "make" "localsystem")
-                        (invoke "make" "remotesystem"))))
-                  (add-after 'unpack 'fix-hardcoded-paths
-                    (lambda _
-                      (substitute* (find-files "libpod" "\\.go")
-                        (("exec.LookPath[(][\"]slirp4netns[\"][)]")
-                         (string-append "exec.LookPath(\""
-                                        (which "slirp4netns") "\")")))
-                      (substitute* "hack/install_catatonit.sh"
-                        (("CATATONIT_PATH=\"[^\"]+\"")
-                         (string-append "CATATONIT_PATH=" (which "true"))))
-                      (substitute* "vendor/github.com/containers/common/pkg/config/config_linux.go"
-                        (("/usr/local/libexec/podman")
-                         (string-append (assoc-ref %outputs "out") "/bin")))
-                      (substitute* "vendor/github.com/containers/common/pkg/config/default.go"
-                        (("/usr/libexec/podman/conmon") (which "conmon"))
-                        (("/usr/local/libexec/cni")
-                         (string-append (assoc-ref %build-inputs "cni-plugins")
-                                        "/bin"))
-                        (("/usr/bin/crun") (which "crun"))))))))
+     (list
+      #:make-flags
+      #~(list #$(string-append "CC=" (cc-for-target))
+              (string-append "PREFIX=" #$output))
+      #:tests? #f                  ; /sys/fs/cgroup not set up in guix sandbox
+      #:test-target "test"
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)
+          (add-after 'unpack 'set-env
+            (lambda* (#:key inputs #:allow-other-keys)
+              ;; when running go, things fail because
+              ;; HOME=/homeless-shelter.
+              (setenv "HOME" "/tmp")))
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                ;; (invoke "strace" "-f" "bin/podman" "version")
+                (invoke "make" "localsystem")
+                (invoke "make" "remotesystem"))))
+          (add-after 'unpack 'fix-hardcoded-paths
+            (lambda _
+              (substitute* (find-files "libpod" "\\.go")
+                (("exec.LookPath[(][\"]slirp4netns[\"][)]")
+                 (string-append "exec.LookPath(\""
+                                (which "slirp4netns") "\")")))
+              (substitute* "hack/install_catatonit.sh"
+                (("CATATONIT_PATH=\"[^\"]+\"")
+                 (string-append "CATATONIT_PATH=" (which "true"))))
+              (substitute* "vendor/github.com/containers/common/pkg/config/config_linux.go"
+                (("/usr/local/libexec/podman")
+                 (string-append #$output "/bin")))
+              (substitute* "vendor/github.com/containers/common/pkg/config/default.go"
+                (("/usr/libexec/podman/conmon") (which "conmon"))
+                (("/usr/local/libexec/cni")
+                 (string-append #$(this-package-input "cni-plugins")
+                                "/bin"))
+                (("/usr/bin/crun") (which "crun")))))
+          (add-after 'install 'install-completions
+            (lambda _
+              (invoke "make" "install.completions"
+                      (string-append "PREFIX=" #$output)))))))
     (inputs
      (list btrfs-progs
            cni-plugins

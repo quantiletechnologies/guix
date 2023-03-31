@@ -242,17 +242,17 @@ does not have a default value" field kind)))
                stem
                #,(id #'stem #'make- #'stem)
                #,(id #'stem #'stem #'?)
-               (%location #,(id #'stem #'stem #'-location)
-                          (default (and=> (current-source-location)
-                                          source-properties->location))
-                          (innate))
                #,@(map (lambda (name getter def)
                          #`(#,name #,getter (default #,def)
                                    (sanitize
                                     #,(id #'stem #'validate- #'stem #'- name))))
                        #'(field ...)
                        #'(field-getter ...)
-                       #'(field-default ...)))
+                       #'(field-default ...))
+               (%location #,(id #'stem #'stem #'-source-location)
+                          (default (and=> (current-source-location)
+                                          source-properties->location))
+                          (innate)))
 
              (define #,(id #'stem #'stem #'-fields)
                (list (configuration-field
@@ -410,7 +410,7 @@ If NEGATE? is @code{#t}, retrieve all fields except FIELDS."
 
 
 (define* (interpose ls  #:optional (delimiter "\n") (grammar 'infix))
-  "Same as @code{string-join}, but without join and string, returns an
+  "Same as @code{string-join}, but without join and string, returns a
 DELIMITER interposed LS.  Support 'infix and 'suffix GRAMMAR values."
   (when (not (member grammar '(infix suffix)))
     (raise
@@ -442,6 +442,7 @@ the list result in @code{#t} when applying PRED? on them."
 
 (define (text-config? config)
   (list-of file-like?))
+
 (define (serialize-text-config field-name val)
   #~(string-append
      #$@(interpose

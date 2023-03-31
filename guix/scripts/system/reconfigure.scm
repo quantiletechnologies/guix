@@ -34,16 +34,15 @@
   #:use-module (guix monads)
   #:use-module (guix store)
   #:use-module ((guix self) #:select (make-config.scm))
-  #:autoload   (guix describe) (current-profile)
   #:use-module (guix channels)
   #:autoload   (guix git) (update-cached-checkout)
   #:use-module (guix i18n)
   #:use-module (guix diagnostics)
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
-  #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
+  #:use-module (srfi srfi-71)
   #:use-module ((guix config) #:select (%guix-package-name))
   #:export (switch-system-program
             switch-to-system
@@ -185,8 +184,8 @@ services as defined by OS."
                      #:target-type shepherd-root-service-type))))
 
   (mlet* %store-monad ((live-services (running-services eval)))
-    (let*-values (((to-unload to-restart)
-                   (shepherd-service-upgrade live-services target-services)))
+    (let ((to-unload to-restart
+                     (shepherd-service-upgrade live-services target-services)))
       (let* ((to-unload  (map live-service-canonical-name to-unload))
              (to-restart (map shepherd-service-canonical-name to-restart))
              (running    (map live-service-canonical-name
@@ -348,14 +347,12 @@ to commits of channels in NEW."
                                         (channel-name old)))
                                  new)))
                   (and new
-                       (let-values (((checkout commit relation)
-                                     (update-cached-checkout
-                                      (channel-url new)
-                                      #:ref
-                                      `(commit . ,(channel-commit new))
-                                      #:starting-commit
-                                      (channel-commit old)
-                                      #:check-out? #f)))
+                       (let ((checkout commit relation
+                                       (update-cached-checkout
+                                        (channel-url new)
+                                        #:ref `(commit . ,(channel-commit new))
+                                        #:starting-commit (channel-commit old)
+                                        #:check-out? #f)))
                          (list new
                                (channel-commit old) (channel-commit new)
                                relation)))))
@@ -372,8 +369,7 @@ currently-deployed commit (from CURRENT-CHANNELS, which is as returned by
 'guix system describe' by default) and the target commit (as returned by 'guix
 describe')."
   (define new
-    (or (and=> (current-profile) profile-channels)
-        '()))
+    ((@ (guix describe) current-channels)))
 
   (when (null? current-channels)
     (warning (G_ "cannot determine provenance for current system~%")))

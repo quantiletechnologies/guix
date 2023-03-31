@@ -34,6 +34,7 @@
   #:use-module (gnu packages)
   #:use-module (gnu packages algebra)
   #:use-module (gnu packages base)
+  #:use-module (gnu packages build-tools)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages docbook)
   #:use-module (gnu packages glib)
@@ -138,7 +139,7 @@ between two other data points.")
 (define-public gama
   (package
     (name "gama")
-    (version "2.21")
+    (version "2.23")
     (source
       (origin
         (method url-fetch)
@@ -146,7 +147,7 @@ between two other data points.")
                             version ".tar.gz"))
         (sha256
          (base32
-          "0xncq4cgzn5mgwxw515xa0rhazf28y4cnpwg67kbibya7zx2iqw7"))
+          "03cwx83q788xlnpj0m4dgpf8scwn7m8p5c20vq90m1fxc614199q"))
         (modules '((guix build utils)))
         (snippet
          '(begin

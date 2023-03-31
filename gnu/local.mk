@@ -51,6 +51,11 @@
 # Copyright © 2022 Remco van 't Veer <remco@remworks.net>
 # Copyright © 2022 Artyom V. Poptsov <poptsov.artyom@gmail.com>
 # Copyright © 2022 John Kehayias <john.kehayias@protonmail.com>
+# Copyright © 2022 muradm <mail@muradm.net>
+# Copyright © 2022 Hilton Chain <hako@ultrarare.space>
+# Copyright © 2022 Alex Griffin <a@ajgrf.com>
+# Copyright © 2022 ( <paren@disroot.org>
+# Copyright © 2022 jgart <jgart@dismail.de>
 #
 # This file is part of GNU Guix.
 #
@@ -79,12 +84,14 @@ GNU_SYSTEM_MODULES =				\
   %D%/bootloader/u-boot.scm                     \
   %D%/bootloader/depthcharge.scm                \
   %D%/ci.scm					\
+  %D%/compression.scm				\
   %D%/home.scm					\
   %D%/home/services.scm			\
   %D%/home/services/desktop.scm			\
   %D%/home/services/symlink-manager.scm		\
   %D%/home/services/fontutils.scm		\
   %D%/home/services/guix.scm			\
+  %D%/home/services/pm.scm			\
   %D%/home/services/shells.scm			\
   %D%/home/services/shepherd.scm		\
   %D%/home/services/ssh.scm			\
@@ -141,6 +148,7 @@ GNU_SYSTEM_MODULES =				\
   %D%/packages/browser-extensions.scm		\
   %D%/packages/build-tools.scm			\
   %D%/packages/busybox.scm			\
+  %D%/packages/bqn.scm				\
   %D%/packages/c.scm				\
   %D%/packages/calcurse.scm			\
   %D%/packages/ccache.scm			\
@@ -305,6 +313,7 @@ GNU_SYSTEM_MODULES =				\
   %D%/packages/haxe.scm				\
   %D%/packages/heads.scm			\
   %D%/packages/hexedit.scm			\
+  %D%/packages/high-availability.scm			\
   %D%/packages/hugs.scm				\
   %D%/packages/hunspell.scm				\
   %D%/packages/hurd.scm				\
@@ -342,6 +351,7 @@ GNU_SYSTEM_MODULES =				\
   %D%/packages/kawa.scm				\
   %D%/packages/kde.scm				\
   %D%/packages/kde-frameworks.scm		\
+  %D%/packages/kde-games.scm			\
   %D%/packages/kde-internet.scm			\
   %D%/packages/kde-multimedia.scm		\
   %D%/packages/kde-pim.scm			\
@@ -415,7 +425,6 @@ GNU_SYSTEM_MODULES =				\
   %D%/packages/moe.scm				\
   %D%/packages/motti.scm			\
   %D%/packages/monitoring.scm			\
-  %D%/packages/mono.scm				\
   %D%/packages/moreutils.scm			\
   %D%/packages/mpd.scm				\
   %D%/packages/mp3.scm				\
@@ -498,6 +507,7 @@ GNU_SYSTEM_MODULES =				\
   %D%/packages/pure.scm				\
   %D%/packages/purescript.scm			\
   %D%/packages/pv.scm				\
+  %D%/packages/pypy.scm				\
   %D%/packages/python.scm			\
   %D%/packages/python-build.scm			\
   %D%/packages/python-check.scm			\
@@ -660,6 +670,7 @@ GNU_SYSTEM_MODULES =				\
   %D%/services/guix.scm			\
   %D%/services/hurd.scm				\
   %D%/services/kerberos.scm			\
+  %D%/services/lightdm.scm      		\
   %D%/services/linux.scm			\
   %D%/services/lirc.scm				\
   %D%/services/virtualization.scm		\
@@ -672,12 +683,14 @@ GNU_SYSTEM_MODULES =				\
   %D%/services/nfs.scm			\
   %D%/services/pam-mount.scm			\
   %D%/services/science.scm			\
+  %D%/services/security.scm			\
   %D%/services/security-token.scm		\
   %D%/services/shepherd.scm			\
   %D%/services/sound.scm			\
   %D%/services/herd.scm				\
   %D%/services/pm.scm				\
   %D%/services/rsync.scm			\
+  %D%/services/samba.scm			\
   %D%/services/sddm.scm				\
   %D%/services/spice.scm				\
   %D%/services/ssh.scm				\
@@ -685,6 +698,7 @@ GNU_SYSTEM_MODULES =				\
   %D%/services/sysctl.scm			\
   %D%/services/telephony.scm			\
   %D%/services/version-control.scm              \
+  %D%/services/vnc.scm				\
   %D%/services/vpn.scm				\
   %D%/services/web.scm				\
   %D%/services/xorg.scm				\
@@ -712,6 +726,7 @@ GNU_SYSTEM_MODULES =				\
   %D%/system/images/pine64.scm			\
   %D%/system/images/pinebook-pro.scm		\
   %D%/system/images/rock64.scm			\
+  %D%/system/images/wsl2.scm			\
 						\
   %D%/machine.scm				\
 						\
@@ -747,6 +762,7 @@ GNU_SYSTEM_MODULES =				\
   %D%/tests/guix.scm				\
   %D%/tests/monitoring.scm                      \
   %D%/tests/nfs.scm				\
+  %D%/tests/image.scm				\
   %D%/tests/install.scm				\
   %D%/tests/ldap.scm				\
   %D%/tests/linux-modules.scm			\
@@ -756,12 +772,15 @@ GNU_SYSTEM_MODULES =				\
   %D%/tests/package-management.scm		\
   %D%/tests/reconfigure.scm			\
   %D%/tests/rsync.scm				\
+  %D%/tests/samba.scm				\
+  %D%/tests/security.scm			\
   %D%/tests/security-token.scm			\
   %D%/tests/singularity.scm			\
   %D%/tests/ssh.scm				\
   %D%/tests/telephony.scm		        \
   %D%/tests/version-control.scm			\
   %D%/tests/virtualization.scm			\
+  %D%/tests/vnc.scm				\
   %D%/tests/web.scm
 
 INSTALLER_MODULES =                             \
@@ -769,6 +788,7 @@ INSTALLER_MODULES =                             \
   %D%/installer/connman.scm			\
   %D%/installer/dump.scm			\
   %D%/installer/final.scm			\
+  %D%/installer/hardware.scm			\
   %D%/installer/hostname.scm			\
   %D%/installer/keymap.scm			\
   %D%/installer/locale.scm			\
@@ -840,6 +860,7 @@ dist_patch_DATA =						\
   %D%/packages/patches/abseil-cpp-fix-strerror_test.patch	\
   %D%/packages/patches/adb-add-libraries.patch			\
   %D%/packages/patches/adb-libssl_11-compatibility.patch	\
+  %D%/packages/patches/accountsservice-extensions.patch		\
   %D%/packages/patches/aegis-constness-error.patch         	\
   %D%/packages/patches/aegis-perl-tempdir1.patch           	\
   %D%/packages/patches/aegis-perl-tempdir2.patch           	\
@@ -933,6 +954,7 @@ dist_patch_DATA =						\
   %D%/packages/patches/calibre-remove-test-sqlite.patch		\
   %D%/packages/patches/calibre-remove-test-unrar.patch		\
   %D%/packages/patches/catdoc-CVE-2017-11110.patch		\
+  %D%/packages/patches/chez-scheme-bin-sh.patch			\
   %D%/packages/patches/circos-remove-findbin.patch		\
   %D%/packages/patches/cdparanoia-fpic.patch			\
   %D%/packages/patches/cdrkit-libre-cross-compile.patch	\
@@ -940,7 +962,6 @@ dist_patch_DATA =						\
   %D%/packages/patches/ceph-disable-cpu-optimizations.patch	\
   %D%/packages/patches/ceph-boost-compat.patch			\
   %D%/packages/patches/ceph-rocksdb-compat.patch		\
-  %D%/packages/patches/cheese-vala-update.patch		        \
   %D%/packages/patches/chmlib-inttypes.patch			\
   %D%/packages/patches/cl-asdf-config-directories.patch		\
   %D%/packages/patches/clamav-config-llvm-libs.patch		\
@@ -957,6 +978,7 @@ dist_patch_DATA =						\
   %D%/packages/patches/clang-12.0-libc-search-path.patch	\
   %D%/packages/patches/clang-13.0-libc-search-path.patch	\
   %D%/packages/patches/clang-14.0-libc-search-path.patch	\
+  %D%/packages/patches/clang-15.0-libc-search-path.patch	\
   %D%/packages/patches/clang-runtime-asan-build-fixes.patch	\
   %D%/packages/patches/clang-runtime-esan-build-fixes.patch	\
   %D%/packages/patches/clang-runtime-9-libsanitizer-mode-field.patch	\
@@ -969,12 +991,15 @@ dist_patch_DATA =						\
   %D%/packages/patches/cling-use-shared-library.patch		\
   %D%/packages/patches/clucene-pkgconfig.patch			\
   %D%/packages/patches/cmake-curl-certificates.patch		\
-  %D%/packages/patches/cmh-support-fplll.patch      		\
+  %D%/packages/patches/cmake-curl-certificates-3.24.patch	\
   %D%/packages/patches/coda-use-system-libs.patch		\
   %D%/packages/patches/collectd-5.11.0-noinstallvar.patch		\
-  %D%/packages/patches/containerd-create-pid-file.patch		\
   %D%/packages/patches/combinatorial-blas-awpm.patch		\
   %D%/packages/patches/combinatorial-blas-io-fix.patch		\
+  %D%/packages/patches/connman-CVE-2022-32292.patch		\
+  %D%/packages/patches/connman-CVE-2022-32293-pt1.patch	\
+  %D%/packages/patches/connman-CVE-2022-32293-pt2.patch	\
+  %D%/packages/patches/containerd-create-pid-file.patch	\
   %D%/packages/patches/cool-retro-term-wctype.patch		\
   %D%/packages/patches/coreutils-gnulib-tests.patch		\
   %D%/packages/patches/coq-fix-envvars.patch			\
@@ -982,6 +1007,7 @@ dist_patch_DATA =						\
   %D%/packages/patches/cpuinfo-system-libraries.patch		\
   %D%/packages/patches/cpulimit-with-glib-2.32.patch		\
   %D%/packages/patches/crawl-upgrade-saves.patch		\
+  %D%/packages/patches/crc32c-unbundle-googletest.patch		\
   %D%/packages/patches/crda-optional-gcrypt.patch		\
   %D%/packages/patches/clucene-contribs-lib.patch               \
   %D%/packages/patches/cube-nocheck.patch			\
@@ -1018,9 +1044,6 @@ dist_patch_DATA =						\
   %D%/packages/patches/dstat-skip-devices-without-io.patch	\
   %D%/packages/patches/dvd+rw-tools-add-include.patch 		\
   %D%/packages/patches/dynaconf-unvendor-deps.patch		\
-  %D%/packages/patches/ecl-16-format-directive-limit.patch	\
-  %D%/packages/patches/ecl-16-ignore-stderr-write-error.patch	\
-  %D%/packages/patches/ecl-16-libffi.patch			\
   %D%/packages/patches/efibootmgr-remove-extra-decl.patch	\
   %D%/packages/patches/efivar-211.patch			\
   %D%/packages/patches/eigen-fix-strict-aliasing-bug.patch	\
@@ -1040,14 +1063,17 @@ dist_patch_DATA =						\
   %D%/packages/patches/emacs-highlight-stages-add-gexp.patch	\
   %D%/packages/patches/emacs-libgit-use-system-libgit2.patch    \
   %D%/packages/patches/emacs-lispy-fix-thread-last-test.patch   \
+  %D%/packages/patches/emacs-native-comp-driver-options.patch   \
+  %D%/packages/patches/emacs-polymode-fix-lexical-variable-error.patch  \
   %D%/packages/patches/emacs-source-date-epoch.patch		\
   %D%/packages/patches/emacs-telega-path-placeholder.patch	\
   %D%/packages/patches/emacs-telega-test-env.patch		\
   %D%/packages/patches/emacs-wordnut-require-adaptive-wrap.patch	\
   %D%/packages/patches/emacs-yasnippet-fix-tests.patch	\
+  %D%/packages/patches/emacs-kv-fix-tests.patch	\
+  %D%/packages/patches/emacs-pgtk-super-key-fix.patch	\
   %D%/packages/patches/enjarify-setup-py.patch			\
   %D%/packages/patches/enlightenment-fix-setuid-path.patch	\
-  %D%/packages/patches/eog-update-libportal-usage.patch		\
   %D%/packages/patches/erlang-man-path.patch			\
   %D%/packages/patches/esmtp-add-lesmtp.patch		\
   %D%/packages/patches/eudev-rules-directory.patch		\
@@ -1080,6 +1106,8 @@ dist_patch_DATA =						\
   %D%/packages/patches/fifo-map-fix-flags-for-gcc.patch		\
   %D%/packages/patches/fifo-map-remove-catch.hpp.patch		\
   %D%/packages/patches/findutils-localstatedir.patch		\
+  %D%/packages/patches/firebird-riscv64-support-pt1.patch	\
+  %D%/packages/patches/firebird-riscv64-support-pt2.patch	\
   %D%/packages/patches/flann-cmake-3.11.patch			\
   %D%/packages/patches/flatpak-fix-path.patch			\
   %D%/packages/patches/flatpak-unset-gdk-pixbuf-for-sandbox.patch	\
@@ -1087,10 +1115,10 @@ dist_patch_DATA =						\
   %D%/packages/patches/foobillard++-pkg-config.patch		\
   %D%/packages/patches/foomatic-filters-CVE-2015-8327.patch	\
   %D%/packages/patches/foomatic-filters-CVE-2015-8560.patch	\
+  %D%/packages/patches/fp16-implicit-double.patch		\
   %D%/packages/patches/fp16-system-libraries.patch		\
   %D%/packages/patches/fpc-reproducibility.patch		\
   %D%/packages/patches/freedink-engine-fix-sdl-hints.patch	\
-  %D%/packages/patches/freeglut-gcc-compat.patch		\
   %D%/packages/patches/freeimage-unbundle.patch		\
   %D%/packages/patches/fuse-glibc-2.34.patch			\
   %D%/packages/patches/fuse-overlapping-headers.patch		\
@@ -1156,18 +1184,16 @@ dist_patch_DATA =						\
   %D%/packages/patches/gdm-wayland-session-wrapper-from-env.patch	\
   %D%/packages/patches/gdm-pass-gdk-pixbuf-loader-env.patch	\
   %D%/packages/patches/geeqie-clutter.patch			\
+  %D%/packages/patches/gemmi-fix-pegtl-usage.patch		\
+  %D%/packages/patches/gemmi-fix-sajson-types.patch		\
   %D%/packages/patches/genimage-mke2fs-test.patch		\
   %D%/packages/patches/geoclue-config.patch			\
-  %D%/packages/patches/ghc-4.patch				\
   %D%/packages/patches/ghc-8.0-fall-back-to-madv_dontneed.patch	\
   %D%/packages/patches/ghc-testsuite-dlopen-pie.patch		\
   %D%/packages/patches/ghc-language-haskell-extract-ghc-8.10.patch	\
   %D%/packages/patches/ghostscript-no-header-id.patch		\
   %D%/packages/patches/ghostscript-no-header-uuid.patch		\
   %D%/packages/patches/ghostscript-no-header-creationdate.patch \
-  %D%/packages/patches/giara-fix-login.patch                      \
-  %D%/packages/patches/glade-gls-set-script-name.patch	        \
-  %D%/packages/patches/glade-test-widget-null-icon.patch	\
   %D%/packages/patches/glib-appinfo-watch.patch			\
   %D%/packages/patches/glib-networking-gnutls-binding.patch	\
   %D%/packages/patches/glib-networking-32-bit-time.patch	\
@@ -1205,14 +1231,10 @@ dist_patch_DATA =						\
   %D%/packages/patches/gmp-arm-asm-nothumb.patch		\
   %D%/packages/patches/gmp-faulty-test.patch			\
   %D%/packages/patches/gnash-fix-giflib-version.patch	        \
-  %D%/packages/patches/gnome-boxes-add-guix-logo.patch		\
-  %D%/packages/patches/gnome-builder-update-libportal.patch		\
   %D%/packages/patches/gnome-control-center-libexecdir.patch	\
   %D%/packages/patches/gnome-online-miners-tracker-3.patch	\
-  %D%/packages/patches/gnome-screenshot-meson-0.60.patch	\
   %D%/packages/patches/gnome-settings-daemon-gc.patch		\
-  %D%/packages/patches/gnome-session-support-elogind.patch      \
-  %D%/packages/patches/gnome-todo-libportal.patch		\
+  %D%/packages/patches/gnome-session-support-elogind.patch	\
   %D%/packages/patches/gnome-tweaks-search-paths.patch		\
   %D%/packages/patches/gnupg-CVE-2022-34903.patch		\
   %D%/packages/patches/gnupg-default-pinentry.patch		\
@@ -1221,7 +1243,9 @@ dist_patch_DATA =						\
   %D%/packages/patches/gnutls-cross.patch			\
   %D%/packages/patches/gnutls-guile-eintr-eagain.patch		\
   %D%/packages/patches/gobject-introspection-absolute-shlib-path.patch \
+  %D%/packages/patches/gobject-introspection-absolute-shlib-path-1.72.patch \
   %D%/packages/patches/gobject-introspection-cc.patch		\
+  %D%/packages/patches/gobject-introspection-cc-1.72.patch	\
   %D%/packages/patches/gobject-introspection-girepository.patch	\
   %D%/packages/patches/go-fix-script-tests.patch			\
   %D%/packages/patches/go-github-com-golang-snappy-32bit-test.patch \
@@ -1233,15 +1257,12 @@ dist_patch_DATA =						\
   %D%/packages/patches/gpm-glibc-2.26.patch			\
   %D%/packages/patches/gpodder-disable-updater.patch		\
   %D%/packages/patches/gpsbabel-fix-i686-test.patch		\
-  %D%/packages/patches/grantlee-merge-theme-dirs.patch		\
   %D%/packages/patches/grep-timing-sensitive-test.patch		\
   %D%/packages/patches/grfcodec-gcc-compat.patch		\
   %D%/packages/patches/gromacs-tinyxml2.patch			\
   %D%/packages/patches/groovy-add-exceptionutilsgenerator.patch	\
   %D%/packages/patches/grub-efi-fat-serial-number.patch		\
   %D%/packages/patches/grub-setup-root.patch			\
-  %D%/packages/patches/gspell-dash-test.patch			\
-  %D%/packages/patches/gst-plugins-good-fix-test.patch		\
   %D%/packages/patches/guile-1.8-cpp-4.5.patch			\
   %D%/packages/patches/guile-2.2-skip-oom-test.patch            \
   %D%/packages/patches/guile-2.2-skip-so-test.patch             \
@@ -1252,9 +1273,11 @@ dist_patch_DATA =						\
   %D%/packages/patches/guile-linux-syscalls.patch		\
   %D%/packages/patches/guile-3.0-linux-syscalls.patch		\
   %D%/packages/patches/guile-ac-d-bus-fix-tests.patch		\
+  %D%/packages/patches/guile-continuation-stack-leak.patch	\
   %D%/packages/patches/guile-cross-compilation.patch		\
   %D%/packages/patches/guile-fibers-destroy-peer-schedulers.patch \
   %D%/packages/patches/guile-fibers-epoll-instance-is-dead.patch \
+  %D%/packages/patches/guile-fibers-fd-finalizer-leak.patch	\
   %D%/packages/patches/guile-fibers-wait-for-io-readiness.patch \
   %D%/packages/patches/guile-gdbm-ffi-support-gdbm-1.14.patch	\
   %D%/packages/patches/guile-git-adjust-for-libgit2-1.2.0.patch \
@@ -1286,7 +1309,6 @@ dist_patch_DATA =						\
   %D%/packages/patches/hdf-eos5-remove-gctp.patch		\
   %D%/packages/patches/hdf-eos5-fix-szip.patch			\
   %D%/packages/patches/hdf-eos5-fortrantests.patch		\
-  %D%/packages/patches/hedgewars-network-bsd.patch		\
   %D%/packages/patches/helm-fix-gcc-9-build.patch		\
   %D%/packages/patches/http-parser-CVE-2020-8287.patch		\
   %D%/packages/patches/htslib-for-stringtie.patch		\
@@ -1298,7 +1320,6 @@ dist_patch_DATA =						\
   %D%/packages/patches/i7z-gcc-10.patch				\
   %D%/packages/patches/icecat-makeicecat.patch			\
   %D%/packages/patches/icecat-avoid-bundled-libraries.patch	\
-  %D%/packages/patches/icecat-use-older-reveal-hidden-html.patch	\
   %D%/packages/patches/icecat-use-system-graphite2+harfbuzz.patch	\
   %D%/packages/patches/icecat-use-system-media-libs.patch	\
   %D%/packages/patches/icedtea-7-hotspot-aarch64-use-c++98.patch\
@@ -1319,17 +1340,19 @@ dist_patch_DATA =						\
   %D%/packages/patches/irrlicht-link-against-needed-libs.patch	\
   %D%/packages/patches/isl-0.11.1-aarch64-support.patch	\
   %D%/packages/patches/itk-snap-alt-glibc-compat.patch		\
-  %D%/packages/patches/jami-fix-esc-bug.patch			\
-  %D%/packages/patches/json-c-0.13-CVE-2020-12762.patch	\
-  %D%/packages/patches/json-c-0.12-CVE-2020-12762.patch	\
-  %D%/packages/patches/jsoncpp-pkg-config-version.patch		\
+  %D%/packages/patches/jami-disable-integration-tests.patch	\
+  %D%/packages/patches/jami-fix-qml-imports.patch		\
+  %D%/packages/patches/jami-fix-unit-tests-build.patch          \
+  %D%/packages/patches/jami-libjami-headers-search.patch	\
+  %D%/packages/patches/jami-no-webengine.patch			\
+  %D%/packages/patches/jami-sip-unregister.patch		\
+  %D%/packages/patches/jami-xcb-link.patch			\
   %D%/packages/patches/jamvm-1.5.1-aarch64-support.patch	\
   %D%/packages/patches/jamvm-1.5.1-armv7-support.patch	\
   %D%/packages/patches/jamvm-2.0.0-aarch64-support.patch	\
   %D%/packages/patches/jamvm-2.0.0-disable-branch-patching.patch	\
   %D%/packages/patches/jamvm-2.0.0-opcode-guard.patch		\
   %D%/packages/patches/java-antlr4-Add-standalone-generator.patch	\
-  %D%/packages/patches/java-antlr4-fix-code-too-large.java	\
   %D%/packages/patches/java-tunnelvisionlabs-antlr-code-too-large.patch	\
   %D%/packages/patches/java-apache-ivy-port-to-latest-bouncycastle.patch	\
   %D%/packages/patches/java-commons-collections-fix-java8.patch \
@@ -1345,33 +1368,34 @@ dist_patch_DATA =						\
   %D%/packages/patches/jfsutils-add-sysmacros.patch		\
   %D%/packages/patches/jfsutils-gcc-compat.patch		\
   %D%/packages/patches/jfsutils-include-systypes.patch		\
+  %D%/packages/patches/json-c-0.13-CVE-2020-12762.patch	\
+  %D%/packages/patches/json-c-0.12-CVE-2020-12762.patch	\
+  %D%/packages/patches/jsoncpp-pkg-config-version.patch		\
   %D%/packages/patches/julia-SOURCE_DATE_EPOCH-mtime.patch	\
   %D%/packages/patches/julia-tracker-16-compat.patch		\
   %D%/packages/patches/julia-allow-parallel-build.patch		\
-  %D%/packages/patches/kdbusaddons-kinit-file-name.patch	\
   %D%/packages/patches/libffi-3.3-powerpc-fixes.patch		\
   %D%/packages/patches/libffi-float128-powerpc64le.patch	\
   %D%/packages/patches/libobjc2-unbundle-robin-map.patch	\
   %D%/packages/patches/librime-fix-build-with-gcc10.patch	\
   %D%/packages/patches/libvirt-add-install-prefix.patch	\
   %D%/packages/patches/libziparchive-add-includes.patch		\
+  %D%/packages/patches/lightdm-arguments-ordering.patch		\
+  %D%/packages/patches/lightdm-vncserver-check.patch		\
+  %D%/packages/patches/lightdm-vnc-color-depth.patch		\
   %D%/packages/patches/localed-xorg-keyboard.patch		\
+  %D%/packages/patches/kcontacts-incorrect-country-name.patch	\
+  %D%/packages/patches/kde-cli-tools-delay-mime-db.patch	\
   %D%/packages/patches/kdiagram-Fix-missing-link-libraries.patch \
   %D%/packages/patches/kiki-level-selection-crash.patch		\
   %D%/packages/patches/kiki-makefile.patch			\
   %D%/packages/patches/kiki-missing-includes.patch		\
   %D%/packages/patches/kiki-portability-64bit.patch		\
   %D%/packages/patches/kinit-kdeinit-extra_libs.patch		\
-  %D%/packages/patches/kinit-kdeinit-libpath.patch		\
   %D%/packages/patches/kio-search-smbd-on-PATH.patch		\
   %D%/packages/patches/kismet-unbundle-boost.patch		\
-  %D%/packages/patches/kmail-Fix-missing-link-libraries.patch \
   %D%/packages/patches/kmod-module-directory.patch		\
   %D%/packages/patches/kmscon-runtime-keymap-switch.patch	\
-  %D%/packages/patches/kpackage-allow-external-paths.patch	\
-  %D%/packages/patches/kpackage-fix-KF5PackageMacros.cmake.patch \
-  %D%/packages/patches/kmplayer-aarch64.patch			\
-  %D%/packages/patches/kmplayer-upstream_Fix-build-with-Qt-5.9.patch	\
   %D%/packages/patches/kobodeluxe-paths.patch			\
   %D%/packages/patches/kobodeluxe-enemies-pipe-decl.patch	\
   %D%/packages/patches/kobodeluxe-const-charp-conversion.patch	\
@@ -1381,6 +1405,7 @@ dist_patch_DATA =						\
   %D%/packages/patches/kodi-increase-test-timeout.patch		\
   %D%/packages/patches/kodi-set-libcurl-ssl-parameters.patch		\
   %D%/packages/patches/kodi-skip-test-449.patch		\
+  %D%/packages/patches/kwayland-skip-flaky-test.patch		\
   %D%/packages/patches/laby-make-install.patch			\
   %D%/packages/patches/ldns-drill-examples.patch		\
   %D%/packages/patches/leela-zero-gtest.patch			\
@@ -1399,6 +1424,10 @@ dist_patch_DATA =						\
   %D%/packages/patches/libcroco-CVE-2020-12825.patch		\
   %D%/packages/patches/libcyaml-libyaml-compat.patch		\
   %D%/packages/patches/libexpected-nofetch.patch                \
+  %D%/packages/patches/libgda-cve-2021-39359.patch		\
+  %D%/packages/patches/libgda-fix-build.patch			\
+  %D%/packages/patches/libgda-fix-missing-initialization.patch	\
+  %D%/packages/patches/libgda-skip-postgresql-tests.patch	\
   %D%/packages/patches/libgit2-mtime-0.patch			\
   %D%/packages/patches/libgnome-encoding.patch			\
   %D%/packages/patches/libgnomeui-utf8.patch			\
@@ -1410,6 +1439,7 @@ dist_patch_DATA =						\
   %D%/packages/patches/libofa-ftbfs-2.diff		\
   %D%/packages/patches/libotr-test-auth-fix.patch		\
   %D%/packages/patches/libksieve-Fix-missing-link-libraries.patch \
+  %D%/packages/patches/libksysguard-qdiriterator-follow-symlinks.patch \
   %D%/packages/patches/libmad-armv7-thumb-pt1.patch		\
   %D%/packages/patches/libmad-armv7-thumb-pt2.patch		\
   %D%/packages/patches/libmad-length-check.patch		\
@@ -1444,7 +1474,6 @@ dist_patch_DATA =						\
   %D%/packages/patches/libxml2-terminating-newline.patch	\
   %D%/packages/patches/libxml2-xpath-recursion-limit.patch	\
   %D%/packages/patches/libxml2-xpath0-Add-option-xpath0.patch	\
-  %D%/packages/patches/libxmlb-install-xb-tool-into-bindir.patch \
   %D%/packages/patches/libxslt-generated-ids.patch		\
   %D%/packages/patches/libxt-guix-search-paths.patch		\
   %D%/packages/patches/lierolibre-check-unaligned-access.patch	\
@@ -1453,7 +1482,8 @@ dist_patch_DATA =						\
   %D%/packages/patches/lierolibre-remove-arch-warning.patch	\
   %D%/packages/patches/lierolibre-try-building-other-arch.patch	\
   %D%/packages/patches/linbox-fix-pkgconfig.patch		\
-  %D%/packages/patches/linphone-desktop-without-sdk.patch           \
+  %D%/packages/patches/linphone-desktop-without-sdk.patch	\
+  %D%/packages/patches/linux-libre-infodocs-target.patch	\
   %D%/packages/patches/linux-libre-support-for-Pinebook-Pro.patch \
   %D%/packages/patches/linux-pam-no-setfsuid.patch		\
   %D%/packages/patches/linuxdcpp-openssl-1.1.patch		\
@@ -1479,7 +1509,6 @@ dist_patch_DATA =						\
   %D%/packages/patches/lua-liblua-so.patch                      \
   %D%/packages/patches/lua-5.4-pkgconfig.patch			\
   %D%/packages/patches/lua-5.4-liblua-so.patch			\
-  %D%/packages/patches/luajit-no_ldconfig.patch			\
   %D%/packages/patches/luit-posix.patch				\
   %D%/packages/patches/lvm2-static-link.patch			\
   %D%/packages/patches/mailutils-variable-lookup.patch		\
@@ -1501,13 +1530,17 @@ dist_patch_DATA =						\
   %D%/packages/patches/libmemcached-build-with-gcc7.patch	\
   %D%/packages/patches/libmhash-hmac-fix-uaf.patch		\
   %D%/packages/patches/libsigrokdecode-python3.9-fix.patch	\
-  %D%/packages/patches/mercurial-hg-extension-path.patch       \
+  %D%/packages/patches/memtest86+-build-reproducibly.patch	\
+  %D%/packages/patches/mercurial-hg-extension-path.patch	\
+  %D%/packages/patches/mercurial-openssl-compat.patch		\
   %D%/packages/patches/mesa-opencl-all-targets.patch		\
   %D%/packages/patches/mesa-skip-tests.patch			\
   %D%/packages/patches/meson-allow-dirs-outside-of-prefix.patch	\
   %D%/packages/patches/mhash-keygen-test-segfault.patch		\
   %D%/packages/patches/mia-fix-boost-headers.patch		\
   %D%/packages/patches/mia-vtk9.patch				\
+  %D%/packages/patches/mia-vtk92.patch				\
+  %D%/packages/patches/mia-vtk-version.patch			\
   %D%/packages/patches/mingw-w64-6.0.0-gcc.patch		\
   %D%/packages/patches/mingw-w64-dlltool-temp-prefix.patch	\
   %D%/packages/patches/mingw-w64-reproducible-gendef.patch	\
@@ -1521,7 +1554,6 @@ dist_patch_DATA =						\
   %D%/packages/patches/mpg321-gcc-10.patch			\
   %D%/packages/patches/module-init-tools-moduledir.patch	\
   %D%/packages/patches/monero-use-system-miniupnpc.patch			\
-  %D%/packages/patches/mono-mdoc-timestamping.patch		\
   %D%/packages/patches/mosaicatcher-unbundle-htslib.patch	\
   %D%/packages/patches/mrrescue-support-love-11.patch		\
   %D%/packages/patches/mtools-mformat-uninitialized.patch	\
@@ -1530,7 +1562,7 @@ dist_patch_DATA =						\
   %D%/packages/patches/musl-cross-locale.patch			\
   %D%/packages/patches/mutt-store-references.patch		\
   %D%/packages/patches/m4-gnulib-libio.patch			\
-  %D%/packages/patches/nautilus-add-libportal-gtk3.patch	\
+  %D%/packages/patches/nautilus-extension-search-path.patch	\
   %D%/packages/patches/ncompress-fix-softlinks.patch		\
   %D%/packages/patches/ncftp-reproducible.patch			\
   %D%/packages/patches/netcdf-date-time.patch			\
@@ -1557,6 +1589,7 @@ dist_patch_DATA =						\
   %D%/packages/patches/nvi-dbpagesize-binpower.patch		\
   %D%/packages/patches/nvi-db4.patch				\
   %D%/packages/patches/nyacc-binary-literals.patch		\
+  %D%/packages/patches/oath-toolkit-xmlsec-compat.patch		\
   %D%/packages/patches/obs-modules-location.patch		\
   %D%/packages/patches/ocaml-dose3-add-unix-dependency.patch	\
   %D%/packages/patches/ocaml-dose3-Fix-for-ocaml-4.06.patch	\
@@ -1598,12 +1631,13 @@ dist_patch_DATA =						\
   %D%/packages/patches/password-store-tree-compat.patch		\
   %D%/packages/patches/pciutils-hurd-configure.patch		\
   %D%/packages/patches/pciutils-hurd-fix.patch			\
-  %D%/packages/patches/pjproject-install-libpjsua2.patch	\
   %D%/packages/patches/plasma-framework-fix-KF5PlasmaMacros.cmake.patch \
+  %D%/packages/patches/pocketfft-cpp-prefer-preprocessor-if.patch			\
   %D%/packages/patches/pokerth-boost.patch			\
   %D%/packages/patches/ppsspp-disable-upgrade-and-gold.patch		\
   %D%/packages/patches/pthreadpool-system-libraries.patch	\
   %D%/packages/patches/python-chai-drop-python2.patch		\
+  %D%/packages/patches/python-louvain-fix-test.patch		\
   %D%/packages/patches/python-random2-getrandbits-test.patch		\
   %D%/packages/patches/python-poppler-qt5-fix-build.patch	\
   %D%/packages/patches/python-w3lib-fix-test-failure.patch	\
@@ -1638,7 +1672,6 @@ dist_patch_DATA =						\
   %D%/packages/patches/phoronix-test-suite-fsdg.patch		\
   %D%/packages/patches/php-bug-74093-test.patch			\
   %D%/packages/patches/php-curl-compat.patch			\
-  %D%/packages/patches/picard-fix-id3-rename-test.patch		\
   %D%/packages/patches/picprog-non-intel-support.patch		\
   %D%/packages/patches/pidgin-add-search-path.patch		\
   %D%/packages/patches/pinball-system-ltdl.patch		\
@@ -1651,21 +1684,18 @@ dist_patch_DATA =						\
   %D%/packages/patches/plib-CVE-2011-4620.patch		\
   %D%/packages/patches/plib-CVE-2012-4552.patch		\
   %D%/packages/patches/plotutils-spline-test.patch		\
-  %D%/packages/patches/polkit-CVE-2021-4034.patch		\
-  %D%/packages/patches/polkit-configure-elogind.patch		\
-  %D%/packages/patches/polkit-use-duktape.patch			\
+  %D%/packages/patches/polkit-disable-systemd.patch		\
   %D%/packages/patches/portaudio-audacity-compat.patch		\
   %D%/packages/patches/portmidi-modular-build.patch		\
   %D%/packages/patches/postgresql-disable-resolve_symlinks.patch	\
-  %D%/packages/patches/postgresql-riscv-spinlocks.patch	\
   %D%/packages/patches/procmail-ambiguous-getline-debian.patch  \
   %D%/packages/patches/procmail-CVE-2014-3618.patch		\
   %D%/packages/patches/procmail-CVE-2017-16844.patch		\
+  %D%/packages/patches/protobuf-fix-build-on-32bit.patch	\
   %D%/packages/patches/psm-arch.patch				\
   %D%/packages/patches/psm-disable-memory-stats.patch		\
   %D%/packages/patches/psm-ldflags.patch			\
   %D%/packages/patches/psm-repro.patch				\
-  %D%/packages/patches/public-inbox-fix-spawn-test.patch	\
   %D%/packages/patches/pulseaudio-fix-mult-test.patch		\
   %D%/packages/patches/pulseaudio-longer-test-timeout.patch	\
   %D%/packages/patches/pulseview-qt515-compat.patch		\
@@ -1687,10 +1717,12 @@ dist_patch_DATA =						\
   %D%/packages/patches/python-3-fix-tests.patch			\
   %D%/packages/patches/python-3-hurd-configure.patch		\
   %D%/packages/patches/python-3-no-static-lib.patch		\
+  %D%/packages/patches/python-apsw-3.39.2.1-test-fix.patch	\
   %D%/packages/patches/python-aionotify-0.2.0-py3.8.patch	\
   %D%/packages/patches/python-argcomplete-1.11.1-fish31.patch	\
   %D%/packages/patches/python-cross-compile.patch		\
   %D%/packages/patches/python-configobj-setuptools.patch	\
+  %D%/packages/patches/python-dateutil-pytest-compat.patch	\
   %D%/packages/patches/python-debugpy-unbundle-pydevd.patch	\
   %D%/packages/patches/python-docopt-pytest6-compat.patch	\
   %D%/packages/patches/python-execnet-read-only-fix.patch	\
@@ -1734,6 +1766,7 @@ dist_patch_DATA =						\
   %D%/packages/patches/python-werkzeug-tests.patch		\
   %D%/packages/patches/python-zeep-Fix-pytest_httpx-test-cases.patch	\
   %D%/packages/patches/qemu-build-info-manual.patch		\
+  %D%/packages/patches/qemu-disable-aarch64-migration-test.patch	\
   %D%/packages/patches/qemu-glibc-2.27.patch 			\
   %D%/packages/patches/qemu-glibc-2.30.patch 			\
   %D%/packages/patches/qemu-fix-agent-paths.patch 		\
@@ -1763,27 +1796,33 @@ dist_patch_DATA =						\
   %D%/packages/patches/readline-6.2-CVE-2014-2524.patch		\
   %D%/packages/patches/renpy-use-system-fribidi.patch		\
   %D%/packages/patches/reposurgeon-add-missing-docbook-files.patch	\
-  %D%/packages/patches/r-httpuv-1.5.5-unvendor-libuv.patch	\
+  %D%/packages/patches/r-httpuv-1.6.6-unvendor-libuv.patch	\
   %D%/packages/patches/ri-li-modernize_cpp.patch		\
   %D%/packages/patches/ripperx-missing-file.patch		\
   %D%/packages/patches/rpcbind-CVE-2017-8779.patch		\
   %D%/packages/patches/rtags-separate-rct.patch			\
-  %D%/packages/patches/racket-minimal-sh-via-rktio.patch	\
+  %D%/packages/patches/racket-backport-8.7-pkg-strip.patch	\
+  %D%/packages/patches/racket-chez-scheme-bin-sh.patch		\
+  %D%/packages/patches/racket-rktio-bin-sh.patch		\
+  %D%/packages/patches/racket-zuo-bin-sh.patch			\
   %D%/packages/patches/remake-impure-dirs.patch			\
   %D%/packages/patches/restic-0.9.6-fix-tests-for-go1.15.patch	\
   %D%/packages/patches/retroarch-LIBRETRO_DIRECTORY.patch	\
+  %D%/packages/patches/r-mixedpower-r2power.patch		\
   %D%/packages/patches/rnp-add-version.cmake.patch		\
   %D%/packages/patches/rnp-disable-ruby-rnp-tests.patch		\
   %D%/packages/patches/rnp-unbundle-googletest.patch		\
-  %D%/packages/patches/rocm-comgr-3.1.0-dependencies.patch \
-  %D%/packages/patches/rocm-opencl-runtime-4.3-noclinfo.patch \
-  %D%/packages/patches/rocm-opencl-runtime-4.3-noopencl.patch \
+  %D%/packages/patches/rocm-comgr-3.1.0-dependencies.patch 	\
+  %D%/packages/patches/rocm-opencl-runtime-4.3-noclinfo.patch 	\
+  %D%/packages/patches/rocm-opencl-runtime-4.3-noopencl.patch 	\
+  %D%/packages/patches/rottlog-direntry.patch 			\
+  %D%/packages/patches/ruby-hydra-minimal-no-byebug.patch	\
   %D%/packages/patches/ruby-anystyle-data-immutable-install.patch	\
   %D%/packages/patches/ruby-anystyle-fix-dictionary-populate.patch	\
   %D%/packages/patches/ruby-latex-decode-fix-test.patch		\
   %D%/packages/patches/ruby-mustache-1.1.1-fix-race-condition-tests.patch \
   %D%/packages/patches/ruby-sanitize-system-libxml.patch	\
-  %D%/packages/patches/rustc-1.39.0-src.patch			\
+  %D%/packages/patches/rustc-1.54.0-src.patch			\
   %D%/packages/patches/rust-adblock-ignore-live-tests.patch		\
   %D%/packages/patches/i3status-rust-enable-unstable-features.patch	\
   %D%/packages/patches/rust-ndarray-remove-blas-src-dep.patch	\
@@ -1792,18 +1831,17 @@ dist_patch_DATA =						\
   %D%/packages/patches/rust-nettle-disable-vendor.patch		 \
   %D%/packages/patches/rust-nettle-sys-disable-vendor.patch	 \
   %D%/packages/patches/rust-openssl-sys-no-vendor.patch	\
-  %D%/packages/patches/rust-shell2batch-lint-fix.patch		\
   %D%/packages/patches/rust-wl-clipboard-rs-newer-wl.patch      \
   %D%/packages/patches/sbc-fix-build-non-x86.patch		\
   %D%/packages/patches/sbcl-aserve-add-HTML-5-elements.patch	\
   %D%/packages/patches/sbcl-aserve-fix-rfe12668.patch	\
   %D%/packages/patches/sbcl-burgled-batteries3-fix-signals.patch	\
   %D%/packages/patches/sbcl-clml-fix-types.patch		\
+  %D%/packages/patches/sbcl-fix-build-on-arm64-with-clisp-as-host.patch	\
   %D%/packages/patches/sbcl-png-fix-sbcl-compatibility.patch	\
   %D%/packages/patches/scalapack-gcc-10-compilation.patch	\
   %D%/packages/patches/scheme48-tests.patch			\
-  %D%/packages/patches/scotch-build-parallelism.patch		\
-  %D%/packages/patches/scotch-integer-declarations.patch	\
+  %D%/packages/patches/scons-test-environment.patch		\
   %D%/packages/patches/screen-hurd-path-max.patch		\
   %D%/packages/patches/sdl-libx11-1.6.patch			\
   %D%/packages/patches/seed-webkit.patch			\
@@ -1821,10 +1859,13 @@ dist_patch_DATA =						\
   %D%/packages/patches/slim-reset.patch				\
   %D%/packages/patches/slim-login.patch				\
   %D%/packages/patches/slim-display.patch			\
+  %D%/packages/patches/stex-copy-from-immutable-store.patch	\
   %D%/packages/patches/syslinux-gcc10.patch			\
   %D%/packages/patches/syslinux-strip-gnu-property.patch	\
   %D%/packages/patches/snappy-add-O2-flag-in-CmakeLists.txt.patch	\
   %D%/packages/patches/snappy-add-inline-for-GCC.patch		\
+  %D%/packages/patches/spectre-meltdown-checker-externalize-fwdb.patch \
+  %D%/packages/patches/spectre-meltdown-checker-find-kernel.patch \
   %D%/packages/patches/sphinxbase-fix-doxygen.patch		\
   %D%/packages/patches/spice-vdagent-glib-2.68.patch		\
   %D%/packages/patches/sssd-optional-systemd.patch		\
@@ -1848,19 +1889,19 @@ dist_patch_DATA =						\
   %D%/packages/patches/tao-fix-parser-types.patch		\
   %D%/packages/patches/tar-remove-wholesparse-check.patch	\
   %D%/packages/patches/tar-skip-unreliable-tests.patch		\
-  %D%/packages/patches/tbb-fix-test-on-aarch64.patch		\
   %D%/packages/patches/tbb-other-arches.patch			\
   %D%/packages/patches/tclxml-3.2-install.patch			\
   %D%/packages/patches/tcsh-fix-autotest.patch			\
   %D%/packages/patches/teensy-loader-cli-help.patch		\
   %D%/packages/patches/tensorflow-c-api-fix.patch		\
   %D%/packages/patches/texinfo-5-perl-compat.patch		\
+  %D%/packages/patches/telegram-desktop-allow-disable-libtgvoip.patch   \
   %D%/packages/patches/telegram-purple-adjust-test.patch	\
   %D%/packages/patches/texi2html-document-encoding.patch	\
   %D%/packages/patches/texi2html-i18n.patch			\
+  %D%/packages/patches/texlive-hyph-utf8-no-byebug.patch	\
   %D%/packages/patches/thefuck-test-environ.patch		\
   %D%/packages/patches/tidy-CVE-2015-5522+5523.patch		\
-  %D%/packages/patches/timescaledb-flaky-test.patch		\
   %D%/packages/patches/tinyxml-use-stl.patch			\
   %D%/packages/patches/tipp10-disable-downloader.patch		\
   %D%/packages/patches/tipp10-fix-compiling.patch		\
@@ -1878,6 +1919,8 @@ dist_patch_DATA =						\
   %D%/packages/patches/trytond-add-guix_trytond_path.patch	\
   %D%/packages/patches/ttf2eot-cstddef.patch			\
   %D%/packages/patches/tup-unbundle-dependencies.patch		\
+  %D%/packages/patches/turbovnc-custom-paths.patch		\
+  %D%/packages/patches/turbovnc-find-system-packages.patch	\
   %D%/packages/patches/tuxpaint-stamps-path.patch		\
   %D%/packages/patches/twinkle-bcg729.patch			\
   %D%/packages/patches/u-boot-allow-disabling-openssl.patch	\
@@ -1886,6 +1929,7 @@ dist_patch_DATA =						\
   %D%/packages/patches/u-boot-sifive-prevent-reloc-initrd-fdt.patch	\
   %D%/packages/patches/u-boot-rk3399-enable-emmc-phy.patch	\
   %D%/packages/patches/ucx-tcp-iface-ioctl.patch		\
+  %D%/packages/patches/ultrastar-deluxe-no-freesans.patch		\
   %D%/packages/patches/ungoogled-chromium-extension-search-path.patch	\
   %D%/packages/patches/ungoogled-chromium-ffmpeg-compat.patch	\
   %D%/packages/patches/ungoogled-chromium-RUNPATH.patch		\
@@ -1927,7 +1971,6 @@ dist_patch_DATA =						\
   %D%/packages/patches/unzip-zipbomb-part2.patch		\
   %D%/packages/patches/unzip-zipbomb-part3.patch		\
   %D%/packages/patches/unzip-32bit-zipbomb-fix.patch    \
-  %D%/packages/patches/upx-CVE-2021-20285.patch		\
   %D%/packages/patches/ustr-fix-build-with-gcc-5.patch		\
   %D%/packages/patches/util-linux-tests.patch			\
   %D%/packages/patches/util-linux-CVE-2021-3995.patch		\
@@ -1944,13 +1987,15 @@ dist_patch_DATA =						\
   %D%/packages/patches/vsearch-unbundle-cityhash.patch		\
   %D%/packages/patches/vte-CVE-2012-2738-pt1.patch			\
   %D%/packages/patches/vte-CVE-2012-2738-pt2.patch			\
-  %D%/packages/patches/vtk-fix-freetypetools-build-failure.patch	\
   %D%/packages/patches/vtk-7-gcc-10-compat.patch		\
   %D%/packages/patches/vtk-7-hdf5-compat.patch			\
   %D%/packages/patches/vtk-7-python-compat.patch		\
+  %D%/packages/patches/wacomtablet-add-missing-includes.patch	\
+  %D%/packages/patches/wacomtablet-qt5.15.patch			\
   %D%/packages/patches/warsow-qfusion-fix-bool-return-type.patch	\
   %D%/packages/patches/webkitgtk-adjust-bubblewrap-paths.patch	\
   %D%/packages/patches/webrtc-audio-processing-big-endian.patch	\
+  %D%/packages/patches/webrtc-for-telegram-desktop-fix-gcc12-cstdint.patch   \
   %D%/packages/patches/websocketpp-fix-for-cmake-3.15.patch	\
   %D%/packages/patches/widelands-add-missing-map-include.patch	\
   %D%/packages/patches/widelands-system-wide_minizip.patch	\

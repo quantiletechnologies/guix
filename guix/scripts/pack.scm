@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2015, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015, 2017-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2017, 2018 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2018 Konrad Hinsen <konrad.hinsen@fastmail.net>
 ;;; Copyright © 2018 Chris Marusich <cmmarusich@gmail.com>
@@ -33,7 +33,6 @@
   #:use-module (guix store)
   #:use-module ((guix status) #:select (with-status-verbosity))
   #:use-module ((guix self) #:select (make-config.scm))
-  #:use-module (guix grafts)
   #:autoload   (guix inferior) (inferior-package?
                                 inferior-package-name
                                 inferior-package-version)
@@ -43,11 +42,13 @@
   #:use-module (guix profiles)
   #:use-module (guix describe)
   #:use-module (guix derivations)
+  #:use-module (guix diagnostics)
   #:use-module (guix search-paths)
   #:use-module (guix build-system gnu)
   #:use-module (guix scripts build)
   #:use-module (guix transformations)
   #:use-module ((guix self) #:select (make-config.scm))
+  #:use-module (gnu compression)
   #:use-module (gnu packages)
   #:use-module (gnu packages bootstrap)
   #:use-module ((gnu packages compression) #:hide (zip))
@@ -59,14 +60,11 @@
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
   #:use-module (srfi srfi-26)
+  #:use-module (srfi srfi-35)
   #:use-module (srfi srfi-37)
   #:use-module (ice-9 match)
-  #:export (compressor?
-            compressor-name
-            compressor-extension
-            compressor-command
-            %compressors
-            lookup-compressor
+  #:export (symlink-spec-option-parser
+
             self-contained-tarball
             debian-archive
             docker-image
@@ -75,49 +73,12 @@
             %formats
             guix-pack))
 
-;; Type of a compression tool.
-(define-record-type <compressor>
-  (compressor name extension command)
-  compressor?
-  (name       compressor-name)      ;string (e.g., "gzip")
-  (extension  compressor-extension) ;string (e.g., ".lz")
-  (command    compressor-command))  ;gexp (e.g., #~(list "/gnu/store/…/gzip"
-                                    ;                    "-9n" ))
-
-(define %compressors
-  ;; Available compression tools.
-  (list (compressor "gzip"  ".gz"
-                    #~(list #+(file-append gzip "/bin/gzip") "-9n"))
-        (compressor "lzip"  ".lz"
-                    #~(list #+(file-append lzip "/bin/lzip") "-9"))
-        (compressor "xz"    ".xz"
-                    #~(append (list #+(file-append xz "/bin/xz")
-                                    "-e")
-                              (%xz-parallel-args)))
-        (compressor "bzip2" ".bz2"
-                    #~(list #+(file-append bzip2 "/bin/bzip2") "-9"))
-        (compressor "zstd" ".zst"
-                    ;; The default level 3 compresses better than gzip in a
-                    ;; fraction of the time, while the highest level 19
-                    ;; (de)compresses more slowly and worse than xz.
-                    #~(list #+(file-append zstd "/bin/zstd") "-3"))
-        (compressor "none" "" #f)))
-
 ;; This one is only for use in this module, so don't put it in %compressors.
 (define bootstrap-xz
   (compressor "bootstrap-xz" ".xz"
               #~(append (list #+(file-append %bootstrap-coreutils&co "/bin/xz")
                               "-e")
                         (%xz-parallel-args))))
-
-(define (lookup-compressor name)
-  "Return the compressor object called NAME.  Error out if it could not be
-found."
-  (or (find (match-lambda
-              (($ <compressor> name*)
-               (string=? name* name)))
-            %compressors)
-      (leave (G_ "~a: compressor not found~%") name)))
 
 (define not-config?
   ;; Select (guix …) and (gnu …) modules, except (guix config).
@@ -203,6 +164,36 @@ its source property."
           ((_) str)
           ((names ... _) (loop names))))))
 
+(define (symlink-spec-option-parser opt name arg result)
+  "A SRFI-37 option parser for the --symlink option.  The symlink spec accepts
+the link file name as its left-hand side value and its target as its
+right-hand side value.  The target must be a relative link."
+  ;; Note: Using 'string-split' allows us to handle empty
+  ;; TARGET (as in "/opt/guile=", meaning that /opt/guile is
+  ;; a symlink to the profile) correctly.
+  (match (string-split arg #\=)
+    ((source target)
+     (when (string-prefix? "/" target)
+       (raise-exception
+        (make-compound-condition
+         (formatted-message (G_ "symlink target is absolute: '~a'~%") target)
+         (condition
+          (&fix-hint (hint (format #f (G_ "The target of the symlink must be
+relative rather than absolute, as it is relative to the profile created.
+Perhaps the source and target components of the symlink spec were inverted?
+Below is a valid example, where the @file{/usr/bin/env} symbolic link is to
+target the profile's @file{bin/env} file:
+@example
+--symlink=/usr/bin/env=bin/env
+@end example"))))))))
+     (let ((symlinks (assoc-ref result 'symlinks)))
+       (alist-cons 'symlinks
+                   `((,source -> ,target) ,@symlinks)
+                   (alist-delete 'symlinks result eq?))))
+    (x
+     (leave (G_ "~a: invalid symlink specification~%")
+            arg))))
+
 
 ;;;
 ;;; Tarball format.
@@ -269,8 +260,9 @@ its source property."
                `(,@(if (string=? parent "/")
                        '()
                        `((directory ,parent)))
-                 (,source
-                  -> ,(relative-file-name parent target)))))))
+                 ;; Use a relative file name for compatibility with
+                 ;; relocatable packs.
+                 (,source -> ,(relative-file-name parent target)))))))
 
         (define directives
           ;; Fully-qualified symlinks.
@@ -710,7 +702,6 @@ Valid compressors are: ~a~%") compressor-name %valid-compressors)))
                          (guix build utils)
                          (guix profiles)
                          (ice-9 match)
-                         ((oop goops) #:select (get-keyword))
                          (srfi srfi-1))
 
             (define machine-type
@@ -771,15 +762,20 @@ Valid compressors are: ~a~%") compressor-name %valid-compressors)))
 
             (copy-file #+data-tarball data-tarball-file-name)
 
+            (define (keyword-ref lst keyword)
+              (match (memq keyword lst)
+                ((_ value . _) value)
+                (#f #f)))
+
             ;; Generate the control archive.
             (define control-file
-              (get-keyword #:control-file '#$extra-options))
+              (keyword-ref '#$extra-options #:control-file))
 
             (define postinst-file
-              (get-keyword #:postinst-file '#$extra-options))
+              (keyword-ref '#$extra-options #:postinst-file))
 
             (define triggers-file
-              (get-keyword #:triggers-file '#$extra-options))
+              (keyword-ref '#$extra-options #:triggers-file))
 
             (define control-tarball-file-name
               (string-append "control.tar"
@@ -1251,20 +1247,7 @@ last resort for relocation."
                  (lambda (opt name arg result)
                    (alist-cons 'compressor (lookup-compressor arg)
                                result)))
-         (option '(#\S "symlink") #t #f
-                 (lambda (opt name arg result)
-                   ;; Note: Using 'string-split' allows us to handle empty
-                   ;; TARGET (as in "/opt/guile=", meaning that /opt/guile is
-                   ;; a symlink to the profile) correctly.
-                   (match (string-split arg (char-set #\=))
-                     ((source target)
-                      (let ((symlinks (assoc-ref result 'symlinks)))
-                        (alist-cons 'symlinks
-                                    `((,source -> ,target) ,@symlinks)
-                                    (alist-delete 'symlinks result eq?))))
-                     (x
-                      (leave (G_ "~a: invalid symlink specification~%")
-                             arg)))))
+         (option '(#\S "symlink") #t #f symlink-spec-option-parser)
          (option '("save-provenance") #f #f
                  (lambda (opt name arg result)
                    (alist-cons 'save-provenance? #t result)))
@@ -1364,74 +1347,74 @@ Create a bundle of PACKAGE.\n"))
   (category development)
   (synopsis "create application bundles")
 
-  (define opts
-    (parse-command-line args %options (list %default-options)))
-
-  (define maybe-package-argument
-    ;; Given an option pair, return a package, a package/output tuple, or #f.
-    (match-lambda
-      (('argument . spec)
-       (call-with-values
-           (lambda ()
-             (specification->package+output spec))
-         list))
-      (('expression . exp)
-       (read/eval-package-expression exp))
-      (x #f)))
-
-  (define (manifest-from-args store opts)
-    (let* ((transform     (options->transformation opts))
-           (packages      (map (match-lambda
-                                 (((? package? package) output)
-                                  (list (transform package) output))
-                                 ((? package? package)
-                                  (list (transform package) "out")))
-                               (reverse
-                                (filter-map maybe-package-argument opts))))
-           (manifests     (filter-map (match-lambda
-                                        (('manifest . file) file)
-                                        (_ #f))
-                                      opts)))
-      (define with-provenance
-        (if (assoc-ref opts 'save-provenance?)
-            (lambda (manifest)
-              (map-manifest-entries
-               (lambda (entry)
-                 (let ((entry (manifest-entry-with-provenance entry)))
-                   (unless (assq 'provenance (manifest-entry-properties entry))
-                     (warning (G_ "could not determine provenance of package ~a~%")
-                              (manifest-entry-name entry)))
-                   entry))
-               manifest))
-            identity))
-
-      (with-provenance
-       (cond
-        ((and (not (null? manifests)) (not (null? packages)))
-         (leave (G_ "both a manifest and a package list were given~%")))
-        ((not (null? manifests))
-         (concatenate-manifests
-          (map (lambda (file)
-                 (let ((user-module (make-user-module
-                                     '((guix profiles) (gnu)))))
-                   (load* file user-module)))
-               manifests)))
-        (else
-         (packages->manifest packages))))))
-
-  (define (process-file-arg opts name)
-    ;; Validate that the file exists and return it as a <local-file> object,
-    ;; else #f.
-    (let ((value (assoc-ref opts name)))
-      (match value
-        ((and (? string?) (not (? file-exists?)))
-         (leave (G_ "file provided with option ~a does not exist: ~a~%")
-                (string-append "--" (symbol->string name)) value))
-        ((? string?)
-         (local-file value))
-        (#f #f))))
-
   (with-error-handling
+    (define opts
+      (parse-command-line args %options (list %default-options)))
+
+    (define maybe-package-argument
+      ;; Given an option pair, return a package, a package/output tuple, or #f.
+      (match-lambda
+        (('argument . spec)
+         (call-with-values
+             (lambda ()
+               (specification->package+output spec))
+           list))
+        (('expression . exp)
+         (read/eval-package-expression exp))
+        (x #f)))
+
+    (define (manifest-from-args store opts)
+      (let* ((transform     (options->transformation opts))
+             (packages      (map (match-lambda
+                                   (((? package? package) output)
+                                    (list (transform package) output))
+                                   ((? package? package)
+                                    (list (transform package) "out")))
+                                 (reverse
+                                  (filter-map maybe-package-argument opts))))
+             (manifests     (filter-map (match-lambda
+                                          (('manifest . file) file)
+                                          (_ #f))
+                                        opts)))
+        (define with-provenance
+          (if (assoc-ref opts 'save-provenance?)
+              (lambda (manifest)
+                (map-manifest-entries
+                 (lambda (entry)
+                   (let ((entry (manifest-entry-with-provenance entry)))
+                     (unless (assq 'provenance (manifest-entry-properties entry))
+                       (warning (G_ "could not determine provenance of package ~a~%")
+                                (manifest-entry-name entry)))
+                     entry))
+                 manifest))
+              identity))
+
+        (with-provenance
+         (cond
+          ((and (not (null? manifests)) (not (null? packages)))
+           (leave (G_ "both a manifest and a package list were given~%")))
+          ((not (null? manifests))
+           (concatenate-manifests
+            (map (lambda (file)
+                   (let ((user-module (make-user-module
+                                       '((guix profiles) (gnu)))))
+                     (load* file user-module)))
+                 manifests)))
+          (else
+           (packages->manifest packages))))))
+
+    (define (process-file-arg opts name)
+      ;; Validate that the file exists and return it as a <local-file> object,
+      ;; else #f.
+      (let ((value (assoc-ref opts name)))
+        (match value
+          ((and (? string?) (not (? file-exists?)))
+           (leave (G_ "file provided with option ~a does not exist: ~a~%")
+                  (string-append "--" (symbol->string name)) value))
+          ((? string?)
+           (local-file value))
+          (#f #f))))
+
     (with-store store
       (with-status-verbosity (assoc-ref opts 'verbosity)
         ;; Set the build options before we do anything else.

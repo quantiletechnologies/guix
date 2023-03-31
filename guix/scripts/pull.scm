@@ -31,7 +31,6 @@
   #:use-module (guix derivations)
   #:use-module (guix profiles)
   #:use-module (guix gexp)
-  #:use-module (guix grafts)
   #:use-module (guix memoization)
   #:use-module (guix monads)
   #:use-module (guix channels)
@@ -452,6 +451,9 @@ true, display what would be built without actually building it."
   (mlet %store-monad ((manifest (channel-instances->manifest instances)))
     (mbegin %store-monad
       (update-profile profile manifest
+                      ;; Create a version 3 profile so that it is readable by
+                      ;; old instances of Guix.
+                      #:format-version 3
                       #:hooks %channel-profile-hooks)
 
       (return

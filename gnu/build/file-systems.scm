@@ -98,6 +98,18 @@ standard input is /dev/null."
              system*/console)
          program args))
 
+(define (call-with-input-file file proc)
+  "Like 'call-with-input-file', but pass O_CLOEXEC."
+  (let ((port #f))
+    (dynamic-wind
+      (lambda ()
+        (set! port (open file (logior O_RDONLY O_CLOEXEC))))
+      (lambda ()
+        (proc port))
+      (lambda ()
+        (close-port port)
+        (set! port #f)))))
+
 (define (bind-mount source target)
   "Bind-mount SOURCE at TARGET."
   (mount source target "" MS_BIND))
@@ -887,6 +899,10 @@ caught and lead to a warning and #f as the result."
                  (format (current-error-port)
                          "warning: failed to read from device '~a'~%" device)
                  #f)
+                ((= EMEDIUMTYPE errno)            ;inaccessible, like DRBD secondaries
+                 (format (current-error-port)
+                         "warning: failed to open device '~a'~%" device)
+                 #f)
                 (else
                  (apply throw args))))))))
 
@@ -1111,7 +1127,7 @@ corresponds to the symbols listed in FLAGS."
       (('read-only rest ...)
        (logior MS_RDONLY (loop rest)))
       (('bind-mount rest ...)
-       (logior MS_BIND (loop rest)))
+       (logior MS_REC (logior MS_BIND (loop rest))))
       (('no-suid rest ...)
        (logior MS_NOSUID (loop rest)))
       (('no-dev rest ...)
@@ -1120,6 +1136,8 @@ corresponds to the symbols listed in FLAGS."
        (logior MS_NOEXEC (loop rest)))
       (('no-atime rest ...)
        (logior MS_NOATIME (loop rest)))
+      (('no-diratime rest ...)
+       (logior MS_NODIRATIME (loop rest)))
       (('strict-atime rest ...)
        (logior MS_STRICTATIME (loop rest)))
       (('lazy-time rest ...)
@@ -1183,7 +1201,8 @@ corresponds to the symbols listed in FLAGS."
                  (not (file-is-directory? source)))
             (unless (file-exists? target)
               (mkdir-p (dirname target))
-              (call-with-output-file target (const #t)))
+              (close-fdes
+               (open-fdes target (logior O_WRONLY O_CREAT O_CLOEXEC))))
             (mkdir-p target))
 
         (cond

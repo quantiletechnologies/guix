@@ -1,6 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2016, 2017, 2018, 2019, 2020, 2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2018 Clément Lassieur <clement@lassieur.org>
+;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -341,7 +342,7 @@ info --version")
                       (wait-for-screen-text marionette
                                             (lambda (text)
                                               (string-contains text "Password"))
-                                            #:ocrad
+                                            #:ocr
                                             #$(file-append ocrad "/bin/ocrad"))
                       (marionette-type (string-append password "\n\n")
                                        marionette))
@@ -422,6 +423,12 @@ info --version")
                #t)
               (x
                (pk 'failure x #f))))
+
+          (test-assert "nscd configuration action"
+            (marionette-eval '(with-shepherd-action 'nscd ('configuration)
+                                                    results
+                                (file-exists? (car results)))
+                             marionette))
 
           (test-equal "nscd invalidate action"
             '(#t)                                 ;one value, #t
@@ -509,18 +516,18 @@ info --version")
                 (file-exists? capture))))
 
           (test-assert "screen text"
-            (let ((text (marionette-screen-text marionette
-                                                #:ocrad
-                                                #$(file-append ocrad
-                                                               "/bin/ocrad"))))
-              ;; Check whether the welcome message and shell prompt are
-              ;; displayed.  Note: OCR confuses "y" and "V" for instance, so
-              ;; we cannot reliably match the whole text.
-              (and (string-contains text "This is the GNU")
-                   (string-contains text
-                                    (string-append
-                                     "root@"
-                                     #$(operating-system-host-name os))))))
+            (wait-for-screen-text
+             marionette
+             (lambda (text)
+               ;; Check whether the welcome message and shell prompt are
+               ;; displayed.  Note: OCR confuses "y" and "V" for instance, so
+               ;; we cannot reliably match the whole text.
+               (and (string-contains text "This is the GNU")
+                    (string-contains text
+                                     (string-append
+                                      "root@"
+                                      #$(operating-system-host-name os)))))
+             #:ocr #$(file-append ocrad "/bin/ocrad")))
 
           (test-end))))
 
@@ -694,7 +701,13 @@ in a loop.  See <http://bugs.gnu.org/26931>.")
 
             ;; Halt the system.
             (marionette-eval '(system* "/run/current-system/profile/sbin/halt")
-                             marionette))
+                             marionette)
+
+            (display "waiting for marionette to complete...")
+            (force-output)
+            (false-if-exception (waitpid (marionette-pid marionette)))
+            (display " done\n")
+            (force-output))
 
           ;; Remove the sockets used by the marionette above to avoid
           ;; EADDRINUSE.

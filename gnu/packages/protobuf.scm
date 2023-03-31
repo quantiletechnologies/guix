@@ -31,11 +31,14 @@
   #:use-module (guix git-download)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system gnu)
+  #:use-module (guix build-system pyproject)
   #:use-module (guix build-system python)
   #:use-module (guix build-system emacs)
   #:use-module (guix build-system ruby)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix utils)
+  #:use-module (gnu packages)
+  #:use-module (gnu packages build-tools)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages check)
   #:use-module (gnu packages gcc)
@@ -45,7 +48,9 @@
   #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-check)
   #:use-module (gnu packages python-xyz)
-  #:use-module (gnu packages ruby))
+  #:use-module (gnu packages rpc)
+  #:use-module (gnu packages ruby)
+  #:use-module (srfi srfi-1))
 
 (define-public fstrm
   (package
@@ -88,55 +93,71 @@ data in motion, or as a file format for data at rest.")
 (define-public protobuf
   (package
     (name "protobuf")
-    (version "3.17.3")
+    (version "3.21.9")
     (source (origin
               (method url-fetch)
-              (uri (string-append "https://github.com/google/protobuf/releases/"
-                                  "download/v" version "/protobuf-cpp-"
-                                  version ".tar.gz"))
+              (uri (string-append
+                    "https://github.com/protocolbuffers/"
+                    "protobuf/releases/download/v"
+                    (string-join (drop (string-split version #\.) 1) ".")
+                    "/protobuf-cpp-" version ".tar.gz"))
+              (modules '((guix build utils)))
+              (snippet '(delete-file-recursively "third_party"))
               (sha256
                (base32
-                "1jzqrklhj9grs6xbddyb5dyxfbgbgbyhl5zig8ml50wb22gwkkji"))))
-    (build-system gnu-build-system)
-    (inputs (list zlib))
+                "01cl4l0rnnzjbhjjs2gyg2pk13505gh86ikh22jqjp54dp8mvp5x"))
+              (patches (search-patches "protobuf-fix-build-on-32bit.patch"))))
     (outputs (list "out"
                    "static"))           ; ~12 MiB of .a files
+    (build-system cmake-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'disable-broken-tests
-           ;; The following tests fail on 32 bit architectures such as
-           ;; i686-linux.
-           (lambda _
-             (let-syntax ((disable-tests
-                           (syntax-rules ()
-                             ((_ file test ...)
-                              (substitute* file
-                                ((test name)
-                                 (string-append "DISABLED_" name)) ...)))))
-               ;; See: https://github.com/protocolbuffers/protobuf/issues/8460.
-               (disable-tests "src/google/protobuf/any_test.cc"
-                              "TestPackFromSerializationExceedsSizeLimit")
-               ;; See: https://github.com/protocolbuffers/protobuf/issues/8459.
-               (disable-tests "src/google/protobuf/arena_unittest.cc"
-                              "SpaceAllocated_and_Used"
-                              "BlockSizeSmallerThanAllocation")
-               ;; See: https://github.com/protocolbuffers/protobuf/issues/8082.
-               (disable-tests "src/google/protobuf/io/zero_copy_stream_unittest.cc"
-                              "LargeOutput"))))
-         (add-after 'install 'move-static-libraries
-           (lambda* (#:key outputs #:allow-other-keys)
-             ;; Move static libraries to the "static" output.
-             (let* ((out    (assoc-ref outputs "out"))
-                    (lib    (string-append out "/lib"))
-                    (static (assoc-ref outputs "static"))
-                    (slib   (string-append static "/lib")))
-               (mkdir-p slib)
-               (for-each (lambda (file)
-                           (install-file file slib)
-                           (delete-file file))
-                         (find-files lib "\\.a$"))))))))
-    (home-page "https://github.com/google/protobuf")
+     (list
+      ;; TODO: Add the BUILD_SHARED_LIBS flag to cmake-build-system.
+      #:configure-flags #~(list "-DBUILD_SHARED_LIBS=ON"
+                                "-Dprotobuf_USE_EXTERNAL_GTEST=ON")
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'disable-broken-tests
+            ;; The following tests fail on 32 bit architectures such as
+            ;; i686-linux.
+            (lambda _
+              (let-syntax ((disable-tests
+                            (syntax-rules ()
+                              ((_ file test ...)
+                               (substitute* file
+                                 ((test name)
+                                  (string-append "DISABLED_" name)) ...)))))
+                ;; See: https://github.com/protocolbuffers/protobuf/issues/8460.
+                (disable-tests "src/google/protobuf/any_test.cc"
+                               "TestPackFromSerializationExceedsSizeLimit")
+                ;; See: https://github.com/protocolbuffers/protobuf/issues/8459.
+                (disable-tests "src/google/protobuf/arena_unittest.cc"
+                               "SpaceAllocated_and_Used"
+                               "BlockSizeSmallerThanAllocation")
+                ;; See: https://github.com/protocolbuffers/protobuf/issues/8082.
+                (disable-tests "src/google/protobuf/io/zero_copy_stream_unittest.cc"
+                               "LargeOutput"))))
+          (add-before 'configure 'set-c++-standard
+            (lambda _
+              (substitute* "CMakeLists.txt"
+                ;; The 32bit patch requires C++14.
+                ;; TODO: Remove after next release.
+                (("CMAKE_CXX_STANDARD 11") "CMAKE_CXX_STANDARD 14"))))
+          (add-after 'install 'move-static-libraries
+            (lambda* (#:key outputs #:allow-other-keys)
+              ;; Move static libraries to the "static" output.
+              (let* ((out    (assoc-ref outputs "out"))
+                     (lib    (string-append out "/lib"))
+                     (static (assoc-ref outputs "static"))
+                     (slib   (string-append static "/lib")))
+                (mkdir-p slib)
+                (for-each (lambda (file)
+                            (install-file file slib)
+                            (delete-file file))
+                          (find-files lib "\\.a$"))))))))
+    (native-inputs (list googletest))
+    (inputs (list zlib))
+    (home-page "https://github.com/protocolbuffers/protobuf")
     (synopsis "Data encoding for remote procedure calls (RPCs)")
     (description
      "Protocol Buffers are a way of encoding structured data in an efficient
@@ -156,12 +177,19 @@ internal RPC protocols and file formats.")
                                   version ".tar.gz"))
               (sha256
                (base32
-                "0a955bz59ihrb5wg7dwi12xajdi5pmz4bl0g147rbdwv393jwwxk"))))))
+                "0a955bz59ihrb5wg7dwi12xajdi5pmz4bl0g147rbdwv393jwwxk"))))
+    (build-system gnu-build-system)
+    (arguments (substitute-keyword-arguments (package-arguments protobuf)
+                 ((#:configure-flags _ #f)
+                  #~(list))
+                 ((#:phases phases)
+                  #~(modify-phases #$phases
+                      (delete 'set-c++-standard)))))))
 
 ;; The 3.5 series are the last versions that do not require C++ 11.
 (define-public protobuf-3.5
   (package
-    (inherit protobuf)
+    (inherit protobuf-3.6)
    (version "3.5.1")
    (source (origin
               (method url-fetch)
@@ -184,15 +212,14 @@ internal RPC protocols and file formats.")
               (sha256
                (base32
                 "040rcs9fpv4bslhiy43v7dcrzakz4vwwpyqg4jp8bn24sl95ci7f"))))
-    (arguments (substitute-keyword-arguments (package-arguments protobuf)
-                 ((#:phases phases)
-                  `(modify-phases ,phases
-                     (delete 'disable-broken-tests)))))))
+    (build-system gnu-build-system)
+    (arguments '())
+    (outputs '("out"))))
 
 (define-public protobuf-c
   (package
     (name "protobuf-c")
-    (version "1.3.3")
+    (version "1.4.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://github.com/protobuf-c/protobuf-c/"
@@ -200,7 +227,7 @@ internal RPC protocols and file formats.")
                                   "/protobuf-c-" version ".tar.gz"))
               (sha256
                (base32
-                "0y3yaanq97si7iyld06p8w20m0shpj7sf4xwzbhhvijhxw36d592"))))
+                "17rk42r3gcc46c2svd1mxs542wnl4mi77a6klkhg6wl1a36zmi2c"))))
     (build-system gnu-build-system)
     (inputs (list protobuf))
     (native-inputs (list pkg-config))
@@ -213,6 +240,20 @@ that implements protobuf encoding and decoding, and @code{protoc-c}, a code
 generator that converts Protocol Buffer @code{.proto} files to C descriptor
 code.")
     (license license:bsd-2)))
+
+(define-public protobuf-c-for-aiscm
+  (package
+    (inherit protobuf-c)
+    (version "1.3.3")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "https://github.com/protobuf-c/protobuf-c/"
+                                  "releases/download/v" version
+                                  "/protobuf-c-" version ".tar.gz"))
+              (sha256
+               (base32
+                "0y3yaanq97si7iyld06p8w20m0shpj7sf4xwzbhhvijhxw36d592"))))
+    (inputs (list protobuf-3.6))))
 
 (define-public protozero
   (package
@@ -236,6 +277,122 @@ encoder in C++.  The developer using protozero has to manually translate the
     (license (list
               license:asl2.0            ; for folly
               license:bsd-2))))
+
+(define-public nanopb
+  (package
+    (name "nanopb")
+    (version "0.4.6.4")
+    (source (origin
+              (method git-fetch)        ;for tests
+              (uri (git-reference
+                    (url "https://github.com/nanopb/nanopb")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0gb6q4igrjj8jap4p1ijza4y8dkjlingzym3cli1w18f90d7xlh7"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      #:configure-flags #~(list "-DBUILD_SHARED_LIBS=ON"
+                                "-DBUILD_STATIC_LIBS=OFF")
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                (with-directory-excursion "../source/tests"
+                  (invoke "scons"))))))))
+    (native-inputs (list protobuf python-protobuf python-wrapper scons))
+    (home-page "https://jpa.kapsi.fi/nanopb/")
+    (synopsis "Small code-size Protocol Buffers implementation in ANSI C")
+    (description "Nanopb is a small code-size Protocol Buffers implementation
+in ansi C.  It is especially suitable for use in microcontrollers, but fits
+any memory-restricted system.")
+    (license license:zlib)))
+
+(define-public python-mypy-protobuf
+  (package
+    (name "python-mypy-protobuf")
+    (version "3.3.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/nipunn1313/mypy-protobuf")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0z03h9k68qvnlyhpk0ndwp01bdx77vrjr6mybxq4ldilkkbksklk"))))
+    (build-system pyproject-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-before 'check 'generate-protos-for-tests
+            (lambda _
+              ;; Generate Python sources.
+              (for-each (lambda (proto)
+                          (invoke "protoc"
+                                  "--proto_path=proto"
+                                  "--experimental_allow_proto3_optional"
+                                  "--python_out=test/generated" proto))
+                        (find-files "." "\\.proto$"))
+              ;; Generate GRPC protos.
+              (for-each (lambda (proto)
+                          (invoke "python" "-m" "grpc_tools.protoc"
+                                  "--proto_path=proto"
+                                  "--experimental_allow_proto3_optional"
+                                  "--grpc_python_out=test/generated" proto))
+                        (find-files "proto/testproto/grpc" "\\.proto$"))))
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (setenv "PYTHONPATH" "test/generated")
+              (invoke "pytest" "-vv" "--ignore=test/generated" "test"))))))
+    (native-inputs
+     (list python-grpc-stubs
+           python-grpcio-tools
+           python-pytest
+           python-typing-extensions-next))
+    (propagated-inputs
+     (list protobuf
+           python-protobuf
+           python-types-protobuf))
+    (home-page "https://github.com/nipunn1313/mypy-protobuf")
+    (synopsis "Generate Mypy stub files from protobuf specifications")
+    (description "This Python package provide tools to generate Mypy stubs
+from protobuf specification files.")
+    (license license:asl2.0)))
+
+(define-public python-nanopb
+  (package
+    (inherit nanopb)
+    (name "python-nanopb")
+    (build-system python-build-system)
+    (arguments
+     (list
+      #:tests? #f                       ;no Python-specific tests
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'build
+            (lambda _
+              (copy-file "extra/poetry/pyproject.toml" "pyproject.toml")
+              (delete-file "build.py")
+              ;; Mimick extra/poetry/poetry_build.sh.
+              (mkdir "nanopb")
+              (copy-recursively "generator" "nanopb/generator")
+              (invoke "touch" "nanopb/__init__.py"
+                      "nanopb/generator/__init__.py")
+              (invoke "make" "-C" "nanopb/generator/proto")
+              (invoke "python" "-m" "build" "--wheel" "--no-isolation" ".")))
+          (replace 'install
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let ((whl (car (find-files "dist" "\\.whl$"))))
+                (invoke "pip" "--no-cache-dir" "--no-input"
+                        "install" "--no-deps" "--prefix" #$output whl)))))))
+    (native-inputs (list poetry protobuf python-pypa-build))
+    (propagated-inputs (list python-protobuf))
+    (synopsis "Small code-size Protocol Buffers implementation in Python")))
 
 (define-public python-protobuf
   (package

@@ -61,6 +61,7 @@
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-check)
   #:use-module (gnu packages python-xyz)
+  #:use-module (gnu packages qt)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages serialization)
   #:use-module (gnu packages texinfo)
@@ -596,7 +597,7 @@ the position of the variable and allows you to modify its value.")
 (define-public remake
   (package (inherit gnu-make)
     (name "remake")
-    (version "4.3-1.5")
+    (version "4.3-1.6")
     (source (origin
               (method url-fetch)
               (uri (let ((upstream-version
@@ -608,7 +609,7 @@ the position of the variable and allows you to modify its value.")
               (file-name (string-append "remake-" version ".tar.gz"))
               (sha256
                (base32
-                "0xlx2485y0israv2pfghmv74lxcv9i5y65agy69mif76yc4vfvif"))
+                "11vvch8bi0yhjfz7gn92b3xmmm0cgi3qfiyhbnnj89frkhbwd87n"))
               (patches (search-patches "remake-impure-dirs.patch"))))
     (inputs
      (modify-inputs (package-inputs gnu-make)
@@ -621,7 +622,7 @@ error reporting, better tracing, profiling, and a debugger.")
 (define-public rr
   (package
     (name "rr")
-    (version "5.5.0")
+    (version "5.6.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -629,7 +630,7 @@ error reporting, better tracing, profiling, and a debugger.")
                     (commit version)))
               (sha256
                (base32
-                "079x891axkiy8qbvjar9vbaldlx7pm9p0i3nq6infdc66nc69635"))
+                "0sdpsd7bcbmx9gmp7lv71znzxz708wm8qxq5apbyc6hh80z4fzqz"))
               (file-name (git-file-name name version))))
     (build-system cmake-build-system)
     (arguments
@@ -641,7 +642,9 @@ error reporting, better tracing, profiling, and a debugger.")
              ;; Satisfy the ‘validate-runpath’ phase.  This isn't a direct
              ;; consequence of clearing CMAKE_INSTALL_RPATH.
              (string-append "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath="
-                            (assoc-ref %build-inputs "capnproto") "/lib")
+                            (assoc-ref %build-inputs "capnproto")
+                            "/lib,-rpath=" (assoc-ref %build-inputs "zlib")
+                            "/lib")
              ,@(if (and (not (%current-target-system))
                         (member (%current-system)
                                 '("x86_64-linux" "aarch64-linux")))
@@ -666,7 +669,7 @@ error reporting, better tracing, profiling, and a debugger.")
     (native-inputs
      (list pkg-config ninja which))
     (inputs
-     (list gdb capnproto python python-pexpect))
+     (list gdb capnproto python python-pexpect zlib))
     (home-page "https://rr-project.org/")
     (synopsis "Record and reply debugging framework")
     (description
@@ -824,3 +827,32 @@ debugger with support for programming, disassembly and reverse
 engineering.")
       (home-page "https://github.com/dlbeer/mspdebug")
       (license license:gpl2+))))
+
+(define-public seer-gdb
+  (package
+    (name "seer-gdb")
+    (version "1.11")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                     (url "https://github.com/epasveer/seer.git")
+                     (commit (string-append "v" version))))
+              (file-name (string-append name "-" version "-checkout"))
+              (sha256
+               (base32
+                "0778573rixhdanmzp4slghpwgv7pm08n7cpa24rm3wrvs77ic3kb"))))
+    (build-system cmake-build-system)
+    (arguments
+     `(#:tests? #f ; Those are strangely manual
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'chdir
+           (lambda _
+             (chdir "src"))))))
+    (inputs
+     (list qtbase-5 qtcharts))
+    (synopsis "GUI frontend for GDB")
+    (description "This package provides a frontend to GDB, the GNU debugger.")
+    (home-page "https://github.com/epasveer/seer")
+    ;; Note: Some icons in src/resources are creative commons 3.0 and/or 4.0.
+    (license license:gpl3+)))

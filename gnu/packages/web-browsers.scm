@@ -159,14 +159,14 @@ management, extensions such as advertisement blocker and colorful tabs.")
 (define-public links
   (package
     (name "links")
-    (version "2.27")
+    (version "2.28")
     (source (origin
               (method url-fetch)
               (uri (string-append "http://links.twibright.com/download/"
                                   "links-" version ".tar.bz2"))
               (sha256
                (base32
-                "1d7bz6bbis94jq82xydwnazaczzmb1ij62pbmf0dxkg7xpycppfq"))))
+                "1d2lyj9k2s6brk38k51qfpddwh2w96w6gh9jq5br9rfy2fdlkm9g"))))
     (build-system gnu-build-system)
     (arguments
      (list
@@ -468,7 +468,7 @@ interface.")
 (define-public qutebrowser
   (package
     (name "qutebrowser")
-    (version "2.5.1")
+    (version "2.5.2")
     (source
      (origin
        (method url-fetch)
@@ -476,7 +476,7 @@ interface.")
                            "qutebrowser/releases/download/v" version "/"
                            "qutebrowser-" version ".tar.gz"))
        (sha256
-        (base32 "1g7dfrnjgifvbmz1523iq9qxhrsciajr8dv3pak6dlacm235i276"))))
+        (base32 "0279fi4lx8sfxz3mx6ar0wz01kiiqa1zkv9fxc6xw0y4vlacxgx9"))))
     (build-system python-build-system)
     (native-inputs
      (list python-attrs))               ; for tests
@@ -705,7 +705,7 @@ is fully configurable and extensible in Common Lisp.")
 (define-public lagrange
   (package
     (name "lagrange")
-    (version "1.13.7")
+    (version "1.14.1")
     (source
      (origin
        (method url-fetch)
@@ -713,7 +713,7 @@ is fully configurable and extensible in Common Lisp.")
         (string-append "https://git.skyjake.fi/skyjake/lagrange/releases/"
                        "download/v" version "/lagrange-" version ".tar.gz"))
        (sha256
-        (base32 "051f7ym1z1hjsxnlvk7gx7b4v12x42i3g9gi49qwy3x8rw30vrvz"))
+        (base32 "0dhynq5pn6xjis0bpnam89km9qbrdxkbv76mfsx6jzda934iyy2n"))
        (modules '((guix build utils)))
        (snippet
         '(begin
@@ -829,7 +829,7 @@ http, and https via third-party applications.")
 (define-public tinmop
   (package
     (name "tinmop")
-    (version "0.9.6")
+    (version "0.9.9")
     (source
      (origin
        (method git-fetch)
@@ -838,7 +838,7 @@ http, and https via third-party applications.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "19rr1wcadm4698q5gyq0pxv81220l5g8zfnp61s43a4q7kn4mi1z"))))
+        (base32 "0s73587wf29jzymlqrgcnci7w6wsfj1vcs7szxshsmaiszf0skwk"))))
     (build-system gnu-build-system)
     (native-inputs
      (list autoconf
@@ -912,10 +912,11 @@ http, and https via third-party applications.")
                  '("LISP_COMPILER) --eval \"(require 'asdf)\" "
                    "--eval \"(push \\\"$$(pwd)/\\\" asdf:*central-registry*)\"  "))))
              #t)))))
-    (synopsis "Gemini, kami and pleroma client with a terminal interface")
+    (synopsis
+     "Gemini, gopher, kami and pleroma client with a terminal interface")
     (description
-     "This package provides a Gemini, kami and pleroma client with a terminal
-interface.")
+     "This package provides a Gemini, gopher, kami and pleroma client with a
+terminal interface.")
     (home-page "https://www.autistici.org/interzona/tinmop.html")
     (license license:gpl3+)))
 

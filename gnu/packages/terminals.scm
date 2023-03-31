@@ -640,7 +640,7 @@ should be thread-safe.")
 (define-public libvterm
   (package
     (name "libvterm")
-    (version "0.1.4")
+    (version "0.3")
     (source
      (origin
        (method url-fetch)
@@ -648,7 +648,7 @@ should be thread-safe.")
                            "libvterm-" version ".tar.gz"))
        (sha256
         (base32
-         "1pfkhbbihd2kvaza707vl2nvk7bxaawmb37wf9v6d72mjng38w5w"))))
+         "0n1k923ii618ffkbifi8a89ag8c6m9l49z8dj01dyay551k0vsv1"))))
     (build-system gnu-build-system)
     (arguments
      `(#:make-flags
@@ -743,7 +743,7 @@ embedded kernel situations.")
                        ""))
                     (for-each
                      (lambda (file)
-                       (let ((start-rx (make-regexp " *ListElement\\{"))
+                       (let ((start-rx (make-regexp " *ListElement *\\{"))
                              (end-rx   (make-regexp " *\\}")))
                         (with-atomic-file-replacement file
                           (lambda (in out)
@@ -838,7 +838,7 @@ eye-candy, customizable, and reasonably lightweight.")
 (define-public foot
   (package
     (name "foot")
-    (version "1.12.1")
+    (version "1.13.1")
     (home-page "https://codeberg.org/dnkl/foot")
     (source (origin
               (method git-fetch)
@@ -846,7 +846,7 @@ eye-candy, customizable, and reasonably lightweight.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "14jqs4sarxbrgi5pxz0afqa9jxq90cb5ayqd21qj2n65whqa5bpk"))))
+                "0k0zbh6adwr99y9aazlyvp6s1k8zaq2j6x8kqb8q9a5qjjg56lay"))))
     (build-system meson-build-system)
     (arguments
      `(;; Using a "release" build is recommended both for performance, and
@@ -926,7 +926,7 @@ programmer to write text-based user interfaces.")
 (define-public go-github-com-junegunn-fzf
   (package
     (name "go-github-com-junegunn-fzf")
-    (version "0.25.0")
+    (version "0.34.0")
     (source
      (origin
        (method git-fetch)
@@ -936,7 +936,7 @@ programmer to write text-based user interfaces.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "1j5bfxl4w8w3n89p051y8dhxg0py9l98v7r2gkr63bg4lj32faz8"))))
+         "023ksrmjg99svmkpnlh4k7gssv1sz2nl0v5b6bsr2iragvwrgkf4"))))
     (build-system go-build-system)
     (arguments
      `(#:import-path "github.com/junegunn/fzf"))
@@ -945,8 +945,10 @@ programmer to write text-based user interfaces.")
            go-github-com-mattn-go-shellwords
            go-github-com-mattn-go-isatty
            go-github-com-gdamore-tcell
+           go-github-com-rivo-uniseg
            go-github-com-saracen-walker
            go-golang.org-x-sync-errgroup
+           go-golang-org-x-term
            go-golang-org-x-crypto))
     (home-page "https://github.com/junegunn/fzf")
     (synopsis "Command-line fuzzy-finder")
@@ -1097,14 +1099,13 @@ than a terminal.")
 (define-public python-curtsies
   (package
     (name "python-curtsies")
-    (version "0.3.5")
+    (version "0.4.0")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "curtsies" version))
        (sha256
-        (base32
-         "1g8dwafx4vx06isjkn28r3cwb0hw1bv67lgygaz34yk66lrzz1x5"))))
+        (base32 "1zj284kacv0d10ab3amkkx37hcciylkqympsksi9bwzy6g7fyafb"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
@@ -1113,9 +1114,9 @@ than a terminal.")
            (lambda _
              (invoke "nosetests" "-v"))))))
     (propagated-inputs
-     (list python-blessings python-cwcwidth))
+     (list python-blessed python-cwcwidth))
     (native-inputs
-     (list python-mock python-pyte python-nose))
+     (list python-pyte python-nose))
     (home-page "https://github.com/bpython/curtsies")
     (synopsis "Library for curses-like terminal interaction with colored
 strings")

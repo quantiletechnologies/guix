@@ -224,6 +224,7 @@ provided.")
   (package
     (name "libksba")
     (version "1.6.0")
+    (replacement libksba/fixed)
     (source
      (origin
       (method url-fetch)
@@ -252,6 +253,18 @@ specifications are building blocks of S/MIME and TLS.")
     (license license:gpl3+)
     (properties '((ftp-server . "ftp.gnupg.org")
                   (ftp-directory . "/gcrypt/libksba")))))
+
+(define libksba/fixed
+  (package
+    (inherit libksba)
+    (version "1.6.2")
+        (source
+     (origin
+      (method url-fetch)
+      (uri (string-append
+            "mirror://gnupg/libksba/libksba-" version ".tar.bz2"))
+      (sha256
+       (base32 "0wf9j9hlzvgn0vz6zg3fvcmpdr62v8bz1kzsvzdbs4lqqp51rq7w"))))))
 
 (define-public npth
   (package
@@ -288,7 +301,7 @@ compatible to GNU Pth.")
     (replacement gnupg/fixed)
     (source (origin
               (method url-fetch)
-              (uri (string-append "ftp://ftp.gnupg.org/gcrypt/gnupg/gnupg-" version
+              (uri (string-append "mirror://gnupg/gnupg/gnupg-" version
                                   ".tar.bz2"))
               (patches (search-patches "gnupg-default-pinentry.patch"))
               (sha256
@@ -418,6 +431,19 @@ and every application benefits from this.")
     (properties '((ftp-server . "ftp.gnupg.org")
                   (ftp-directory . "/gcrypt/gpgme")))))
 
+;; TODO: Merge with gpgme in the next rebuild cycle.
+(define-public gpgme-1.18
+  (package
+    (inherit gpgme)
+    (version "1.18.0")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://gnupg/gpgme/gpgme-"
+                                  version ".tar.bz2"))
+              (sha256
+               (base32
+                "17hfigfnq6xz45b5xrp299f68b5mwx0aysd51sx5v4nf8yp4w79n"))))))
+
 (define-public qgpgme
   (package
     (inherit gpgme)
@@ -445,6 +471,16 @@ and every application benefits from this.")
 QGpgME was originally developed as part of libkleo and incorporated into
 gpgpme starting with version 1.7.")
     (license license:gpl2+))) ;; Note: this differs from gpgme
+
+;; TODO: Merge with qgpgme in the next rebuild cycle.
+(define-public qgpgme-1.18
+  (package
+    (inherit qgpgme)
+    (version (package-version gpgme-1.18))
+    (source (package-source gpgme-1.18))
+    (inputs
+     (modify-inputs (package-inputs qgpgme)
+       (replace "gpgme" gpgme-1.18)))))
 
 (define-public guile-gcrypt
   (package
@@ -790,14 +826,14 @@ including tools for signing keys, keyring analysis, and party preparation.
 (define-public pinentry-tty
   (package
     (name "pinentry-tty")
-    (version "1.2.0")
+    (version "1.2.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://gnupg/pinentry/pinentry-"
                                   version ".tar.bz2"))
               (sha256
                (base32
-                "0w34c4x5hkxaxnnkcrm1azlzwzxcziv5dkci3xcd0hz0ld2j01qh"))))
+                "0rs019acfj7sr4pvc847nk42v5mba9ixqmd98nwqy8w5b9g1hyj5"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags '("--enable-pinentry-tty")))
@@ -1154,7 +1190,7 @@ over.")
 (define-public jetring
   (package
     (name "jetring")
-    (version "0.30")
+    (version "0.31")
     (source
       (origin
         (method git-fetch)
@@ -1168,14 +1204,13 @@ over.")
     (arguments
      '(#:phases
        (modify-phases %standard-phases
-         (delete 'configure) ; no configure script
+         (delete 'configure)            ; no configure script
          (add-before 'install 'hardlink-gnupg
            (lambda* (#:key inputs #:allow-other-keys)
              (let ((gpg (search-input-file inputs "/bin/gpg")))
                (substitute* (find-files "." "jetring-[[:alpha:]]+$")
                  (("gpg -") (string-append gpg " -"))
-                 (("\\\"gpg\\\"") (string-append "\"" gpg "\"")))
-               #t)))
+                 (("\\\"gpg\\\"") (string-append "\"" gpg "\""))))))
          (replace 'install
            (lambda* (#:key outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
@@ -1186,9 +1221,8 @@ over.")
                (for-each (lambda (file)
                            (install-file file (string-append man "/man1/")))
                          (find-files "." ".*\\.1$"))
-               (install-file "jetring.7" (string-append man "/man7/"))
-               #t))))
-       #:tests? #f)) ; no test phase
+               (install-file "jetring.7" (string-append man "/man7/"))))))
+       #:tests? #f))                    ; no tests
     (inputs
      (list gnupg perl))
     (home-page "https://joeyh.name/code/jetring/")

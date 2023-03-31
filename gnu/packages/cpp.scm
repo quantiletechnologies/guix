@@ -10,7 +10,7 @@
 ;;; Copyright © 2020 Roel Janssen <roel@gnu.org>
 ;;; Copyright © 2020, 2021 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2020 Brice Waegeneire <brice@waegenei.re>
-;;; Copyright © 2020, 2021 Vinicius Monego <monego@posteo.net>
+;;; Copyright © 2020, 2021, 2022 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2020, 2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2020 Michael Rohleder <mike@rohleder.de>
 ;;; Copyright © 2020 Alexandros Theodotou <alex@zrythm.org>
@@ -29,6 +29,9 @@
 ;;; Copyright © 2022 muradm <mail@muradm.net>
 ;;; Copyright © 2022 Attila Lendvai <attila@lendvai.name>
 ;;; Copyright © 2022 Arun Isaac <arunisaac@systemreboot.net>
+;;; Copyright © 2022 David Elsing <david.elsing@posteo.net>
+;;; Copyright © 2022 Zheng Junjie <873216071@qq.com>
+;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -56,6 +59,7 @@
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system meson)
   #:use-module (guix build-system python)
+  #:use-module (guix build-system scons)
   #:use-module (guix modules)
   #:use-module (guix gexp)
   #:use-module (gnu packages)
@@ -406,7 +410,7 @@ combination of these streams.")
 (define-public xsimd
   (package
     (name "xsimd")
-    (version "8.1.0")
+    (version "9.0.1")
     (source
      (origin
        (method git-fetch)
@@ -414,7 +418,7 @@ combination of these streams.")
              (url "https://github.com/QuantStack/xsimd")
              (commit version)))
        (sha256
-        (base32 "16b9fdvhhsbs93llbzccgpxjdkj8kfvac3wx0b30i306k5f3maq2"))
+        (base32 "1fcy0djwpwvls6yqxqa82s4l4gvwkqkr8i8bibbb3dm0lqvhnw52"))
        (file-name (git-file-name name version))))
     (build-system cmake-build-system)
     (arguments
@@ -422,7 +426,7 @@ combination of these streams.")
        #:test-target "xtest"))
     (native-inputs
      (list googletest))
-    (home-page "https://github.com/QuantStack/xsimd")
+    (home-page "https://github.com/xtensor-stack/xsimd")
     (synopsis "C++ wrappers for SIMD intrinsics and math implementations")
     (description
      "xsimd provides a unified means for using @acronym{SIMD, single instruction
@@ -435,7 +439,7 @@ operating on batches.")
 (define-public google-highway
   (package
     (name "google-highway")
-    (version "0.17.0")
+    (version "1.0.2")
     (source
      (origin
        (method git-fetch)
@@ -444,7 +448,7 @@ operating on batches.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0iwn7m8f1j7bchwbi5h84nzkzmzqd7byddbr4lh6i6lpd87wny08"))))
+        (base32 "1dxv61ag0pl5nl6ql4k83k4i95937nhl98img8gz9fx76cpw6z08"))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags (list "-DHWY_SYSTEM_GTEST=on")))
@@ -456,12 +460,12 @@ operating on batches.")
 library for SIMD (Single Instruction, Multiple Data) with runtime dispatch.")
     (license license:asl2.0)))
 
-(define-public xsmimd-benchmark
+(define-public xsimd-benchmark
   (package
     (inherit xsimd)
     (name "xsimd-benchmark")
     (arguments
-     `(#:configure-flags (list "-DBUILD_BENCHMARK=ON")
+     `(#:configure-flags (list "-DBUILD_BENCHMARK=ON" "-DBUILD_EXAMPLES=ON")
        #:tests? #f
        #:phases (modify-phases %standard-phases
                   (add-after 'unpack 'remove-march=native
@@ -470,9 +474,11 @@ library for SIMD (Single Instruction, Multiple Data) with runtime dispatch.")
                         (("-march=native") ""))))
                   (replace 'install
                     (lambda* (#:key outputs #:allow-other-keys)
-                      ;; Install nothing but the executable.
+                      ;; Install nothing but the executables.
                       (let ((out (assoc-ref outputs "out")))
                         (install-file "benchmark/benchmark_xsimd"
+                                      (string-append out "/bin"))
+                        (install-file "examples/mandelbrot"
                                       (string-append out "/bin"))))))))
     (synopsis "Benchmark of the xsimd library")
 
@@ -529,7 +535,7 @@ functions, class methods, and stl containers.
               (modules '((guix build utils)))
               (snippet '(delete-file-recursively "./test/thirdparty"))))
     (inputs
-     (list catch-framework2-1))
+     (list catch2-1))
     (build-system cmake-build-system)
     (arguments
      '(#:phases
@@ -548,6 +554,37 @@ functions, class methods, and stl containers.
 container which uses the order in which keys were inserted to the container
 as ordering relation.")
     (license license:expat)))
+
+(define-public json-dto
+  (package
+    (name "json-dto")
+    (version "0.3.1")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/Stiffstream/json_dto")
+                    (commit (string-append "v." version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0wr1srp08fr2mv4fmnqr626pwiw60svn6wkvy2xg7j080mgwb3ml"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      #:configure-flags #~(list "-DJSON_DTO_INSTALL_SAMPLES=OFF")
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'change-directory
+            (lambda _
+              (chdir "dev"))))))
+    (native-inputs (list catch2))
+    (propagated-inputs (list rapidjson))    ;#include'd
+    (home-page "https://github.com/Stiffstream/json_dto")
+    (synopsis "JSON to C++ structures conversion library")
+    (description "@code{json_dto} library is a small header-only helper for
+converting data between JSON representation and C++ structs.  DTO stands for
+data transfer object.")
+    (license license:bsd-3)))
 
 (define-public json-modern-cxx
   (package
@@ -654,7 +691,7 @@ tools (containers, algorithms) used by other QuantStack packages.")
 (define-public ccls
   (package
     (name "ccls")
-    (version "0.20210330")
+    (version "0.20220729")
     (source
      (origin
        (method git-fetch)
@@ -662,7 +699,7 @@ tools (containers, algorithms) used by other QuantStack packages.")
              (url "https://github.com/MaskRay/ccls")
              (commit version)))
        (sha256
-        (base32 "0zzdn7c7a244djqwcsd7rvgclcdacyf9d0vkxpfspl83k2554alf"))
+        (base32 "0cp534n7afl0rrr778cc0bnd8w091qmyqdpp5k1jh4wxla9s09br"))
        (file-name (git-file-name name version))))
     (build-system cmake-build-system)
     (arguments
@@ -1021,9 +1058,10 @@ Google's C++ code base.")
 
 (define-public abseil-cpp
   (let ((base abseil-cpp-20200923.3))
-    (package/inherit base
+    (package
+      (inherit base)
       (name "abseil-cpp")
-      (version "20210324.2")
+      (version "20220623.1")
       (source (origin
                 (method git-fetch)
                 (uri (git-reference
@@ -1032,12 +1070,21 @@ Google's C++ code base.")
                 (file-name (git-file-name name version))
                 (sha256
                  (base32
-                  "0g9rbhk3mwjdfxk7cscd04vm8fphd5flz9yykpgvyy1nwa34zk3x"))))
+                  "0vxh2a74g4s45yr8kdjqnzl64k10qdlc0hbnn987a4cnwdj4bp9r"))))
       (arguments
        (substitute-keyword-arguments (package-arguments base)
          ((#:configure-flags flags)
           `(cons* "-DBUILD_TESTING=ON"
                   (delete "-DABSL_RUN_TESTS=ON" ,flags))))))))
+
+(define-public abseil-cpp-cxxstd17
+  (let ((base abseil-cpp))
+    (hidden-package
+     (package/inherit base
+       (arguments
+        (substitute-keyword-arguments (package-arguments base)
+          ((#:configure-flags flags)
+           #~(cons* "-DCMAKE_CXX_STANDARD=17" #$flags))))))))
 
 (define-public pegtl
   (package
@@ -1084,7 +1131,7 @@ standard GNU style syntax for options.")
 (define-public folly
   (package
     (name "folly")
-    (version "2022.04.11.00")
+    (version "2022.10.31.00")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1093,7 +1140,7 @@ standard GNU style syntax for options.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "03c1my66xncn8yvgih4kc7j83ckmjbi2w29hdb28j30ixbn0bsjg"))))
+                "06r9xnj8ilghc0vv6r17k5apl3w19iwd76nr02svnv96c74bz2aa"))))
     (build-system cmake-build-system)
     (arguments
      '(;; Tests must be explicitly enabled
@@ -1262,7 +1309,7 @@ services including database, analytic, and machine learning technologies.")
            (lambda _
              (invoke "./tests"))))))
     (native-inputs
-     (list catch-framework2))
+     (list catch2))
     (synopsis "C++11/14/17 std::expected with functional-style extensions")
     (description "@code{std::expected} is proposed as the preferred way to
 represent objects which will either have an expected value, or an unexpected
@@ -1905,3 +1952,282 @@ and above.  It is header only and has zero dependencies.  It provides a
 templated string type for compatibility with any STL-like string (std::string,
 std::wstring, etc).")
     (license license:boost1.0)))
+
+(define-public crc32c
+  (package
+    (name "crc32c")
+    (version "1.1.2")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/google/crc32c")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0966lyy3w5cnrs0c0fkma4hga51k54hns72l4n76944awqssap7j"))
+              (patches (search-patches "crc32c-unbundle-googletest.patch"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list #:configure-flags #~(list "-DBUILD_SHARED_LIBS=ON"
+                                     "-DCRC32C_BUILD_BENCHMARKS=OFF"
+                                     "-DCRC32C_USE_GLOG=OFF"
+                                     (string-append
+                                      "-DCRC32C_BUILD_TESTS="
+                                      ;; TODO: perhaps infer #:tests?
+                                      (if #$(%current-target-system)
+                                          "OFF" "ON")))))
+    (native-inputs (list googletest))
+    (home-page "https://github.com/google/crc32c")
+    (synopsis "Cyclic redundancy check")
+    (description
+     "This package provides architecture-specific implementations of the
+CRC32C algorithm, which is specified in RFC 3720, section 12.1.")
+    (license license:bsd-3)))
+
+(define fast-float-test-files
+  (let ((commit "97a0b2e638feb479387554cf253e346500541e7e"))
+   (origin
+    (method git-fetch)
+    (uri (git-reference
+          (url (string-append "https://github.com/fastfloat"
+                              "/supplemental_test_files.git"))
+          (commit "97a0b2e638feb479387554cf253e346500541e7e")))
+    (file-name (string-append "fast-float-test-files-"
+                              (string-take commit 8)))
+    (sha256
+     (base32
+      "0dxbiyzyh7i847i89ablfzypfc3ckhm7f74w98jsh73v1mppmxlf")))))
+
+(define-public fast-float
+  (package
+    (name "fast-float")
+    (version "3.5.1")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/fastfloat/fast_float")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0z3rxxd0pwvw70dbnv63rm67biw829vdqf50y16isxm6g3sbrz8g"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      #:configure-flags #~(list "-DFASTFLOAT_TEST=ON"
+                                "-DSYSTEM_DOCTEST=ON")
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'patch-cmake-tests
+            (lambda* (#:key inputs native-inputs #:allow-other-keys)
+              (substitute* "tests/CMakeLists.txt"
+                (("FetchContent_GetProperties\\(supplemental_test_files.*")
+                 "")
+                (("if\\(NOT supplemental_test_files_POPULATED.*")
+                 (string-append
+                  "set(supplemental_test_files_BINARY_DIR "
+                  (search-input-directory (or native-inputs inputs)
+                                          "data")
+                  ")\nif(0)\n"))))))))
+    (native-inputs (list doctest fast-float-test-files))
+    (home-page "https://github.com/fastfloat/fast_float")
+    (synopsis "Floating point number parser for C++")
+    (description "@code{fast_float} is a header-only C++ library for parsing
+floating point numbers from strings.  It implements the C++ from_chars
+functions for the float and double types.")
+    (license (list license:asl2.0 license:expat)))) ; dual licensed
+
+(define-public pocketfft-cpp
+  (let ((commit "daa8bb18327bc5c7d22c69428c25cf5dc64167d3")
+        (revision "0"))
+    (package
+      (name "pocketfft-cpp")
+      (version (git-version "0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/mreineck/pocketfft")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "1dbkkqkmkxgmz1qjpsqzic5ig3qw1pqndbb3dvjc7xq5f2rdzyq1"))
+                (patches (search-patches
+                          "pocketfft-cpp-prefer-preprocessor-if.patch"))))
+      (build-system copy-build-system)
+      (arguments
+       (list
+        #:install-plan #~'(("pocketfft_hdronly.h" "include/"))))
+      (home-page "https://github.com/mreineck/pocketfft")
+      (synopsis "C++11 header-only Fast Fourier Transform library")
+      (description "This package provides a single-header C++11 library for
+computing Fast Fourier transformations.  It supports multidimensional arrays,
+different floating point sizes and complex transformations.")
+      (license license:bsd-3))))
+
+(define-public sajson
+  (let ((commit "ec644013e34f9984a3cc9ba568cab97a391db9cd")
+        (revision "0"))
+    (package
+      (name "sajson")
+      (version (git-version "1.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/chadaustin/sajson")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (patches
+                 (search-patches "sajson-build-with-gcc10.patch"))
+                (sha256
+                 (base32
+                  "0fjag27w7gvkc5pdhq3ad7yc09rabpzahndw1sgsg04ipznidmmq"))
+                (modules '((guix build utils)))
+                (snippet '(delete-file-recursively "third-party"))))
+      (build-system scons-build-system)
+      (arguments
+       (list
+        #:phases
+        #~(modify-phases %standard-phases
+            (add-after 'unpack 'disable-other-builds
+              (lambda _
+                (substitute* "SConstruct"
+                  (("for name, tools in builds:")
+                   "for name, tools in [('opt', [gcc, opt])]:"))))
+            (add-after 'unpack 'use-external-unittest-cpp
+              (lambda _
+                (substitute* "SConscript"
+                  (("unittestpp_env\\.Library") "_dummy = ")
+                  (("test_env = env.Clone\\(tools=\\[unittestpp, sajson\\]\\)")
+                   (string-append
+                    "test_env = env.Clone(tools=[sajson])\n"
+                    "test_env.Append(CPPPATH='"
+                    (search-input-directory %build-inputs "/include/UnitTest++")
+                    "', LIBPATH='"
+                    (string-append #$(this-package-native-input "unittest-cpp")
+                                   "/lib")
+                    "', LIBS=['UnitTest++'])")))))
+            (replace 'build
+              (lambda* (#:key tests? #:allow-other-keys #:rest args)
+                (when tests?
+                  (apply (assoc-ref %standard-phases 'build)
+                         args))))
+            (replace 'check
+              (lambda* (#:key tests? #:allow-other-keys)
+                (when tests?
+                  (invoke "build/opt/test")
+                  (invoke "build/opt/test_unsorted"))))
+            (replace 'install
+              (lambda _
+                (let ((out (string-append #$output "/include")))
+                  (install-file "include/sajson.h" out)
+                  (install-file "include/sajson_ostream.h" out)))))))
+      (native-inputs (list unittest-cpp))
+      (home-page "https://github.com/chadaustin/sajson")
+      (synopsis "C++11 header-only, in-place JSON parser")
+      (description "@code{sajson} is an in-place JSON parser with support for
+parsing with only a single memory allocation.")
+      (license license:expat))))
+
+(define-public sajson-for-gemmi
+  (package/inherit sajson
+    (name "sajson-for-gemmi")
+    (source (origin
+              (inherit (package-source sajson))
+              (patches (cons
+                        (search-patch
+                         "sajson-for-gemmi-numbers-as-strings.patch")
+                        (origin-patches (package-source sajson))))))
+    (arguments
+     (substitute-keyword-arguments (package-arguments sajson)
+       ;; This is a modified version used in gemmi, in which numbers are kept
+       ;; as strings. Building the tests fails with the modification.
+       ((#:tests? _ #f) #f)))
+    (properties '((hidden? . #t)))))
+
+(define-public optionparser
+  (package
+    (name "optionparser")
+    (version "1.7")
+    (source (origin
+              (method url-fetch)
+              (uri
+               (string-append "mirror://sourceforge/optionparser/"
+                              "optionparser-" version ".tar.gz"))
+              (sha256
+               (base32
+                "04gfxrdzwacaynb8scsz6rr7nh64n6yk6w9dh2qdhrxw4caqr0dk"))))
+    (outputs '("out" "doc"))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)
+          (add-before 'build 'chdir
+            (lambda _ (chdir "src")))
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                (begin
+                  (invoke "./example_arg")
+                  (invoke "./testparse")
+                  (invoke "./testprintusage")
+                  (invoke "./testodr")
+                  (invoke "./example")))))
+          (replace 'install
+            (lambda _
+              (install-file "optionparser.h"
+                            (string-append #$output "/include"))))
+          (add-after 'install 'install-doc
+            (lambda _
+              (copy-recursively
+               "../html"
+               (string-append #$output:doc "/share/doc/optionparser/html")))))))
+    (native-inputs (list doxygen))
+    (home-page "https://optionparser.sourceforge.net/")
+    (synopsis "Header-only C++ library to parse command line options")
+    (description "This package provides a header-only C++ library to parse
+command line options.  It supports the short and long option formats of
+getopt(), getopt_long() and getopt_long_only().")
+    (license license:expat)))
+
+(define-public safeint
+  (package
+    (name "safeint")
+    (version "3.0.27")
+    (home-page "https://github.com/dcleblanc/SafeInt")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url home-page)
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "01d2dpdhyw3lghmamknb6g39w2gg0sv53pgxlrs2la8h694z6x7s"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list #:phases #~(modify-phases %standard-phases
+                        (replace 'install
+                          (lambda _
+                            (let ((include-dir (string-append #$output
+                                                              "/include")))
+                              (with-directory-excursion "../source"
+                                (install-file "SafeInt.hpp" include-dir)
+                                (install-file "safe_math.h" include-dir)
+                                (install-file "safe_math_impl.h" include-dir)))))
+                        (add-after 'install 'install-doc
+                          (lambda _
+                            (let ((doc-dir (string-append #$output
+                                                          "/share/doc/safeint")))
+                              (with-directory-excursion "../source"
+                                (install-file "helpfile.md" doc-dir))))))))
+    (synopsis "C and C++ library for managing integer overflows")
+    (description
+     "SafeInt is a class library for C++ that manages integer overflows.  It
+also includes a C library that checks casting, multiplication, division,
+addition and subtraction for all combinations of signed and unsigned 32-bit and
+64-bit integers.")
+    (license license:expat)))

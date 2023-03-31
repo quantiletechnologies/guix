@@ -26,6 +26,7 @@
 ;;; Copyright © 2021 Sarah Morgensen <iskarian@mgsn.dev>
 ;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2022 John Kehayias <john.kehayias@protonmail.com>
+;;; Copyright © 2022 Garek Dyszel <garekdyszel@disroot.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -467,7 +468,7 @@ depend: $(STDLIB_MLIS) $(STDLIB_DEPS)"))
 (define-public ocamlbuild
   (package
     (name "ocamlbuild")
-    (version "0.14.1")
+    (version "0.14.2")
     (source
      (origin
        (method git-fetch)
@@ -476,7 +477,7 @@ depend: $(STDLIB_MLIS) $(STDLIB_DEPS)"))
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "00ma0g6ajll9awp2bp303bawac8ync4k9w2a6vix0k4nw3003gb4"))))
+        (base32 "16q8s22msyfq66i1sbz99wj04a9x9ad95x458ixxacxsv0qqh2j0"))))
     (build-system ocaml-build-system)
     (arguments
      `(#:make-flags
@@ -647,11 +648,14 @@ underlying solvers like Cplex, Gurobi, Lpsolver, Glpk, CbC, SCIP or WBO.")
     (name "ocaml-dose3")
     (version "5.0.1")
     (source (origin
-              (method url-fetch)
-              (uri "https://gforge.inria.fr/frs/download.php/file/36063/dose3-5.0.1.tar.gz")
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitlab.com/irill/dose3")
+                    (commit version)))
+              (file-name (git-file-name name version))
               (sha256
                (base32
-                "00yvyfm4j423zqndvgc1ycnmiffaa2l9ab40cyg23pf51qmzk2jm"))
+                "0dxkw37gj8z45kd0dnrlfgpj8yycq0dphs8kjm9kvq9xc8rikxp3"))
               (patches
                (search-patches
                 "ocaml-dose3-add-unix-dependency.patch"
@@ -1078,54 +1082,52 @@ the OCaml core distribution.")
     (license license:lgpl2.1+))); with linking exception
 
 (define-public emacs-tuareg
-  ;; Last upstream release on Sept., 14th, 2018, since then "Package cl
-  ;; deprecated" or 'lexical-binding' and others had been fixed.
-  (let ((commit "ccde45bbc292123ec20617f1af7f7e19f7481545")
-        (revision "0"))
-    (package
-      (name "emacs-tuareg")
-      (version (git-version "2.2.0" revision commit))
-      (source
-       (origin
-         (method git-fetch)
-         (uri (git-reference
-               (url "https://github.com/ocaml/tuareg")
-               (commit commit)))
-         (file-name (git-file-name name version))
-         (sha256
-          (base32 "1yxv4bnqarilnpg5j7wywall8170hwvm0q4xx06yqjgcn8pq1lac"))))
-      (build-system gnu-build-system)
-      (native-inputs
-       `(("emacs" ,emacs-minimal)
-         ("opam" ,opam)))
-      (arguments
-       `(#:phases
-         (modify-phases %standard-phases
-           (add-after 'unpack 'make-git-checkout-writable
-             (lambda _
-               (for-each make-file-writable (find-files "."))
-               #t))
-           (delete 'configure)
-           (add-before 'install 'fix-install-path
-             (lambda* (#:key outputs #:allow-other-keys)
-               (substitute* "Makefile"
-                 (("/emacs/site-lisp")
-                  (string-append (assoc-ref %outputs "out")
-                                 "/share/emacs/site-lisp/")))
-               #t))
-           (add-after 'install 'post-install
-             (lambda* (#:key outputs #:allow-other-keys)
-               (symlink "tuareg.el"
-                        (string-append (assoc-ref outputs "out")
-                                       "/share/emacs/site-lisp/"
-                                       "tuareg-autoloads.el"))
-               #t)))))
-      (home-page "https://github.com/ocaml/tuareg")
-      (synopsis "OCaml programming mode, REPL, debugger for Emacs")
-      (description "Tuareg helps editing OCaml code, to highlight important
+  (package
+    (name "emacs-tuareg")
+    (version "3.0.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/ocaml/tuareg")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1p3xpk78i8ywgdmc59w05wjjy9dg6gm5gicm08szmrlnx08v2ihm"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:imported-modules `(,@%gnu-build-system-modules
+                           (guix build emacs-build-system)
+                           (guix build emacs-utils))
+      #:modules '((guix build gnu-build-system)
+                  ((guix build emacs-build-system) #:prefix emacs:)
+                  (guix build emacs-utils)
+                  (guix build utils))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'make-git-checkout-writable
+            (lambda _
+              (for-each make-file-writable (find-files "."))))
+          (delete 'configure)
+          (add-before 'install 'fix-install-path
+            (lambda _
+              (substitute* "Makefile"
+                (("/emacs/site-lisp")
+                 (emacs:elpa-directory #$output)))))
+          (add-after 'install 'post-install
+            (lambda _
+              (symlink "tuareg.el"
+                       (string-append (emacs:elpa-directory #$output)
+                                      "/tuareg-autoloads.el")))))))
+    (native-inputs
+     (list emacs-minimal opam))
+    (home-page "https://github.com/ocaml/tuareg")
+    (synopsis "OCaml programming mode, REPL, debugger for Emacs")
+    (description "Tuareg helps editing OCaml code, to highlight important
 parts of the code, to run an OCaml REPL, and to run the OCaml debugger within
 Emacs.")
-      (license license:gpl2+))))
+    (license license:gpl2+)))
 
 (define-public ocaml-menhir
   (package
@@ -1716,7 +1718,7 @@ full_split, cut, rcut, etc..")
 (define dune-bootstrap
   (package
     (name "dune")
-    (version "3.4.1")
+    (version "3.6.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1725,7 +1727,7 @@ full_split, cut, rcut, etc..")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "02zn79l7y7rvy7b6bimlf5qymrvzc43w8q7l4jx3k8wzn2g5326z"))))
+                "0gv851wxbv5ln20429nj7p92spzxgw8vngg9z94q39aawn6q8lx6"))))
     (build-system ocaml-build-system)
     (arguments
      `(#:tests? #f; require odoc
@@ -1954,7 +1956,7 @@ ocaml-migrate-parsetree")
 (define-public ocaml-linenoise
   (package
     (name "ocaml-linenoise")
-    (version "1.3.1")
+    (version "1.4.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1963,7 +1965,7 @@ ocaml-migrate-parsetree")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0s98695skz1wvrak0rdlh80w3cv6piic1dxqpn9rv1yymbklafg4"))))
+                "1gk11pflal08kg2dz1b5zrlpnhbxpg2rwf8cknw3vzmq6gsmk2kc"))))
     (build-system dune-build-system)
     (arguments
      ;; No tests
@@ -2083,14 +2085,14 @@ defined in this library.")
 (define-public ocaml-topkg
   (package
     (name "ocaml-topkg")
-    (version "1.0.5")
+    (version "1.0.6")
     (source (origin
               (method url-fetch)
               (uri (string-append "http://erratique.ch/software/topkg/releases/"
                                   "topkg-" version ".tbz"))
               (sha256
                (base32
-                "1iyinmcfqpprk7k4cc51nqgypayprbj4larwcfqw86k5dri84825"))))
+                "11ycfk0prqvifm9jca2308gw8a6cjb1hqlgfslbji2cqpan09kpq"))))
     (build-system ocaml-build-system)
     (native-inputs
      (list opam ocamlbuild))
@@ -2504,7 +2506,7 @@ simple (yet expressive) query language to select the tests to run.")
 (define-public ocaml-ppx-tools
   (package
     (name "ocaml-ppx-tools")
-    (version "6.5")
+    (version "6.6")
     (source
      (origin
        (method git-fetch)
@@ -2514,7 +2516,7 @@ simple (yet expressive) query language to select the tests to run.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "0fwibah2hgllrnbdrmfqil5gr5raf6pb5h2zx6zs1h3d4ykvy8k8"))))
+         "1ms2i063cwsm8wcw7jixz3qx2f2prrmf0k44gbksvsgqvm1rl6s2"))))
     (build-system dune-build-system)
     (arguments
      ;; No tests
@@ -2560,7 +2562,7 @@ lets the client choose the concrete timeline.")
 (define-public ocaml-ssl
   (package
     (name "ocaml-ssl")
-    (version "0.5.12")
+    (version "0.5.13")
     (source
       (origin
         (method git-fetch)
@@ -2569,7 +2571,7 @@ lets the client choose the concrete timeline.")
               (commit version)))
         (file-name (git-file-name name version))
         (sha256 (base32
-                  "1dr7yghbv0wncvggd2105bj097msgrdzxd9wjkw1xxf2vvp0j1bi"))))
+                  "1bg5vagklq6yfxsvcnj2i76xis8hb59088hkic82smyrxdjd1kjs"))))
     (build-system dune-build-system)
     (arguments
      `(#:test-target "."))
@@ -2701,7 +2703,7 @@ module Unix.")
 (define-public ocaml-lwt-log
   (package
     (name "ocaml-lwt-log")
-    (version "1.1.1")
+    (version "1.1.2")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -2710,7 +2712,7 @@ module Unix.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1n12i1rmn9cjn6p8yr6qn5dwbrwvym7ckr7bla04a1xnq8qlcyj7"))))
+                "0mbv5l9gj09jd1c4lr2axcl4v043ipmhjd9xrk27l4hylzfc6d1q"))))
     (build-system dune-build-system)
     (arguments
      `(#:tests? #f)); require lwt_ppx
@@ -3068,7 +3070,7 @@ string values and to directly encode characters in OCaml Buffer.t values.")
 (define-public ocaml-uunf
   (package
     (name "ocaml-uunf")
-    (version "14.0.0")
+    (version "15.0.0")
     (source
      (origin
        (method url-fetch)
@@ -3076,13 +3078,18 @@ string values and to directly encode characters in OCaml Buffer.t values.")
                            version".tbz"))
        (sha256
         (base32
-         "17wv0nm3vvwcbzb1b09akw8jblmigyhbfmh1sy9lkb5756ni94a2"))))
+         "1s5svvdqfbzw16rf1h0zm9n92xfdr0qciprd7lcjza8z1hy6pyh7"))))
     (build-system ocaml-build-system)
     (arguments
      `(#:build-flags (list "build" "--tests" "true")
        #:phases
        (modify-phases %standard-phases
          (delete 'configure)
+         ;; reported and fixed upstream, will be available in next version.
+         (add-before 'build 'fix-test
+           (lambda _
+             (substitute* "test/test.ml"
+               (("test/NormalizationTest.txt") "-"))))
          (add-before 'check 'check-data
            (lambda* (#:key inputs #:allow-other-keys)
              (copy-file (assoc-ref inputs "NormalizationTest.txt")
@@ -3101,7 +3108,7 @@ string values and to directly encode characters in OCaml Buffer.t values.")
                                "/ucd/NormalizationTest.txt"))
            (file-name (string-append "NormalizationTest-" version ".txt"))
            (sha256
-              (base32 "0c93pqdkksf7b7zw8y2w0h9i5kkrsdjmh2cr5clrrhp6mg10rcvw"))))))
+              (base32 "09pkawfqpgy2xnv2nkkgmxv53rx4anprg65crbbcm02a2p6ci6pv"))))))
     (propagated-inputs (list ocaml-uutf))
     (home-page "https://erratique.ch/software/uunf")
     (synopsis "Unicode text normalization for OCaml")
@@ -3184,7 +3191,7 @@ This package includes:
 (define-public ocaml-ocp-index
   (package
     (name "ocaml-ocp-index")
-    (version "1.3.3")
+    (version "1.3.4")
     (source
       (origin
         (method git-fetch)
@@ -3194,7 +3201,7 @@ This package includes:
         (file-name (git-file-name name version))
         (sha256
          (base32
-          "1gbigw5s2cafkr82n9vkxbb892qfkykj0adj0hrdkrkw8j6rfl0j"))))
+          "031b3s8ppqkpw1n6h87h6jzjkmny6yig9wfimmgwnljafcc83d3b"))))
     (build-system dune-build-system)
     (arguments
      `(#:package "ocp-index"))
@@ -3561,7 +3568,7 @@ compatibility with older compiler to use these new features in their code.")
 (define-public ocaml-fileutils
   (package
     (name "ocaml-fileutils")
-    (version "0.6.3")
+    (version "0.6.4")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -3570,7 +3577,7 @@ compatibility with older compiler to use these new features in their code.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0aa7p5qymi8p7iqym42yk2akjd1ff81fvaks82nhjc533zl01pnf"))))
+                "1s2az5lv52r0fig4624652zn3jj5dy30d1xlw6gzd0s086i4bvjh"))))
     (build-system dune-build-system)
     (propagated-inputs
      (list ocaml-stdlib-shims))
@@ -4303,7 +4310,7 @@ function that follows the prototype of POSIX's wcwidth.")
 (define-public ocaml-zed
   (package
     (name "ocaml-zed")
-    (version "3.2.0")
+    (version "3.2.1")
     (home-page "https://github.com/ocaml-community/zed")
     (source
      (origin
@@ -4313,7 +4320,7 @@ function that follows the prototype of POSIX's wcwidth.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1g171kk5wxnk66d4vwz2crh5i19vhqghp78iybl5am17gl9qf8pb"))))
+        (base32 "17zdbm422y0qznc659civ9bmahhrbffxa50f8dnykiaq8v2ci91l"))))
     (build-system dune-build-system)
     (propagated-inputs
      (list ocaml-react
@@ -4467,6 +4474,36 @@ sensitive completion, colors, and more.")
         ("ocaml-camomile" ,ocaml-camomile)
         ("ocaml-zed" ,ocaml-zed)))
      (properties '()))))
+
+(define-public ocaml-ansiterminal
+  (package
+    (name "ocaml-ansiterminal")
+    (version "0.8.5")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/Chris00/ANSITerminal")
+                    (commit version)
+                    (recursive? #t)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "052qnc23vmxp90yympjz9q6lhqw98gs1yvb3r15kcbi1j678l51h"))))
+    (build-system dune-build-system)
+    (arguments
+     `(#:test-target "tests"))
+    (properties `((upstream-name . "ANSITerminal")))
+    (home-page "https://github.com/Chris00/ANSITerminal")
+    (synopsis
+     "Basic control of ANSI compliant terminals and the windows shell")
+    (description
+     "ANSITerminal is a module allowing to use the colors and cursor
+movements on ANSI terminals.")
+    ;; Variant of the LGPL3+ which permits
+    ;; static and dynamic linking when producing binary files.
+    ;; In other words, it allows one to link to the library
+    ;; when compiling nonfree software.
+    (license (license:non-copyleft "LICENSE.md"))))
 
 (define-public ocaml-ptmap
   (package
@@ -4638,7 +4675,7 @@ cross-platform SDL C library.")
 (define-public dedukti
   (package
     (name "dedukti")
-    (version "2.6.0")
+    (version "2.7")
     (home-page "https://deducteam.github.io/")
     (source
      (origin
@@ -4649,31 +4686,12 @@ cross-platform SDL C library.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "0frl3diff033i4fmq304b8wbsdnc9mvlhmwd7a3zd699ng2lzbxb"))))
-    (inputs
-     `(("menhir" ,ocaml-menhir)))
-    (native-inputs
-     (list ocamlbuild))
-    (build-system ocaml-build-system)
+         "1dsr3s88kgmcg3najhc29cwfvsxa2plvjws1127fz75kmn15np28"))))
+    (build-system dune-build-system)
     (arguments
-     `(#:phases
-       ,#~(modify-phases %standard-phases
-            (delete 'configure)
-            (replace 'build
-              (lambda _
-                (invoke "make")))
-            (replace 'check
-              (lambda _
-                (invoke "make" "tests")))
-            (add-before 'install 'set-binpath
-              ;; Change binary path in the makefile
-              (lambda _
-                (substitute* "GNUmakefile"
-                  (("BINDIR = (.*)$")
-                   (string-append "BINDIR = " #$output "/bin")))))
-            (replace 'install
-              (lambda _
-                (invoke "make" "install"))))))
+     `(#:test-target "tests"))
+    (inputs (list gmp ocaml-cmdliner ocaml-z3 z3))
+    (native-inputs (list ocaml-menhir))
     (synopsis "Proof-checker for the λΠ-calculus modulo theory, an extension of
 the λ-calculus")
     (description "Dedukti is a proof-checker for the λΠ-calculus modulo
@@ -4683,61 +4701,6 @@ dependent types.  The λΠ-calculus modulo theory is itself an extension of the
 rules.  This system is not designed to develop proofs, but to check proofs
 developed in other systems.  In particular, it enjoys a minimalistic syntax.")
     (license license:cecill-c)))
-
-(define-public emacs-dedukti-mode
-  (let ((commit "d7c3505a1046187de3c3aeb144455078d514594e"))
-    (package
-      (name "emacs-dedukti-mode")
-      (version (git-version "0" "0" commit))
-      (home-page "https://github.com/rafoo/dedukti-mode")
-      (source (origin
-                (method git-fetch)
-                (uri (git-reference
-                      (url home-page)
-                      (commit commit)))
-                (sha256
-                 (base32
-                  "1842wikq24c8rg0ac84vb1qby9ng1nssxswyyni4kq85lng5lcrp"))
-                (file-name (git-file-name name version))))
-      (inputs
-       (list dedukti))
-      (build-system emacs-build-system)
-      (arguments
-       '(#:phases
-         (modify-phases %standard-phases
-           (add-before 'install 'patch-dkpath
-             (lambda _
-               (let ((dkcheck-path (which "dkcheck")))
-                 (substitute* "dedukti-mode.el"
-                   (("dedukti-path \"(.*)\"")
-                    (string-append "dedukti-path \"" dkcheck-path "\"")))))))))
-      (synopsis "Emacs major mode for Dedukti files")
-      (description "This package provides an Emacs major mode for editing
-Dedukti files.")
-      (license license:cecill-b))))
-
-(define-public emacs-flycheck-dedukti
-  (let ((commit "3dbff5646355f39d57a3ec514f560a6b0082a1cd"))
-    (package
-      (name "emacs-flycheck-dedukti")
-      (version (git-version "0" "0" commit))
-      (home-page "https://github.com/rafoo/flycheck-dedukti")
-      (source (origin
-                (method git-fetch)
-                (uri (git-reference
-                      (url home-page)
-                      (commit commit)))
-                (sha256
-                 (base32
-                  "1ffpxnwl3wx244n44mbw81g00nhnykd0lnid29f4aw1av7w6nw8l"))
-                (file-name (git-file-name name version))))
-      (build-system emacs-build-system)
-      (inputs
-       (list emacs-dedukti-mode emacs-flycheck))
-      (synopsis "Flycheck integration for the dedukti language")
-      (description "This package provides a frontend for Flycheck to perform
-syntax checking on dedukti files.")
-      (license license:cecill-b))))
 
 (define-public ocaml-jst-config
   (package
@@ -5013,39 +4976,6 @@ yojson package.  The program @code{atdgen} can be used to derive OCaml-JSON
 serializers and deserializers from type definitions.")
     (license license:bsd-3)))
  
-(define-public ocaml-craml
-  (package
-    (name "ocaml-craml")
-    (version "1.0.0")
-    (home-page "https://github.com/realworldocaml/craml")
-    (source
-     (origin
-       (method git-fetch)
-       (uri (git-reference
-             (url (string-append home-page ".git"))
-             (commit version)))
-       (file-name (git-file-name name version))
-       (sha256
-        (base32
-         "197xjp4vmzdymf2ndinw271ihpf45h04mx8gqj8ypspxdr5fj1a5"))))
-    (build-system dune-build-system)
-    (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'upgrade
-           (lambda _
-             (invoke "dune" "upgrade")
-             #t)))))
-    (inputs
-     (list ocaml-fmt ocaml-astring ocaml-logs ocaml-cmdliner))
-    (synopsis
-     "CRAM-testing framework for testing command line applications")
-    (description "CRAM is a is functional testing framework for command line
-applications.  @code{craml} is freely inspired by the
-Mercurial's @code{https://www.selenic.com/blog/?p=663, unified test
-format}.  @code{craml} is released as a single binary (called @code{craml}).")
-    (license license:isc)))
-
 (define-public ocaml-merlin-lib
   (package
     (name "ocaml-merlin-lib")
@@ -7279,7 +7209,7 @@ thousands of times faster than fork.
 (define-public ocaml-core
   (package
     (name "ocaml-core")
-    (version "0.15.0")
+    (version "0.15.1")
     (source
       (origin
         (method git-fetch)
@@ -7288,7 +7218,7 @@ thousands of times faster than fork.
                (commit (string-append "v" version))))
         (file-name (git-file-name name version))
         (sha256
-          (base32 "1m2ybvlz9zlb2d0jc0j7wdgd18mx9sh3ds2ylkv0cfjx1pzi0l25"))))
+          (base32 "17vc2i5qb53dr0civ8pkrnnsn2nkydlq44ash7fhh93yb4sffy28"))))
     (build-system dune-build-system)
     (arguments
      `(#:package "core"
@@ -7827,7 +7757,7 @@ convenience functions for vectors and matrices.")
 (define-public ocaml-cairo2
   (package
     (name "ocaml-cairo2")
-    (version "0.6.3")
+    (version "0.6.4")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -7836,7 +7766,7 @@ convenience functions for vectors and matrices.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1m0wh0s0sqjfa3mgq99lwk0dsg0bwxipaz93hq18m0lz5fqxib1m"))))
+                "06ag9b88ihhr7yd3s9l0ac7ysig02fmlmsswybbsvz71ni0mb105"))))
     (build-system dune-build-system)
     (arguments
      `(#:test-target "tests"))
@@ -7998,7 +7928,7 @@ support for Mparser.")))
 (define-public lablgtk3
   (package
     (name "lablgtk")
-    (version "3.1.1")
+    (version "3.1.3")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -8007,26 +7937,15 @@ support for Mparser.")))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "11qfc39cmwfwfpwmjh6wh98zwdv6p73bv8hqwcsss869vs1r7gmn"))))
+                "0rhdr89w7yj8pkga5xc7iqmqvrs28034wb7sm7vx7faaxczwjifn"))))
     (build-system dune-build-system)
     (arguments
-     `(#:test-target "."
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'make-writable
-           (lambda _
-             (for-each (lambda (file)
-                         (chmod file #o644))
-                       (find-files "." "."))))
-         (add-before 'build 'set-version
-           (lambda _
-             (substitute* "dune-project"
-               (("\\(name lablgtk3\\)")
-                (string-append "(name lablgtk3)\n(version " ,version ")"))))))))
+     `(#:package "lablgtk3"
+       #:test-target "."))
     (propagated-inputs
-     (list ocaml-cairo2))
+     (list ocaml-cairo2 ocaml-camlp-streams))
     (inputs
-     (list camlp5 gtk+ gtksourceview-3 gtkspell3))
+     (list camlp5 gtk+))
     (native-inputs
      (list pkg-config))
     (home-page "https://github.com/garrigue/lablgtk")
@@ -8039,6 +7958,19 @@ LablGL), gnomecanvas, gnomeui, gtksourceview, gtkspell, libglade (and it can
 generate OCaml code from .glade files), libpanel, librsvg and quartz.")
     ;; Version 2 only, with linking exception.
     (license license:lgpl2.0)))
+
+(define-public ocaml-lablgtk3-sourceview3
+  (package
+    (inherit lablgtk3)
+    (name "ocaml-lablgtk3-sourceview3")
+    (propagated-inputs (list lablgtk3))
+    (native-inputs (list gtksourceview-3 pkg-config))
+    (arguments
+     `(#:package "lablgtk3-sourceview3"
+       #:test-target "."))
+    (synopsis "OCaml interface to GTK+ gtksourceview library")
+    (description "This package provides the lablgtk interface to the
+GTK+ gtksourceview library.")))
 
 (define-public ocaml-reactivedata
   (package
@@ -8071,7 +8003,7 @@ client chooses the concrete timeline.")
 (define-public ocaml-uucd
   (package
     (name "ocaml-uucd")
-    (version "14.0.0")
+    (version "15.0.0")
     (source
      (origin
        (method url-fetch)
@@ -8079,7 +8011,7 @@ client chooses the concrete timeline.")
                            "uucd-" version ".tbz"))
        (sha256
         (base32
-         "0fc737v5gj3339jx4x9xr096lxrpwvp6vaiylhavcvsglcwbgm30"))))
+         "1g26237yqmxr7sd1n9fg65qm5mxz66ybk7hr336zfyyzl25h6jqf"))))
     (build-system ocaml-build-system)
     (arguments
      '(#:build-flags '("build" "--tests" "true")
@@ -8101,7 +8033,7 @@ representations can be extracted.")
 (define-public ocaml-uucp
   (package
     (name "ocaml-uucp")
-    (version "14.0.0")
+    (version "15.0.0")
     (source
      (origin
        (method url-fetch)
@@ -8109,7 +8041,7 @@ representations can be extracted.")
                            "uucp-" version ".tbz"))
        (sha256
         (base32
-         "1yx9nih3d9prb9zizq8fzmmqylf24a6yifhf81h33znrj5xn1mpj"))))
+         "0c2k9gkg442l7hnc8rn1vqzn6qh68w9fx7h3nj03n2x90ps98ixc"))))
     (build-system ocaml-build-system)
     (arguments
      '(#:build-flags '("build" "--tests" "true")
@@ -8133,7 +8065,7 @@ selection of character properties of the Unicode character database.")
 (define-public ocaml-uuseg
   (package
     (name "ocaml-uuseg")
-    (version "14.0.0")
+    (version "15.0.0")
     (source
      (origin
        (method url-fetch)
@@ -8141,7 +8073,7 @@ selection of character properties of the Unicode character database.")
                            "uuseg-" version ".tbz"))
        (sha256
         (base32
-         "1g9zyzjkhqxgbb9mh3cgaawscwdazv6y8kdqvmy6yhnimmfqv25p"))))
+         "1qz130wlmnvb6j7kpvgjlqmdm2jqid4wb1dmrsls4hdm4rp7gk5b"))))
     (build-system ocaml-build-system)
     (arguments
      '(#:build-flags '("build" "--tests" "true")
@@ -8524,7 +8456,7 @@ libraries.")
 (define-public js-of-ocaml
   (package
     (name "js-of-ocaml")
-    (version "4.0.0")
+    (version "4.1.0")
     (source
      (origin
        (method git-fetch)
@@ -8533,7 +8465,7 @@ libraries.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0iyhl9z57j53j2jvyqcwmxhbvy23l6g80aa0abmlgwam14yskspf"))))
+        (base32 "14ig69iyc9yzniclfsc6cz9g9zqp96bs66y6dy4rzrm78s81w6i1"))))
     (build-system dune-build-system)
     (arguments
      `(#:tests? #f ;tests assume ocaml 4.13
@@ -8681,7 +8613,7 @@ constant-time to avoid timing-attack with crypto stuff.")
 (define-public ocaml-digestif
   (package
     (name "ocaml-digestif")
-    (version "1.1.2")
+    (version "1.1.3")
     (home-page "https://github.com/mirage/digestif")
     (source
      (origin
@@ -8692,7 +8624,7 @@ constant-time to avoid timing-attack with crypto stuff.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "0mc233d63y04jznsn3bxncgv7fkvyngbv6hcka412iq0y3x4qsmq"))))
+         "0x5iskavqkclr5mk2q6jvh5h1v81krqi4v353rj4xsmdqb33s0f1"))))
     (build-system dune-build-system)
     (propagated-inputs (list ocaml-eqaf))
     (native-inputs
@@ -8741,3 +8673,42 @@ SHA384, SHA512, Blake2b, Blake2s and RIPEMD160.")
     (description "This package allows you to produce, from a set of
 bibliography files in BibTeX format, a bibliography in HTML format.")
     (license license:gpl2)))
+
+(define-public ocaml-guile
+  (package
+    (name "ocaml-guile")
+    (version "1.0")
+    (home-page "https://github.com/gopiandcode/guile-ocaml")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url home-page)
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "0yxdkrhrrbwvay5sn0p26rh3f11876k6kdharmpi4afxknml74ql"))))
+    (build-system dune-build-system)
+    (arguments
+     `(#:tests? #f)) ; no tests
+    (propagated-inputs
+     (list ocaml-sexplib
+           ocaml-ctypes
+           ocaml-stdio
+           ocaml-odoc))
+    (inputs (list guile-3.0 libffi))
+    (native-inputs
+     (list ocaml-odoc
+           pkg-config))
+    (synopsis "Bindings to GNU Guile Scheme for OCaml")
+    (description
+     "The OCaml guile library provides high-level OCaml bindings to GNU Guile
+3.0, supporting easy interop between OCaml and GNU Guile Scheme.")
+    (license license:gpl3+)))
+
+;;;
+;;; Avoid adding new packages to the end of this file. To reduce the chances
+;;; of a merge conflict, place them above by existing packages with similar
+;;; functionality or similar names.
+;;;

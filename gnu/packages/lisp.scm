@@ -20,7 +20,9 @@
 ;;; Copyright © 2021 Sharlatan Hellseher <sharlatanus@gmail.com>
 ;;; Copyright © 2021 Paul A. Patience <paul@apatience.com>
 ;;; Copyright © 2021 Charles Jackson <charles.b.jackson@protonmail.com>
-;;; Copyright © 2021 jgart <jgart@dismail.de>
+;;; Copyright © 2022 Joeke de Graaf <joeke@posteo.net>
+;;; Copyright © 2021, 2022 jgart <jgart@dismail.de>
+;;; Copyright © 2022 ( <paren@disroot.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -54,12 +56,15 @@
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system ant)
   #:use-module (guix build-system asdf)
+  #:use-module (guix build-system haskell)
   #:use-module (guix build-system trivial)
   #:use-module (gnu packages admin)
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages bdw-gc)
+  #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages dbm)
   #:use-module (gnu packages ed)
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages gcc)
@@ -68,10 +73,14 @@
   #:use-module (gnu packages gl)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages groff)
+  #:use-module (gnu packages haskell-check)
+  #:use-module (gnu packages haskell-web)
+  #:use-module (gnu packages haskell-xyz)
   #:use-module (gnu packages libffcall)
   #:use-module (gnu packages libffi)
   #:use-module (gnu packages libsigsegv)
   #:use-module (gnu packages linux)
+  #:use-module (gnu packages llvm)
   #:use-module (gnu packages m4)
   #:use-module (gnu packages maths)
   #:use-module (gnu packages multiprecision)
@@ -80,6 +89,7 @@
   #:use-module (gnu packages perl)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages sdl)
+  #:use-module (gnu packages tcl)
   #:use-module (gnu packages tex)
   #:use-module (gnu packages texinfo)
   #:use-module (gnu packages tls)
@@ -413,14 +423,17 @@ an interpreter, a compiler, a debugger, and much more.")
 (define-public sbcl
   (package
     (name "sbcl")
-    (version "2.2.6")
+    (version "2.2.10")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://sourceforge/sbcl/sbcl/" version "/sbcl-"
                            version "-source.tar.bz2"))
+       (patches
+        ;; TODO: remove this patch when updating to sbcl > 2.2.10.
+        (search-patches "sbcl-fix-build-on-arm64-with-clisp-as-host.patch"))
        (sha256
-        (base32 "18044dqx37mkipnrzs7jrp0cbnwp6snb5gi06a8zn9m8iy6088ry"))))
+        (base32 "0cq8x4svkawirxq5s5gs4qxkl23m4q5p722a2kpss8qjfslc7hwc"))))
     (build-system gnu-build-system)
     (outputs '("out" "doc"))
     (native-inputs
@@ -548,11 +561,6 @@ an interpreter, a compiler, a debugger, and much more.")
                  (("\\(deftest grent\\.[12]" all)
                   (string-append "#+nil ;disabled by Guix\n" all))))
              #t))
-         (add-before 'build 'fix-shared-library-makefile
-           (lambda _
-             (substitute* '("src/runtime/GNUmakefile")
-               (("	cc") "	$(CC)"))
-             #t))
          (add-before 'build 'fix-contrib-library-path
            (lambda* (#:key inputs #:allow-other-keys)
              (let ((gmp (assoc-ref inputs "gmp"))
@@ -580,8 +588,7 @@ an interpreter, a compiler, a debugger, and much more.")
                      "--with-sb-xref-for-internals"
                      ;; SB-SIMD will only be built on x86_64 CPUs supporting
                      ;; AVX2 instructions. Some x86_64 CPUs don't, so for reproducibility
-                     ;; we disable it and we don't build its documentation (see the
-                     ;; 'build-doc' phase).
+                     ;; we disable it.
                      "--without-sb-simd")))
          (add-after 'build 'build-shared-library
            (lambda* (#:key outputs #:allow-other-keys)
@@ -592,11 +599,6 @@ an interpreter, a compiler, a debugger, and much more.")
              (invoke "sh" "install.sh")))
          (add-after 'build 'build-doc
            (lambda _
-             ;; Don't build the documentation for SB-SIMD as it is disabled in
-             ;; the 'build' phase.
-             (substitute* "doc/manual/generate-texinfo.lisp"
-               (("exclude '\\(\"asdf\"\\)")
-                "exclude '(\"asdf\" \"sb-simd\")"))
              (with-directory-excursion "doc/manual"
                (and  (invoke "make" "info")
                      (invoke "make" "dist")))))
@@ -984,7 +986,7 @@ the HTML documentation of TXR.")
 (define-public txr
   (package
     (name "txr")
-    (version "280")
+    (version "282")
     (source
      (origin
        (method git-fetch)
@@ -993,7 +995,7 @@ the HTML documentation of TXR.")
              (commit (string-append "txr-" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1ni2yb9dggldgizfp13mvrw5vzk13pg74dpk2lyn9dijqvs293s4"))))
+        (base32 "1hzni1v9qlh1vy8spz8prink7v9hp2bin15vnyfha2ax306w6dq5"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags
@@ -1232,7 +1234,7 @@ including a built-in database engine and a GUI system.")
 (define-public janet
   (package
     (name "janet")
-    (version "1.24.0")
+    (version "1.25.1")
     (source
      (origin
        (method git-fetch)
@@ -1241,7 +1243,7 @@ including a built-in database engine and a GUI system.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "07kyjzbj5g197008n9qwpdnagylzlv8x4zbsf2d233mpskv3dixi"))))
+        (base32 "0d601imsndkmjyanja6pqp234fwmn9jxzpcbigwpra969x4a4qjd"))))
     (build-system gnu-build-system)
     (arguments
      (list #:make-flags
@@ -1264,6 +1266,72 @@ platforms.  The entire language (core library, interpreter, compiler,
 assembler, PEG) is less than 1MB.")
     (license license:expat)))
 
+(define-public carp
+  (package
+    (name "carp")
+    (version "0.5.5")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/carp-lang/Carp")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "14jdnv0ljqvpr9ych1plfw7hp5q57a8j1bv8h3v345x06z783d07"))))
+    (build-system haskell-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               ;; Carp looks inside the sources checkout to know where to
+               ;; find its core libraries and other files.
+               ;; Carp emits C code and tries to compile it with an external
+               ;; C compiler. On Linux it defaults to Clang.
+               (add-after 'install 'wrap-programs
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (define (wrap-carp-program program)
+                     (wrap-program (string-append
+                                    #$output "/bin/" program)
+                       `("CARP_DIR" prefix
+                         (#$(package-source this-package)))
+                       `("PATH" prefix
+                         ,(list (dirname
+                                 (search-input-file inputs "bin/clang"))
+                                (dirname
+                                 (search-input-file inputs "bin/ld"))))
+                       `("C_INCLUDE_PATH" prefix
+                         ,(list (dirname
+                                 (search-input-directory
+                                  inputs "include/linux"))
+                                (dirname
+                                 (search-input-file
+                                  inputs "include/stdlib.h"))))))
+
+                   (for-each wrap-carp-program
+                             (list "carp"
+                                   "carp-header-parse")))))))
+    (inputs
+     (list bash-minimal
+           clang
+           ghc-blaze-markup
+           ghc-blaze-html
+           ghc-split
+           ghc-ansi-terminal
+           ghc-cmark
+           ghc-edit-distance
+           ghc-hashable
+           ghc-open-browser
+           ghc-optparse-applicative))
+    (native-inputs
+     (list ghc-hunit))
+    (home-page "https://carp-lang.org/")
+    (synopsis "Statically typed Lisp without a garbage collector")
+    (description
+     "@code{carp} is a Lisp-like programming language that compiles to
+C.  It features inferred static typing, macros, automatic memory
+management without a garbage collector, a REPL, and straightforward
+integration with code written in C.")
+    (license license:asl2.0)))
 (define-public lisp-repl-core-dumper
   (package
     (name "lisp-repl-core-dumper")
@@ -1351,3 +1419,58 @@ and make for REPLs that start blazing fast.
      "Buildapp is an application for SBCL or CCL that configures and saves an
 executable Common Lisp image.  It is similar to cl-launch and hu.dwim.build.")
     (license license:bsd-2)))
+
+(define-public eisl
+  (package
+    (name "eisl")
+    (version "2.63")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/sasagawa888/eisl")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "01fwffk71c1cvq7pf50xwpl2a32rbghcymllg67wvm07yfw3gi0q"))))
+    (build-system gnu-build-system)
+    (inputs
+     (list bash-minimal freeglut gdbm libiconv ncurses tcl tk))
+    (native-inputs
+     (list cppcheck))
+    (arguments
+     (list #:make-flags
+           #~(list (string-append "PREFIX=" #$output)
+                   (string-append "CC=" #$(cc-for-target)))
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'fix-paths
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (substitute* "library/compiler.lsp"
+                     (("\"cc ")
+                      "\"gcc "))
+                   (substitute* "library/tcltk.lsp"
+                     (("c-include \"<tcl/tcl\\.h>\"")
+                      "c-include \"<tcl.h>\"")
+                     (("c-option \"-ltcl -ltk\" linux")
+                      "c-option \"-ltcl8.6 -ltk8.6\" linux"))))
+               (delete 'configure)
+               (add-after 'install 'wrap
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (wrap-program (string-append #$output "/bin/eisl")
+                     `("PATH" prefix
+                       ,(map (lambda (bin)
+                               (string-append (assoc-ref inputs bin) "/bin"))
+                             '("binutils" "coreutils" "gcc" "ld-wrapper")))
+                     `("LIBRARY_PATH" suffix
+                       ,(map (lambda (lib)
+                               (string-append (assoc-ref inputs lib) "/lib"))
+                             '("libc")))))))))
+    (home-page "https://github.com/sasagawa888/eisl")
+    (synopsis "Implementation of ISLisp")
+    (description "Easy ISLISP (eisl) is an implementation of ISLisp which
+includes a compiler as well as an interpreter.")
+    (license (list license:bsd-2 ;; documents/license.txt
+                   license:expat ;; cii/LICENSE
+                   license:gpl2+ ;; nana/gdb/test.c and others under nana/
+                   license:bsd-3)))) ;; bench/*

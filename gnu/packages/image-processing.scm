@@ -20,6 +20,7 @@
 ;;; Copyright © 2021 Guillaume Le Vaillant <glv@posteo.net>
 ;;; Copyright © 2021 Ivan Gankevich <i.gankevich@spbu.ru>
 ;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Tomasz Jeneralczyk <tj@schwi.pl>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -53,6 +54,7 @@
   #:use-module (gnu packages boost)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages cpp)
   #:use-module (gnu packages curl)
   #:use-module (gnu packages docbook)
   #:use-module (gnu packages documentation)
@@ -85,6 +87,7 @@
   #:use-module (gnu packages serialization)
   #:use-module (gnu packages sqlite)
   #:use-module (gnu packages tbb)
+  #:use-module (gnu packages textutils)
   #:use-module (gnu packages tls)
   #:use-module (gnu packages version-control)
   #:use-module (gnu packages video)
@@ -98,26 +101,29 @@
 (define-public bart
   (package
     (name "bart")
-    (version "0.7.00")
+    (version "0.8.00")
     (source
      (origin
        (method git-fetch)
        (uri (git-reference
              (url "https://github.com/mrirecon/bart")
-             (commit "d1b0e576c3f759089915565d5bf57832acf7b03e")))
+             (commit "eacc67b95cf128487ecc48f0e6541ea4dca08818")))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "159rj3agr9pb9lg38b56rnw3d8wcbkmb2n718z26zpy4c6a6d9rn"))))
+        (base32 "05lcf7c3g7ms5h82bw1mi4kzkdv5wpqi1zrfhqfkgbcpd3irj6aq"))))
     (build-system gnu-build-system)
     (arguments
      (list
       #:test-target "utest"
       #:make-flags #~(list
                       (string-append "PREFIX=" #$output)
+                      "PARALLEL=1"
+                      "PARALLEL_NJOBS=1"
                       "OPENBLAS=1"
                       "SCALAPACK=1"
                       (string-append "BLAS_BASE=" #$(this-package-input "openblas"))
                       (string-append "FFTW_BASE=" #$(this-package-input "fftw")))
+      #:parallel-build? #false ;leads to non-deterministic output
       #:phases
       #~(modify-phases %standard-phases
           (delete 'configure)
@@ -195,7 +201,9 @@ licences similar to the Modified BSD licence."))))
                (base32
                 "0qpcd3n26q52dpyibm11f5l6cgscdr54p2jish39gc3p1f5h3ws1"))
               (patches (search-patches "mia-fix-boost-headers.patch"
-                                       "mia-vtk9.patch"))))
+                                       "mia-vtk9.patch"
+                                       "mia-vtk92.patch"
+                                       "mia-vtk-version.patch"))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags
@@ -308,7 +316,7 @@ many popular formats.")
 (define-public vtk
   (package
     (name "vtk")
-    (version "9.0.1")
+    (version "9.2.2")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://vtk.org/files/release/"
@@ -316,21 +324,23 @@ many popular formats.")
                                   "/VTK-" version ".tar.gz"))
               (sha256
                (base32
-                "1ir2lq9i45ls374lcmjzw0nrm5l5hnm1w47lg8g8d0n2j7hsaf8v"))
-              (patches
-               (search-patches "vtk-fix-freetypetools-build-failure.patch"))
+                "0x8h2bwxq2870067j7wqd0qym87pa3inkbri93zrdb0zwwmhlnqw"))
               (modules '((guix build utils)))
               (snippet
                '(begin
                   (for-each
-                    (lambda (dir)
-                      (delete-file-recursively
-                        (string-append "ThirdParty/" dir "/vtk" dir)))
-                    ;; pugixml depended upon unconditionally
-                    '("doubleconversion" "eigen" "expat" "freetype" "gl2ps"
-                      "glew" "hdf5" "jpeg" "jsoncpp" "libproj" "libxml2" "lz4"
-                      "netcdf" "ogg" "png" "sqlite" "theora" "tiff" "zlib"))
-                  #t))))
+                   (lambda (dir)
+                     (delete-file-recursively
+                      (string-append "ThirdParty/" dir "/vtk" dir)))
+                   ;; pugixml depended upon unconditionally
+                   '("doubleconversion" "eigen" "expat" "freetype" "gl2ps"
+                     "glew" "hdf5" "jpeg" "jsoncpp" "libharu" "libproj"
+                     "libxml2" "lz4" "netcdf" "ogg" "png" "sqlite" "theora"
+                     "tiff" "zlib"))
+                  (substitute* "IO/ExportPDF/vtkPDFContextDevice2D.cxx"
+                    (("\\bHPDF_UINT16 (noPen|dash|dot|denseDot|dashDot|dashDotDot)\\b"
+                      _ var)
+                     (string-append "HPDF_REAL " var)))))))
     (properties `((release-monitoring-url . "https://vtk.org/download/")))
     (build-system cmake-build-system)
     (arguments
@@ -347,6 +357,7 @@ many popular formats.")
                            "-DVTK_MODULE_USE_EXTERNAL_VTK_hdf5=ON"
                            "-DVTK_MODULE_USE_EXTERNAL_VTK_jpeg=ON"
                            "-DVTK_MODULE_USE_EXTERNAL_VTK_jsoncpp=ON"
+                           "-DVTK_MODULE_USE_EXTERNAL_VTK_libharu=ON"
                            "-DVTK_MODULE_USE_EXTERNAL_VTK_libproj=ON"
                            "-DVTK_MODULE_USE_EXTERNAL_VTK_libxml2=ON"
                            "-DVTK_MODULE_USE_EXTERNAL_VTK_lz4=ON"
@@ -362,14 +373,6 @@ many popular formats.")
                            "-DVTK_WRAP_PYTHON=ON"
                            "-DVTK_PYTHON_VERSION:STRING=3"
                            )
-       #:phases
-         (modify-phases %standard-phases
-           (add-after 'unpack 'patch-sources
-             (lambda _
-               (substitute* "Common/Core/vtkFloatingPointExceptions.cxx"
-                 (("<fenv.h>") "<cfenv>"))
-               (substitute* "Common/Core/CMakeLists.txt"
-                 (("fenv.h") "cfenv")))))
        #:tests? #f))        ;XXX: test data not included
     (inputs
      (list double-conversion
@@ -380,6 +383,7 @@ many popular formats.")
            glew
            glu
            hdf5
+           libharu
            libjpeg-turbo
            jsoncpp
            libtheora
@@ -390,7 +394,7 @@ many popular formats.")
            mesa
            netcdf
            libpng
-           proj
+           proj-7
            python
            ;("pugixml" ,pugixml)
            sqlite
@@ -510,6 +514,9 @@ integrates with various databases on GUI toolkits such as Qt and Tk.")
              ;;
              ;; DISPATCH is the list of optional dispatches.
              "-DCPU_BASELINE=SSE2"
+
+             ;; Build Python bindings.
+             "-DBUILD_opencv_python3=ON"
 
              ,@(match (%current-system)
                  ("x86_64-linux"
@@ -661,7 +668,7 @@ things like:
 (define-public vips
   (package
     (name "vips")
-    (version "8.10.6")
+    (version "8.13.1")
     (source
      (origin
        (method url-fetch)
@@ -669,7 +676,7 @@ things like:
              "https://github.com/libvips/libvips/releases/download/v"
              version "/vips-" version ".tar.gz"))
        (sha256
-        (base32 "0vjsh3i0861f6h9as3bch956cidz824zz499pvhjs3lfjn6hhs14"))))
+        (base32 "00kp3439jcqv9l2gcjg88xzvlq8clv54z1m3x66i3chvarz7ndxd"))))
     (build-system gnu-build-system)
     (native-inputs
      (list gobject-introspection pkg-config))
@@ -857,6 +864,99 @@ the VIPS image processing library.  It's a little like a spreadsheet: you
 create a set of formula connecting your objects together, and on a change nip2
 recalculates.")
     (license license:gpl2+)))
+
+;; This package bundles and extends VTK.  It also reuses the VTK build system
+;; to some degree.  Sadly, it does not seem to be possible to build with an
+;; external VTK, despite the CMake option PARAVIEW_USE_EXTERNAL_VTK.
+(define-public paraview-5.9
+  (package
+    (name "paraview")
+    (version "5.9.1")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://www.paraview.org/files/v"
+                           (version-major+minor version)
+                           "/ParaView-v" version ".tar.xz"))
+       (sha256
+        (base32 "13aczmfshzia324h9r2m675yyrklz2308rf98n444ppmzfv6qj0d"))))
+    (build-system qt-build-system)
+    (arguments
+     (list
+      #:build-type "Release"        ;Build without debug symbols to save space
+      #:configure-flags
+      '(list "-DPARAVIEW_BUILD_WITH_EXTERNAL=ON"
+             "-DPARAVIEW_BUILD_SHARED_LIBS=ON"
+             "-DPARAVIEW_BUILD_DEVELOPER_DOCUMENTATION=OFF"
+             "-DPARAVIEW_USE_PYTHON=ON"
+             "-DPARAVIEW_ENABLE_FFMPEG=ON"
+             "-DPARAVIEW_ENABLE_GDAL=ON"
+             "-DPARAVIEW_ENABLE_WEB=OFF"
+
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_doubleconversion=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_eigen=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_expat=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_freetype=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_gl2ps=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_glew=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_hdf5=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_jpeg=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_libxml2=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_lz4=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_lzma=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_netcdf=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_png=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_theora=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_tiff=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_utf8=ON"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_zlib=ON"
+
+             "-DVTK_MODULE_USE_EXTERNAL_ParaView_vtkcatalyst=OFF"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_cgns=OFF"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_exprtk=OFF"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_fmt=OFF"
+             "-DVTK_MODULE_USE_EXTERNAL_VTK_ioss=OFF")))
+    (inputs
+     (list ;; XXX: We can't simply #:use-module due to a cycle somewhere.
+           (module-ref
+            (resolve-interface '(gnu packages engineering))
+            'cgns)
+           cli11
+           double-conversion
+           eigen
+           expat
+           ffmpeg
+           freetype
+           gdal
+           gl2ps
+           glew
+           hdf5
+           jsoncpp
+           libharu
+           libjpeg-turbo
+           libpng
+           libtheora
+           libtiff
+           libxml2
+           lz4
+           mesa
+           netcdf
+           protobuf
+           pugixml
+           python
+           qtbase-5
+           qtsvg-5
+           qttools-5
+           qtxmlpatterns
+           utfcpp
+           zlib))
+    (home-page "https://www.paraview.org/")
+    (synopsis "Data analysis and visualization application")
+    (description "ParaView is a data analysis and visualization application.
+Users can quickly build visualizations to analyze their data using qualitative
+and quantitative techniques.  The data exploration can be done interactively
+in 3D or programmatically using ParaView’s batch processing capabilities.")
+    (license license:bsd-3)))
 
 (define-public vxl
   (package

@@ -16,6 +16,7 @@
 ;;; Copyright © 2020 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2021 lu hui <luhuins@163.com>
 ;;; Copyright © 2021, 2022 Foo Chuan Wei <chuanwei.foo@hotmail.com>
+;;; Copyright © 2022 Michael Rohleder <mike@rohleder.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -283,7 +284,7 @@ COCOMO model or user-provided parameters.")
 (define-public cloc
   (package
     (name "cloc")
-    (version "1.92")
+    (version "1.94")
     (source
      (origin
        (method git-fetch)
@@ -292,7 +293,7 @@ COCOMO model or user-provided parameters.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1hy1hskiw02b7xaxn2qz0v7znj14l49w1anx20z6rkcps7212l5l"))))
+        (base32 "082kkzr168lkv35hvijq95b817lyj2azcwld47xpws9h35556jlv"))))
     (build-system gnu-build-system)
     (inputs
      (list coreutils
@@ -744,7 +745,7 @@ independent targets.")
 (define-public uncrustify
   (package
     (name "uncrustify")
-    (version "0.74.0")
+    (version "0.75.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -753,7 +754,7 @@ independent targets.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0v48vhmzxjzysbf0vhxzayl2pkassvbabvwg84xd6b8n5i74ijxd"))))
+                "1mzzzd4alajjdshbjd2a5mddqcpag8yyss72n09mfpialzyf7g60"))))
     (build-system cmake-build-system)
     (native-inputs
      `(("python" ,python-wrapper)))

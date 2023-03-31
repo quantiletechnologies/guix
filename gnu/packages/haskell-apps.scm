@@ -304,14 +304,14 @@ to @code{cabal repl}).")
 (define-public git-annex
   (package
     (name "git-annex")
-    (version "10.20220624")
+    (version "10.20221103")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://hackage.haskell.org/package/"
                            "git-annex/git-annex-" version ".tar.gz"))
        (sha256
-        (base32 "0a17ph8w620fmbwhm4yhdz2pwp0z8g5d4qsw2bg8k1par2n8rnmz"))))
+        (base32 "0fwg74ldw2paq9dr052hqjz2x219zkkramvm8jskpnnnch9c6jgm"))))
     (build-system haskell-build-system)
     (arguments
      `(#:configure-flags
@@ -326,8 +326,7 @@ to @code{cabal repl}).")
              ;; let's temporarily patch it so that we can run the tests.
              (copy-file "Utility/Shell.hs" "/tmp/Shell.hs")
              (substitute* "Utility/Shell.hs"
-               (("/bin/sh") (which "sh")))
-             #t))
+               (("/bin/sh") (which "sh")))))
          (add-before 'configure 'factor-setup
            (lambda _
              ;; Factor out necessary build logic from the provided
@@ -341,12 +340,10 @@ to @code{cabal repl}).")
              (call-with-output-file "Setup.hs"
                (lambda (out)
                  (format out "import Distribution.Simple~%")
-                 (format out "main = defaultMain~%")))
-             #t))
+                 (format out "main = defaultMain~%")))))
          (add-before 'configure 'pre-configure
            (lambda _
-             (invoke "runhaskell" "PreConf.hs")
-             #t))
+             (invoke "runhaskell" "PreConf.hs")))
          (add-after 'build 'build-manpages
            (lambda _
              ;; The Setup.hs rewrite above removed custom code for building
@@ -380,8 +377,7 @@ to @code{cabal repl}).")
                                        "/man/man1/")))
                (mkdir-p man)
                (for-each (lambda (file) (install-file file man))
-                         (find-files "man")))
-             #t))
+                         (find-files "man")))))
          (add-after 'install 'install-symlinks
            (lambda* (#:key outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
@@ -389,8 +385,7 @@ to @code{cabal repl}).")
                (symlink (string-append bin "/git-annex")
                         (string-append bin "/git-annex-shell"))
                (symlink (string-append bin "/git-annex")
-                        (string-append bin "/git-remote-tor-annex"))
-               #t)))
+                        (string-append bin "/git-remote-tor-annex")))))
          (add-after 'install 'touch-static-output
            (lambda* (#:key outputs #:allow-other-keys)
              ;; The Haskell build system adds a "static" output by
@@ -411,6 +406,7 @@ to @code{cabal repl}).")
            ghc-bloomfilter
            ghc-byteable
            ghc-case-insensitive
+           ghc-clientsession
            ghc-concurrent-output
            ghc-conduit
            ghc-connection
@@ -467,8 +463,17 @@ to @code{cabal repl}).")
            ghc-utf8-string
            ghc-uuid
            ghc-vector
-           git
+           ghc-wai
+           ghc-wai-extra
+           ghc-warp
+           ghc-warp-tls
+           ghc-yesod
+           ghc-yesod-core
+           ghc-yesod-form
+           ghc-yesod-static
            rsync))
+    (propagated-inputs
+     (list git))
     (native-inputs
      (list ghc-tasty ghc-tasty-hunit ghc-tasty-quickcheck ghc-tasty-rerun
            perl))

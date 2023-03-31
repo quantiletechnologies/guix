@@ -216,7 +216,8 @@ when evaluated."
          (source ,(source->code source version))
          ,@(match properties
              (() '())
-             (_  `((properties ,properties))))
+             (_  `((properties
+                    ,(list 'quasiquote (object->code properties #t))))))
          ,@(if replacement
                `((replacement ,replacement))
                '())

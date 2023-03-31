@@ -7,6 +7,7 @@
 ;;; Copyright © 2018 Pierre Neidhardt <mail@ambrevar.xyz>
 ;;; Copyright © 2019 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -123,7 +124,7 @@ the WPE-flavored port of WebKit.")
 engine that uses Wayland for graphics output.")
     (license license:bsd-2)))
 
-(define %webkit-version "2.36.4")
+(define %webkit-version "2.36.8")       ;webkit2gtk4
 
 (define-public webkitgtk
   (package
@@ -134,7 +135,7 @@ engine that uses Wayland for graphics output.")
               (uri (string-append "https://www.webkitgtk.org/releases/"
                                   name "-" version ".tar.xz"))
               (sha256
-               (base32 "1a72w9md2xvb82rd2sk3c7pqrvr28rqa8i4yq5ldjyd4hlgvxgmn"))
+               (base32 "0dq4s0rw3cmsxlv22pc38qdsq4wx2yyq9wgsi4wgw243y9mzpn8a"))
               (patches (search-patches
                         "webkitgtk-adjust-bubblewrap-paths.patch"))))
     (build-system cmake-build-system)
@@ -235,12 +236,14 @@ engine that uses Wayland for graphics output.")
            enchant
            geoclue
            gst-plugins-base
+           gst-plugins-bad-minimal
            gtk+-2
            harfbuzz
            hyphen
            icu4c
            lcms
            libgcrypt
+           libgudev
            libjpeg-turbo
            libmanette
            libnotify
@@ -260,6 +263,7 @@ engine that uses Wayland for graphics output.")
            woff2
            wpebackend-fdo
            xdg-dbus-proxy))
+    (properties '((timeout . 144000)))  ; 40 hours, most notably for aarch64
     (home-page "https://www.webkitgtk.org/")
     (synopsis "Web content engine for GTK+")
     (description "WebKitGTK+ is a full-featured port of the WebKit rendering engine,
@@ -275,11 +279,47 @@ propagated by default) such as @code{gst-plugins-good} and
                    license:bsd-2
                    license:bsd-3))))
 
-;;; Required by gnome-online-accounts as webkitgtk propagates libsoup 3, which
-;;; causes the build to fail.  Also required by e.g. emacs-next-pgtk,
-;;; emacs-xwidgets, and some other GNOME packages for webkit2gtk-4.0.  See
-;;; also the upstream tracker for libsoup 3:
-;;; https://gitlab.gnome.org/GNOME/libsoup/-/issues/218
+(define-public webkitgtk-next
+  (package
+    (inherit webkitgtk)
+    (name "webkitgtk")
+    (version "2.38.2")                  ;webkit2gtk5
+    (source (origin
+              (inherit (package-source webkitgtk))
+              (method url-fetch)
+              (uri (string-append "https://www.webkitgtk.org/releases/"
+                                  name "-" version ".tar.xz"))
+              (sha256
+               (base32 "0gpy17lwsv5x0xl7p7nf1xqsg8c4yxmd3b4wv6s87xaijs4q5szk"))))
+    (build-system cmake-build-system)
+    (arguments
+     (substitute-keyword-arguments (package-arguments webkitgtk)
+       ((#:configure-flags flags)
+        #~(cons* "-DENABLE_INTROSPECTION=ON"
+                 "-DUSE_GTK4=ON"
+                 (delete "-DENABLE_GTKDOC=ON" #$flags)))
+       ((#:phases phases)
+        #~(modify-phases #$phases
+            (add-before 'build 'set-CC
+              (lambda _
+                ;; Some Perl scripts check for the CC environment variable, else
+                ;; use /usr/bin/gcc.
+                (setenv "CC" "gcc")))))))
+    (native-inputs
+     (modify-inputs (package-native-inputs webkitgtk)
+       (delete "docbook-xml" "gtk-doc")
+       (append gi-docgen)))
+    (propagated-inputs
+     (modify-inputs (package-propagated-inputs webkitgtk)
+       (replace "gtk+" gtk)))
+    (inputs
+     (modify-inputs (package-inputs webkitgtk)
+       (delete "gtk+-2" "libnotify")
+       (append pango-next)))))          ;TODO: remove after it's the default
+
+;;; Required by e.g. emacs-next-pgtk, emacs-xwidgets, and some other GNOME
+;;; packages for webkit2gtk-4.0.  See also the upstream tracker for libsoup 3:
+;;; https://gitlab.gnome.org/GNOME/libsoup/-/issues/218.
 (define-public webkitgtk-with-libsoup2
   (package/inherit webkitgtk
     (name "webkitgtk-with-libsoup2")
@@ -300,7 +340,7 @@ propagated by default) such as @code{gst-plugins-good} and
               (uri (string-append "https://wpewebkit.org/releases/"
                                   name "-" version ".tar.xz"))
               (sha256
-               (base32 "08f0sz4d5bpgrgvkgby3fri3wk5474f66gvp3y39laflypnknyih"))))
+               (base32 "1svmvj96c0lhdhs7fndgwchkvv4wyb7gwd4d3fbd1chhr54s6hld"))))
     (arguments
      (substitute-keyword-arguments (package-arguments webkitgtk)
        ((#:configure-flags flags)

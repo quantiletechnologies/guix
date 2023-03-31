@@ -10,6 +10,7 @@
 ;;; Copyright © 2020 Vincent Legoll <vincent.legoll@gmail.com>
 ;;; Copyright © 2020. 2021, 2022 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2022 John Kehayias <john.kehayias@protonmail.com>
+;;; Copyright © 2022 Sharlatan Hellseher <sharlatanus@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -204,17 +205,6 @@ cameras (CRW/CR2, NEF, RAF, DNG, and others).")
     ;; both two licensing modes for your changes/additions."
     (license (list license:lgpl2.1 license:cddl1.0))))
 
-(define-public libraw-0.18
-  (package (inherit libraw)
-    (name "libraw")
-    (version "0.18.12")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append "https://www.libraw.org/data/LibRaw-"
-                                  version ".tar.gz"))
-              (sha256
-               (base32
-                "1m2khr2cij8z6lawgbmdksjn14fpnjsy8ad4qahnpqapm1slsxap"))))))
 
 (define-public libexif
   (package
@@ -241,14 +231,14 @@ data as produced by digital cameras.")
 (define-public libgphoto2
   (package
     (name "libgphoto2")
-    (version "2.5.28")
+    (version "2.5.30")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://sourceforge/gphoto/libgphoto/"
                                   version "/libgphoto2-" version ".tar.bz2"))
               (sha256
                (base32
-                "1gayf81nzi8gxmwhgs4k1p0dwqajsx0h9lzjfvnib3100dm5j04n"))))
+                "1d0g3ixxfz3sfm5rzibydqd9ccflls86pq0ls48zfp5dqvda2qgf"))))
     (build-system gnu-build-system)
     (native-inputs (list pkg-config))
     (inputs
@@ -471,7 +461,7 @@ photographic equipment.")
 (define-public darktable
   (package
     (name "darktable")
-    (version "4.0.0")
+    (version "4.0.1")
     (source
      (origin
        (method url-fetch)
@@ -479,7 +469,7 @@ photographic equipment.")
              "https://github.com/darktable-org/darktable/releases/"
              "download/release-" version "/darktable-" version ".tar.xz"))
        (sha256
-        (base32 "0bfcag6bj5vcmg4z4xjirs43iafcx89al6jl41i5mrhpjzszh5hl"))))
+        (base32 "0s0xwp5n4jhzdhbmsg02dlsc503jfznpwqn3rnipg687q3h83vsz"))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags '("-DBINARY_PACKAGE_BUILD=On"
@@ -493,6 +483,13 @@ photographic equipment.")
                (("\"libOpenCL\"")
                 (string-append "\"" (assoc-ref inputs "opencl-icd-loader")
                                "/lib/libOpenCL.so\"")))))
+         (add-after 'unpack 'fix-missing-include
+           (lambda _
+             ;; Fix missing include needed to build tests.  See upstream
+             ;; issue: https://github.com/darktable-org/darktable/issues/12604
+             (substitute* "./src/common/variables.h"
+               (("once")
+                "once\n#include \"common/image.h\""))))
          (add-before 'configure 'prepare-build-environment
            (lambda* (#:key inputs #:allow-other-keys)
              ;; Rawspeed fails to build with GCC due to OpenMP error:
@@ -810,4 +807,27 @@ photo post-production and is primarily focused on improving a photographer's
 workflow by facilitating the handling of large numbers of images.  Most raw
 formats are supported, including Pentax Pixel Shift, Canon Dual-Pixel, and those
 from Foveon and X-Trans sensors.")
+    (license license:gpl3+)))
+
+(define-public librtprocess
+  (package
+    (name "librtprocess")
+    (version "0.12.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/CarVac/librtprocess")
+                    (commit version)))
+              (sha256
+               (base32
+                "0v0zwbdbc1fn7iy6wi0m6zgb86qdx1ijnv548d0ydbr8cm4klnpz"))
+              (file-name (git-file-name name version))))
+    (build-system cmake-build-system)
+    (arguments
+     ;; No tests
+     (list #:tests? #f))
+    (home-page "https://github.com/CarVac/librtprocess")
+    (synopsis "Highly optimized library for processing RAW images")
+    (description
+     "This package provides RawTherapee's highly optimized RAW processing routines.")
     (license license:gpl3+)))

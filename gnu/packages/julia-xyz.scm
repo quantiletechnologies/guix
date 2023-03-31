@@ -165,7 +165,8 @@ provides functions to run a few automatable checks for Julia packages.")
      ;; Expression: @inferred(ArrayInterface.size(Rnr)) === (StaticInt(4),)
      ;; Evaluated: (static(2),) === (static(4),)
      ;; Disable as stopgap.
-     (list #:tests? (not (target-x86-32?))))
+     (list #:tests? (not (or (%current-target-system)
+                             (target-x86-32?)))))
     (propagated-inputs
      (list julia-ifelse
            julia-requires
@@ -1471,6 +1472,15 @@ valuable enough at this time.")
                 (("pip install")
                  (string-append (search-input-file inputs "bin/pip")
                                 " install")))))
+          (add-after 'link-depot 'fix-test-git-submodule
+            ;; Git v2.38.1 fixes security issues and changes the default
+            ;; behaviour of `git submodule`.  This substitution is a backport
+            ;; of the upstream patch, not yet released, fixing the test suite.
+            ;; https://github.com/JuliaDocs/Documenter.jl/commit/b5a5c65d02d136743e7c18ffebf8baba900484fc
+            (lambda* (#:key inputs #:allow-other-keys)
+              (substitute* "test/utilities.jl"
+                (("submodule add")
+                 "-c protocol.file.allow=always submodule add"))))
           (add-after 'link-depot 'remove-javascript-downloads
             (lambda _
               (substitute* "src/Writers/HTMLWriter.jl"
@@ -2048,7 +2058,8 @@ c-style numerical formatting.")
      ;; Expression: dual_isapprox(FDNUM ^ PRIMAL, exp(PRIMAL * log(FDNUM)))
      ;; ERROR: LoadError: LoadError: There was an error during testing
      ;; Disable as stopgap.
-     (list #:tests? (not (target-x86-32?))))
+     (list #:tests? (not (or (%current-target-system)
+                             (target-x86-32?)))))
     (inputs                             ;required for tests
      (list julia-calculus
            julia-difftests))
@@ -2937,7 +2948,8 @@ each one has a fixed size.  Currently support inline strings from 1 byte up to
       ;; Got exception outside of a @test
       ;; OverflowError: 96908232 * 106943408 overflowed for type Int32
       ;; Disable as stopgap.
-      #:tests? (not (target-x86-32?))))
+      #:tests? (not (or (%current-target-system)
+                        (target-x86-32?)))))
     (propagated-inputs
      (list julia-axisalgorithms
            julia-offsetarrays
@@ -4658,7 +4670,8 @@ can be avoided.")
      ;; Expression: hash(tr_float, hash(1)) === hash(v_float, hash(1))
      ;; MethodError: no method matching decompose(::ReverseDiff.TrackedReal{Float64, Float64, Nothing})
      ;; Disable as stopgap.
-     (list #:tests? (not (target-x86-32?))))
+     (list #:tests? (not (or (%current-target-system)
+                             (target-x86-32?)))))
     (propagated-inputs
      (list julia-diffresults
            julia-diffrules
@@ -5874,3 +5887,9 @@ Zygote, without depending on Zygote itself.")
 differentiation (AD) in Julia, and is the next-generation AD system for the
 Flux differentiable programming framework.")
     (license license:expat)))
+
+;;;
+;;; Avoid adding new packages to the end of this file. To reduce the chances
+;;; of a merge conflict, place them above by existing packages with similar
+;;; functionality or similar names.
+;;;

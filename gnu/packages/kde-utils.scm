@@ -2,6 +2,8 @@
 ;;; Copyright © 2017, 2019 Hartmut Goebel <h.goebel@crazy-compilers.com>
 ;;; Copyright © 2020, 2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2021 Zheng Junjie <873216071@qq.com>
+;;; Copyright © 2022 Brendan Tildesley <mail@brendan.scot>
+;;; Copyright © 2022 Petr Hodina <phodina@protonmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -20,34 +22,44 @@
 
 (define-module (gnu packages kde-utils)
   #:use-module (guix build-system qt)
+  #:use-module (guix gexp)
   #:use-module (guix download)
+  #:use-module (guix git-download)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
+  #:use-module (guix utils)
   #:use-module (gnu packages)
   #:use-module (gnu packages backup)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages cmake)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages crypto)
+  #:use-module (gnu packages cups)
+  #:use-module (gnu packages glib) ; dbus for tests
   #:use-module (gnu packages gnome)
+  #:use-module (gnu packages gstreamer)
   #:use-module (gnu packages imagemagick)
+  #:use-module (gnu packages multiprecision)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages kde)
   #:use-module (gnu packages kde-frameworks)
   #:use-module (gnu packages kde-plasma)
   #:use-module (gnu packages qt)
   #:use-module (gnu packages samba)
+  #:use-module (gnu packages xdisorg)
   #:use-module (gnu packages xorg))
 
 (define-public ark
   (package
     (name "ark")
-    (version "20.04.1")
+    (version "22.04.3")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://kde/stable/release-service/" version
                                   "/src/ark-" version ".tar.xz"))
               (sha256
                (base32
-                "0g5bfa1lc7mhrc2ngd4ldf33dpwr7gqrj95kp897pf632wwj23iw"))
+                "1wjy90qkkzafwcw8d4v9cyhmc3sgfipc1085hq2ghqhvrgdyzs00"))
               ;; The libarchive package in Guix does not support
               ;; xar; disable related tests.
               (patches (search-patches "ark-skip-xar-test.patch"))))
@@ -79,7 +91,8 @@
     (native-inputs
      (list extra-cmake-modules pkg-config kdoctools xorg-server))
     (inputs
-     (list breeze-icons
+     (list bash-minimal
+           breeze-icons
            karchive
            kconfig
            kcrash
@@ -103,24 +116,234 @@
            unzip
            zip
            zstd))
-    (home-page "https://apps.kde.org/en/ark")
+    (home-page "https://apps.kde.org/ark/")
     (synopsis "Graphical archiving tool")
     (description "Ark is a graphical file compression/decompression utility
 with support for multiple formats, including tar, gzip, bzip2, rar and zip, as
 well as CD-ROM images.")
     (license license:gpl2+)))
 
+(define-public atelier
+  (let ((commit "93d7d440c42f1e49a4933cbbce9f68d5e4ca725a") ; no releases
+        (revision "1"))
+    (package
+      (name "atelier")
+      (version (git-version "0.1-pre" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://invent.kde.org/utilities/atelier")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "00jccpwvksyp2vr3fjxajs8d9d30rspg4zj6rnj8dai96alp303k"))))
+      (build-system qt-build-system)
+      (native-inputs (list extra-cmake-modules pkg-config))
+      (inputs (list ki18n
+                    kxmlgui
+                    kconfigwidgets
+                    ktexteditor
+                    libatcore
+                    qt3d-5
+                    qtbase-5
+                    qtcharts
+                    qtdeclarative-5
+                    qtmultimedia-5
+                    qtserialport))
+      (home-page "https://atelier.kde.org")
+      (synopsis "Desktop interface to control 3D printers powered by AtCore")
+      (description "Atelier provides interface to control and manage your printer.
+@itemize
+@item Load and see your GCode File
+@item Real time graphic to monitor your bed and hotend temperatures
+@item You can log everything that comes and go from your printer
+@item Edit gcode file
+@end itemize")
+      (license license:gpl3+))))
+
+(define-public basket
+  (let ((commit "e23a8b3b1198d51f770523c7fb4652750810359a")
+        (revision "1"))
+    (package
+      (name "basket")
+      (version (git-version "2.49" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://invent.kde.org/utilities/basket")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "1i7hrrlwyzzh7mm9xc8hjix24rvy1b2cvvbkhxh9mmdbmphwdhhd"))))
+      (build-system qt-build-system)
+      (native-inputs (list extra-cmake-modules))
+      (inputs (list breeze-icons
+                    karchive
+                    kcompletion
+                    kconfig
+                    kconfigwidgets
+                    kcoreaddons
+                    kcrash
+                    kdbusaddons
+                    kdoctools
+                    kfilemetadata
+                    kglobalaccel
+                    kguiaddons
+                    ki18n
+                    kiconthemes
+                    kcmutils
+                    kio
+                    knotifications
+                    kparts
+                    kservice
+                    ktextwidgets
+                    kwidgetsaddons
+                    kwindowsystem
+                    kxmlgui
+                    phonon))
+      (home-page "https://invent.kde.org/utilities/basket")
+      (synopsis "Notes and to-dos organizer")
+      (description "This package provides simple note taking and to-do app.")
+      (license license:gpl2+))))
+
+(define-public fielding
+  (let ((commit "6b3c5d67b308e9e7e2043dc6072bfd265ec9f3e1")
+        ;; no releases yet
+        (revision "1"))
+    (package
+      (name "fielding")
+      (version (git-version "0.1-pre" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://invent.kde.org/utilities/fielding")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "1l16am7il7kprmy8irpzj04rb8wbfr84y49wp4i74hspp9xkfick"))))
+      (build-system qt-build-system)
+      (native-inputs (list extra-cmake-modules))
+      (inputs (list kirigami
+                    kcoreaddons
+                    kconfig
+                    ki18n
+                    kdbusaddons
+                    ksyntaxhighlighting
+                    qtdeclarative-5
+                    qtquickcontrols2-5
+                    qtsvg-5))
+      (home-page "https://invent.kde.org/utilities/fielding")
+      (synopsis "REST API testing tool")
+      (description
+       "This package provides a tool for testing REST APIs.")
+      (license license:lgpl2.1+))))
+
+(define-public filelight
+  (package
+    (name "filelight")
+    (version "22.08.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://kde/stable/release-service/"
+                                  version "/src/filelight-" version ".tar.xz"))
+              (sha256
+               (base32
+                "1fqgmpq5dznbn5lalx1j6dyynhylijrcqw3x9hrwxcqwr275h9iw"))))
+    (build-system qt-build-system)
+    (native-inputs (list extra-cmake-modules))
+    (inputs (list kirigami
+                  kquickcharts
+                  kxmlgui
+                  kio
+                  ki18n
+                  kdeclarative
+                  qqc2-desktop-style
+                  qtgraphicaleffects
+                  qtquickcontrols2-5
+                  qtsvg-5))
+    (home-page "https://apps.kde.org/filelight/")
+    (synopsis "Visualize the disk usage")
+    (description "Filelight is an application to visualize the disk usage on
+your computer.")
+    (license license:lgpl2.1+)))
+
+(define-public francis
+  (let ((commit "d2c762ad94170430a667ee57f81ec9dbe498642c") ; no release yet
+        (revision "1"))
+    (package
+      (name "francis")
+      (version (git-version "0.1-pre" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://invent.kde.org/utilities/francis")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "15bk5iq127mp34n9fzq4d5r3qss3ihk93lqy86z2q3lgwid26s0h"))))
+      (build-system qt-build-system)
+      (native-inputs (list extra-cmake-modules))
+      (inputs (list kirigami
+                    kcoreaddons
+                    kconfig
+                    ki18n
+                    kdbusaddons
+                    knotifications
+                    qtdeclarative-5
+                    qtgraphicaleffects
+                    qtquickcontrols2-5
+                    qtsvg-5))
+      (home-page "https://invent.kde.org/utilities/francis")
+      (synopsis "Track your time")
+      (description "This package provides time tracking.")
+      (license license:lgpl2.1+))))
+
+(define-public isoimagewriter
+  (let ((commit "bd1ef4f0ce179fa874b102689022ebda3e7b4c16")
+        (revision "1"))
+    (package
+      (name "isoimagewriter")
+      (version (git-version "0.8" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://invent.kde.org/utilities/isoimagewriter")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0dha2y4kmyppi6c0g0hclp53fjj963vq27q7azznpl0bz6zb4042"))))
+      (build-system qt-build-system)
+      (native-inputs (list extra-cmake-modules))
+      (inputs (list kauth
+                    karchive
+                    kcoreaddons
+                    ki18n
+                    kiconthemes
+                    kcrash
+                    solid
+                    kwidgetsaddons))
+      (home-page "https://invent.kde.org/utilities/isoimagewriter")
+      (synopsis "Write hybrid ISO files onto USB disks")
+      (description
+       "This package provides a tool to write ISO files to USB disks.")
+      (license license:gpl3+))))
+
 (define-public kate
   (package
     (name "kate")
-    (version "20.04.1")
+    (version "22.04.3")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://kde/stable/release-service/" version
                            "/src/kate-" version ".tar.xz"))
        (sha256
-        (base32 "0nrby307syrqlxrf9lwdzc9c15ifw47418qwszqwg345ma2pww7i"))))
+        (base32 "0dnlr1cld6lqanqv98bss66w2bi2y78vqb8jx26addn2r1w4ygkf"))))
     (build-system qt-build-system)
     (native-inputs
      (list extra-cmake-modules kdoctools))
@@ -139,11 +362,12 @@ well as CD-ROM images.")
            kjobwidgets
            kparts
            ktexteditor
+           ksyntaxhighlighting
            kwallet
            plasma-framework
            kwindowsystem
            kxmlgui
-           oxygen-icons ;; default icon set
+           breeze-icons ;; default icon set
            qtbase-5
            qtscript))
     (arguments
@@ -154,8 +378,7 @@ well as CD-ROM images.")
            (lambda _
              ;; make Qt render "offscreen", required for tests
              (setenv "QT_QPA_PLATFORM" "offscreen")
-             (setenv "XDG_CACHE_HOME" "/tmp/xdg-cache")
-             #t)))))
+             (setenv "XDG_CACHE_HOME" "/tmp/xdg-cache"))))))
     (home-page "https://kate-editor.org/")
     (synopsis "Multi-document, multi-view text editor")
     (description "Kate is a powerful text editor that can open multiple files
@@ -176,17 +399,391 @@ Kate's features include:
     (license ;; GPL for programs, LGPL for libraries
      (list license:gpl2+ license:lgpl2.0))))
 
+(define-public kdebugsettings
+  (package
+    (name "kdebugsettings")
+    (version "22.08.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://kde/stable/release-service/"
+                                  version "/src/kdebugsettings-" version
+                                  ".tar.xz"))
+              (sha256
+               (base32
+                "0l9q7cmzc93zz2zc5ncq3q7q6jil6ai36n2vh70s2wsi8b0gsms8"))))
+    (build-system qt-build-system)
+    (native-inputs (list extra-cmake-modules))
+    (inputs (list kcoreaddons
+                  kconfig
+                  kdbusaddons
+                  ki18n
+                  kwidgetsaddons
+                  kitemviews
+                  kcompletion))
+    (home-page "https://invent.kde.org/utilities/kdebugsettings")
+    (synopsis "Choose which QLoggingCategory are displayed")
+    (description
+     "This package allows to select which QLoggingCategory are displayed.")
+    (license license:lgpl2.0+)))
+
+(define-public kbackup
+  (package
+    (name "kbackup")
+    (version "22.08.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://kde/stable/release-service/"
+                                  version "/src/kbackup-" version ".tar.xz"))
+              (sha256
+               (base32
+                "0c0zdk00j9qssjdb5dg5hwc5mx7h5kvriyszia2xizqjq2m53c3k"))))
+    (build-system qt-build-system)
+    (native-inputs (list extra-cmake-modules))
+    (inputs (list kguiaddons
+                  knotifications
+                  ki18n
+                  kio
+                  kxmlgui
+                  kiconthemes
+                  karchive
+                  kwidgetsaddons
+                  shared-mime-info))
+    (home-page "https://apps.kde.org/kbackup/")
+    (synopsis "Backup program with an easy-to-use interface")
+    (description
+     "This package provides tool to backup your data.
+@itemize
+@item profile for directories and files to be included or excluded from the
+backup
+@item The backup target can be either a locally mounted device like a ZIP
+drive, USB stick, etc
+@item Running automated backups without using a graphical user interface
+@end itemize")
+    (license license:gpl2+)))
+
+(define-public kcalc
+  (package
+    (name "kcalc")
+    (version "22.08.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://kde/stable/release-service/"
+                                  version "/src/kcalc-" version ".tar.xz"))
+              (sha256
+               (base32
+                "01rn6qy40q4b90i5mysrygkqh5fzq885dgcd11l6r8s59ijjcjlk"))))
+    (build-system qt-build-system)
+    (native-inputs (list extra-cmake-modules kdoctools))
+    (inputs (list gmp
+                  kcoreaddons
+                  kcrash
+                  kconfig
+                  kconfigwidgets
+                  kguiaddons
+                  ki18n
+                  knotifications
+                  kxmlgui
+                  mpfr))
+    (home-page "https://apps.kde.org/kcalc/")
+    (synopsis "Scientific calculator")
+    (description
+     "This package provides a scientific calculator.")
+    (license license:gpl2+)))
+
+(define-public kcharselect
+  (package
+    (name "kcharselect")
+    (version "22.08.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://kde/stable/release-service/"
+                                  version "/src/kcharselect-" version
+                                  ".tar.xz"))
+              (sha256
+               (base32
+                "1gs9jkq76dkhjgjqpl5dcsx0l2qi6i0pk122y1qmwgyd6f8af35b"))))
+    (build-system qt-build-system)
+    (native-inputs (list extra-cmake-modules))
+    (inputs (list kbookmarks kcoreaddons kcrash ki18n kwidgetsaddons kxmlgui))
+    (home-page "https://apps.kde.org/kcharselect/")
+    (synopsis "Select and copy special characters from installed fonts")
+    (description
+     "This package provides a tool to display various information
+about the selected character.  This includes not only the Unicode character
+name, but also aliases, general notes and cross references to similar
+characters.")
+    (license license:gpl2+)))
+
+(define-public kdialog
+  (package
+    (name "kdialog")
+    (version "22.08.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://kde/stable/release-service/"
+                                  version "/src/kdialog-" version ".tar.xz"))
+              (sha256
+               (base32
+                "1lqzhfn5g16qr6ada9i0i3kshna1zxp1y20ylwmmsa82bgmyblhx"))))
+    (build-system qt-build-system)
+    (native-inputs (list extra-cmake-modules kdoctools))
+    (inputs (list ktextwidgets
+                  knotifications
+                  kguiaddons
+                  kiconthemes
+                  kwindowsystem
+                  kio
+                  kdbusaddons))
+    (home-page "https://invent.kde.org/utilities/kdialog")
+    (synopsis "Show dialog boxes from shell scripts")
+    (description "This package provides tool to show nice dialog boxes from
+shell scripts.")
+    (license license:gpl2+)))
+
+(define-public keurocalc
+  (let ((commit "a760d8a7e58b36eb72d15e847f96599c93785194") ; just one release
+        (revision "1"))
+    (package
+      (name "keurocalc")
+      (version (git-version "1.3.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://invent.kde.org/utilities/keurocalc")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0gh5vwl38hwf1405c980j1fj06g5c52am140lf4mxhrjvnmry7kd"))))
+      (build-system qt-build-system)
+      (native-inputs (list extra-cmake-modules kdoctools))
+      (inputs (list kconfig
+                    kconfigwidgets
+                    kcoreaddons
+                    ki18n
+                    kio
+                    kwidgetsaddons
+                    kxmlgui))
+      (home-page "https://invent.kde.org/utilities/keurocalc")
+      (synopsis "Currency conversion tool")
+      (description "This package provides a utility to handle currency
+conversions between European currencies.")
+      (license license:gpl2+))))
+
+(define-public keysmith
+  (package
+    (name "keysmith")
+    (version "22.09")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://kde/stable/plasma-mobile/"
+                                  (version-major+minor version) "/keysmith-"
+                                  version ".tar.xz"))
+              (sha256
+               (base32
+                "0w3vvmp9rn6ahly2fm9n6f4glfr7d84bfvj33mrs5pn7n99h7jgy"))))
+    (build-system qt-build-system)
+    (native-inputs (list extra-cmake-modules pkg-config))
+    (inputs (list kdbusaddons
+                  kirigami
+                  ki18n
+                  kwindowsystem
+                  libsodium
+                  qtdeclarative-5
+                  qtgraphicaleffects
+                  qtquickcontrols2-5
+                  qtsvg-5))
+    (home-page "https://invent.kde.org/utilities/keysmith")
+    (synopsis "OTP client for Plasma Mobile and Desktop")
+    (description
+     "This package provides OTP client for Plasma Mobile and Desktop
+with support for QR scanning.")
+    (license license:gpl3+)))
+
+(define-public kfind
+  (package
+    (name "kfind")
+    (version "22.08.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://kde/stable/release-service/"
+                                  version "/src/kfind-" version ".tar.xz"))
+              (sha256
+               (base32
+                "0py6ygnj7qxbwrldf2a3hqc1cqd5yvyfi1l0nji0hwn8lvidnjhc"))))
+    (build-system qt-build-system)
+    (native-inputs (list extra-cmake-modules kdoctools))
+    (inputs (list karchive
+                  kcoreaddons
+                  kfilemetadata
+                  ki18n
+                  kio
+                  kwidgetsaddons))
+    (home-page "https://apps.kde.org/kfind/")
+    (synopsis "File search utility")
+    (description
+     "This package provides a file search utility for KDE.")
+    (license license:gpl2+)))
+
+(define-public kirogi
+  (let ((commit "73b009f1fc5ac159c2faba720b302c704f89a806") ; no releases yet
+        (revision "1"))
+    (package
+      (name "kirogi")
+      (version (git-version "0.1-pre" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://invent.kde.org/utilities/kirogi")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "1gncfnwadh11ipynfcrsh1vnk2g02c7scd5wanphi8i95jzak9jd"))))
+      (build-system qt-build-system)
+      (arguments
+       (list #:phases #~(modify-phases %standard-phases
+                          (add-after 'unpack 'fix-gstreamer
+                            (lambda* _
+                              (substitute* "CMakeLists.txt"
+                                (("gstreamer-video-1.0")
+                                 "")))))))
+      (native-inputs (list extra-cmake-modules pkg-config))
+      (inputs (list kconfigwidgets
+                    kcoreaddons
+                    ki18n
+                    kirigami
+                    kcrash
+                    kdnssd
+                    qtquickcontrols2-5
+                    qtgraphicaleffects
+                    qtdeclarative-5
+                    qtgamepad
+                    qtlocation))
+      (propagated-inputs (list gstreamer))
+      (home-page "https://apps.kde.org/kirogi/")
+      (synopsis "Ground control application for drones")
+      (description "Kirogi is a ground control application for drones.
+@itemize
+@item Direct flight controls
+@item Fly by touch on a Navigation Map
+@item Trigger vehicle actions (e.g. flips, trim)
+@item Gamepad/joypad support
+@item Live video
+@item Take photo and record video
+@item Configure flight parameters (speed, altitude limits)
+@item Support for Parrot (Anafi, Bebop 2) and Ryze Tello drones
+@end itemize")
+      (license ;GPL for programs, LGPL for libraries
+               (list license:gpl2+ license:lgpl2.0)))))
+
+(define-public kontrast
+  (package
+    (name "kontrast")
+    (version "22.08.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://kde/stable/release-service/"
+                                  version "/src/kontrast-" version ".tar.xz"))
+              (sha256
+               (base32
+                "03y3y5p29zx4nmqi7hp3abxq2n2bgwbz2knhn9vhl3im3ghp7lmp"))))
+    (build-system qt-build-system)
+    (native-inputs (list extra-cmake-modules))
+    (inputs (list kirigami
+                  ki18n
+                  kcoreaddons
+                  qtdeclarative-5
+                  qtgraphicaleffects
+                  qtquickcontrols2-5
+                  qtsvg-5))
+    (home-page "https://apps.kde.org/kontrast/")
+    (synopsis "Color contrast checker")
+    (description
+     "Kontrast is a color contrast checker and tells you if your color
+combinations are distinct enough to be readable and accessible.")
+    (license license:gpl3+)))
+
+(define-public libatcore
+  (let ((commit "0de6393ed3e721537dec50b0ad174d83f1207eb6")
+        (revision "1"))
+    (package
+      (name "libatcore")
+      (version (git-version "1.0.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://invent.kde.org/libraries/atcore")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "1830r6ylpn3l7y2frl8cih5cpjgbkfrib9jq7jklf8aszhlsihf2"))))
+      (build-system qt-build-system)
+      (native-inputs (list extra-cmake-modules))
+      (inputs (list qtcharts qtdeclarative-5 qtserialport))
+      (home-page "https://invent.kde.org/libraries/atcore")
+      (synopsis "Library for connection and management of 3D printers")
+      (description
+       "This package provides a API to manage the serial connection between
+the computer and 3D Printers.")
+      (license (list license:lgpl2.1 license:lgpl3)))))
+
+(define-public wacomtablet
+  (package
+    (name "wacomtablet")
+    (version "3.2.0")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://kde/stable/"
+                                  name "/" version "/"
+                                  name "-" version ".tar.xz"))
+              (patches (search-patches
+                        "wacomtablet-add-missing-includes.patch"
+                        "wacomtablet-qt5.15.patch"))
+              (sha256
+               (base32
+                "197pwpl87gqlnza36bp68jvw8ww25znk08acmi8bpz7n84xfc368"))))
+    (build-system qt-build-system)
+    (arguments
+     (list #:phases #~(modify-phases %standard-phases
+                        (replace 'check
+                          (lambda* (#:key tests? #:allow-other-keys)
+                            (when tests?
+                              (invoke "dbus-launch" "ctest" "-E"
+                               "(Test.KDED.DBusTabletService|Test.KDED.TabletHandler|Test.KDED.XInputAdaptor|Test.KDED.XsetWacomAdaptor)")))))))
+    (native-inputs (list dbus extra-cmake-modules kdoctools pkg-config))
+    (inputs (list kcoreaddons
+                  ki18n
+                  kglobalaccel
+                  kconfig
+                  kxmlgui
+                  kwidgetsaddons
+                  kwindowsystem
+                  knotifications
+                  kdbusaddons
+                  qtx11extras
+                  qtdeclarative-5
+                  libwacom
+                  xf86-input-wacom
+                  libxi))
+    (propagated-inputs (list plasma-framework))
+    (home-page "https://invent.kde.org/system/wacomtablet")
+    (synopsis "KDE GUI for the Wacom Linux Drivers")
+    (description "Provides KDE GUI for the Wacom Linux Drivers.")
+    (license license:gpl2+)))
+
 (define-public kmag
   (package
     (name "kmag")
-    (version "20.04.1")
+    (version "22.04.3")
     (source
      (origin
       (method url-fetch)
       (uri (string-append "mirror://kde/stable/release-service/" version
                           "/src/kmag-" version ".tar.xz"))
       (sha256
-       (base32 "18lk8i2r90gvw8q5j179xgpniih92mwk06krk7w4jv98yinqf6m5"))))
+       (base32 "08jwv2wnb67vjgz5pv1nn6rwl9ldj8dfd74l6va9vz4x5pk7d859"))))
     (build-system qt-build-system)
     (native-inputs
      (list extra-cmake-modules kdoctools))
@@ -194,10 +791,10 @@ Kate's features include:
      (list ki18n
            kio
            kxmlgui
-           oxygen-icons ;; default icon set
+           breeze-icons ;; default icon set
            ;; TODO: QAccessibilityClient - libqaccessibilityclien
            qtbase-5))
-    (home-page "https://kde.org/applications/utilities/org.kde.kmag")
+    (home-page "https://apps.kde.org/kmag/")
     (synopsis "Screen magnifier tool")
     (description "You can use KMagnifier to magnify a part of the screen just
 as you would use a lens to magnify a newspaper fine-print or a photograph.
@@ -209,14 +806,14 @@ artists to web-designers to people with low vision.")
 (define-public kmousetool
   (package
     (name "kmousetool")
-    (version "20.04.1")
+    (version "22.04.3")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://kde/stable/release-service/" version
                            "/src/kmousetool-" version ".tar.xz"))
        (sha256
-        (base32 "01j6bx8zihns4ip8maj0gb3w3bhx1ha2ljhfmsm6lcyay531ay98"))))
+        (base32 "13pvdhhf3fdkaiyjp0ijqm5qdffabyw7qq2051l1nqv6i7w6lgwx"))))
     (build-system qt-build-system)
     (native-inputs
      (list extra-cmake-modules kdoctools))
@@ -233,9 +830,9 @@ artists to web-designers to people with low vision.")
            libxtst
            libxt
            phonon
-           oxygen-icons ;; default icon set
+           breeze-icons ;; default icon set
            qtbase-5))
-    (home-page "https://kde.org/applications/utilities/org.kde.kmousetool")
+    (home-page "https://apps.kde.org/kmousetool/")
     (synopsis "Automatic mouse click and mouse manipulation tool for the
 disabled")
     (description "KMouseTool clicks the mouse whenever the mouse cursor pauses
@@ -247,14 +844,14 @@ whom pressing buttons hurts.")
 (define-public kmouth
   (package
     (name "kmouth")
-    (version "20.04.1")
+    (version "22.04.3")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://kde/stable/release-service/" version
                            "/src/kmouth-" version ".tar.xz"))
        (sha256
-        (base32 "1afgxlys9mvmc3rd33g7gchfb0ylx83x3x0a0qf3dra6cpgsgcg7"))))
+        (base32 "0lzaw7qqvpqzfz4nb2lk8l06c4yxacfg5982yk33g5q0j7r19bpy"))))
     (build-system qt-build-system)
     (native-inputs
      (list extra-cmake-modules kdoctools))
@@ -268,10 +865,10 @@ whom pressing buttons hurts.")
            kio
            kwidgetsaddons
            kxmlgui
-           oxygen-icons ;; default icon set
+           breeze-icons ;; default icon set
            qtbase-5
            qtspeech))
-    (home-page "https://kde.org/applications/utilities/org.kde.kmouth")
+    (home-page "https://apps.kde.org/kmouth/")
     (synopsis "Type-and-say frontend for speech synthesizers")
     (description "KMouth is a program which enables persons that cannot speak
 to let their computer speak, e.g. mutal people or people who have lost their
@@ -306,9 +903,9 @@ sentences to be re-spoken.")
            ki18n
            kwidgetsaddons
            kxmlgui
-           oxygen-icons ;; default icon set
+           breeze-icons ;; default icon set
            qtbase-5))
-    (home-page "https://kde.org/applications/utilities/org.kde.kronometer")
+    (home-page "https://apps.kde.org/kronometer/")
     (synopsis "Simple stopwatch application")
     (description "Kronometer is a stopwatch application.  It features the
 basic stopwatch actions (pause, resume, reset, laps), as well as the ability
@@ -349,11 +946,11 @@ to save the times and resume them later.")
            kwidgetsaddons
            kwindowsystem
            kxmlgui
-           oxygen-icons ;; default icon set
+           breeze-icons ;; default icon set
            qtbase-5
            solid
            zlib))
-    (home-page "https://www.krusader.org")
+    (home-page "https://krusader.org/")
     (synopsis "Twin-panel (commander-style) file manager")
     (description "Krusader is a simple, easy, yet powerful,
 twin-panel (commander-style) file manager, similar to Midnight Commander or
@@ -386,7 +983,7 @@ great on your desktop.")
      (list extra-cmake-modules kdoctools pkg-config))
     (inputs
      (list ktexteditor imagemagick qtbase-5 qtx11extras))
-    (home-page "https://kde.org/applications/en/graphics/org.kde.kxstitch")
+    (home-page "https://apps.kde.org/kxstitch/")
     (synopsis "Create and print cross stitch patterns")
     (description
      "KXStitch allows creating and printing cross stitch patterns, which can
@@ -396,15 +993,14 @@ either be created or generated from a image.")
 (define-public okteta
   (package
     (name "okteta")
-    (version "17.12.3")
+    (version "0.26.9")
     (source
      (origin
        (method url-fetch)
-       ;; TODO: Why is this not in "stable" anymore
-       (uri (string-append "mirror://kde/Attic/applications/" version
+       (uri (string-append "mirror://kde/stable/okteta/" version
                            "/src/okteta-" version ".tar.xz"))
        (sha256
-        (base32 "03wsv83l1cay2dpcsksad124wzan7kh8zxdw1h0yicn398kdbck4"))))
+        (base32 "1yszs3w78dqdr5d8djf6gp4abzc5lcms859imqcq50wl9r6lr18n"))))
     (build-system qt-build-system)
     (native-inputs
      (list extra-cmake-modules kdoctools qttools-5 shared-mime-info))
@@ -424,9 +1020,10 @@ either be created or generated from a image.")
            kservice
            kwidgetsaddons
            kxmlgui
-           oxygen-icons ;; default icon set
+           breeze-icons ;; default icon set
            qca
            qtbase-5
+           qtdeclarative-5
            qtscript))
     (arguments
      `(#:phases
@@ -435,9 +1032,8 @@ either be created or generated from a image.")
            (lambda _
              ;; make Qt render "offscreen", required for tests
              (setenv "QT_QPA_PLATFORM" "offscreen")
-             (setenv "HOME" "/tmp/dummy-home")
-             #t)))))
-    (home-page "https://kde.org/applications/utilities/org.kde.okteta")
+             (setenv "HOME" "/tmp/dummy-home"))))))
+    (home-page "https://apps.kde.org/okteta/")
     (synopsis "Hexadecimal editor for binary files")
     (description "Okteta is a simple editor for the raw data of files.  This
 type of program is also called hex editor or binary editor.
@@ -452,6 +1048,41 @@ filter tool.  All modifications to the data loaded can be endlessly undone or
 redone.")
     (license ;; GPL for programs, LGPL for libraries, FDL for documentation
      (list license:gpl2+ license:lgpl2.0+ license:fdl1.2+))))
+
+(define-public print-manager
+  (package
+    (name "print-manager")
+    (version "22.08.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "mirror://kde/stable/release-service/" version
+                           "/src/print-manager-" version ".tar.xz"))
+       (sha256
+        (base32 "1abwj1ccm70adzx07ykqjlb4f6y55k2rv1j861dl0822187vl799"))))
+    (build-system qt-build-system)
+    (native-inputs
+     (list extra-cmake-modules))
+    (inputs
+     (list cups
+           kcmutils
+           kconfig
+           kconfigwidgets
+           kcoreaddons
+           kdbusaddons
+           kiconthemes
+           ki18n
+           kio
+           knotifications
+           kwidgetsaddons
+           kwindowsystem
+           plasma-framework
+           qtdeclarative-5))
+    (home-page "https://invent.kde.org/utilities/print-manager")
+    (synopsis "Manage print jobs and printers")
+    (description
+     "This package provides printing management for KDE.")
+    (license license:gpl2+)))
 
 (define-public rsibreak
   (package
@@ -482,9 +1113,9 @@ redone.")
            ktextwidgets
            kwindowsystem
            kxmlgui
-           oxygen-icons ;; default icon set
+           breeze-icons ;; default icon set
            qtbase-5))
-    (home-page "https://kde.org/applications/utilities/org.kde.rsibreak")
+    (home-page "https://apps.kde.org/rsibreak/")
     (synopsis "Assists in the Recovery and Prevention of Repetitive Strain
 Injury")
     (description "Repetitive Strain Injury is an illness which can occur as a
@@ -528,12 +1159,12 @@ remind you to take a break now and then.")
            kwindowsystem
            kxmlgui
            samba
-           oxygen-icons ;; default icon set
+           breeze-icons ;; default icon set
            plasma-framework
            qtbase-5
            qtdeclarative-5
            solid))
-    (home-page "https://kde.org/applications/utilities/org.kde.smb4k")
+    (home-page "https://apps.kde.org/smb4k/")
     (synopsis "Samba (SMB) share advanced browser")
     (description "Smb4K is an network neighborhood browser for the KDE
 Software Compilation and a frontend to the programs of the Samba software
@@ -568,14 +1199,14 @@ Features:
 (define-public sweeper
   (package
     (name "sweeper")
-    (version "20.04.1")
+    (version "22.04.3")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://kde/stable/release-service/" version
                            "/src/sweeper-" version ".tar.xz"))
        (sha256
-        (base32 "1az3c2khnh51bbmqpamj4p26d3a0ff4l5rd3vcrylg94mk7wgh59"))))
+        (base32 "0kda4a5d9a11am2y6f91bx8v3nb8mw9qh671nskvgkx46x1pww21"))))
     (build-system qt-build-system)
     (native-inputs
      (list extra-cmake-modules kdoctools))
@@ -590,9 +1221,9 @@ Features:
            kio
            ktextwidgets
            kxmlgui
-           oxygen-icons ;; default icon set
+           breeze-icons ;; default icon set
            qtbase-5))
-    (home-page "https://kde.org/applications/utilities/org.kde.sweeper")
+    (home-page "https://apps.kde.org/sweeper/")
     (synopsis "Temporary file and history cleaner")
     (description "
 Sweeper helps to clean unwanted traces the user leaves on the system and to

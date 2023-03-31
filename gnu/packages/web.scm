@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013, 2015 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2013 Aljosha Papsch <misc@rpapsch.de>
-;;; Copyright © 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2014, 2015, 2016 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2018 Raoul Jean Pierre Bonnal <ilpuccio.febo@gmail.com>
@@ -58,6 +58,7 @@
 ;;; Copyright © 2022 cage <cage-dev@twistfold.it>
 ;;; Copyright © 2022 Pradana Aumars <paumars@courrier.dev>
 ;;; Copyright © 2022 Petr Hodina <phodina@protonmail.com>
+;;; Copyright © 2022 jgart <jgart@dismail.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -107,6 +108,7 @@
   #:use-module (gnu packages bison)
   #:use-module (gnu packages bittorrent)
   #:use-module (gnu packages boost)
+  #:use-module (gnu packages build-tools)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages cpp)
@@ -382,14 +384,14 @@ the same, being completely separated from the Internet.")
     ;; Track the ‘mainline’ branch.  Upstream considers it more reliable than
     ;; ’stable’ and recommends that “in general you deploy the NGINX mainline
     ;; branch at all times” (https://www.nginx.com/blog/nginx-1-6-1-7-released/)
-    (version "1.23.1")
+    (version "1.23.2")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://nginx.org/download/nginx-"
                                   version ".tar.gz"))
               (sha256
                (base32
-                "1qpibmnz5kjkd5z61abism1qn5z6dbrz2cjmlivr8fryqb8ipvjy"))))
+                "0ihbkfcqlqadzkdk813raq15qqrahss1gdd81bkswanpsdrc4358"))))
     (build-system gnu-build-system)
     (inputs (list libxml2 libxslt openssl pcre zlib))
     (arguments
@@ -406,6 +408,7 @@ the same, being completely separated from the Internet.")
               "--with-pcre-jit"
               "--with-debug"
               "--with-stream"
+              "--with-stream_ssl_module"
               ;; Even when not cross-building, we pass the
               ;; --crossbuild option to avoid customizing for the
               ;; kernel version on the build machine.
@@ -478,8 +481,8 @@ and as a proxy to reduce the load on back-end HTTP or mail servers.")
 (define-public nginx-documentation
   ;; This documentation should be relevant for the current nginx package.
   (let ((version "1.23.1")
-        (revision 2869)
-        (changeset "9383e934e546"))
+        (revision 2898)
+        (changeset "0b7e004b5061"))
     (package
       (name "nginx-documentation")
       (version (simple-format #f "~A-~A-~A" version revision changeset))
@@ -491,7 +494,7 @@ and as a proxy to reduce the load on back-end HTTP or mail servers.")
                (file-name (string-append name "-" version))
                (sha256
                 (base32
-                 "0zq89cjj8vpxaanx378yaypvmcxk0my8c773acx545c5p75ghvbk"))))
+                 "027q7gnx7k3hgj7qana44g383fvvj6ndz1kavr30mj2z87cnq3dp"))))
       (build-system gnu-build-system)
       (arguments
        '(#:tests? #f                    ; no test suite
@@ -1378,15 +1381,12 @@ current version of any major web browser.")
                   (delete-file-recursively "bin/jsonchecker")))))
     (build-system cmake-build-system)
     (arguments
-     (if (string-prefix? "aarch64" (or (%current-target-system)
-                                       (%current-system)))
-         '(#:phases
-           (modify-phases %standard-phases
-             (add-after 'unpack 'patch-aarch-march-detection
-               (lambda _
-                 (substitute* (find-files "." "^CMakeLists\\.txt$")
-                   (("native") "armv8-a"))))))
-         '()))
+     '(#:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'fix-march=native
+           (lambda _
+             (substitute* "CMakeLists.txt"
+               (("-m[^-]*=native") "")))))))
     (home-page "https://github.com/Tencent/rapidjson")
     (synopsis "JSON parser/generator for C++ with both SAX/DOM style API")
     (description
@@ -1937,13 +1937,14 @@ from streaming URLs.  It is a command-line wrapper for the libquvi library.")
         (base32 "1k47gbgpp52049andr28y28nbwh9m36bbb0g8p0aka3pqlhjv72l"))))
     (build-system scons-build-system)
     (propagated-inputs
-     (list apr apr-util openssl))
+     (list apr apr-util openssl-1.1))
     (inputs
      (list ;; TODO: Fix build with gss.
            ;;("gss" ,gss)
            zlib))
     (arguments
-     `(#:scons-flags (list (string-append "APR=" (assoc-ref %build-inputs "apr"))
+     `(#:scons ,scons-3   ;TODO: remove in the next rebuild cycle
+       #:scons-flags (list (string-append "APR=" (assoc-ref %build-inputs "apr"))
                            (string-append "APU=" (assoc-ref %build-inputs "apr-util"))
                            (string-append "OPENSSL=" (assoc-ref %build-inputs "openssl"))
                            ;; (string-append "GSSAPI=" (assoc-ref %build-inputs "gss"))
@@ -4655,8 +4656,8 @@ CDF, Atom 0.3, and Atom 1.0 feeds.")
                    license:freebsd-doc)))) ; documentation
 
 (define-public guix-data-service
-  (let ((commit "ee73d2cc9857533020535eb8e1ad856e04fb5152")
-        (revision "33"))
+  (let ((commit "95064d39a337da9f2eb7d5675e0e511301466f77")
+        (revision "34"))
     (package
       (name "guix-data-service")
       (version (string-append "0.0.1-" revision "." (string-take commit 7)))
@@ -4668,7 +4669,7 @@ CDF, Atom 0.3, and Atom 1.0 feeds.")
                 (file-name (git-file-name name version))
                 (sha256
                  (base32
-                  "0rmx728md50nlka61f4gma58avplyaf32k71hazprijdqii2vkgf"))))
+                  "1nkasn2wk36jfnfan619lv604cjj6ppwvmiljckcyyr57yynqbr4"))))
       (build-system gnu-build-system)
       (arguments
        '(#:modules ((guix build utils)
@@ -5706,14 +5707,14 @@ on the fly.")
 (define-public hitch
   (package
     (name "hitch")
-    (version "1.7.2")
+    (version "1.7.3")
     (home-page "https://hitch-tls.org/")
     (source (origin
               (method url-fetch)
               (uri (string-append home-page "source/hitch-" version ".tar.gz"))
               (sha256
                (base32
-                "118p3a8wjvr0yhldpd1zm7d2cmgaw4vmyz9ib8m64z18qsz5rmnw"))))
+                "11wp50zs5irb5bj5xyanm060nlvna6ha328wqf6p2nvpbnaz86qs"))))
     (build-system gnu-build-system)
     (arguments
      `(#:phases (modify-phases %standard-phases
@@ -5798,14 +5799,14 @@ tools like SSH (Secure Shell) to reach the outside world.")
 (define-public stunnel
   (package
   (name "stunnel")
-  (version "5.61")
+  (version "5.66")
   (source
     (origin
       (method url-fetch)
       (uri (string-append "https://www.stunnel.org/downloads/stunnel-"
                           version ".tar.gz"))
       (sha256
-       (base32 "0yjx07r5wc987s4z0wm37381fa3az2s4mrhyjxypx3rd92k0rsli"))))
+       (base32 "172pkzp8qilj0gd92bhdi96739gjpgbcav5c7a4gd98s9mq7i0am"))))
   (build-system gnu-build-system)
   (arguments
    (list #:configure-flags
@@ -5846,13 +5847,13 @@ deployments.")
   (package
     (name "varnish")
     (home-page "https://varnish-cache.org/")
-    (version "7.1.1")
+    (version "7.2.1")
     (source (origin
               (method url-fetch)
               (uri (string-append home-page "_downloads/varnish-" version ".tgz"))
               (sha256
                (base32
-                "14512fjjzwini3fics6sib9y83s45vlrpncamixqmmg7j0jvxbrc"))))
+                "0h590kr7rhp57a4kfx6apyvqk60w78qdjwpr6g2ikv5840bpv4sd"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags (list (string-append "LDFLAGS=-Wl,-rpath=" %output "/lib")
@@ -6239,19 +6240,19 @@ inspired by Ruby's @code{fakeweb}.")
 (define-public jo
   (package
     (name "jo")
-    (version "1.6")
+    (version "1.9")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://github.com/jpmens/jo/releases/download/"
                            version "/jo-" version ".tar.gz"))
        (sha256
-        (base32 "18fizi0368jgajrmy13xpdiks76jwch8lhx1d1sagmd63cpmj5gb"))))
+        (base32 "17y73657z5v792ik3plcvk9f5g5h2yawv6afahhkq42159pwv581"))))
     (build-system gnu-build-system)
     (home-page "https://github.com/jpmens/jo")
     (synopsis "Output JSON from a shell")
-    (description "jo is a command-line utility to create JSON objects or
-arrays.  It creates a JSON string on stdout from words provided as
+    (description "@command{jo} is a command-line utility to create JSON objects
+or arrays.  It creates a JSON string on stdout from words provided as
 command-line arguments or read from stdin.")
     (license (list license:gpl2+
                    license:expat)))) ; json.c, json.h
@@ -7626,18 +7627,15 @@ compressed JSON header blocks.
                  `("GUILE_LOAD_PATH" ":" prefix (,path))
                  `("GUILE_LOAD_COMPILED_PATH" ":" prefix (,gopath)))))))))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("uglify-js" ,uglify-js)
-       ("pkg-config" ,pkg-config)
-       ("guile" ,@(assoc-ref (package-native-inputs guix) "guile"))))
+     (list autoconf automake uglify-js pkg-config
+           (lookup-package-native-input guix "guile")))
     (inputs
-     `(("guile" ,@(assoc-ref (package-native-inputs guix) "guile"))
-       ("guix" ,guix)
-       ("guile-zlib" ,guile-zlib)
-       ("guile-commonmark" ,guile-commonmark)
-       ("guile-json" ,guile-json-4)
-       ("bash-minimal" ,bash-minimal)))
+     (list (lookup-package-native-input guix "guile")
+           guix
+           guile-zlib
+           guile-commonmark
+           guile-json-4
+           bash-minimal))
     (home-page "https://github.com/UMCUGenetics/hpcguix-web")
     (synopsis "Web interface for cluster deployments of Guix")
     (description "Hpcguix-web provides a web interface to the list of packages
@@ -7851,7 +7849,7 @@ solution for any project's interface needs:
 (define-public gmid
   (package
     (name "gmid")
-    (version "1.8.4")
+    (version "1.8.5")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -7859,7 +7857,7 @@ solution for any project's interface needs:
                     version "/gmid-" version ".tar.gz"))
               (sha256
                (base32
-                "0bwxr08n6zzhc70a71jhgr9zr1246d1lxf2pknndxwn2pz1xxv5b"))))
+                "0p3wr3ic4c50wxi7sr1hi8m8izmmjnazcmyqvxaf56yx58b3gpxv"))))
     (build-system gnu-build-system)
     (arguments
      (list #:test-target "regress"
@@ -8182,6 +8180,33 @@ provided by a TLS reverse proxy (e.g. tlstunnel, hitch or stunnel).")
       ;; to account for "vendor names".
       (properties '((lint-hidden-cve . ("CVE-2019-15520")))))))
 
+(define-public go-webring
+  (let ((commit "6786a27b0c57df75323217453369c83a4d9f4dea")
+        (revision "0"))
+    (package
+      (name "go-webring")
+      (version (git-version "20220426" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://git.sr.ht/~amolith/go-webring")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "1xra0mapdmda8n0z6zsgcqppdzvxc47p0fahsdyig5qmpk89ar8l"))))
+      (build-system go-build-system)
+      (arguments
+       (list #:import-path "git.sr.ht/~amolith/go-webring"
+             #:install-source? #f))
+      (inputs (list go-github-com-spf13-pflag))
+      (home-page "https://git.sr.ht/~amolith/go-webring")
+      (synopsis "Simple webring implementation")
+      (description
+"@code{go--webring} provides a simple webring implementation as used by
+the Fediring.")
+      (license (list license:cc0 license:bsd-2)))))
+
 (define-public archivebox
   (package
     (name "archivebox")
@@ -8218,3 +8243,9 @@ You can feed it URLs one at a time, or schedule regular imports.  It saves
 snapshots of the URLs you feed it in several formats.")
     (home-page "https://archivebox.io/")
     (license license:expat)))
+
+;;;
+;;; Avoid adding new packages to the end of this file. To reduce the chances
+;;; of a merge conflict, place them above by existing packages with similar
+;;; functionality or similar names.
+;;;

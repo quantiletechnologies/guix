@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2015, 2016, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015, 2016, 2021, 2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015 Tomáš Čech <sleep_walker@gnu.org>
 ;;; Copyright © 2016, 2019 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2016, 2017, 2019 Ricardo Wurmus <rekado@elephly.net>
@@ -32,6 +32,7 @@
 ;;; Copyright © 2022 Zheng Junjie <873216071@qq.com>
 ;;; Copyright © 2022 Tobias Kortkamp <tobias.kortkamp@gmail.com>
 ;;; Copyright © 2022 Paul A. Patience <paul@apatience.com>
+;;; Copyright © 2022 dan <i@dan.games>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -61,6 +62,7 @@
   #:use-module (gnu packages cdrom)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages cpp)
   #:use-module (gnu packages crypto)
   #:use-module (gnu packages datastructures)
   #:use-module (gnu packages documentation)
@@ -88,6 +90,7 @@
   #:use-module (gnu packages logging)
   #:use-module (gnu packages llvm)
   #:use-module (gnu packages lua)
+  #:use-module (gnu packages man)
   #:use-module (gnu packages maths)
   #:use-module (gnu packages mp3)
   #:use-module (gnu packages multiprecision)
@@ -131,6 +134,7 @@
   #:use-module (guix hg-download)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
+  #:use-module (guix deprecation)
   #:use-module (guix utils))
 
 (define-public mmm
@@ -190,36 +194,36 @@ framebuffer graphics, audio output and input event.")
     (native-inputs
      (list autoconf automake libtool perl pkg-config))
     (inputs
-     `(("alsa" ,alsa-lib)
-       ("ffmpeg" ,ffmpeg)
-       ("freetype" ,freetype)
-       ("glu" ,glu)
-       ("gstreamer" ,gstreamer)
-       ("imlib2" ,imlib2)
-       ("jasper" ,jasper)
-       ("jpeg" ,libjpeg-turbo)
-       ("libcddb" ,libcddb)
-       ("libdrm" ,libdrm)
-       ("libtimidity" ,libtimidity)
-       ("mad" ,libmad)
-       ("mng" ,libmng)
-       ("mpeg2" ,libmpeg2)
-       ("mpeg3" ,libmpeg3)
-       ("opengl" ,mesa)
-       ("png" ,libpng)
-       ("sdl" ,sdl)
-       ("svg" ,librsvg)
-       ("tiff" ,libtiff)
-       ("tslib" ,tslib)
-       ("vdpau" ,libvdpau)
-       ("vorbisfile" ,libvorbis)
-       ("wayland" ,wayland)
-       ("webp" ,libwebp)
-       ("x11" ,libx11)
-       ("xcomposite" ,libxcomposite)
-       ("xext" ,libxext)
-       ("xproto" ,xorgproto)
-       ("zlib" ,zlib)))
+     (list alsa-lib
+           ffmpeg
+           freetype
+           glu
+           gstreamer
+           imlib2
+           jasper
+           libjpeg-turbo
+           libcddb
+           libdrm
+           libtimidity
+           libmad
+           libmng
+           libmpeg2
+           libmpeg3
+           mesa
+           libpng
+           sdl
+           (librsvg-for-system)
+           libtiff
+           tslib
+           libvdpau
+           libvorbis
+           wayland
+           libwebp
+           libx11
+           libxcomposite
+           libxext
+           xorgproto
+           zlib))
     (propagated-inputs
      (list flux))
     (synopsis "DFB Graphics Library")
@@ -427,14 +431,14 @@ typically encountered in feature film production.")
 (define-public blender
   (package
     (name "blender")
-    (version "3.0.1")
+    (version "3.3.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://download.blender.org/source/"
                                   "blender-" version ".tar.xz"))
               (sha256
                (base32
-                "0hblgls5pclqamsxk0vb14f4fm30hdiq7fb2bm5mq2ly4sb0mfqr"))))
+                "1jlc26axbhh97d2j6kfg9brgiq8j412mgmw7p41ah34apzq4inia"))))
     (build-system cmake-build-system)
     (arguments
       (let ((python-version (version-major+minor (package-version python))))
@@ -747,6 +751,12 @@ many more.")
        (sha256
         (base32 "1nyld18mf220ghm1vidnfnn0rdns9z5i4l9s66xgd0kfdgarb31f"))))
     (build-system cmake-build-system)
+    (arguments
+     ;; XXX: On i686-linux, tests fail due to rounding issues (excess
+     ;; precision), as was discussed and patched long ago:
+     ;; <https://issues.guix.gnu.org/22049>.  It seems the relevant fixes
+     ;; didn't make it upstream, so skip tests.
+     (list #:tests? (not (target-x86-32?))))
     (home-page "https://github.com/AcademySoftwareFoundation/Imath")
     (synopsis "Library of math operations for computer graphics")
     (description
@@ -771,11 +781,21 @@ applications, including the \"half\" 16-bit floating-point type.")
               (patches (search-patches "ilmbase-fix-tests.patch"))))
     (build-system cmake-build-system)
     (arguments
-     `(#:phases (modify-phases %standard-phases
-                  (add-after 'unpack 'change-directory
-                    (lambda _
-                      (chdir "IlmBase")
-                      #t)))))
+     (list #:phases #~(modify-phases %standard-phases
+                        (add-after 'unpack 'change-directory
+                          (lambda _
+                            (chdir "IlmBase")
+                            #t))
+                        #$@(if (target-x86-32?)
+                               #~((add-after 'change-directory 'skip-test
+                                    (lambda _
+                                      ;; XXX: This test fails on i686,
+                                      ;; possibly due to excess precision when
+                                      ;; comparing floats.  Skip it.
+                                      (substitute* "ImathTest/testFun.cpp"
+                                        (("assert \\(bit_cast<unsigned>.*" all)
+                                         (string-append "// " all "\n"))))))
+                               #~()))))
     (home-page "https://www.openexr.com/")
     (synopsis "Utility C++ libraries for threads, maths, and exceptions")
     (description
@@ -961,7 +981,7 @@ distills complex, animated scenes into a set of baked geometric results.")
 (define-public mangohud
   (package
     (name "mangohud")
-    (version "0.6.7")
+    (version "0.6.8")
     (source
      (origin
        (method git-fetch)
@@ -970,7 +990,7 @@ distills complex, animated scenes into a set of baked geometric results.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0n2x6agv2j8nd6h1998dqsphb7k57zx8vsayv47dqix28kg5kixz"))))
+        (base32 "19dp8l5njzl9xah0bhwlkl39vc8w2rnpvpdrhgaz3hnhz8b0r5df"))))
     (build-system meson-build-system)
     (arguments
      (list
@@ -1100,29 +1120,53 @@ graphics.")
   (package
     (name "openexr")
     (version "3.1.3")
-    (source
-     (origin
-       (method git-fetch)
-       (uri (git-reference
-             (url "https://github.com/AcademySoftwareFoundation/openexr")
-             (commit (string-append "v" version))))
-       (file-name (git-file-name name version))
-       (sha256
-        (base32 "0c9vla0kbsbbhkk42jlbf94nzfb1anqh7dy9b0b3nna1qr6v4bh6"))))
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url
+                     "https://github.com/AcademySoftwareFoundation/openexr")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0c9vla0kbsbbhkk42jlbf94nzfb1anqh7dy9b0b3nna1qr6v4bh6"))))
     (build-system cmake-build-system)
     (arguments
-     '(#:phases
-       (modify-phases %standard-phases
-         ;; /var/tmp does not exist in the Guix build environment
-         (add-after 'unpack 'patch-test-directory
-           (lambda _
-             (substitute* '("src/test/OpenEXRUtilTest/tmpDir.h"
-                            "src/test/OpenEXRFuzzTest/tmpDir.h"
-                            "src/test/OpenEXRTest/tmpDir.h"
-                            "src/test/OpenEXRCoreTest/main.cpp")
-               (("/var/tmp") "/tmp")))))))
-    (inputs
-     (list imath zlib))
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'patch-test-directory
+                 (lambda _
+                   (substitute* (list
+                                 "src/test/OpenEXRUtilTest/tmpDir.h"
+                                 "src/test/OpenEXRFuzzTest/tmpDir.h"
+                                 "src/test/OpenEXRTest/tmpDir.h"
+                                 "src/test/OpenEXRCoreTest/main.cpp")
+                     (("/var/tmp")
+                      "/tmp"))))
+               #$@(if (target-64bit?)
+                      #~()
+                      #~((add-after 'patch-test-directory 'disable-broken-tests
+                           (lambda _
+                             ;; Disable tests that fail at least on i686-linux.
+                             (substitute* '("src/test/OpenEXRCoreTest/main.cpp"
+					    "src/test/OpenEXRTest/main.cpp")
+                               (("TEST \\(testCompression, \"basic\"\\);")
+                                "")
+                               (("TEST\\( testNoCompression, \"core_compression\" \\);")
+                                "")
+                               (("TEST\\( testRLECompression, \"core_compression\" \\);")
+                                "")
+                               (("TEST\\( testZIPCompression, \"core_compression\" \\);")
+                                "")
+                               (("TEST\\( testZIPSCompression, \"core_compression\" \\);")
+                                "")
+                               (("TEST\\( testB44Compression, \"core_compression\" \\);")
+                                "")
+                               (("TEST\\( testB44ACompression, \"core_compression\" \\);")
+                                "")
+                               (("TEST \\(testOptimizedInterleavePatterns, \"basic\"\\);")
+                                "")))))))))
+    (inputs (list imath zlib))
     (home-page "https://www.openexr.com/")
     (synopsis "High-dynamic-range file format library")
     (description
@@ -1155,23 +1199,25 @@ with strong support for multi-part, multi-channel use cases.")
                (("/var/tmp") "/tmp"))))
          (add-after 'change-directory 'increase-test-timeout
            (lambda _
-             ;; On armhf-linux, we need to override the CTest default
+             ;; On some architectures, we need to override the CTest default
              ;; timeout of 1500 seconds for the OpenEXR.IlmImf test.
              (substitute* "IlmImfTest/CMakeLists.txt"
                (("add_test\\(NAME OpenEXR\\.IlmImf.*" all)
                 (string-append
                  all
-                 "set_tests_properties(OpenEXR.IlmImf PROPERTIES TIMEOUT 2000)")))
+                 "set_tests_properties(OpenEXR.IlmImf PROPERTIES TIMEOUT 15000)")))
              #t))
          ,@(if (not (target-64bit?))
                `((add-after 'change-directory 'disable-broken-test
-                   ;; This test fails on i686. Upstream developers suggest that
-                   ;; this test is broken on i686 and can be safely disabled:
-                   ;; https://github.com/openexr/openexr/issues/67#issuecomment-21169748
                    (lambda _
                      (substitute* "IlmImfTest/main.cpp"
-                       ((".*testOptimizedInterleavePatterns.*") ""))
-                     #t)))
+                       ;; This test fails on i686. Upstream developers suggest
+                       ;; that this test is broken on i686 and can be safely
+                       ;; disabled:
+                       ;; https://github.com/openexr/openexr/issues/67#issuecomment-21169748
+                       ((".*testOptimizedInterleavePatterns.*") "")
+                       ;; This one fails similarly on i686.
+                       ((".*testCompression.*") "")))))
                '()))))
     (native-inputs
      (list pkg-config))
@@ -1207,7 +1253,7 @@ with strong support for multi-part, multi-channel use cases.")
      (list pkg-config))
     (inputs
      `(("boost" ,boost)
-       ("fmt" ,fmt)
+       ("fmt" ,fmt-8)
        ("libheif" ,libheif)
        ("libpng" ,libpng)
        ("libjpeg" ,libjpeg-turbo)
@@ -1754,102 +1800,57 @@ or by subtracting one shape from the other.")
       (license license:gpl2))))
 
 (define-public coin3D
-  ;; The ‘4.0.0’ zip archive isn't stable, nor in fact a release.  See:
-  ;; https://bitbucket.org/Coin3D/coin/issues/179/coin-400-srczip-has-been-modified
-  (let ((revision 1)
-        (changeset "ab8d0e47a4de3230a8137feb39c142d6ba45f97d"))
-    (package
-      (name "coin3D")
-      (version
-       (simple-format #f "3.1.3-~A-~A" revision (string-take changeset 7)))
-      (source
-       (origin
-         (method hg-fetch)
-         (uri (hg-reference
-               (url "https://bitbucket.org/Coin3D/coin")
-               (changeset changeset)))
-         (file-name (git-file-name name version))
-         (sha256
-          (base32 "1ff44jz6lg4rylljvy69n1hcjh9y6achbv9jpn1cv2sf8cxn3r2j"))
-         (modules '((guix build utils)))
-         (snippet
-          '(begin
-             (for-each delete-file
-                       '("cfg/csubst.exe"
-                         "cfg/wrapmsvc.exe"))
-             #t))))
-      (build-system cmake-build-system)
-      (native-inputs
-       (list doxygen graphviz))
-      (inputs
-       (list boost freeglut glew))
-      (arguments
-       `(#:configure-flags
-         (list
-          "-DCOIN_BUILD_DOCUMENTATION_MAN=ON"
-          (string-append "-DBOOST_ROOT="
-                         (assoc-ref %build-inputs "boost")))))
-      (home-page "https://bitbucket.org/Coin3D/coin/wiki/Home")
-      (synopsis
-       "High-level 3D visualization library with Open Inventor 2.1 API")
-      (description
-       "Coin is a 3D graphics library with an Application Programming Interface
-based on the Open Inventor 2.1 API.  For those who are not familiar with
-Open Inventor, it is a scene-graph based retain-mode rendering and model
-interaction library, written in C++, which has become the de facto
-standard graphics library for 3D visualization and visual simulation
-software in the scientific and engineering community.")
-      (license license:bsd-3))))
-
-(define-public coin3D-4
-    (package
+  (package
     (name "coin3D")
     (version "4.0.0")
     (source
-      (origin
-        (method git-fetch)
-        (uri (git-reference
-               (url "https://github.com/coin3d/coin")
-               (commit (string-append "Coin-" version))
-               (recursive? #t)))
-        (file-name (git-file-name name version))
-        (sha256
-          (base32 "1ayg0hl8wanhadahm5xbghghxw1qjwqbrs3dl3ngnff027hsyf8p"))
-        (modules '((guix build utils)))
-        (snippet
-          '(begin
-             ;; Delete binaries
-             (for-each delete-file
-                       '("cfg/csubst.exe"
-                         "cfg/wrapmsvc.exe"))
-             ;; Delete references to packaging tool cpack. Otherwise the build
-             ;; fails with "add_subdirectory given source "cpack.d" which is not
-             ;; an existing directory."
-             (substitute* "CMakeLists.txt"
-               ((".*cpack.d.*") ""))
-             #t))))
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/coin3d/coin")
+             (commit (string-append "Coin-" version))
+             (recursive? #t)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1ayg0hl8wanhadahm5xbghghxw1qjwqbrs3dl3ngnff027hsyf8p"))
+       (modules '((guix build utils)))
+       (snippet
+        '(begin
+           ;; Delete binaries
+           (for-each delete-file
+                     '("cfg/csubst.exe"
+                       "cfg/wrapmsvc.exe"))
+           ;; Delete references to packaging tool cpack. Otherwise the build
+           ;; fails with "add_subdirectory given source "cpack.d" which is not
+           ;; an existing directory."
+           (substitute* "CMakeLists.txt"
+             ((".*cpack.d.*") ""))
+           #t))))
     (build-system cmake-build-system)
     (native-inputs
-      (list doxygen graphviz))
+     (list doxygen graphviz))
     (inputs
-      (list boost freeglut glew))
+     (list boost freeglut glew))
     (arguments
-      `(#:configure-flags
-        (list
-          "-DCOIN_BUILD_DOCUMENTATION_MAN=ON"
-          (string-append "-DBOOST_ROOT="
-                         (assoc-ref %build-inputs "boost")))))
+     `(#:configure-flags
+       (list
+        "-DCOIN_BUILD_DOCUMENTATION_MAN=ON"
+        (string-append "-DBOOST_ROOT="
+                       (assoc-ref %build-inputs "boost")))))
     (home-page "https://github.com/coin3d/coin")
     (synopsis
-      "High-level 3D visualization library with Open Inventor 2.1 API")
+     "High-level 3D visualization library with Open Inventor 2.1 API")
     (description
-      "Coin is a 3D graphics library with an Application Programming Interface
+     "Coin is a 3D graphics library with an Application Programming Interface
 based on the Open Inventor 2.1 API.  For those who are not familiar with Open
 Inventor, it is a scene-graph based retain-mode rendering and model interaction
 library, written in C++, which has become the de facto standard graphics
 library for 3D visualization and visual simulation software in the scientific
 and engineering community.")
-      (license license:bsd-3)))
+    (license license:bsd-3)))
+
+(define-deprecated coin3D-4 coin3D)
+(export coin3D-4)
 
 (define-public skia
   ;; Releases follow those of Chromium, about every 6 weeks.  The release
@@ -2052,7 +2053,7 @@ Some feature highlights:
 (define-public openxr
   (package
     (name "openxr")
-    (version "1.0.24")
+    (version "1.0.25")
     (source
      (origin
        (method git-fetch)
@@ -2066,7 +2067,7 @@ Some feature highlights:
            ;; Delete bundled jsoncpp.
            (delete-file-recursively "src/external/jsoncpp")))
        (sha256
-        (base32 "1lkbw03hpwnqcbn0fmxs4cnp5m04hc0ys6y111n7vlrg11sjdpq5"))))
+        (base32 "1p8nfxswgy40zxizh925a477jcsfngbwns65qzaid5rmrvvk8c45"))))
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #f))                    ; there are no tests
@@ -2182,72 +2183,263 @@ Features include:
 ")
     (license license:gpl3+)))
 
-(define-public f3d
-  ;; There have been many improvements since the last tagged version (1.2.1,
-  ;; released in December 2021), including support for the Alembic file
-  ;; format.
-  (let ((commit "9cc79b65ed750b178f58012dbba091aa24722dab")
+(define-public discregrid
+  (let ((commit "4c27e1cc88be828c6ac5b8a05759ac7e01cf79e9")
         (revision "0"))
     (package
-      (name "f3d")
-      (version (git-version "1.2.1" revision commit))
+      (name "discregrid")
+      (version (git-version "0.0.0" revision commit))
       (source
        (origin
          (method git-fetch)
          (uri (git-reference
-               (url "https://github.com/f3d-app/f3d")
+               (url "https://github.com/InteractiveComputerGraphics/Discregrid")
                (commit commit)))
          (file-name (git-file-name name version))
          (sha256
-          (base32 "041gqi2wfny2br4j68vhifg0bd18kbl0qsaallkz7yywk47njxfi"))))
+          (base32 "01cwfpw19rc9k5glx9dhnqpihd0is28a9b53qvzp5kgjmdq2v1p0"))
+         (modules '((guix build utils)))
+         (snippet
+          #~(begin
+              (delete-file-recursively "extern/cxxopts")
+              (substitute* '("cmd/discrete_field_to_bitmap/main.cpp"
+                             "cmd/generate_density_map/main.cpp"
+                             "cmd/generate_sdf/main.cpp")
+                (("^#include <cxxopts/cxxopts\\.hpp>")
+                 "#include <cxxopts.hpp>"))))))
       (build-system cmake-build-system)
+      (outputs '("out" "bin"))
       (arguments
-       (list
-        ;; Many tests require files supplied by git-lfs.
-        ;; Also, some tests segfault (after an exception?) but the tested
-        ;; behavior, i.e., when the program is run manually, does not (for
-        ;; example, TestNonExistentConfigFile and TestInvalidConfigFile).
-        ;; Upstream is aware of occasionally flaky tests (see
-        ;; https://github.com/f3d-app/f3d/issues/92) but the tests run in CI
-        ;; seem to be passing.
-        ;; Anyway, the program runs and is able to open at least STL files
-        ;; without issue.
-        #:tests? #f
-        #:configure-flags
-        #~(list "-DBUILD_TESTING=OFF"
-                "-DF3D_MODULE_ALEMBIC=ON"
-                "-DF3D_MODULE_ASSIMP=ON"
-                "-DF3D_MODULE_OCCT=ON"
-                ;; Prefer Guix's versioned documentation directory to F3D's
-                ;; unversioned one.
-                (string-append "-DCMAKE_INSTALL_DOCDIR=" #$output
-                               "/share/doc/" #$name "-" #$version))))
+       (list #:tests? #f                ; No tests
+             #:configure-flags
+             #~(list (string-append "-DCMAKE_INSTALL_BINDIR="
+                                    #$output:bin "/bin")
+                     ;; Bespoke version of BUILD_SHARED_LIBS.
+                     "-DBUILD_AS_SHARED_LIBS=ON")
+             #:phases
+             #~(modify-phases %standard-phases
+                 (add-after 'unpack 'patch-cmake
+                   (lambda _
+                     (let ((port (open-file "cmd/CMakeLists.txt" "a")))
+                       (display "install(TARGETS
+  DiscreteFieldToBitmap
+  GenerateDensityMap
+  GenerateSDF)
+"
+                                port)
+                       (close-port port)))))))
       (inputs
-       (list alembic
-             assimp
-             double-conversion
-             eigen
-             expat
-             fontconfig
-             freetype
-             glew
-             hdf5
-             imath
-             jsoncpp
-             libjpeg-turbo
-             libpng
-             libtiff
-             libx11
-             lz4
-             netcdf
-             opencascade-occt
-             vtk
-             zlib))
-      (home-page "https://f3d-app.github.io/f3d/")
-      (synopsis "VTK based 3D viewer")
-      (description "F3D (pronounced @samp{/fɛd/}) is a VTK-based 3D viewer, it
-has simple interaction mechanisms and is fully controllable using arguments on
-the command line.  It supports a range of file formats (including animated
+       (list cxxopts eigen))
+      (home-page "https://github.com/InteractiveComputerGraphics/Discregrid")
+      (synopsis "Discretize functions on regular grids")
+      (description "Discregrid is a C++ library for the parallel discretization
+of (preferably smooth) functions on regular grids.  It generates a (cubic)
+polynomial discretization given a box-shaped domain, a grid resolution, and a
+3D scalar field.  The library can also serialize and deserialize the generated
+discrete grid, and compute and discretize the signed distance field
+corresponding to a triangle mesh.  The following programs are included with
+Discregrid:
+
+@itemize
+@item @code{GenerateSDF}: Computes a discrete (cubic) signed distance field
+from a triangle mesh in OBJ format.
+
+@item @code{DiscreteFieldToBitmap}: Generates an image in bitmap format of a
+two-dimensional slice of a previously computed discretization.
+
+@item @code{GenerateDensityMap}: Generates a density map from a previously
+generated discrete signed distance field using the cubic spline kernel.
+@end itemize")
+      (license license:expat))))
+
+(define-public mmg
+  (package
+    (name "mmg")
+    (version "5.6.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/MmgTools/mmg")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "173biz5skbwg27i5w6layg7mydjzv3rmi1ywhra4rx9rjf5c0cc5"))))
+    (build-system cmake-build-system)
+    (outputs '("out" "lib" "doc"))
+    (arguments
+     (list #:configure-flags
+           #~(list (string-append "-DCMAKE_INSTALL_PREFIX=" #$output:lib)
+                   (string-append "-DCMAKE_INSTALL_RPATH=" #$output:lib "/lib")
+                   ;; The build doesn't honor -DCMAKE_INSTALL_BINDIR, hence
+                   ;; the adjust-bindir phase.
+                   ;;(string-append "-DCMAKE_INSTALL_BINDIR=" #$output "/bin")
+                   "-DBUILD_SHARED_LIBS=ON"
+                   "-DBUILD_TESTING=ON"
+                   ;; The longer tests are for continuous integration and
+                   ;; depend on input data which must be downloaded.
+                   "-DONLY_VERY_SHORT_TESTS=ON"
+                   ;; TODO: Add Elas (from
+                   ;; https://github.com/ISCDtoolbox/LinearElasticity).
+                   "-DUSE_ELAS=OFF"
+                   ;; TODO: Figure out how to add VTK to inputs without
+                   ;; causing linking errors in ASLI of the form:
+                   ;;
+                   ;;   ld: /gnu/store/…-vtk-9.0.1/lib/libvtkWrappingPythonCore-9.0.so.1:
+                   ;;     undefined reference to `PyUnicode_InternFromString'
+                   ;;
+                   ;; Also, adding VTK to inputs requires adding these as well:
+                   ;;
+                   ;;   double-conversion eigen expat freetype gl2ps glew hdf5
+                   ;;   jsoncpp libjpeg-turbo libpng libtheora libtiff libx11
+                   ;;   libxml2 lz4 netcdf proj python sqlite zlib
+                   "-DUSE_VTK=OFF")
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'build 'build-doc
+                 (lambda _
+                   ;; Fontconfig wants to write to a cache directory.
+                   (setenv "HOME" "/tmp")
+                   (invoke "make" "doc")))
+               (add-after 'install 'install-doc
+                 (lambda _
+                   (copy-recursively
+                    "../source/doc/man" (string-append #$output
+                                                       "/share/man/man1"))
+                   (copy-recursively
+                    "doc" (string-append #$output:doc "/share/doc/"
+                                         #$name "-" #$version))))
+               (add-after 'install 'adjust-bindir
+                 (lambda _
+                   (let ((src (string-append #$output:lib "/bin"))
+                         (dst (string-append #$output "/bin")))
+                     (copy-recursively src dst)
+                     (delete-file-recursively src))))
+               ;; Suffixing program names with build information, i.e.,
+               ;; optimization flags and whether debug symbols were generated,
+               ;; is unusual and fragilizes scripts calling these programs.
+               (add-after 'adjust-bindir 'fix-program-names
+                 (lambda _
+                   (with-directory-excursion (string-append #$output "/bin")
+                     (rename-file "mmg2d_O3d" "mmg2d")
+                     (rename-file "mmg3d_O3d" "mmg3d")
+                     (rename-file "mmgs_O3d" "mmgs")))))))
+    (native-inputs
+     ;; For the documentation
+     (list doxygen graphviz
+           ;; TODO: Fix failing LaTeX invocation (which results in equations
+           ;; being inserted literally into PNGs rather than being typeset).
+           ;;texlive-tiny
+
+           perl))                            ;used to generate Fortran headers
+    (inputs
+     (list scotch))
+    (home-page "http://www.mmgtools.org/")
+    (synopsis "Surface and volume remeshers")
+    (description "Mmg is a collection of applications and libraries for
+bidimensional and tridimensional surface and volume remeshing.  It consists
+of:
+
+@itemize
+@item the @code{mmg2d} application and library: mesh generation from a set of
+edges, adaptation and optimization of a bidimensional triangulation and
+isovalue discretization;
+
+@item the @code{mmgs} application and library: adaptation and optimization of
+a surface triangulation and isovalue discretization;
+
+@item the @code{mmg3d} application and library: adaptation and optimization of
+a tetrahedral mesh, isovalue discretization and Lagrangian movement;
+
+@item the @code{mmg} library gathering the @code{mmg2d}, @code{mmgs} and
+@code{mmg3d} libraries.
+@end itemize")
+    (license license:lgpl3+)))
+
+(define-public f3d
+  (package
+    (name "f3d")
+    (version "1.3.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/f3d-app/f3d")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "0hdfgwf5d24ykab634xg4vv9r09nh96ss7hhnqnh5nmw4abhxzg7"))
+       (modules '((guix build utils)))
+       (snippet
+        #~(begin
+            (delete-file "application/cxxopts.hpp")
+            (delete-file "application/json.hpp")
+            (substitute* "application/F3DOptionsParser.cxx"
+              (("^#include \"cxxopts\\.hpp\"")
+               "#include <cxxopts.hpp>")
+              (("^#include \"json\\.hpp\"")
+               "#include <nlohmann/json.hpp>"))))))
+    (build-system cmake-build-system)
+    ;; The package cannot easily be split into out and lib outputs because
+    ;; VTK's vtkModule.cmake complains, and also the CMake files in
+    ;; /lib/cmake/f3d expect the f3d executable and library to be available,
+    ;; as they set up targets for both of them.
+    (arguments
+     (list
+      ;; Many tests require files supplied by git-lfs.
+      ;; Also, some tests segfault (after an exception?) but the tested
+      ;; behavior, i.e., when the program is run manually, does not (for
+      ;; example, TestNonExistentConfigFile and TestInvalidConfigFile).
+      ;; Upstream is aware of occasionally flaky tests [1], but the tests
+      ;; run in CI seem to be passing.
+      ;; Anyway, the program runs and is able to open at least STL files
+      ;; without issue.
+      ;;
+      ;; [1]: https://github.com/f3d-app/f3d/issues/92
+      #:tests? #f
+      #:configure-flags
+      #~(list (string-append "-DCMAKE_INSTALL_DOCDIR=" #$output
+                             "/share/doc/" #$name "-" #$version)
+              "-DBUILD_TESTING=OFF"
+              "-DF3D_GENERATE_MAN=ON"
+              "-DF3D_INSTALL_DEFAULT_CONFIGURATION_FILE=ON"
+              "-DF3D_INSTALL_DEFAULT_CONFIGURATION_FILE_IN_PREFIX=ON"
+              "-DF3D_INSTALL_MIME_TYPES_FILES=ON"
+              "-DF3D_INSTALL_THUMBNAILER_FILES=ON"
+              "-DF3D_MODULE_ALEMBIC=ON"
+              "-DF3D_MODULE_ASSIMP=ON"
+              "-DF3D_MODULE_EXTERNAL_RENDERING=ON"
+              "-DF3D_MODULE_OCCT=ON")))
+    (native-inputs
+     (list cxxopts
+           help2man
+           json-modern-cxx))
+    (inputs
+     (list alembic
+           assimp
+           double-conversion
+           eigen
+           expat
+           fontconfig
+           freetype
+           glew
+           hdf5
+           imath
+           jsoncpp
+           libjpeg-turbo
+           libpng
+           libtiff
+           libx11
+           lz4
+           netcdf
+           opencascade-occt
+           vtk
+           zlib))
+    (home-page "https://f3d-app.github.io/f3d/")
+    (synopsis "VTK-based 3D viewer")
+    (description "F3D (pronounced @samp{/fɛd/}) is a VTK-based 3D viewer with
+simple interaction mechanisms and which is fully controllable using arguments
+on the command line.  It supports a range of file formats (including animated
 glTF, STL, STEP, PLY, OBJ, FBX), and provides numerous rendering and texturing
 options.")
-      (license license:bsd-3))))
+    (license license:bsd-3)))

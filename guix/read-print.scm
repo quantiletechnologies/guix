@@ -22,6 +22,7 @@
   #:use-module (ice-9 rdelim)
   #:use-module (ice-9 vlist)
   #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
   #:use-module (guix i18n)
@@ -276,7 +277,7 @@ expressions and blanks that were read."
    ('lambda 2)
    ('lambda* 2)
    ('match-lambda 1)
-   ('match-lambda* 2)
+   ('match-lambda* 1)
    ('define 2)
    ('define* 2)
    ('define-public 2)
@@ -285,6 +286,8 @@ expressions and blanks that were read."
    ('define-syntax-rule 2)
    ('define-module 2)
    ('define-gexp-compiler 2)
+   ('define-record-type 2)
+   ('define-record-type* 4)
    ('let 2)
    ('let* 2)
    ('letrec 2)
@@ -336,7 +339,8 @@ expressions and blanks that were read."
 
    ('services '(operating-system))
    ('set-xorg-configuration '())
-   ('services '(home-environment))))
+   ('services '(home-environment))
+   ('home-bash-configuration '(service))))
 
 (define (prefix? candidate lst)
   "Return true if CANDIDATE is a prefix of LST."
@@ -366,10 +370,9 @@ surrounding SYMBOL."
 (define (newline-form? symbol context)
   "Return true if parenthesized expressions starting with SYMBOL must be
 followed by a newline."
-  (match (vhash-assq symbol %newline-forms)
-    (#f #f)
-    ((_ . prefix)
-     (prefix? prefix context))))
+  (let ((matches (vhash-foldq* cons '() symbol %newline-forms)))
+    (find (cut prefix? <> context)
+          matches)))
 
 (define (escaped-string str)
   "Return STR with backslashes and double quotes escaped.  Everything else, in
@@ -384,6 +387,21 @@ particular newlines, is left as is."
                           '()
                           str)
      #\")))
+
+(define %natural-whitespace-string-forms
+  ;; When a string has one of these forms as its parent, only double quotes
+  ;; and backslashes are escaped; newlines, tabs, etc. are left as-is.
+  '(synopsis description G_ N_))
+
+(define (printed-string str context)
+  "Return the read syntax for STR depending on CONTEXT."
+  (match context
+    (()
+     (object->string str))
+    ((head . _)
+     (if (memq head %natural-whitespace-string-forms)
+         (escaped-string str)
+         (object->string str)))))
 
 (define (string-width str)
   "Return the \"width\" of STR--i.e., the width of the longest line of STR."
@@ -425,6 +443,48 @@ each line except the first one (they're assumed to be already there)."
        (newline port)
        (display (make-string indent #\space) port)
        (loop tail)))))
+
+(define %integer-forms
+  ;; Forms that take an integer as their argument, where said integer should
+  ;; be printed in base other than decimal base.
+  (letrec-syntax ((vhashq (syntax-rules ()
+                            ((_) vlist-null)
+                            ((_ (key value) rest ...)
+                             (vhash-consq key value (vhashq rest ...))))))
+    (vhashq
+     ('chmod 8)
+     ('umask 8)
+     ('mkdir 8)
+     ('mkstemp 8)
+     ('logand 16)
+     ('logior 16)
+     ('logxor 16)
+     ('lognot 16))))
+
+(define (integer->string integer context)
+  "Render INTEGER as a string using a base suitable based on CONTEXT."
+  (define (form-base form)
+    (match (vhash-assq form %integer-forms)
+      (#f 10)
+      ((_ . base) base)))
+
+  (define (octal? form)
+    (= 8 (form-base form)))
+
+  (define base
+    (match context
+      ((head . tail)
+       (match (form-base head)
+         (8 8)
+         (16 (if (any octal? tail) 8 16))
+         (10 10)))
+      (_ 10)))
+
+  (string-append (match base
+                   (10 "")
+                   (16 "#x")
+                   (8  "#o"))
+                 (number->string integer base)))
 
 (define* (pretty-print-with-comments port obj
                                      #:key
@@ -661,9 +721,12 @@ FORMAT-VERTICAL-SPACE; a useful value of 'canonicalize-vertical-space'."
              (display ")" port)
              (+ column 1)))))
       (_
-       (let* ((str (if (string? obj)
-                       (escaped-string obj)
-                       (object->string obj)))
+       (let* ((str (cond ((string? obj)
+                          (printed-string obj context))
+                         ((integer? obj)
+                          (integer->string obj context))
+                         (else
+                          (object->string obj))))
               (len (string-width str)))
          (if (and (> (+ column 1 len) max-width)
                   (not delimited?))

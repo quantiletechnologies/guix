@@ -2,6 +2,7 @@
 ;;; Copyright © 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2012, 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;; Copyright © 2021 Simon Tournier <zimon.toutoune@gmail.com>
+;;; Copyright © 2022 Maxime Devos <maximedevos@telenet.be>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -32,6 +33,8 @@
   #:use-module (rnrs io ports)
   #:use-module (system foreign)
   #:use-module ((guix http-client) #:hide (open-socket-for-uri))
+  ;; not required in many cases, so autoloaded to reduce start-up costs.
+  #:autoload   (guix download) (%mirrors)
   #:use-module (guix ftp-client)
   #:use-module (guix utils)
   #:use-module (guix memoization)
@@ -56,6 +59,8 @@
             official-gnu-packages
             find-package
             gnu-package?
+
+            uri-mirror-rewrite
 
             release-file?
             releases
@@ -247,7 +252,7 @@ network to check in GNU's database."
   (make-regexp "^([^.]+)[-_][vV]?([0-9]|[^-])+(-(src|[sS]ource|gnu[0-9]))?\\.(tar\\.|tgz|zip$)"))
 
 (define %alpha-tarball-rx
-  (make-regexp "^.*-.*[0-9](-|~)?(alpha|beta|rc|RC|cvs|svn|git)-?[0-9\\.]*\\.tar\\."))
+  (make-regexp "^.*-.*[0-9](-|~|\\.)?(alpha|beta|rc|RC|cvs|svn|git)-?[0-9\\.]*\\.tar\\."))
 
 (define (release-file? project file)
   "Return #f if FILE is not a release tarball of PROJECT, otherwise return
@@ -358,10 +363,12 @@ return the corresponding signature URL, or #f it signatures are unavailable."
       (upstream-source
        (package project)
        (version (tarball->version file))
-       (urls (list url))
+       ;; uri-mirror-rewrite: Don't turn nice mirror:// URIs into ftp://
+       ;; URLs during "guix refresh -u".
+       (urls (list (uri-mirror-rewrite url)))
        (signature-urls (match (file->signature url)
                          (#f #f)
-                         (sig (list sig)))))))
+                         (sig (list (uri-mirror-rewrite sig))))))))
 
   (let loop ((directory directory)
              (result    #f))
@@ -499,6 +506,12 @@ are unavailable."
              (base-url (string-append base-url directory))
              (url  (cond ((and=> (string->uri url) uri-scheme) ;full URL?
                           url)
+                         ;; full URL, except for URI scheme.  Reuse the URI
+                         ;; scheme of the document that contains the link.
+                         ((string-prefix? "//" url)
+                          (string-append
+                           (symbol->string (uri-scheme (string->uri base-url)))
+                           ":" url))
                          ((string-prefix? "/" url) ;absolute path?
                           (let ((uri (string->uri base-url)))
                             (uri->string
@@ -525,9 +538,12 @@ are unavailable."
                (upstream-source
                 (package package)
                 (version version)
-                (urls (list url))
+                ;; uri-mirror-rewrite: Don't turn nice mirror:// URIs into ftp://
+                ;; URLs during "guix refresh -u".
+                (urls (list (uri-mirror-rewrite url)))
                 (signature-urls
-                 (list ((or file->signature file->signature/guess) url))))))))
+                 (and=> ((or file->signature file->signature/guess) url)
+                        (lambda (url) (list (uri-mirror-rewrite url))))))))))
 
     (define candidates
       (filter-map url->release links))
@@ -580,6 +596,12 @@ ftp.gnu.org.
 
 This method does not rely on FTP access at all; instead, it browses the file
 list available from %GNU-FILE-LIST-URI over HTTP(S)."
+  (define archive-type
+    (package-archive-type package))
+
+  (define (better-tarball? tarball1 tarball2)
+    (string=? (file-extension tarball1) archive-type))
+
   (let-values (((server directory)
                 (ftp-server/directory package))
                ((name)
@@ -610,7 +632,9 @@ list available from %GNU-FILE-LIST-URI over HTTP(S)."
                          (string-append "mirror://gnu/"
                                         (string-drop file
                                                      (string-length "/gnu/"))))
-                       tarballs))
+                       ;; Sort so that the tarball with the same compression
+                       ;; format as currently used in PACKAGE comes first.
+                       (sort tarballs better-tarball?)))
             (signature-urls (map (cut string-append <> ".sig") urls)))))
         (()
          #f)))))
@@ -644,27 +668,28 @@ GNOME packages; EMMS is included though, because its releases are on gnu.org."
 (define gnu-hosted?
   (url-prefix-predicate "mirror://gnu/"))
 
-(define (url-prefix-rewrite old new)
-  "Return a one-argument procedure that rewrites URL prefix OLD to NEW."
-  (lambda (url)
-    (if (and url (string-prefix? old url))
-        (string-append new (string-drop url (string-length old)))
-        url)))
-
-(define (adjusted-upstream-source source rewrite-url)
-  "Rewrite URLs in SOURCE by apply REWRITE-URL to each of them."
-  (upstream-source
-   (inherit source)
-   (urls (map rewrite-url (upstream-source-urls source)))
-   (signature-urls (and=> (upstream-source-signature-urls source)
-                          (lambda (urls)
-                            (map rewrite-url urls))))))
+(define (uri-mirror-rewrite uri)
+  "Rewrite URI to a mirror:// URI if possible, or return URI unmodified."
+  (if (string-prefix? "mirror://" uri)
+      uri                            ;nothing to do, it's already a mirror URI
+      (let loop ((mirrors %mirrors))
+        (match mirrors
+          (()
+           uri)
+          (((mirror-id mirror-urls ...) rest ...)
+           (match (find (cut string-prefix? <> uri) mirror-urls)
+             (#f
+              (loop rest))
+             (prefix
+              (format #f "mirror://~a/~a"
+                      mirror-id
+                      (string-drop uri (string-length prefix))))))))))
 
 (define %savannah-base
   ;; One of the Savannah mirrors listed at
-  ;; <http://download0.savannah.gnu.org/mirmon/savannah/> that serves valid
+  ;; <https://download.savannah.gnu.org/mirmon/savannah/> that serves valid
   ;; HTML (unlike <https://download.savannah.nongnu.org/releases>.)
-  "https://nongnu.freemirror.org/nongnu")
+  "https://de.freedif.org/savannah/")
 
 (define (latest-savannah-release package)
   "Return the latest release of PACKAGE."
@@ -673,15 +698,12 @@ GNOME packages; EMMS is included though, because its releases are on gnu.org."
                        ((? string? uri) uri)
                        ((uri mirrors ...) uri))))
          (package   (package-upstream-name package))
-         (directory (dirname (uri-path uri)))
-         (rewrite   (url-prefix-rewrite %savannah-base
-                                        "mirror://savannah")))
+         (directory (dirname (uri-path uri))))
     ;; Note: We use the default 'file->signature', which adds ".sig", ".asc",
     ;; or whichever detached signature naming scheme PACKAGE uses.
-    (and=> (latest-html-release package
-                                #:base-url %savannah-base
-                                #:directory directory)
-           (cut adjusted-upstream-source <> rewrite))))
+    (latest-html-release package
+                         #:base-url %savannah-base
+                         #:directory directory)))
 
 (define (latest-sourceforge-release package)
   "Return the latest release of PACKAGE."
@@ -761,21 +783,17 @@ GNOME packages; EMMS is included though, because its releases are on gnu.org."
                        ((? string? uri) uri)
                        ((uri mirrors ...) uri))))
          (package   (package-upstream-name package))
-         (directory (dirname (uri-path uri)))
-         (rewrite   (url-prefix-rewrite %kernel.org-base
-                                        "mirror://kernel.org")))
-    (and=> (latest-html-release package
-                                #:base-url %kernel.org-base
-                                #:directory directory
-                                #:file->signature file->signature)
-           (cut adjusted-upstream-source <> rewrite))))
+         (directory (dirname (uri-path uri))))
+    (latest-html-release package
+                         #:base-url %kernel.org-base
+                         #:directory directory
+                         #:file->signature file->signature)))
 
 (define html-updatable-package?
   ;; Return true if the given package may be handled by the generic HTML
   ;; updater.
   (let ((hosting-sites '("github.com" "github.io" "gitlab.com"
-                         "notabug.org" "sr.ht"
-                         "gforge.inria.fr" "gitlab.inria.fr"
+                         "notabug.org" "sr.ht" "gitlab.inria.fr"
                          "ftp.gnu.org" "download.savannah.gnu.org"
                          "pypi.org" "crates.io" "rubygems.org"
                          "bioconductor.org")))

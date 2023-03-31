@@ -35,6 +35,9 @@
 ;;; Copyright © 2020 Hartmut Goebel <h.goebel@crazy-compilers.com>
 ;;; Copyright © 2021 David Dashyan <mail@davie.li>
 ;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Maxime Devos <maximedevos@telenet.be>
+;;; Copyright © 2022 ( <paren@disroot.org>
+;;; Copyright © 2022 Nicolas Graves <ngraves@ngraves.fr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -53,9 +56,12 @@
 
 (define-module (gnu packages password-utils)
   #:use-module ((guix licenses) #:prefix license:)
+  #:use-module (guix utils)
   #:use-module (guix build-system cmake)
+  #:use-module (guix build-system copy)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system go)
+  #:use-module (guix build-system python)
   #:use-module (guix build-system trivial)
   #:use-module (guix download)
   #:use-module (guix gexp)
@@ -72,11 +78,13 @@
   #:use-module (gnu packages crypto)
   #:use-module (gnu packages cryptsetup)
   #:use-module (gnu packages curl)
+  #:use-module (gnu packages digest)
   #:use-module (gnu packages docbook)
   #:use-module (gnu packages file)
   #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages glib)
+  #:use-module (gnu packages gnome)
   #:use-module (gnu packages gnupg)
   #:use-module (gnu packages golang)
   #:use-module (gnu packages gtk)
@@ -106,8 +114,7 @@
   #:use-module (gnu packages wxwidgets)
   #:use-module (gnu packages xdisorg)
   #:use-module (gnu packages xorg)
-  #:use-module (gnu packages xml)
-  #:use-module (guix build-system python))
+  #:use-module (gnu packages xml))
 
 (define-public pwgen
   (package
@@ -132,7 +139,7 @@ human.")
 (define-public keepassxc
   (package
     (name "keepassxc")
-    (version "2.7.1")
+    (version "2.7.4")
     (source
      (origin
        (method url-fetch)
@@ -140,7 +147,7 @@ human.")
                            "/releases/download/" version "/keepassxc-"
                            version "-src.tar.xz"))
        (sha256
-        (base32 "1ryk2ndv93jb155cp7qkjm7jd8hjy0v5gqvdvbdidhrmdiibl0b0"))))
+        (base32 "1knywp38byq0jq9vdyp1ykha9prh09k1y5srwwkr6f503nb5402n"))))
     (build-system cmake-build-system)
     (arguments
      (list
@@ -150,8 +157,13 @@ human.")
       #:imported-modules `(,@%cmake-build-system-modules
                            (guix build qt-utils))
       #:configure-flags
-      #~(list "-DWITH_XC_ALL=YES"
-              "-DWITH_XC_UPDATECHECK=NO")
+      #~(append
+          (list "-DWITH_XC_ALL=YES"
+                "-DWITH_XC_UPDATECHECK=NO")
+          #$(if (member (%current-system)
+                        (package-transitive-supported-systems ruby-asciidoctor))
+              #~'()
+              #~(list "-DWITH_XC_DOCS=NO")))
       #:phases
       #~(modify-phases %standard-phases
           (replace 'check
@@ -165,7 +177,12 @@ human.")
             (lambda* (#:key inputs #:allow-other-keys)
               (wrap-qt-program "keepassxc" #:output #$output #:inputs inputs))))))
     (native-inputs
-     (list qttools-5 ruby-asciidoctor))
+     (append
+       (list qttools-5)
+       (if (member (%current-system)
+                   (package-transitive-supported-systems ruby-asciidoctor))
+         (list ruby-asciidoctor)
+         '())))
     (inputs
      (list argon2
            botan
@@ -201,7 +218,7 @@ algorithms AES or Twofish.")
 (define-public pwsafe
   (package
     (name "pwsafe")
-    (version "3.54.1")
+    (version "3.60.0")
     (home-page "https://www.pwsafe.org/")
     (source
      (origin
@@ -210,23 +227,20 @@ algorithms AES or Twofish.")
              (url "https://github.com/pwsafe/pwsafe")
              (commit version)))
        (sha256
-        (base32 "0d51dlw98mv23nwb0b5jyji8gnb9f5cnig6kivfljl97lmr6lhvf"))
+        (base32 "064y78sqr8h9mq922spi4r13ga0a1j09mfh4kc4pn7j697nl6b5y"))
        (file-name (git-file-name name version))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("gtest" ,googletest)
-       ("perl" ,perl)
-       ("zip" ,zip)))
-    (inputs `(("curl" ,curl)
-              ("file" ,file)
-              ("libuuid" ,util-linux "lib")
-              ("libxt" ,libxt)
-              ("libxtst" ,libxtst)
-              ("openssl" ,openssl)
-              ("qrencode" ,qrencode)
-              ("wxwidgets" ,wxwidgets)
-              ("xerces-c" ,xerces-c)))
+     (list gettext-minimal googletest perl zip))
+    (inputs (list curl
+                  file
+                  `(,util-linux "lib")
+                  libxt
+                  libxtst
+                  openssl
+                  qrencode
+                  wxwidgets
+                  xerces-c))
     (arguments '(#:configure-flags (list "-DNO_GTEST=YES")
                  #:phases (modify-phases %standard-phases
                             (add-after 'unpack 'add-gtest
@@ -333,6 +347,34 @@ applications, there is xclip integration." )
     (home-page "https://dthompson.us/projects/shroud.html")
     (license license:gpl3+)))
 
+(define-public ssh-to-age
+  (let* ((commit "37365ce80fa64d8794855ec3c63cc9a071799fea")
+         (revision "0"))
+    (package
+      (name "ssh-to-age")
+      (version (git-version "1.0.2" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://github.com/Mic92/ssh-to-age")
+               (commit commit)))
+         (file-name (git-file-name name version))
+         (sha256
+          (base32 "1fk2vxa854jnnffcw4q3vm1445jk1ck1v3p4mr9fh04yz06g7d28"))))
+      (build-system go-build-system)
+      (arguments
+       '(#:import-path "github.com/Mic92/ssh-to-age/cmd/ssh-to-age"
+         #:unpack-path "github.com/Mic92/ssh-to-age"))
+      (inputs (list go-golang-org-x-crypto
+                    go-filippo-io-edwards25519
+                    go-filippo-io-age))
+      (home-page "https://github.com/Mic92/ssh-to-age")
+      (synopsis "Convert SSH @code{ed25519} keys to @code{age} keys.")
+      (description "This package provides a simple command-line tool to
+convert SSH @code{ed25519} keys to @code{age} keys.")
+      (license license:expat))))
+
 (define-public yapet
   (package
     (name "yapet")
@@ -366,7 +408,7 @@ and vice versa.")
 (define-public cracklib
   (package
     (name "cracklib")
-    (version "2.9.7")
+    (version "2.9.8")
     (source
      (origin
        (method url-fetch)
@@ -374,7 +416,7 @@ and vice versa.")
                            "releases/download/v" version "/"
                            "cracklib-" version ".tar.bz2"))
        (sha256
-        (base32 "1rimpjsdnmw8f5b7k558cic41p2qy2n2yrlqp5vh7mp4162hk0py"))))
+        (base32 "11p3f0yqg9d32g3n1qik7jfyl2l14pf8i8vzq3bpram3bqw3978z"))))
     (build-system gnu-build-system)
     (arguments
      `(#:phases
@@ -584,6 +626,67 @@ changes to your password database to a git repository that can be managed
 through the pass command.")
     (license license:gpl2+)))
 
+(define-public pass-age
+  (package
+    (inherit password-store)
+    (name "pass-age")
+    (version "1.7.4a0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/FiloSottile/passage")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "17899whffnpqqx9x1nx2b8bfxbxlh1pwlglqa0kznl0cn6sb37ql"))))
+    (build-system copy-build-system)
+    (arguments
+     '(#:modules
+       ((guix build copy-build-system)
+        (guix build utils)
+        (srfi srfi-26))
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'rename-script
+           (lambda _
+             (rename-file "src/password-store.sh"
+                          "src/passage")))
+         (add-after 'install 'wrap-script
+           (lambda* (#:key inputs outputs #:allow-other-keys)
+             (let* ((out (assoc-ref outputs "out"))
+                    (script (string-append out "/bin/passage")))
+               (substitute* script
+                 ;; Avoid ugly ‘.passage-real’ in --help output and elsewhere.
+                 (("^(PROGRAM=).*" _ program=)
+                  (string-append program= (basename script) "\n")))
+               (wrap-program script
+                 `("PATH" ":" prefix
+                   ,(map dirname
+                         (map (cut search-input-file inputs <>)
+                              (list "bin/age"
+                                    "bin/age-keygen"
+                                    "bin/getopt"
+                                    "bin/git"
+                                    "bin/pkill"
+                                    "bin/qrencode"
+                                    "bin/sed"
+                                    "bin/tree")))))))))
+       #:install-plan
+       '(("src/passage" "/bin/")
+         ("src/completion/pass.bash-completion"
+          "/share/bash-completion/completions/")
+         ("src/completion/pass.zsh-completion"
+          "/share/zsh/site-functions/"))))
+    (inputs
+     (list age age-keygen git procps qrencode sed tree util-linux))
+    (home-page "https://github.com/FiloSottile/passage")
+    (synopsis "Encrypted password manager")
+    (description "This package provides an encrypted password manager, forked
+from the @code{password-store} package.  Files are encrypted with the
+@command{age} encryption package with small explicit keys.")
+    (license license:gpl2+)))
+
 (define-public pass-otp
   (package
     (name "pass-otp")
@@ -754,7 +857,7 @@ using password-store through rofi interface:
 (define-public tessen
   (package
     (name "tessen")
-    (version "2.1.0")
+    (version "2.1.2")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -763,7 +866,7 @@ using password-store through rofi interface:
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1ddsjhzp1qy3jfhxlrzcxgp0gza234yc0sdlngwa3xdj0wr40zs0"))))
+                "01jaxakq847k3v2wid8fzhcmq8mraxz0q1j87s1jv75l1gy4qiij"))))
     (build-system gnu-build-system)
     (arguments
      (list #:tests?
@@ -773,13 +876,17 @@ using password-store through rofi interface:
                (add-after 'unpack 'patch-wtype-path
                  (lambda* (#:key inputs #:allow-other-keys)
                    (substitute* "tessen"
-                     (("wtype") (search-input-file inputs "/bin/wtype")))))
+                     (("notify-send") (search-input-file inputs
+                                                         "/bin/notify-send"))
+                     (("wl-copy") (search-input-file inputs "/bin/wl-copy"))
+                     (("wtype") (search-input-file inputs "/bin/wtype"))
+                     (("xdg-open") (search-input-file inputs "/bin/xdg-open")))))
                (delete 'configure)) ;no configure script
            #:make-flags
            #~(list (string-append "PREFIX="
                                   #$output))))
     (native-inputs (list scdoc))
-    (inputs (list wtype))
+    (inputs (list libnotify wl-clipboard wtype xdg-utils))
     (home-page "https://github.com/ayushnix/tessen")
     (synopsis "Frontend for password-store and gopass")
     (description "Tessen is a bash script that can autotype and copy data
@@ -859,6 +966,39 @@ This package only contains the Browserpass native messaging host.  You must
 also install the browser extension for GNU IceCat or ungoogled-chromium
 separately.")
     (license license:isc)))
+
+(define-public cpass
+  (package
+    (name "cpass")
+    (version "0.9.4")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "cpass" version))
+              (sha256
+               (base32
+                "1zp3a8mgqxn916fzj1v2yhgnl7v6s0vnd0qcghqs3qq648qmlwr5"))))
+    (build-system python-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'patch-pass-refs
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (substitute* "cpass.py"
+                     (("'pass'")
+                      (string-append "'"
+                                     (search-input-file inputs
+                                                        "bin/pass")
+                                     "'"))
+                     (("\\.password_store")
+                      ".password-store")))))))
+    (inputs (list password-store))
+    (propagated-inputs (list python-urwid))
+    (home-page "https://github.com/OliverLew/cpass")
+    (synopsis "Textual interface for @command{pass}")
+    (description
+     "@command{cpass} is a terminal user interface for @command{pass}.
+It supports both vim-like keybindings and the mouse.")
+    (license license:expat)))
 
 (define-public argon2
   (package
@@ -1112,27 +1252,41 @@ your online accounts makes it necessary.")
 (define-public hashcat
   (package
     (name "hashcat")
-    (version "6.1.1")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "https://hashcat.net/files/hashcat-"
-                           version ".tar.gz"))
-       (sha256
-        (base32
-         "104z63m7lqbb0sdrxhf9yi15l4a9zwf9m6zs9dbb3gf0nfxl1h9r"))))
-    (native-inputs
-     (list opencl-headers))
+    (version "6.2.5")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "https://hashcat.net/files/hashcat-" version
+                                  ".tar.gz"))
+              (sha256
+               (base32
+                "0sc96xcsc20xd4fyby3i45nm9as3hl4nhk9snkvmk5l9mpbrjs3g"))
+              (modules '((guix build utils)))
+              ;; Delete bundled libraries.
+              (snippet
+               ;; TODO: Unbundle LZMA-SDK as well
+               #~(for-each delete-file-recursively
+                           '("deps/zlib" "deps/xxHash" "deps/OpenCL-Headers")))))
+    (inputs (list minizip opencl-headers xxhash zlib))
     (build-system gnu-build-system)
     (arguments
-     '(#:tests? #f                      ;no tests
-       #:make-flags (list (string-append "PREFIX=" %output))
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure))))
+     (list #:tests? #f ;no tests
+           #:make-flags #~(list (string-append "PREFIX=" #$output)
+                                (string-append "AR=" #$(ar-for-target))
+                                (string-append "CC=" #$(cc-for-target))
+                                (string-append "USE_SYSTEM_ZLIB=1")
+                                (string-append "USE_SYSTEM_OPENCL=1")
+                                (string-append "USE_SYSTEM_XXHASH=1"))
+           #:phases #~(modify-phases %standard-phases
+                        (add-after 'unpack 'fix-reproducibility
+                          (lambda _
+                            (substitute* "src/Makefile"
+                              (("\\$\\(shell date \\+%s\\)")
+                               "0"))))
+                        (delete 'configure))))
     (home-page "https://hashcat.net/hashcat/")
     (synopsis "Advanced password recovery utility")
-    (description "Hashcat is an password recovery utility, supporting five
+    (description
+     "Hashcat is an password recovery utility, supporting five
 unique modes of attack for over 200 highly-optimized hashing algorithms.
 Hashcat currently supports CPUs, GPUs, and other hardware accelerators on
 Linux, Windows, and macOS, and has facilities to help enable distributed
@@ -1259,7 +1413,7 @@ encryption algorithm if so desired.")
 (define-public pass-tomb
   (package
     (name "pass-tomb")
-    (version "1.2")
+    (version "1.3")
     (source
      (origin
        (method git-fetch)
@@ -1268,7 +1422,7 @@ encryption algorithm if so desired.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1qj7vx7svk1ljwihj3kv310k17mafnf919n30n4qn1yxmmsvj924"))))
+        (base32 "1sjkbdm2i3v77nbnap8sypbfdqwxckc8h66g3ixjnyr6cqgcrdli"))))
     (build-system gnu-build-system)
     (arguments
      `(#:make-flags
@@ -1298,3 +1452,43 @@ are not using it.  It uses the same GPG key to encrypt passwords and tomb,
 therefore you don't need to manage more key or secret.  Moreover, you can ask
 pass-tomb to automatically close your store after a given time.")
     (license license:gpl3+)))
+
+(define-public xkcdpass
+  (package
+    (name "xkcdpass")
+    (version "1.19.3")
+    (home-page "https://github.com/redacted/XKCD-password-generator")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url home-page)
+                    (commit (string-append "xkcdpass-" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0xfrmx9k2vinlagv476rfcfdp41aix1ldy6qnzzx26n985gcyk7p"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (add-after 'install 'install-manpage
+           (lambda* (#:key outputs #:allow-other-keys)
+             (install-file
+              "xkcdpass.1"
+              (string-append (assoc-ref outputs "out") "/share/man/man1")))))))
+    (synopsis
+     "Generate secure multiword passwords/passphrases, inspired by XKCD")
+    (description
+     "This package provides a flexible and scriptable password generator which
+generates strong passphrases, inspired by
+@url{https://xkcd.com/936/,XKCD 936}.")
+    (license (list license:bsd-3 ;code
+                   license:cc0 ;spanish, eff_large_de, french word lists
+                   license:cc-by-sa3.0 ;finnish, italian word list
+                   license:cc-by-sa4.0 ;norwegian word list
+                   license:eupl1.1 ;finnish word list
+                   license:gpl2 ;portuguese word list
+                   license:gpl3 ;ger-anix word list
+                   license:lgpl2.0 ;finnish word list
+                   license:lgpl2.1 ;portuguese word list
+                   license:mpl1.1)))) ;portuguese word list

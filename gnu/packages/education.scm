@@ -10,6 +10,7 @@
 ;;; Copyright © 2020 Jakub Kądziołka <kuba@kadziolka.net>
 ;;; Copyright © 2020 Prafulla Giri <pratheblackdiamond@gmail.com>
 ;;; Copyright © 2021 Nicolò Balzarotti <nicolo@nixo.xyz>
+;;; Copyright © 2022 Luis Felipe López Acevedo <luis.felipe.la@protonmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -35,6 +36,7 @@
   #:use-module (gnu packages compression)
   #:use-module (gnu packages curl)
   #:use-module (gnu packages databases)
+  #:use-module (gnu packages django)
   #:use-module (gnu packages flex)
   #:use-module (gnu packages fonts)
   #:use-module (gnu packages fontutils)
@@ -45,6 +47,7 @@
   #:use-module (gnu packages gnome)
   #:use-module (gnu packages golang)
   #:use-module (gnu packages gtk)
+  #:use-module (gnu packages gstreamer)
   #:use-module (gnu packages image)
   #:use-module (gnu packages javascript)
   #:use-module (gnu packages kde)
@@ -579,7 +582,7 @@ a pen-tablet display and a beamer.")
 (define-public fet
   (package
     (name "fet")
-    (version "6.5.3")
+    (version "6.7.1")
     (source
      (origin
        (method url-fetch)
@@ -588,7 +591,7 @@ a pen-tablet display and a beamer.")
               (list (string-append directory base)
                     (string-append directory "old/" base))))
        (sha256
-        (base32 "030njv53azzw6fn2d5mkxn7hyvyb45yss2y49wxb8bgj3ayv1rgp"))))
+        (base32 "0vwddhmr9n21q4yhkcz6iakkff91hvjcfzhg84zvf1ap30xx09hk"))))
     (build-system gnu-build-system)
     (arguments
      (list
@@ -643,14 +646,14 @@ language and very flexible regarding to new or unknown keyboard layouts.")
 (define-public ktouch
   (package
     (name "ktouch")
-    (version "20.12.1")
+    (version "21.12.2")
     (source
       (origin
         (method url-fetch)
         (uri (string-append "mirror://kde/stable/release-service/"
                             version "/src/ktouch-" version ".tar.xz"))
         (sha256
-         (base32 "10lm2p8w26c9n6lhvw3301myfss0dq7hl7rawzb3hsy1lqvmvdib"))))
+         (base32 "1rq2n8395sb17rqd295axv2pbwzhqs8ikjqx5ryn4lv1713alabl"))))
     (build-system qt-build-system)
     (native-inputs
      (list extra-cmake-modules kdoctools pkg-config))
@@ -664,7 +667,6 @@ language and very flexible regarding to new or unknown keyboard layouts.")
            ki18n
            kiconthemes
            kitemviews
-           kqtquickcharts
            ktextwidgets
            kwidgetsaddons
            kwindowsystem
@@ -1046,7 +1048,7 @@ machine, and more.")
 (define-public exercism
   (package
     (name "exercism")
-    (version "3.0.13")
+    (version "3.1.0")
     (source
      (origin
        (method git-fetch)
@@ -1056,22 +1058,115 @@ machine, and more.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "17gvz9a0sn4p36hf4l77bxhhfipf4x998iay31layqwbnzmb4xy7"))
+         "0ah5v4pqq31bvj7s4rg3jyjn7jwxa15w31cn4c317gsqmi0n8rzl"))
        (patches (search-patches "exercism-disable-self-update.patch"))))
     (build-system go-build-system)
     (arguments
      `(#:import-path "github.com/exercism/cli/exercism"
        #:unpack-path "github.com/exercism/cli"
-       #:install-source? #f))
+       #:install-source? #f
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'install 'install-completions
+           (lambda* (#:key outputs #:allow-other-keys)
+             (let* ((out  (assoc-ref outputs "out"))
+                    (bash (string-append out "/etc/bash_completion.d/exercism"))
+                    (fish (string-append
+                            out "/share/fish/vendor_completions.d/exercism.fish"))
+                    (zsh  (string-append out "/share/zsh/site-functions/_exercism")))
+               (mkdir-p (dirname bash))
+               (with-output-to-file bash
+                 (lambda ()
+                   (invoke (string-append out "/bin/exercism") "completion" "bash")))
+               (mkdir-p (dirname fish))
+               (with-output-to-file fish
+                 (lambda ()
+                   (invoke (string-append out "/bin/exercism") "completion" "fish")))
+               (mkdir-p (dirname zsh))
+               (with-output-to-file zsh
+                 (lambda ()
+                   (invoke (string-append out "/bin/exercism") "completion" "zsh")))))))))
     (inputs
-     `(("github.com/blang/semver" ,go-github-com-blang-semver)
-       ("github.com/spf13/cobra" ,go-github-com-spf13-cobra)
-       ("github.com/spf13/pflag" ,go-github-com-spf13-pflag)
-       ("github.com/spf13/viper" ,go-github-com-spf13-viper)
-       ("golang.org/x/net" ,go-golang-org-x-net)
-       ("golang.org/x/text" ,go-golang-org-x-text)))
-    (home-page "https://exercism.io")
+     (list go-github-com-blang-semver
+           go-github-com-spf13-cobra
+           go-github-com-spf13-pflag
+           go-github-com-spf13-viper
+           go-golang-org-x-net
+           go-golang-org-x-text))
+    (home-page "https://exercism.org/")
     (synopsis "Mentored learning for programming languages")
     (description "Commandline client for exercism.io, a free service providing
 mentored learning for programming languages.")
     (license license:expat)))
+
+(define-public mazo
+  (package
+    (name "mazo")
+    (version "1.0.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://gitlab.com/luis-felipe/mazo.git")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "06246380i5rxycniwg5syn0aldd2zy10cbqk1lgyc0qfqb2lyrwj"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:use-setuptools? #f
+       #:phases
+       (modify-phases %standard-phases
+         (delete 'build)
+         (replace 'check
+           (lambda* (#:key tests? inputs outputs #:allow-other-keys)
+             (when tests?
+               (let* ((out (assoc-ref outputs "out"))
+                      (home (string-append out "/tmp")))
+                 (add-installed-pythonpath inputs outputs)
+                 (setenv "HOME" home)
+                 (invoke "python3" "manage.py" "test")))))
+         (replace 'install
+           (lambda* (#:key inputs outputs #:allow-other-keys)
+             (let* ((out (assoc-ref outputs "out"))
+                    (bin (string-append out "/bin"))
+                    (script (string-append bin "/mazo"))
+                    (share (string-append out "/share"))
+                    (help (string-append share "/help/C/mazo"))
+                    (icons (string-append
+                            share
+                            "/icons/hicolor/scalable/apps"))
+                    (apps (string-append share "/applications"))
+                    (site (string-append
+                           (site-packages inputs outputs)
+                           "/mazo")))
+               (mkdir-p help)
+               (mkdir-p bin)
+               (copy-file "mazo.py" script)
+               (chmod script #o555)
+               (install-file "icons/mazo.svg" icons)
+               (install-file "lugare.ulkeva.Mazo.desktop" apps)
+               (copy-recursively "help/C/mazo" help)
+               (copy-recursively "mazo" site)))))))
+    (native-inputs
+     (list python-django
+           python-django-cleanup
+           python-django-svg-image-form-field
+           python-pillow
+           python-pycairo))
+    (propagated-inputs
+     (list gstreamer
+           gtk+
+           python
+           python-django
+           python-django-cleanup
+           python-django-svg-image-form-field
+           python-pillow
+           python-pycairo
+           python-pygobject
+           yelp))
+    (home-page "https://luis-felipe.gitlab.io/mazo/")
+    (synopsis "Memorize concepts using multimedia flash cards")
+    (description "Mazo is a learning application that helps you memorize
+simple concepts using multimedia flash cards and spaced reviews.")
+    (license license:public-domain)))

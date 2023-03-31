@@ -13,7 +13,7 @@
 ;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2020 Reza Alizadeh Majd <r.majd@pantherx.org>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
-;;; Copyright © 2021 muradm <mail@muradm.net>
+;;; Copyright © 2021, 2022 muradm <mail@muradm.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -69,6 +69,7 @@
   #:use-module (guix records)
   #:use-module (guix packages)
   #:use-module (guix store)
+  #:use-module (guix ui)
   #:use-module (guix utils)
   #:use-module (guix gexp)
   #:use-module (srfi srfi-1)
@@ -115,6 +116,9 @@
             elogind-configuration?
             elogind-service
             elogind-service-type
+
+            %gdm-file-system
+            gdm-file-system-service
 
             %fontconfig-file-system
             fontconfig-file-system-service
@@ -202,11 +206,11 @@
   (ignore-lid?                upower-configuration-ignore-lid?
                               (default #f))
   (use-percentage-for-policy? upower-configuration-use-percentage-for-policy?
-                              (default #f))
+                              (default #t))
   (percentage-low             upower-configuration-percentage-low
-                              (default 10))
+                              (default 20))
   (percentage-critical        upower-configuration-percentage-critical
-                              (default 3))
+                              (default 5))
   (percentage-action          upower-configuration-percentage-action
                               (default 2))
   (time-low                   upower-configuration-time-low
@@ -269,7 +273,8 @@
                      #:environment-variables
                      (list (string-append "UPOWER_CONF_FILE_NAME="
                                           #$config))))
-           (stop #~(make-kill-destructor))))))
+           (stop #~(make-kill-destructor))
+           (actions (list (shepherd-configuration-action config)))))))
 
 (define upower-service-type
   (let ((upower-package (compose list upower-configuration-upower)))
@@ -1033,7 +1038,7 @@ include the @command{udisksctl} command, part of UDisks, and GNOME Disks."
     '(ignore poweroff reboot halt kexec suspend hibernate hybrid-sleep lock))
   (define (handle-action x)
     (if (unspecified? x)
-        ""                              ;empty serializer
+        x                               ;let the unspecified value go through
         (enum x handle-actions)))
   (define (sleep-list tokens)
     (unless (valid-list? tokens char-set:user-name)
@@ -1041,10 +1046,18 @@ include the @command{udisksctl} command, part of UDisks, and GNOME Disks."
     (string-join tokens " "))
   (define-syntax ini-file-clause
     (syntax-rules ()
+      ;; Produce an empty line when encountering an unspecified value.  This
+      ;; is better than an empty string value, which can, in some cases, cause
+      ;; warnings such as "Failed to parse handle action setting".
       ((_ config (prop (parser getter)))
-       (string-append prop "=" (parser (getter config)) "\n"))
+       (let ((value (parser (getter config))))
+         (if (unspecified? value)
+             ""
+             (string-append prop "=" value "\n"))))
       ((_ config str)
-       (string-append str "\n"))))
+       (if (unspecified? str)
+           ""
+           (string-append str "\n")))))
   (define-syntax-rule (ini-file config file clause ...)
     (plain-file file (string-append (ini-file-clause config clause) ...)))
   (ini-file
@@ -1156,6 +1169,9 @@ seats.)"
 
 (define (elogind-shepherd-service config)
   "Return a Shepherd service to start elogind according to @var{config}."
+  (define config-file
+    (elogind-configuration-file config))
+
   (list (shepherd-service
          (requirement '(dbus-system))
          (provision '(elogind))
@@ -1164,9 +1180,9 @@ seats.)"
                                         "/libexec/elogind/elogind"))
                    #:environment-variables
                    (list (string-append "ELOGIND_CONF_FILE="
-                                        #$(elogind-configuration-file
-                                           config)))))
-         (stop #~(make-kill-destructor)))))
+                                        #$config-file))))
+         (stop #~(make-kill-destructor))
+         (actions (list (shepherd-configuration-action config-file))))))
 
 (define elogind-service-type
   (service-type (name 'elogind)
@@ -1223,6 +1239,13 @@ when they log out."
     (flags '(read-only))
     (check? #f)))
 
+(define %gdm-file-system
+  (file-system
+    (device "none")
+    (mount-point "/var/lib/gdm")
+    (type "tmpfs")
+    (check? #f)))
+
 ;; The global fontconfig cache directory can sometimes contain stale entries,
 ;; possibly referencing fonts that have been GC'd, so mount it read-only.
 ;; As mentioned https://debbugs.gnu.org/cgi/bugreport.cgi?bug=36924#8 and
@@ -1231,6 +1254,15 @@ when they log out."
   (simple-service 'fontconfig-file-system
                   file-system-service-type
                   (list %fontconfig-file-system)))
+
+;; Avoid stale caches and stale user IDs being reused between system
+;; reconfigurations, which would crash GDM and render the system unusable.
+;; GDM doesn't require persisting anything valuable there anyway.
+(define gdm-file-system-service
+  (simple-service 'gdm-file-system
+                  file-system-service-type
+                  (list %gdm-file-system)))
+
 
 ;;;
 ;;; AccountsService service.
@@ -1643,12 +1675,19 @@ or setting its password with passwd.")))
 ;;; seatd-service-type -- minimal seat management daemon
 ;;;
 
+(define (seatd-group-sanitizer group-or-name)
+  (match group-or-name
+    ((? user-group? group) group)
+    ((? string? group-name) (user-group (name group-name) (system? #t)))
+    (_ (leave (G_ "seatd: '~a' is not a valid group~%") group-or-name))))
+
 (define-record-type* <seatd-configuration> seatd-configuration
   make-seatd-configuration
   seatd-configuration?
   (seatd seatd-package (default seatd))
-  (user seatd-user (default "root"))
-  (group seatd-group (default "users"))
+  (group seatd-group                    ; string | <user-group>
+         (default "seat")
+         (sanitize seatd-group-sanitizer))
   (socket seatd-socket (default "/run/seatd.sock"))
   (logfile seatd-logfile (default "/var/log/seatd.log"))
   (loglevel seatd-loglevel (default "info")))
@@ -1662,8 +1701,7 @@ or setting its password with passwd.")))
          (provision '(seatd elogind))
          (start #~(make-forkexec-constructor
                    (list #$(file-append (seatd-package config) "/bin/seatd")
-                         "-u" #$(seatd-user config)
-                         "-g" #$(seatd-group config))
+                         "-g" #$(user-group-name (seatd-group config)))
                    #:environment-variables
                    (list (string-append "SEATD_LOGLEVEL="
                                         #$(seatd-loglevel config))
@@ -1672,9 +1710,12 @@ or setting its password with passwd.")))
                    #:log-file #$(seatd-logfile config)))
          (stop #~(make-kill-destructor)))))
 
+(define seatd-accounts
+  (match-lambda (($ <seatd-configuration> _ group) (list group))))
+
 (define seatd-environment
   (match-lambda
-    (($ <seatd-configuration> _ _ _ socket)
+    (($ <seatd-configuration> _ _ socket)
      `(("SEATD_SOCK" . ,socket)))))
 
 (define seatd-service-type
@@ -1685,6 +1726,7 @@ to shared devices (graphics, input), without requiring the
 applications needing access to be root.")
    (extensions
     (list
+     (service-extension account-service-type seatd-accounts)
      (service-extension session-environment-service-type seatd-environment)
      ;; TODO: once cgroups is separate dependency we should not mount it here
      ;; for now it is mounted here, because elogind mounts it
@@ -1730,6 +1772,10 @@ applications needing access to be root.")
                                  (program program)))
                               (list (file-append nfs-utils "/sbin/mount.nfs")
                                (file-append ntfs-3g "/sbin/mount.ntfs-3g"))))
+
+         ;; This is a volatile read-write file system mounted at /var/lib/gdm,
+         ;; to avoid GDM stale cache and permission issues.
+         gdm-file-system-service
 
          ;; The global fontconfig cache directory can sometimes contain
          ;; stale entries, possibly referencing fonts that have been GC'd,

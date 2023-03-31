@@ -11,7 +11,7 @@
 @set SUBSTITUTE-TOR-URL https://4zwzi66wwdaalbhgnix55ea3ab4pvvw66ll2ow53kjub6se4q2bclcyd.onion
 
 @copying
-Copyright @copyright{} 2019 Ricardo Wurmus@*
+Copyright @copyright{} 2019, 2022 Ricardo Wurmus@*
 Copyright @copyright{} 2019 Efraim Flashner@*
 Copyright @copyright{} 2019 Pierre Neidhardt@*
 Copyright @copyright{} 2020 Oleg Pykhalov@*
@@ -21,6 +21,7 @@ Copyright @copyright{} 2020 Brice Waegeneire@*
 Copyright @copyright{} 2020 André Batista@*
 Copyright @copyright{} 2020 Christine Lemmer-Webber@*
 Copyright @copyright{} 2021 Joshua Branson@*
+Copyright @copyright{} 2022 Maxim Cournoyer*
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -71,6 +72,7 @@ Weblate} (@pxref{Translating Guix,,, guix, GNU Guix reference manual}).
 * Scheme tutorials::            Meet your new favorite language!
 * Packaging::                   Packaging tutorials
 * System Configuration::        Customizing the GNU System
+* Containers::                  Isolated environments and nested systems
 * Advanced package management:: Power to the users!
 * Environment management::      Control environment
 
@@ -91,8 +93,17 @@ Packaging
 
 System Configuration
 
-* Auto-Login to a Specific TTY:: Automatically Login a User to a Specific TTY
-* Customizing the Kernel::       Creating and using a custom Linux kernel on Guix System.
+* Auto-Login to a Specific TTY::    Automatically Login a User to a Specific TTY
+* Customizing the Kernel::          Creating and using a custom Linux kernel on Guix System.
+* Guix System Image API::           Customizing images to target specific platforms.
+* Using security keys::             How to use security keys with Guix System.
+* Connecting to Wireguard VPN::     Connecting to a Wireguard VPN.
+* Customizing a Window Manager::    Handle customization of a Window manager on Guix System.
+* Running Guix on a Linode Server:: Running Guix on a Linode Server.  Running Guix on a Linode Server
+* Setting up a bind mount::         Setting up a bind mount in the file-systems definition.
+* Getting substitutes from Tor::    Configuring Guix daemon to get substitutes through Tor.
+* Setting up NGINX with Lua::       Configuring NGINX web-server to load Lua modules.
+* Music Server with Bluetooth Audio:: Headless music player with Bluetooth output.
 
 @end detailmenu
 @end menu
@@ -1371,12 +1382,14 @@ reference.
 * Auto-Login to a Specific TTY:: Automatically Login a User to a Specific TTY
 * Customizing the Kernel::       Creating and using a custom Linux kernel on Guix System.
 * Guix System Image API::        Customizing images to target specific platforms.
+* Using security keys::          How to use security keys with Guix System.
 * Connecting to Wireguard VPN::  Connecting to a Wireguard VPN.
 * Customizing a Window Manager:: Handle customization of a Window manager on Guix System.
 * Running Guix on a Linode Server:: Running Guix on a Linode Server
 * Setting up a bind mount:: Setting up a bind mount in the file-systems definition.
 * Getting substitutes from Tor:: Configuring Guix daemon to get substitutes through Tor.
 * Setting up NGINX with Lua:: Configuring NGINX web-server to load Lua modules.
+* Music Server with Bluetooth Audio:: Headless music player with Bluetooth output.
 @end menu
 
 @node Auto-Login to a Specific TTY
@@ -1872,6 +1885,65 @@ guix system image --image-type=hurd-qcow2 my-hurd-os.scm
 @end example
 
 will instead produce a Hurd QEMU image.
+
+@node Using security keys
+@section Using security keys
+@cindex 2FA, two-factor authentication
+@cindex U2F, Universal 2nd Factor
+@cindex security key, configuration
+
+The use of security keys can improve your security by providing a second
+authentication source that cannot be easily stolen or copied, at least
+for a remote adversary (something that you have), to the main secret (a
+passphrase -- something that you know), reducing the risk of
+impersonation.
+
+The example configuration detailed below showcases what minimal
+configuration needs to be made on your Guix System to allow the use of a
+Yubico security key.  It is hoped the configuration can be useful for
+other security keys as well, with minor adjustments.
+
+@subsection Configuration for use as a two-factor authenticator (2FA)
+
+To be usable, the udev rules of the system should be extended with
+key-specific rules.  The following shows how to extend your udev rules
+with the @file{lib/udev/rules.d/70-u2f.rules} udev rule file provided by
+the @code{libfido2} package from the @code{(gnu packages
+security-token)} module and add your user to the @samp{"plugdev"} group
+it uses:
+
+@lisp
+(use-package-modules ... security-token ...)
+...
+(operating-system
+ ...
+ (users (cons* (user-account
+               (name "your-user")
+               (group "users")
+               (supplementary-groups
+		'("wheel" "netdev" "audio" "video"
+                  "plugdev"))           ;<- added system group
+               (home-directory "/home/your-user"))
+              %base-user-accounts))
+ ...
+ (services
+  (cons*
+   ...
+   (udev-rules-service 'fido2 libfido2 #:groups '("plugdev")))))
+@end lisp
+
+After re-configuring your system and re-logging in your graphical
+session so that the new group is in effect for your user, you can verify
+that your key is usable by launching:
+
+@example
+guix shell ungoogled-chromium -- chromium chrome://settings/securityKeys
+@end example
+
+and validating that the security key can be reset via the ``Reset your
+security key'' menu.  If it works, congratulations, your security key is
+ready to be used with applications supporting two-factor authentication
+(2FA).
 
 @node Connecting to Wireguard VPN
 @section Connecting to Wireguard VPN
@@ -2454,6 +2526,594 @@ ngx.say(stdout)
                                                         #$(local-file "index.lua"))))))))))))))
 @end lisp
 
+@node Music Server with Bluetooth Audio
+@section Music Server with Bluetooth Audio
+@cindex mpd
+@cindex music server, headless
+@cindex bluetooth, ALSA configuration
+
+MPD, the Music Player Daemon, is a flexible server-side application for
+playing music.  Client programs on different machines on the network ---
+a mobile phone, a laptop, a desktop workstation --- can connect to it to
+control the playback of audio files from your local music collection.
+MPD decodes the audio files and plays them back on one or many outputs.
+
+By default MPD will play to the default audio device.  In the example
+below we make things a little more interesting by setting up a headless
+music server.  There will be no graphical user interface, no Pulseaudio
+daemon, and no local audio output.  Instead we will configure MPD with
+two outputs: a bluetooth speaker and a web server to serve audio streams
+to any streaming media player.
+
+Bluetooth is often rather frustrating to set up.  You will have to pair
+your Bluetooth device and make sure that the device is automatically
+connected as soon as it powers on.  The Bluetooth system service
+returned by the @code{bluetooth-service} procedure provides the
+infrastructure needed to set this up.
+
+Reconfigure your system with at least the following services and
+packages:
+
+@lisp
+(operating-system
+  ;; …
+  (packages (cons* bluez bluez-alsa
+                   %base-packages))
+  (services
+   ;; …
+   (dbus-service #:services (list bluez-alsa))
+   (bluetooth-service #:auto-enable? #t)))
+@end lisp
+
+Start the @code{bluetooth} service and then use @command{bluetoothctl}
+to scan for Bluetooth devices.  Try to identify your Bluetooth speaker
+and pick out its device ID from the resulting list of devices that is
+indubitably dominated by a baffling smorgasbord of your neighbors' home
+automation gizmos.  This only needs to be done once:
+
+@example
+$ bluetoothctl 
+[NEW] Controller 00:11:22:33:95:7F BlueZ 5.40 [default]
+
+[bluetooth]# power on
+[bluetooth]# Changing power on succeeded
+
+[bluetooth]# agent on
+[bluetooth]# Agent registered
+
+[bluetooth]# default-agent
+[bluetooth]# Default agent request successful
+
+[bluetooth]# scan on
+[bluetooth]# Discovery started
+[CHG] Controller 00:11:22:33:95:7F Discovering: yes
+[NEW] Device AA:BB:CC:A4:AA:CD My Bluetooth Speaker
+[NEW] Device 44:44:FF:2A:20:DC My Neighbor's TV
+@dots{}
+
+[bluetooth]# pair AA:BB:CC:A4:AA:CD
+Attempting to pair with AA:BB:CC:A4:AA:CD
+[CHG] Device AA:BB:CC:A4:AA:CD Connected: yes
+
+[My Bluetooth Speaker]# [CHG] Device AA:BB:CC:A4:AA:CD UUIDs: 0000110b-0000-1000-8000-00xxxxxxxxxx
+[CHG] Device AA:BB:CC:A4:AA:CD UUIDs: 0000110c-0000-1000-8000-00xxxxxxxxxx
+[CHG] Device AA:BB:CC:A4:AA:CD UUIDs: 0000110e-0000-1000-8000-00xxxxxxxxxx
+[CHG] Device AA:BB:CC:A4:AA:CD Paired: yes
+Pairing successful
+
+[CHG] Device AA:BB:CC:A4:AA:CD Connected: no
+
+[bluetooth]# 
+[bluetooth]# trust AA:BB:CC:A4:AA:CD
+[bluetooth]# [CHG] Device AA:BB:CC:A4:AA:CD Trusted: yes
+Changing AA:BB:CC:A4:AA:CD trust succeeded
+
+[bluetooth]# 
+[bluetooth]# connect AA:BB:CC:A4:AA:CD
+Attempting to connect to AA:BB:CC:A4:AA:CD
+[bluetooth]# [CHG] Device AA:BB:CC:A4:AA:CD RSSI: -63
+[CHG] Device AA:BB:CC:A4:AA:CD Connected: yes
+Connection successful
+
+[My Bluetooth Speaker]# scan off
+[CHG] Device AA:BB:CC:A4:AA:CD RSSI is nil
+Discovery stopped
+[CHG] Controller 00:11:22:33:95:7F Discovering: no
+@end example
+
+Congratulations, you can now automatically connect to your Bluetooth
+speaker!
+
+It is now time to configure ALSA to use the @emph{bluealsa} Bluetooth
+module, so that you can define an ALSA pcm device corresponding to your
+Bluetooth speaker.  For a headless server using @emph{bluealsa} with a
+fixed Bluetooth device is likely simpler than configuring Pulseaudio and
+its stream switching behavior.  We configure ALSA by crafting a custom
+@code{alsa-configuration} for the @code{alsa-service-type}.  The
+configuration will declare a @code{pcm} type @code{bluealsa} from the
+@code{bluealsa} module provided by the @code{bluez-alsa} package, and
+then define a @code{pcm} device of that type for your Bluetooth speaker.
+
+All that is left then is to make MPD send audio data to this ALSA
+device.  We also add a secondary MPD output that makes the currently
+played audio files available as a stream through a web server on port
+8080.  When enabled a device on the network could listen to the audio
+stream by connecting any capable media player to the HTTP server on port
+8080, independent of the status of the Bluetooth speaker.
+
+What follows is the outline of an @code{operating-system} declaration
+that should accomplish the above-mentioned tasks:
+
+@lisp
+(use-modules (gnu))
+(use-service-modules audio dbus sound #;… etc)
+(use-package-modules audio linux #;… etc)
+(operating-system
+  ;; …
+  (packages (cons* bluez bluez-alsa
+                   %base-packages))
+  (services
+   ;; …
+   (service mpd-service-type
+            (mpd-configuration
+             (user "your-username")
+             (music-dir "/path/to/your/music")
+             (address "192.168.178.20")
+             (outputs (list (mpd-output
+                             (type "alsa")
+                             (name "MPD")
+                             (extra-options
+                              ;; Use the same name as in the ALSA
+                              ;; configuration below.
+                              '((device . "pcm.btspeaker"))))
+                            (mpd-output
+                             (type "httpd")
+                             (name "streaming")
+                             (enabled? #false)
+                             (always-on? #true)
+                             (tags? #true)
+                             (mixer-type 'null)
+                             (extra-options
+                              '((encoder . "vorbis")
+                                (port    . "8080")
+                                (bind-to-address . "192.168.178.20")
+                                (max-clients . "0") ;no limit
+                                (quality . "5.0")
+                                (format  . "44100:16:1"))))))))
+   (dbus-service #:services (list bluez-alsa))
+   (bluetooth-service #:auto-enable? #t)
+   (service alsa-service-type
+            (alsa-configuration
+             (pulseaudio? #false) ;we don't need it
+             (extra-options
+              #~(string-append "\
+# Declare Bluetooth audio device type \"bluealsa\" from bluealsa module
+pcm_type.bluealsa @{
+    lib \"" #$(file-append bluez-alsa "/lib/alsa-lib/libasound_module_pcm_bluealsa.so") "\"
+@}
+
+# Declare control device type \"bluealsa\" from the same module
+ctl_type.bluealsa @{
+    lib \"" #$(file-append bluez-alsa "/lib/alsa-lib/libasound_module_ctl_bluealsa.so") "\"
+@}
+
+# Define the actual Bluetooth audio device.
+pcm.btspeaker @{
+    type bluealsa
+    device \"AA:BB:CC:A4:AA:CD\" # unique device identifier
+    profile \"a2dp\"
+@}
+
+# Define an associated controller.
+ctl.btspeaker @{
+    type bluealsa
+@}
+"))))))
+@end lisp
+
+Enjoy the music with the MPD client of your choice or a media player
+capable of streaming via HTTP!
+
+
+@c *********************************************************************
+@node Containers
+@chapter Containers
+
+The kernel Linux provides a number of shared facilities that are
+available to processes in the system.  These facilities include a shared
+view on the file system, other processes, network devices, user and
+group identities, and a few others.  Since Linux 3.19 a user can choose
+to @emph{unshare} some of these shared facilities for selected
+processes, providing them (and their child processes) with a different
+view on the system.
+
+A process with an unshared @code{mount} namespace, for example, has its
+own view on the file system --- it will only be able to see directories
+that have been explicitly bound in its mount namespace.  A process with
+its own @code{proc} namespace will consider itself to be the only
+process running on the system, running as PID 1.
+
+Guix uses these kernel features to provide fully isolated environments
+and even complete Guix System containers, lightweight virtual machines
+that share the host system's kernel.  This feature comes in especially
+handy when using Guix on a foreign distribution to prevent interference
+from foreign libraries or configuration files that are available
+system-wide.
+
+@menu
+* Guix Containers::            Perfectly isolated environments
+* Guix System Containers::     A system inside your system
+@end menu
+
+@node Guix Containers
+@section Guix Containers
+
+The easiest way to get started is to use @command{guix shell} with the
+@option{--container} option.  @xref{Invoking guix shell,,, guix, GNU
+Guix Reference Manual} for a reference of valid options.
+
+The following snippet spawns a minimal shell process with most
+namespaces unshared from the system.  The current working directory is
+visible to the process, but anything else on the file system is
+unavailable.  This extreme isolation can be very useful when you want to
+rule out any sort of interference from environment variables, globally
+installed libraries, or configuration files.
+
+@example
+guix shell --container
+@end example
+
+It is a bleak environment, barren, desolate.  You will find that not
+even the GNU coreutils are available here, so to explore this deserted
+wasteland you need to use built-in shell commands.  Even the usually
+gigantic @file{/gnu/store} directory is reduced to a faint shadow of
+itself.
+
+@example sh
+$ echo /gnu/store/*
+/gnu/store/@dots{}-gcc-10.3.0-lib
+/gnu/store/@dots{}-glibc-2.33
+/gnu/store/@dots{}-bash-static-5.1.8
+/gnu/store/@dots{}-ncurses-6.2.20210619
+/gnu/store/@dots{}-bash-5.1.8
+/gnu/store/@dots{}-profile
+/gnu/store/@dots{}-readline-8.1.1
+@end example
+
+@cindex exiting a container
+There isn't much you can do in an environment like this other than
+exiting it.  You can use @key{^D} or @command{exit} to terminate this
+limited shell environment.
+
+@cindex exposing directories, container
+@cindex sharing directories, container
+@cindex mapping locations, container
+You can make other directories available inside of the container
+environment; use @option{--expose=DIRECTORY} to bind-mount the given
+directory as a read-only location inside the container, or use
+@option{--share=DIRECTORY} to make the location writable.  With an
+additional mapping argument after the directory name you can control the
+name of the directory inside the container.  In the following example we
+map @file{/etc} on the host system to @file{/the/host/etc} inside a
+container in which the GNU coreutils are installed.
+
+@example sh
+$ guix shell --container --share=/etc=/the/host/etc coreutils
+$ ls /the/host/etc
+@end example
+
+Similarly, you can prevent the current working directory from being
+mapped into the container with the @option{--no-cwd} option.  Another
+good idea is to create a dedicated directory that will serve as the
+container's home directory, and spawn the container shell from that
+directory.
+
+@cindex hide system libraries, container
+@cindex avoid ABI mismatch, container
+On a foreign system a container environment can be used to compile
+software that cannot possibly be linked with system libraries or with
+the system's compiler toolchain.  A common use-case in a research
+context is to install packages from within an R session.  Outside of a
+container environment there is a good chance that the foreign compiler
+toolchain and incompatible system libraries are found first, resulting
+in incompatible binaries that cannot be used by R.  In a container shell
+this problem disappears, as system libraries and executables simply
+aren't available due to the unshared @code{mount} namespace.
+
+Let's take a comprehensive manifest providing a comfortable development
+environment for use with R:
+
+@lisp
+(specifications->manifest
+  (list "r-minimal"
+
+        ;; base packages
+        "bash-minimal"
+        "glibc-locales"
+        "nss-certs"
+
+        ;; Common command line tools lest the container is too empty.
+        "coreutils"
+        "grep"
+        "which"
+        "wget"
+        "sed"
+
+        ;; R markdown tools
+        "pandoc"
+
+        ;; Toolchain and common libraries for "install.packages"
+        "gcc-toolchain@@10"
+        "gfortran-toolchain"
+        "gawk"
+        "tar"
+        "gzip"
+        "unzip"
+        "make"
+        "cmake"
+        "pkg-config"
+        "cairo"
+        "libxt"
+        "openssl"
+        "curl"
+        "zlib"))
+@end lisp
+
+Let's use this to run R inside a container environment.  For convenience
+we share the @code{net} namespace to use the host system's network
+interfaces.  Now we can build R packages from source the traditional way
+without having to worry about ABI mismatch or incompatibilities.
+
+@example sh
+$ guix shell --container --network --manifest=manifest.scm -- R
+
+R version 4.2.1 (2022-06-23) -- "Funny-Looking Kid"
+Copyright (C) 2022 The R Foundation for Statistical Computing
+@dots{}
+> e <- Sys.getenv("GUIX_ENVIRONMENT")
+> Sys.setenv(GIT_SSL_CAINFO=paste0(e, "/etc/ssl/certs/ca-certificates.crt"))
+> Sys.setenv(SSL_CERT_FILE=paste0(e, "/etc/ssl/certs/ca-certificates.crt"))
+> Sys.setenv(SSL_CERT_DIR=paste0(e, "/etc/ssl/certs"))
+> install.packages("Cairo", lib=paste0(getwd()))
+@dots{}
+* installing *source* package 'Cairo' ...
+@dots{}
+* DONE (Cairo)
+
+The downloaded source packages are in
+	'/tmp/RtmpCuwdwM/downloaded_packages'
+> library("Cairo", lib=getwd())
+> # success!
+@end example
+
+Using container shells is fun, but they can become a little cumbersome
+when you want to go beyond just a single interactive process.  Some
+tasks become a lot easier when they sit on the rock solid foundation of
+a proper Guix System and its rich set of system services.  The next
+section shows you how to launch a complete Guix System inside of a
+container.
+
+
+@node Guix System Containers
+@section Guix System Containers
+
+The Guix System provides a wide array of interconnected system services
+that are configured declaratively to form a dependable stateless GNU
+System foundation for whatever tasks you throw at it.  Even when using
+Guix on a foreign distribution you can benefit from the design of Guix
+System by running a system instance as a container.  Using the same
+kernel features of unshared namespaces mentioned in the previous
+section, the resulting Guix System instance is isolated from the host
+system and only shares file system locations that you explicitly
+declare.
+
+A Guix System container differs from the shell process created by
+@command{guix shell --container} in a number of important ways.  While
+in a container shell the containerized process is a Bash shell process,
+a Guix System container runs the Shepherd as PID 1.  In a system
+container all system services (@pxref{Services,,, guix, GNU Guix
+Reference Manual}) are set up just as they would be on a Guix System in
+a virtual machine or on bare metal---this includes daemons managed by
+the GNU@tie{}Shepherd (@pxref{Shepherd Services,,, guix, GNU Guix
+Reference Manual}) as well as other kinds of extensions to the operating
+system (@pxref{Service Composition,,, guix, GNU Guix Reference Manual}).
+
+The perceived increase in complexity of running a Guix System container
+is easily justified when dealing with more complex applications that
+have higher or just more rigid requirements on their execution
+contexts---configuration files, dedicated user accounts, directories for
+caches or log files, etc.  In Guix System the demands of this kind of
+software are satisfied through the deployment of system services.
+
+
+@node A Database Container
+@subsection A Database Container
+
+A good example might be a PostgreSQL database server.  Much of the
+complexity of setting up such a database server is encapsulated in this
+deceptively short service declaration:
+
+@lisp
+(service postgresql-service-type
+         (postgresql-configuration
+          (postgresql postgresql-14)))
+@end lisp
+
+A complete operating system declaration for use with a Guix System
+container would look something like this:
+
+@lisp
+(use-modules (gnu))
+(use-package-modules databases)
+(use-service-modules databases)
+
+(operating-system
+  (host-name "container")
+  (timezone "Europe/Berlin")
+  (file-systems (cons (file-system
+                        (device (file-system-label "does-not-matter"))
+                        (mount-point "/")
+                        (type "ext4"))
+                      %base-file-systems))
+  (bootloader (bootloader-configuration
+               (bootloader grub-bootloader)
+               (targets '("/dev/sdX"))))
+  (services
+   (cons* (service postgresql-service-type
+                   (postgresql-configuration
+                    (postgresql postgresql-14)
+                    (config-file
+                     (postgresql-config-file
+                      (log-destination "stderr")
+                      (hba-file
+                       (plain-file "pg_hba.conf"
+                                   "\
+local	all	all			trust
+host	all	all	10.0.0.1/32 	trust"))
+                      (extra-config
+                       '(("listen_addresses" "*")
+                         ("log_directory"    "/var/log/postgresql")))))))
+          (service postgresql-role-service-type
+                   (postgresql-role-configuration
+                    (roles
+                     (list (postgresql-role
+                            (name "test")
+                            (create-database? #t))))))
+          %base-services)))
+@end lisp
+
+With @code{postgresql-role-service-type} we define a role ``test'' and
+create a matching database, so that we can test right away without any
+further manual setup.  The @code{postgresql-config-file} settings allow
+a client from IP address 10.0.0.1 to connect without requiring
+authentication---a bad idea in production systems, but convenient for
+this example.
+
+Let's build a script that will launch an instance of this Guix System as
+a container.  Write the @code{operating-system} declaration above to a
+file @file{os.scm} and then use @command{guix system container} to build
+the launcher.  (@pxref{Invoking guix system,,, guix, GNU Guix Reference
+Manual}).
+
+@example
+$ guix system container os.scm
+The following derivations will be built:
+  /gnu/store/@dots{}-run-container.drv
+  @dots{}
+building /gnu/store/@dots{}-run-container.drv...
+/gnu/store/@dots{}-run-container
+@end example
+
+Now that we have a launcher script we can run it to spawn the new system
+with a running PostgreSQL service.  Note that due to some as yet
+unresolved limitations we need to run the launcher as the root user, for
+example with @command{sudo}.
+
+@example
+$ sudo /gnu/store/@dots{}-run-container
+system container is running as PID 5983
+@dots{}
+@end example
+
+Background the process with @key{Ctrl-z} followed by @command{bg}.  Note
+the process ID in the output; we will need it to connect to the
+container later.  You know what?  Let's try attaching to the container
+right now.  We will use @command{nsenter}, a tool provided by the
+@code{util-linux} package:
+
+@example
+$ guix shell util-linux
+$ sudo nsenter -a -t 5983
+root@@container /# pgrep -a postgres
+49 /gnu/store/@dots{}-postgresql-14.4/bin/postgres -D /var/lib/postgresql/data --config-file=/gnu/store/@dots{}-postgresql.conf -p 5432
+51 postgres: checkpointer
+52 postgres: background writer
+53 postgres: walwriter
+54 postgres: autovacuum launcher
+55 postgres: stats collector
+56 postgres: logical replication launcher
+root@@container /# exit
+@end example
+
+The PostgreSQL service is running in the container!
+
+
+@node Container Networking
+@subsection Container Networking
+@cindex container networking
+
+What good is a Guix System running a PostgreSQL database service as a
+container when we can only talk to it with processes originating in the
+container?  It would be much better if we could talk to the database
+over the network.
+
+The easiest way to do this is to create a pair of connected virtual
+Ethernet devices (known as @code{veth}).  We move one of the devices
+(@code{ceth-test}) into the @code{net} namespace of the container and
+leave the other end (@code{veth-test}) of the connection on the host
+system.
+
+@example
+pid=5983
+ns="guix-test"
+host="veth-test"
+client="ceth-test"
+
+# Attach the new net namespace "guix-test" to the container PID.
+sudo ip netns attach $ns $pid
+
+# Create the pair of devices
+sudo ip link add $host type veth peer name $client
+
+# Move the client device into the container's net namespace
+sudo ip link set $client netns $ns
+@end example
+
+Then we configure the host side:
+
+@example
+sudo ip link set $host up
+sudo ip addr add 10.0.0.1/24 dev $host
+@end example
+
+@dots{}and then we configure the client side:
+
+@example
+sudo ip netns exec $ns  ip link set lo up
+sudo ip netns exec $ns  ip link set $client up
+sudo ip netns exec $ns  ip addr add 10.0.0.2/24 dev $client
+@end example
+
+At this point the host can reach the container at IP address 10.0.0.2,
+and the container can reach the host at IP 10.0.0.1.  This is all we
+need to talk to the database server inside the container from the host
+system on the outside.
+
+@example
+$ psql -h 10.0.0.2 -U test
+psql (14.4)
+Type "help" for help.
+
+test=> CREATE TABLE hello (who TEXT NOT NULL);
+CREATE TABLE
+test=> INSERT INTO hello (who) VALUES ('world');
+INSERT 0 1
+test=> SELECT * FROM hello;
+  who
+-------
+ world
+(1 row)
+@end example
+
+Now that we're done with this little demonstration let's clean up:
+
+@example
+sudo kill $pid
+sudo ip netns del $ns
+sudo ip link del $host
+@end example
+
+
 @c *********************************************************************
 @node Advanced package management
 @chapter Advanced package management
@@ -2843,8 +3503,8 @@ to reproduce the exact same profile:
 GUIX_EXTRA_PROFILES=$HOME/.guix-extra-profiles
 GUIX_EXTRA=$HOME/.guix-extra
 
-mkdir "$GUIX_EXTRA"/my-project
-guix pull --channels=channel-specs.scm --profile "$GUIX_EXTRA/my-project/guix"
+mkdir -p "$GUIX_EXTRA"/my-project
+guix pull --channels=channel-specs.scm --profile="$GUIX_EXTRA/my-project/guix"
 
 mkdir -p "$GUIX_EXTRA_PROFILES/my-project"
 "$GUIX_EXTRA"/my-project/guix/bin/guix package --manifest=/path/to/guix-my-project-manifest.scm --profile="$GUIX_EXTRA_PROFILES"/my-project/my-project

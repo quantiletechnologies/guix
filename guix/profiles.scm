@@ -128,6 +128,7 @@
             packages->manifest
             ca-certificate-bundle
             %default-profile-hooks
+            %manifest-format-version
             profile-derivation
             profile-search-paths
             load-profile
@@ -1033,7 +1034,7 @@ MANIFEST."
               (setenv "LANGUAGE" language)
               (zero?
                (system* #+(file-append texinfo "/bin/install-info")
-                        "--silent" info
+                        info
                         (apply string-append #$output "/share/info/dir"
                                (if (string=? "en" language)
                                    '("")

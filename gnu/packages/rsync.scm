@@ -29,6 +29,7 @@
   #:use-module (gnu packages digest)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages popt)
+  #:use-module (gnu packages tls)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
   #:use-module (guix download)
@@ -39,27 +40,26 @@
 (define-public rsync
   (package
    (name "rsync")
-   (version "3.2.5")
+   (version "3.2.7")
    (source (origin
             (method url-fetch)
             (uri (string-append "https://rsync.samba.org/ftp/rsync/src/rsync-"
                                 version ".tar.gz"))
             (sha256
              (base32
-              "1flsqq01dmbz0m2vwn4sj46zb9yxlrfc6xy3gf393xyd6lbd5i1a"))))
+              "1fzj8q9w8bgvi3j162rlqymbdx5cgnk29dszik2ph26idqzrszaf"))))
    (build-system gnu-build-system)
    (arguments
     `(#:configure-flags
       ;; The bundled copies are preferred by default.
       (list "--without-included-zlib"
-            "--without-included-popt"
-            ;; Avoid these dependencies for now.
-            "--disable-openssl")))
+            "--without-included-popt")))
    (native-inputs
     (list perl))
    (inputs
     (list acl
           lz4
+          openssl
           popt
           xxhash
           zlib

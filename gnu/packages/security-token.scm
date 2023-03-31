@@ -310,7 +310,7 @@ website for more information about Yubico and the YubiKey.")
                   (string-append
                    "DEFAULT_PCSC_PROVIDER=\"" libpcsclite "\"")))))))))
     (inputs
-     (list readline openssl pcsc-lite ccid))
+     (list readline openssl-1.1 pcsc-lite ccid))
     (native-inputs
      (list libxslt docbook-xsl pkg-config))
     (home-page "https://github.com/OpenSC/OpenSC/wiki")
@@ -739,7 +739,7 @@ an unprivileged user.")
     (arguments
      ;; These tests do not require any device to be connected
      '(#:configure-flags (list "-DCOMPILE_OFFLINE_TESTS=ON")))
-    (native-inputs (list catch-framework2 doxygen graphviz pkg-config))
+    (native-inputs (list catch2 doxygen graphviz pkg-config))
     (inputs (list hidapi libusb))
     (home-page "https://github.com/Nitrokey/libnitrokey")
     (synopsis "Communication library for Nitrokey")
@@ -763,7 +763,7 @@ an unprivileged user.")
     (arguments
      '(#:configure-flags (list "-DBUILD_TESTING=on")))
     (native-inputs (list pkg-config qttools-5))
-    (inputs (list catch-framework2))
+    (inputs (list catch2))
     (home-page "https://github.com/tplgy/cppcodec")
     (synopsis "Header library to encode/decode base64, base64url, etc.")
     (description "This package provides library to encode/decode base64,
@@ -891,7 +891,7 @@ phone is required.")
 (define-public libfido2
   (package
     (name "libfido2")
-    (version "1.11.0")
+    (version "1.12.0")
     (source
      (origin
        (method git-fetch)
@@ -899,21 +899,21 @@ phone is required.")
              (url "https://github.com/Yubico/libfido2")
              (commit version)))
        (file-name (git-file-name name version))
-       (sha256 (base32 "1nk4irmdg36930lgc892qmlmd4whz4fq37wknkdx5ap57i5x18i6"))))
+       (sha256 (base32 "123rysl21bmgk6rmpgg5s21a5ksmxnn1hc32ws88h7z0q4icvj87"))))
     (native-inputs (list pkg-config))
     (inputs (list eudev libcbor openssl zlib))
     (build-system cmake-build-system)
     (arguments
-     `(#:configure-flags
-       (list (string-append
+     (list
+      #:configure-flags
+      #~(list (string-append
                "-DPKG_CONFIG_EXECUTABLE="
                (search-input-file %build-inputs
                                   (string-append
-                                    "/bin/" ,(pkg-config-for-target)))))
-       #:phases
-       (modify-phases %standard-phases
-         ;; regress tests enabled only for debug builds
-         (delete 'check))))
+                                   "/bin/" #$(pkg-config-for-target))))
+              (string-append "-DUDEV_RULES_DIR=" #$output "/lib/udev/rules.d"))
+      ;; regress tests enabled only for debug builds
+      #:tests? #f))
     (synopsis "Library functionality and command-line tools for FIDO devices")
     (description "libfido2 provides library functionality and command-line
 tools to communicate with a FIDO device over USB, and to verify attestation

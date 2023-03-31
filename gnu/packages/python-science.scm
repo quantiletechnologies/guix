@@ -20,6 +20,7 @@
 ;;; Copyright © 2022 Paul A. Patience <paul@apatience.com>
 ;;; Copyright © 2022 Wiktor Żelazny <wzelazny@vurv.cz>
 ;;; Copyright © 2022 Eric Bavier <bavier@posteo.net>
+;;; Copyright © 2022 jgart <jgart@dismail.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -42,14 +43,17 @@
   #:use-module (gnu packages base)
   #:use-module (gnu packages bioinformatics)
   #:use-module (gnu packages boost)
+  #:use-module (gnu packages build-tools)
   #:use-module (gnu packages check)
   #:use-module (gnu packages cpp)
+  #:use-module (gnu packages crypto)
   #:use-module (gnu packages databases)
   #:use-module (gnu packages gcc)
   #:use-module (gnu packages image-processing)
   #:use-module (gnu packages machine-learning)
   #:use-module (gnu packages maths)
   #:use-module (gnu packages mpi)
+  #:use-module (gnu packages pcre)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
@@ -75,81 +79,86 @@
 (define-public python-scipy
   (package
     (name "python-scipy")
-    (version "1.8.0")
+    (version "1.9.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "scipy" version))
        (sha256
-        (base32 "1gghkwn93niyasm36333xbqrnn3yiadq9d97wnc9mg14nzbg5m1i"))))
-    (outputs '("out" "doc"))
+        (base32 "1jcb94xal7w7ax80kaivqqics36v8smi4a3xngyxbrh0i538rli6"))))
     (build-system python-build-system)
     (arguments
      (list
-      #:modules '((guix build utils)
-                  (guix build python-build-system)
-                  (ice-9 format))
       #:phases
       #~(modify-phases %standard-phases
-          (add-after 'unpack 'disable-pythran
+          (add-after 'unpack 'loosen-requirements
             (lambda _
-              (setenv "SCIPY_USE_PYTHRAN" "0")))
-          (add-before 'build 'change-home-dir
+              (substitute* "pyproject.toml"
+                (("numpy==") "numpy>=")
+                (("meson==") "meson>="))))
+          (replace 'build
             (lambda _
-              ;; Change from /homeless-shelter to /tmp for write permission.
-              (setenv "HOME" "/tmp")))
-          (add-before 'build 'configure-openblas
+              ;; ZIP does not support timestamps before 1980.
+              (setenv "SOURCE_DATE_EPOCH" "315532800")
+              (invoke "python" "-m" "build" "--wheel" "--no-isolation" ".")))
+          (replace 'install
             (lambda _
-              (call-with-output-file "site.cfg"
-                (lambda (port)
-                  (format port
-                          "\
-[blas]
-libraries = openblas
-library_dirs = ~a/lib
-include_dirs = ~:*~a/include
-
-[atlas]
-library_dirs = ~:*~a/lib
-atlas_libs = openblas~%"  #$(this-package-input "openblas"))))))
-          (add-before 'build 'parallelize-build
-            (lambda _
-              (setenv "NPY_NUM_BUILD_JOBS"
-                      (number->string (parallel-job-count)))))
-          (add-before 'check 'install-doc
-            (lambda* (#:key outputs #:allow-other-keys)
-              (let* ((data (string-append (assoc-ref outputs "doc") "/share"))
-                     (doc (string-append data "/doc/" #$name "-" #$version))
-                     (html (string-append doc "/html")))
-                (with-directory-excursion "doc"
-                  ;; Build doc.
-                  (invoke "make" "html"
-                          ;; Building the documentation takes a very long time.
-                          ;; Parallelize it.
-                          (string-append "SPHINXOPTS=-j"
-                                         (number->string (parallel-job-count))))
-                  ;; Install doc.
-                  (mkdir-p html)
-                  (copy-recursively "build/html" html)))))
+              (let ((whl (car (find-files "dist" "\\.whl$"))))
+                (invoke "pip" "--no-cache-dir" "--no-input"
+                        "install" "--no-deps" "--prefix" #$output whl))))
           (replace 'check
             (lambda* (#:key tests? #:allow-other-keys)
               (when tests?
-                (invoke "./runtests.py" "-vv" "--no-build" "--mode=fast"
-                        "-j" (number->string (parallel-job-count)))))))))
-    (propagated-inputs (list python-numpy python-matplotlib python-pyparsing))
+                ;; Step out of the source directory to avoid interference.
+                (with-directory-excursion "/tmp"
+                  (invoke "python" "-c"
+                          (string-append
+                           "import scipy; scipy.test('fast', parallel="
+                           (number->string (parallel-job-count))
+                           ", verbose=2)"))))))
+          (add-after 'check 'install-doc
+            (lambda* (#:key outputs #:allow-other-keys)
+              ;; FIXME: Documentation cannot be built because it requires
+              ;; a newer version of pydata-sphinx-theme, which currently
+              ;; cannot build without internet access:
+              ;; <https://github.com/pydata/pydata-sphinx-theme/issues/628>.
+              ;; Keep the phase for easy testing.
+              (let ((sphinx-build (false-if-exception
+                                   (search-input-file input "bin/sphinx-build"))))
+                (if sphinx-build
+                    (let* ((doc (assoc-ref outputs "doc"))
+                           (data (string-append doc "/share"))
+                           (docdir (string-append
+                                    data "/doc/"
+                                    #$(package-name this-package) "-"
+                                    #$(package-version this-package)))
+                           (html (string-append docdir "/html")))
+                      (with-directory-excursion "doc"
+                        ;; Build doc.
+                        (invoke "make" "html"
+                                ;; Building the documentation takes a very long time.
+                                ;; Parallelize it.
+                                (string-append "SPHINXOPTS=-j"
+                                               (number->string (parallel-job-count))))
+                        ;; Install doc.
+                        (mkdir-p html)
+                        (copy-recursively "build/html" html)))
+                    (format #t "sphinx-build not found, skipping~%"))))))))
+    (propagated-inputs
+     (list python-numpy python-matplotlib python-pyparsing python-pythran))
     (inputs (list openblas pybind11))
     (native-inputs
      (list gfortran
-           perl
+           ;; XXX: Adding gfortran shadows GCC headers, causing a compilation
+           ;; failure.  Somehow also providing GCC works around it ...
+           gcc
+           meson-python
+           pkg-config
            python-cython
-           python-numpydoc
-           python-pydata-sphinx-theme
+           python-pypa-build
            python-pytest
            python-pytest-xdist
-           python-sphinx
-           python-sphinx-panels
-           python-threadpoolctl
-           which))
+           python-threadpoolctl))
     (home-page "https://scipy.org/")
     (synopsis "The Scipy library provides efficient numerical routines")
     (description "The SciPy library is one of the core packages that make up
@@ -339,16 +348,36 @@ manipulation and analysis, in the style of the Polygon object in the Shapely
 library.")
     (license license:expat)))
 
+(define-public python-tspex
+  (package
+    (name "python-tspex")
+    (version "0.6.2")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "tspex" version))
+              (sha256
+               (base32
+                "0x64ki1nzhms2nb8xpng92bzh5chs850dvapr93pkg05rk22m6mv"))))
+    (build-system python-build-system)
+    (propagated-inputs
+     (list python-matplotlib python-numpy python-pandas python-xlrd))
+    (home-page "https://apcamargo.github.io/tspex/")
+    (synopsis "Calculate tissue-specificity metrics for gene expression")
+    (description
+     "This package provides a Python package for calculating
+tissue-specificity metrics for gene expression.")
+    (license license:gpl3+)))
+
 (define-public python-pandas
   (package
     (name "python-pandas")
-    (version "1.4.2")
+    (version "1.4.4")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "pandas" version))
        (sha256
-        (base32 "04lsak3j5hq2hk0vfjf532rdxdqmg2akamdl4yl3qipihp2izg4j"))))
+        (base32 "0ryv66s9cvd27q6a985vv556k2qlnlrdna2z7qc7bdhphrrhsv5b"))))
     (build-system python-build-system)
     (arguments
      `(#:modules ((guix build utils)
@@ -490,6 +519,47 @@ doing practical, real world data analysis in Python.")
 language, with a focus on scientific computing.  It takes a Python module
 annotated with a few interface descriptions and turns it into a native
 Python module with the same interface, but (hopefully) faster.")
+    (license license:bsd-3)))
+
+(define-public python-pyts
+  (package
+    (name "python-pyts")
+    (version "0.12.0")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "pyts" version))
+              (sha256
+               (base32
+                "1cb5jwp8g52a3hxay6mxbfzk16ly6yj6rphq8cwbwk1k2jdf11dg"))))
+    (build-system python-build-system)
+    (arguments
+     (list
+      #:phases
+      '(modify-phases %standard-phases
+         (replace 'check
+           (lambda* (#:key tests? #:allow-other-keys)
+             (when tests?
+               (invoke "pytest" "-v"
+                       ;; XXX: This test fails for unknown reasons
+                       ;; Expected:
+                       ;;  (40, 9086)
+                       ;; Got:
+                       ;; (40, 9088)
+                       "-k"
+                       "not pyts.multivariate.transformation.weasel_muse.WEASELMUSE")))))))
+    (propagated-inputs
+     (list python-joblib
+           python-matplotlib
+           python-numba
+           python-numpy
+           python-scikit-learn
+           python-scipy))
+    (native-inputs
+     (list python-pytest python-pytest-cov))
+    (home-page "https://github.com/johannfaouzi/pyts")
+    (synopsis "Python package for time series classification")
+    (description
+     "This package provides a Python package for time series classification.")
     (license license:bsd-3)))
 
 (define-public python-bottleneck
@@ -835,7 +905,7 @@ of Pandas
 (define-public python-pingouin
   (package
     (name "python-pingouin")
-    (version "0.5.1")
+    (version "0.5.2")
     (source
      ;; The PyPI tarball does not contain the tests.
      (origin
@@ -846,18 +916,25 @@ of Pandas
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "10v3mwcmyc7rd2957cbmfcw66yw2y0fz7zcfyx46q8slbmd1d8d4"))))
+         "0czy7cpn6xx9fs6wbz6rq2lpkb1a89bzxj1anf2f9in1m5qyrh83"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
        (modify-phases %standard-phases
+         (add-after 'unpack 'loosen-requirements
+           (lambda _
+             (substitute* '("requirements.txt" "setup.py")
+               ;; Remove sklearn pinning since it works fine with 1.1.2:
+               ;; https://github.com/raphaelvallat/pingouin/pull/300
+               (("scikit-learn<1\\.1\\.0")
+                "scikit-learn"))))
          ;; On loading, Pingouin uses the outdated package to check if a newer
          ;; version is available on PyPI. This check adds an extra dependency
          ;; and is irrelevant to Guix users. So, disable it.
          (add-after 'unpack 'remove-outdated-check
            (lambda _
              (substitute* "setup.py"
-               (("'outdated',") ""))
+               (("\"outdated\",") ""))
              (substitute* "pingouin/__init__.py"
                (("^from outdated[^\n]*") "")
                (("^warn_if_outdated[^\n]*") ""))))
@@ -1226,7 +1303,7 @@ aggregated sum and more.")
 (define-public python-pyvista
   (package
     (name "python-pyvista")
-    (version "0.35.2")
+    (version "0.36.1")
     (source
      ;; The PyPI tarball does not contain the tests.
      ;; (However, we don't yet actually run the tests.)
@@ -1237,7 +1314,7 @@ aggregated sum and more.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1qmxrhqm3ag736yb761jy1himwlr3p676xyqbry61h97dj11n6sq"))))
+        (base32 "1kjilcrz2cyh67n79r8dpxrans99mlviz2whc6g7j8hgn7v14z2n"))))
     (build-system python-build-system)
     (propagated-inputs
      (list python-appdirs
@@ -1273,6 +1350,26 @@ Toolkit (VTK);
 This package provides a Pythonic, well-documented interface exposing VTK's
 powerful visualization backend to facilitate rapid prototyping, analysis, and
 visual integration of spatially referenced datasets.")
+    (license license:expat)))
+
+(define-public python-simplespectral
+  (package
+    (name "python-simplespectral")
+    (version "1.0.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "SimpleSpectral" version))
+       (sha256
+        (base32 "0qh3xwdv9cwcqdamvglrhm586p4yaq1hd291py1fvykhk2a2d4w6"))))
+    (build-system python-build-system)
+    (propagated-inputs
+     (list python-numpy python-scipy))
+    (home-page "https://github.com/xmikos/simplespectral")
+    (synopsis "FFT module for Python")
+    (description
+     "This package provides a simplified @code{scipy.signal.spectral} module
+to do spectral analysis in Python.")
     (license license:expat)))
 
 (define-public python-traittypes
@@ -1447,6 +1544,30 @@ of use as pickling or @code{numpy.save}, but with the language
 interoperability offered by HDF5.")
     (license license:bsd-3)))
 
+(define-public python-simple-pid
+  (package
+    (name "python-simple-pid")
+    (version "1.0.1")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "simple-pid" version))
+              (sha256
+               (base32
+                "094mz6rmfq1h0gpns5vlxb7xf9297hlkhndw7g9k95ziqfkv7mk0"))))
+    (build-system python-build-system)
+    (arguments
+     '(#:phases
+       (modify-phases %standard-phases
+         (replace 'check
+           (lambda* (#:key tests? #:allow-other-keys)
+             (when tests?
+               (invoke "python" "-m" "unittest" "discover" "tests/")))))))
+    (home-page "https://github.com/m-lundberg/simple-pid")
+    (synopsis "Easy to use PID controller")
+    (description "This package provides a simple and easy-to-use @acronym{PID,
+proportional-integral-derivative} controller.")
+    (license license:expat)))
+
 (define-public python-opt-einsum
   (package
     (name "python-opt-einsum")
@@ -1478,3 +1599,65 @@ Dask, PyTorch, Tensorflow, CuPy, Sparse, Theano, JAX, and Autograd arrays as
 well as potentially any library which conforms to a standard API. See the
 documentation for more information.")
     (license license:expat)))
+
+(define-public python-vaex-core
+  (package
+    (name "python-vaex-core")
+    (version "4.13.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "vaex-core" version))
+       (sha256
+        (base32 "0ni862x5njhfsldjy49xmasd34plrs7yrmkyss6z1b6sgkbw9fsb"))
+       (modules '((guix build utils)))
+       (snippet
+        ;; Remove bundled libraries
+        '(for-each delete-file-recursively
+                   (list "vendor/boost"
+                         "vendor/pcre"
+                         "vendor/pybind11")))))
+    (build-system python-build-system)
+    (arguments
+     `(#:tests? #false ;require vaex.server and others, which require vaex-core.
+       #:phases
+       (modify-phases %standard-phases
+         (replace 'check
+           (lambda* (#:key tests? #:allow-other-keys)
+             (when tests?
+               (invoke "pytest" "-vv" )))))))
+    (inputs
+     (list boost pcre pybind11-2.3))
+    (propagated-inputs
+     (list python-aplus
+           python-blake3
+           python-cloudpickle
+           python-dask
+           python-filelock
+           python-frozendict
+           python-future
+           python-nest-asyncio
+           python-numpy
+           python-pandas
+           python-progressbar2
+           python-pyarrow
+           python-pydantic
+           python-pyyaml
+           python-requests
+           python-rich
+           python-six
+           python-tabulate))
+    (native-inputs
+     (list python-pytest python-cython))
+    (home-page "https://www.github.com/maartenbreddels/vaex")
+    (synopsis "Core of Vaex library for exploring tabular datasets")
+    (description "Vaex is a high performance Python library for lazy
+Out-of-Core DataFrames (similar to Pandas), to visualize and explore big
+tabular datasets.  This package provides the core modules of Vaex.")
+    (license license:expat)))
+
+;;;
+;;; Avoid adding new packages to the end of this file. To reduce the chances
+;;; of a merge conflict, place them above by existing packages with similar
+;;; functionality or similar names.
+;;;

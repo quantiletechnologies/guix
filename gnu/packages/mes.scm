@@ -98,14 +98,14 @@ extensive examples, including parsers for the Javascript and C99 languages.")
 (define-public nyacc
   (package
     (inherit nyacc-0.99)
-    (version "1.07.0")
+    (version "1.07.4")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://savannah/nyacc/nyacc-"
                                   version ".tar.gz"))
               (sha256
                (base32
-                "01qb6h6bk684z8xda5d71q5f5l2z3q9jjz36if3jbpjc7b8dxjap"))
+                "1kr3b88sx0g9zy52algxqpvnkjm76qdyld7pasbbajkph2zhcj92"))
               (modules '((guix build utils)))
               (snippet
                '(substitute* "configure"
@@ -167,14 +167,14 @@ parsers to allow execution with Guile as extension languages.")))
 (define-public mes
   (package
     (name "mes")
-    (version "0.24")
+    (version "0.24.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://gnu/mes/"
                                   "mes-" version ".tar.gz"))
               (sha256
                (base32
-                "00lrpm4x5qg0l840zhbf9mr67mqhp8gljcl24j5dy0y109gf32w2"))))
+                "0d855agwawjjzwbjmvb5xlbwg77zdpwbjm9kjxc2wqvn0vmhq4im"))))
     (supported-systems '("armhf-linux" "i686-linux" "x86_64-linux"))
     (propagated-inputs (list mescc-tools nyacc-1.00.2))
     (native-inputs

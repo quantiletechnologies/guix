@@ -29,6 +29,8 @@
 ;;; Copyright © 2020 Tomás Ortín Fernández <tomasortin@mailbox.org>
 ;;; Copyright © 2021 Giovanni Biscuolo <g@xelera.eu>
 ;;; Copyright © 2022 Philip McGrath <philip@philipmcgrath.com>
+;;; Copyright © 2022 Remco van 't Veer <remco@remworks.net>
+;;; Copyright © 2022 Taiju HIGASHI <higashi@taiju.info>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -100,7 +102,7 @@
 (define-public ruby-2.6
   (package
     (name "ruby")
-    (version "2.6.5")
+    (version "2.6.10")
     (source
      (origin
        (method url-fetch)
@@ -109,7 +111,7 @@
                            "/ruby-" version ".tar.xz"))
        (sha256
         (base32
-         "0qhsw2mr04f3lqinkh557msr35pb5rdaqy4vdxcj91flgxqxmmnm"))
+         "1wn12klc44hn2nh5v1lkqbdyvljip6qhwjqvkkf8zf112gaxxn2z"))
        (modules '((guix build utils)))
        (snippet `(begin
                    ;; Remove bundled libffi
@@ -137,7 +139,7 @@
                (("/bin/sh") (which "sh")))
              #t)))))
     (inputs
-     (list readline openssl libffi gdbm))
+     (list readline openssl-1.1 libffi gdbm))
     (propagated-inputs
      (list zlib))
     (native-search-paths
@@ -154,6 +156,7 @@ a focus on simplicity and productivity.")
   (package
     (inherit ruby-2.6)
     (version "2.7.4")
+    (replacement ruby-2.7-fixed) ; security fixes
     (source
      (origin
        (inherit (package-source ruby-2.6))
@@ -188,10 +191,24 @@ a focus on simplicity and productivity.")
     (native-inputs
      (list autoconf))))
 
+(define ruby-2.7-fixed
+  (package
+    (inherit ruby-2.7)
+    (version "2.7.7")
+    (source
+     (origin
+       (inherit (package-source ruby-2.7))
+       (uri (string-append "https://cache.ruby-lang.org/pub/ruby/"
+                           (version-major+minor version)
+                           "/ruby-" version ".tar.gz"))
+       (sha256
+        (base32
+         "143vih5jzmrd2r5h94pa3qzml0ldii0qzs6g09jg6zqxd7djf0g1"))))))
+
 (define-public ruby-3.0
   (package
     (inherit ruby-2.7)
-    (version "3.0.2")
+    (version "3.0.5")
     (source
      (origin
        (method url-fetch)
@@ -200,12 +217,15 @@ a focus on simplicity and productivity.")
                            "/ruby-" version ".tar.xz"))
        (sha256
         (base32
-         "0h2w2ms4gx2s96v3lzdr3add94bd2qqkhdjzaycmaqhg21rpf3jp"))))))
+         "1pnxbdkkh2miq9nqfq2qscvh76nprzg0r620d9ckdzih42xbaz6g"))))
+    (inputs
+     (modify-inputs (package-inputs ruby-2.7)
+       (replace "openssl" openssl)))))
 
 (define-public ruby-3.1
   (package
-    (inherit ruby-2.7)
-    (version "3.1.1")
+    (inherit ruby-3.0)
+    (version "3.1.2")
     (source
      (origin
        (method url-fetch)
@@ -214,40 +234,7 @@ a focus on simplicity and productivity.")
                            "/ruby-" version ".tar.xz"))
        (sha256
         (base32
-         "1akcl7vhmwfm6ybj7493kzy58ykh2r39ri9f4xfm2xmhg1msmvvs"))))))
-
-(define-public ruby-2.5
-  (package
-    (inherit ruby-2.6)
-    (version "2.5.9")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "http://cache.ruby-lang.org/pub/ruby/"
-                           (version-major+minor version)
-                           "/ruby-" version ".tar.xz"))
-       (sha256
-        (base32
-         "1w2qncacm7h3f3il1whghdabwnv9fvwmz9f1a9vcg32006ljyzx8"))))))
-
-(define-public ruby-2.4
-  (package
-    (inherit ruby-2.6)
-    (version "2.4.10")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "http://cache.ruby-lang.org/pub/ruby/"
-                           (version-major+minor version)
-                           "/ruby-" version ".tar.xz"))
-       (sha256
-        (base32
-         "1prhqlgik1zmw9lakl6hkriqslspw48pvhxff17h7ns42p8qwrnm"))
-       (modules '((guix build utils)))
-       (snippet `(begin
-                   ;; Remove bundled libffi
-                   (delete-file-recursively "ext/fiddle/libffi-3.2.1")
-                   #t))))))
+         "0amzqczgvr51ilcqfgw0n41hrfanzi0wh8k6am3x5dm1z0bx046a"))))))
 
 (define-public ruby ruby-2.7)
 
@@ -3126,24 +3113,40 @@ two hashes.")
     (home-page "https://github.com/liufengyun/hashdiff")
     (license license:expat)))
 
-(define-public ruby-hydra
+(define-public ruby-hydra-minimal
   ;; No releases yet.
   (let ((commit "5abfa378743756ae4d9306cc134bcc482f5c9525")
         (revision "0"))
     (package
-      (name "ruby-hydra")
+      (name "ruby-hydra-minimal")
       (version (git-version "0.0" revision commit))
       (home-page "https://github.com/hyphenation/hydra")
       (source (origin
                 (method git-fetch)
                 (uri (git-reference (url home-page) (commit commit)))
                 (file-name (git-file-name name version))
+                ;; byebug is a non-essential debugging utility that brings in
+                ;; many dependencies.
+                (patches (search-patches "ruby-hydra-minimal-no-byebug.patch"))
                 (sha256
                  (base32
                   "1cik398l2765y3d9sdhjzki3303hkry58ac6jlkiy7iy62nm529f"))))
       (build-system ruby-build-system)
       (arguments
-       '(#:phases (modify-phases %standard-phases
+       ;; Avoid rspec dependency.
+       '(#:tests? #f))
+      (synopsis "Ruby hyphenation patterns")
+      (description
+       "ruby-hydra-minimal is a Ruby library for working with hyphenation patterns.
+It is a low-dependency variant of ruby-hydra.")
+      (license license:expat))))
+
+(define-public ruby-hydra
+  (package
+    (inherit ruby-hydra-minimal)
+    (name "ruby-hydra")
+    (arguments
+        '(#:phases (modify-phases %standard-phases
                     (add-after 'unpack 'make-files-writable
                       (lambda _
                         (for-each make-file-writable (find-files "."))
@@ -3151,14 +3154,12 @@ two hashes.")
                     (replace 'check
                       (lambda _
                         (invoke "rspec"))))))
-      (native-inputs
-       (list ruby-rspec))
-      (propagated-inputs
-       (list ruby-byebug))
-      (synopsis "Ruby hyphenation patterns")
-      (description
-       "ruby-hydra is a Ruby library for working with hyphenation patterns.")
-      (license license:expat))))
+    (native-inputs
+     (list ruby-rspec))
+    (propagated-inputs
+     (list ruby-byebug))
+    (description
+     "ruby-hydra is a Ruby library for working with hyphenation patterns.")))
 
 (define-public ruby-shindo
   (package
@@ -5019,19 +5020,16 @@ to reproduce user environments.")
                (base32
                 "15zplpfw3knqifj9bpf604rb3wc1vhq6363pd6lvhayng8wql5vy"))))))
 
-;; TODO: In the next rebuild cycle, provide texlive a version of ruby-hydra
-;; that does not depend on byebug and rspec, so that their dependencies can
-;; be updated more freely.  For now pin this version to avoid rebuilds.
-(define-public ruby-nokogiri-1.10
+(define-public ruby-nokogiri
   (package
     (name "ruby-nokogiri")
-    (version "1.10.9")
+    (version "1.12.5")
     (source (origin
               (method url-fetch)
               (uri (rubygems-uri "nokogiri" version))
               (sha256
                (base32
-                "12j76d0bp608932xkzmfi638c7aqah57l437q8494znzbj610qnm"))))
+                "1v02g7k7cxiwdcahvlxrmizn3avj2q6nsjccgilq1idc89cr081b"))))
     (build-system ruby-build-system)
     (arguments
      ;; Tests fail because Nokogiri can only test with an installed extension,
@@ -5040,28 +5038,13 @@ to reproduce user environments.")
        #:gem-flags (list "--" "--use-system-libraries"
                          (string-append "--with-xml2-include="
                                         (assoc-ref %build-inputs "libxml2")
-                                        "/include/libxml2" ))
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'patch-extconf
-           ;; 'pkg-config' is not included in the GEM_PATH during
-           ;; installation, so we add it directly to the load path.
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let* ((pkg-config (assoc-ref inputs "ruby-pkg-config")))
-               (substitute* "ext/nokogiri/extconf.rb"
-                 (("gem 'pkg-config'.*")
-                  (string-append "$:.unshift '"
-                                 pkg-config "/lib/ruby/vendor_ruby"
-                                 "/gems/pkg-config-"
-                                 ,(package-version ruby-pkg-config)
-                                 "/lib'\n"))))
-             #t)))))
+                                        "/include/libxml2" ))))
     (native-inputs
      (list ruby-hoe))
     (inputs
      (list zlib libxml2 libxslt))
     (propagated-inputs
-     (list ruby-mini-portile-2 ruby-pkg-config))
+     (list ruby-mini-portile-2.6.1 ruby-pkg-config))
     (synopsis "HTML, XML, SAX, and Reader parser for Ruby")
     (description "Nokogiri (鋸) parses and searches XML/HTML, and features
 both CSS3 selector and XPath 1.0 support.")
@@ -5079,26 +5062,6 @@ both CSS3 selector and XPath 1.0 support.")
               (sha256
                (base32
                 "1lvxm91hi0pabnkkg47wh1siv56s6slm2mdq1idfm86dyfidfprq"))))))
-
-(define-public ruby-nokogiri
-  (package
-    (inherit ruby-nokogiri-1.10)
-    (version "1.12.5")
-    (source (origin
-              (method url-fetch)
-              (uri (rubygems-uri "nokogiri" version))
-              (sha256
-               (base32
-                "1v02g7k7cxiwdcahvlxrmizn3avj2q6nsjccgilq1idc89cr081b"))))
-    (arguments
-     '(#:tests? #f                      ;XXX: no tests in rubygem
-       #:gem-flags (list "--" "--use-system-libraries"
-                         (string-append "--with-xml2-include="
-                                        (assoc-ref %build-inputs "libxml2")
-                                        "/include/libxml2"))))
-    (propagated-inputs
-     (modify-inputs (package-propagated-inputs ruby-nokogiri-1.10)
-       (replace "ruby-mini-portile" ruby-mini-portile-2.6.1)))))
 
 (define-public ruby-method-source
   (package
@@ -5412,6 +5375,24 @@ The output can be customized with a formatting system.")
     (home-page "https://github.com/jfelchner/ruby-progressbar")
     (license license:expat)))
 
+(define-public ruby-latest-ruby
+  (package
+    (name "ruby-latest-ruby")
+    (version "3.1.0")
+    (source (origin
+              (method url-fetch)
+              (uri (rubygems-uri "latest_ruby" version))
+              (sha256
+               (base32
+                "15rqwgxzpnkzdiz8m02jra0zq5sx0fiz61vkfrj1ls6slqfhnzqg"))))
+    (build-system ruby-build-system)
+    (arguments
+     '(#:tests? #f)) ; No Rakefile
+    (synopsis "Answers the question of what the latest Ruby version is")
+    (description "Knows about MRI, Rubinius, JRuby, MagLev and MacRuby.")
+    (home-page "https://github.com/kyrylo/latest_ruby")
+    (license license:zlib)))
+
 (define-public ruby-pry
   (package
     (name "ruby-pry")
@@ -5433,6 +5414,29 @@ The output can be customized with a formatting system.")
 Ruby.  It features syntax highlighting, a plugin architecture, runtime
 invocation, and source and documentation browsing.")
     (home-page "https://cobaltbluemedia.com/pryrepl/")
+    (license license:expat)))
+
+(define-public ruby-pry-doc
+  (package
+    (name "ruby-pry-doc")
+    (version "1.3.0")
+    (source (origin
+              (method url-fetch)
+              (uri (rubygems-uri "pry-doc" version))
+              (sha256
+               (base32
+                "0wyvql6pb6m8jl8bsamabxhxhd86bnqblspaxzz05sl0fm2ynj0r"))))
+    (build-system ruby-build-system)
+    (propagated-inputs (list ruby-pry ruby-yard))
+    (native-inputs (list ruby-latest-ruby ruby-rspec ruby-rake)) ;for tests
+    (synopsis "Provides YARD and extended documentation support for Pry")
+    (description
+     "Pry Doc is a Pry REPL plugin.  It provides extended documentation
+support for the REPL by means of improving the @code{show-doc} and
+@code{show-source} commands.  With help of the plugin the commands are
+be able to display the source code and the docs of Ruby methods and
+classes implemented in C.")
+    (home-page "https://github.com/pry/pry-doc")
     (license license:expat)))
 
 (define-public ruby-single-cov
@@ -6728,8 +6732,7 @@ tree-like structures.  It is similar to Ruby's built-in @code{TSort} module.")
       (build-system ruby-build-system)
       (propagated-inputs
        (list ruby-tdiff
-             ;; Use a fixed version to prevent rebuilds; see ruby-nokogiri TODO.
-             ruby-nokogiri-1.10))
+             ruby-nokogiri))
       (native-inputs
        (list ruby-rspec ruby-yard ruby-rubygems-tasks))
       (synopsis "Calculate the differences between two XML/HTML documents")
@@ -7228,7 +7231,8 @@ run.")
     (arguments
      `(#:test-target "default"
        ;; TODO: Figure out why test hangs.
-       #:tests? ,(not (target-riscv64?))
+       #:tests? ,(not (or (%current-target-system)
+                          (target-riscv64?)))
        #:phases
        (modify-phases %standard-phases
          (add-before 'check 'set-home
@@ -7664,7 +7668,10 @@ variable length integers (varint) in Ruby Protocol Buffers.")
          "1r3xalp91l07m0cwllcxjzg6nkviiqnxkcbgg5qnzsdji6rgy65m"))))
     (build-system ruby-build-system)
     (arguments
-     `(#:phases
+      ;; It is unclear why the tests fail on i686-linux
+     `(#:tests? ,(not (or (%current-target-system)
+                          (target-x86-32?)))
+       #:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'patch-rakefile
            ;; This fixes the following error: "NameError: uninitialized
@@ -11485,7 +11492,7 @@ serves JavaScript, CoffeeScript, CSS, LESS, Sass, and SCSS.")
            (lambda* (#:key inputs #:allow-other-keys)
              (invoke "patch" "-p1" "--batch" "-i"
                      (assoc-ref inputs "test-patch")))))))
-    (synopsis "framework-agnostic way to render logic-free views")
+    (synopsis "Framework-agnostic way to render logic-free views")
     (description
      "Mustache is a framework-agnostic way to render logic-free views.
 Think of Mustache as a replacement for your views.  Instead of views
@@ -13737,3 +13744,9 @@ can also be used as a Ruby library or as a web application, though the later
 has not yet been packaged for Guix.")
     (license license:bsd-2)
     (properties `((upstream-name . "anystyle-cli")))))
+
+;;;
+;;; Avoid adding new packages to the end of this file. To reduce the chances
+;;; of a merge conflict, place them above by existing packages with similar
+;;; functionality or similar names.
+;;;
