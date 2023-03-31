@@ -19,6 +19,8 @@
 ;;; Copyright © 2021 Foo Chuan Wei <chuanwei.foo@hotmail.com>
 ;;; Copyright © 2022 Morgan Smith <Morgan.J.Smith@outlook.com>
 ;;; Copyright © 2022 jgart <jgart@dismail.de>
+;;; Copyright © 2022 Robby Zambito <contact@robbyzambito.me>
+;;; Copyright © 2023 Andrew Whatson <whatson@tailcall.au>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -40,45 +42,48 @@
   #:use-module ((guix licenses)
                 #:select (gpl2+ lgpl2.0+ lgpl2.1 lgpl2.1+ lgpl3+ asl2.0 bsd-3
                           cc-by-sa4.0 non-copyleft expat public-domain))
+  #:use-module (guix gexp)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix utils)
+  #:use-module (guix build-system asdf)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system trivial)
   #:use-module (gnu packages autotools)
-  #:use-module (gnu packages bdw-gc)
+  #:use-module (gnu packages avahi)
+  #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
+  #:use-module (gnu packages bdw-gc)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages databases)
+  #:use-module (gnu packages emacs)
+  #:use-module (gnu packages fontutils)
+  #:use-module (gnu packages gcc)
+  #:use-module (gnu packages ghostscript)
+  #:use-module (gnu packages gl)
+  #:use-module (gnu packages glib)
+  #:use-module (gnu packages gtk)
+  #:use-module (gnu packages image)
+  #:use-module (gnu packages libedit)
   #:use-module (gnu packages libevent)
+  #:use-module (gnu packages libffi)
+  #:use-module (gnu packages libphidget)
   #:use-module (gnu packages libunistring)
+  #:use-module (gnu packages linux)
+  #:use-module (gnu packages lisp-check)
+  #:use-module (gnu packages lisp-xyz)
   #:use-module (gnu packages m4)
   #:use-module (gnu packages multiprecision)
   #:use-module (gnu packages ncurses)
-  #:use-module (gnu packages pcre)
-  #:use-module (gnu packages emacs)
-  #:use-module (gnu packages ghostscript)
   #:use-module (gnu packages netpbm)
-  #:use-module (gnu packages texinfo)
-  #:use-module (gnu packages tex)
-  #:use-module (gnu packages base)
-  #:use-module (gnu packages compression)
+  #:use-module (gnu packages pcre)
   #:use-module (gnu packages pkg-config)
-  #:use-module (gnu packages avahi)
-  #:use-module (gnu packages libphidget)
-  #:use-module (gnu packages gcc)
-  #:use-module (gnu packages glib)
-  #:use-module (gnu packages gtk)
-  #:use-module (gnu packages libffi)
-  #:use-module (gnu packages fontutils)
-  #:use-module (gnu packages image)
-  #:use-module (gnu packages xorg)
   #:use-module (gnu packages sqlite)
+  #:use-module (gnu packages tex)
+  #:use-module (gnu packages texinfo)
   #:use-module (gnu packages tls)
-  #:use-module (gnu packages gl)
-  #:use-module (gnu packages libedit)
-  #:use-module (gnu packages linux)
+  #:use-module (gnu packages xorg)
   #:use-module (srfi srfi-1)
   #:use-module (ice-9 match))
 
@@ -389,14 +394,14 @@ mashups, office (web agendas, mail clients, ...), etc.")
     (version "1.9.2")
     (source (origin
              (method url-fetch)
-             (uri (string-append "http://s48.org/" version
+             (uri (string-append "https://s48.org/" version
                                  "/scheme48-" version ".tgz"))
              (sha256
               (base32
                "1x4xfm3lyz2piqcw1h01vbs1iq89zq7wrsfjgh3fxnlm1slj2jcw"))
              (patches (search-patches "scheme48-tests.patch"))))
     (build-system gnu-build-system)
-    (home-page "http://s48.org/")
+    (home-page "https://s48.org/")
     (synopsis "Scheme implementation using a bytecode interpreter")
     (description
      "Scheme 48 is an implementation of Scheme based on a byte-code
@@ -406,27 +411,157 @@ implementation techniques and as an expository tool.")
     ;; Most files are BSD-3; see COPYING for the few exceptions.
     (license bsd-3)))
 
+(define-public scheme48-prescheme
+  (package
+    (inherit scheme48)
+    (name "scheme48-prescheme")
+    (arguments
+     (list
+      #:tests? #f ; tests only cover scheme48
+      #:modules '((guix build gnu-build-system)
+                  (guix build utils)
+                  (ice-9 popen)
+                  (srfi srfi-1))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'configure 'patch-prescheme-version
+            (lambda _
+              ;; Ensure the Pre-Scheme version matches the package version
+              (call-with-output-file "ps-compiler/minor-version-number"
+                (lambda (port)
+                  (let* ((version #$(package-version this-package))
+                         (vparts (string-split version #\.))
+                         (vminor (string-join (drop vparts 1) ".")))
+                    (write vminor port))))))
+          (add-after 'configure 'patch-prescheme-headers
+            (lambda _
+              ;; Rename "io.h" to play nicely with others
+              (copy-file "c/io.h" "c/prescheme-io.h")
+              (substitute* "c/prescheme.h"
+                (("^#include \"io\\.h\"")
+                 "#include \"prescheme-io.h\""))))
+          (add-after 'configure 'generate-pkg-config
+            (lambda _
+              ;; Generate a pkg-config file
+              (call-with-output-file "prescheme.pc"
+                (lambda (port)
+                  (let ((s48-version #$(package-version scheme48))
+                        (version #$(package-version this-package)))
+                    (format port (string-join
+                                  '("prefix=~a"
+                                    "exec_prefix=${prefix}"
+                                    "libdir=${prefix}/lib/scheme48-~a"
+                                    "includedir=${prefix}/include"
+                                    ""
+                                    "Name: Pre-Scheme (Scheme 48)"
+                                    "Description: Pre-Scheme C runtime"
+                                    "Version: ~a"
+                                    "Libs: -L${libdir} -lprescheme"
+                                    "Cflags: -I${includedir}")
+                                  "\n" 'suffix)
+                            #$output s48-version version))))))
+          (add-after 'configure 'generate-prescheme-wrapper
+            (lambda _
+              ;; Generate a wrapper to load and run ps-compiler.image
+              (call-with-output-file "prescheme"
+                (lambda (port)
+                  (let ((s48-version #$(package-version scheme48)))
+                    (format port (string-join
+                                  '("#!/bin/sh"
+                                    "scheme48=~a/lib/scheme48-~a/scheme48vm"
+                                    "prescheme=~a/lib/scheme48-~a/prescheme.image"
+                                    "exec ${scheme48} -i ${prescheme} \"$@\"")
+                                  "\n" 'suffix)
+                            #$scheme48 s48-version #$output s48-version))))
+              (chmod "prescheme" #o755)))
+          (replace 'build
+            (lambda _
+              ;; Build a minimal static library for linking Pre-Scheme code
+              (let ((lib "c/libprescheme.a")
+                    (objs '("c/unix/io.o"
+                            "c/unix/misc.o")))
+                (apply invoke "make" objs)
+                (apply invoke "ar" "rcs" lib objs))
+              ;; Dump a Scheme 48 image with both the Pre-Scheme compatibility
+              ;; library and compiler pre-loaded, courtesy of Taylor Campbell's
+              ;; Pre-Scheme Manual:
+              ;; https://groups.scheme.org/prescheme/1.3/#Invoking-the-Pre_002dScheme-compiler
+              (with-directory-excursion "ps-compiler"
+                (let ((version #$(package-version this-package))
+                      (port (open-pipe* OPEN_WRITE "scheme48")))
+                  (format port (string-join
+                                '(",batch"
+                                  ",config ,load ../scheme/prescheme/interface.scm"
+                                  ",config ,load ../scheme/prescheme/package-defs.scm"
+                                  ",exec ,load load-ps-compiler.scm"
+                                  ",in prescheme-compiler prescheme-compiler"
+                                  ",user (define prescheme-compiler ##)"
+                                  ",dump ../prescheme.image \"(Pre-Scheme ~a)\""
+                                  ",exit")
+                                "\n" 'suffix)
+                          version)
+                  (close-pipe port)))))
+          (replace 'install
+            (lambda _
+              (let* ((s48-version #$(package-version scheme48))
+                     (bin-dir     (string-append #$output "/bin"))
+                     (lib-dir     (string-append #$output "/lib/scheme48-" s48-version))
+                     (pkgconf-dir (string-append #$output "/lib/pkgconfig"))
+                     (share-dir   (string-append #$output "/share/scheme48-" s48-version))
+                     (include-dir (string-append #$output "/include")))
+                ;; Install Pre-Scheme compiler image
+                (install-file "prescheme" bin-dir)
+                (install-file "prescheme.image" lib-dir)
+                ;; Install Pre-Scheme config, headers, and lib
+                (install-file "prescheme.pc" pkgconf-dir)
+                (install-file "c/prescheme.h" include-dir)
+                (install-file "c/prescheme-io.h" include-dir)
+                (install-file "c/libprescheme.a" lib-dir)
+                ;; Install Pre-Scheme sources
+                (copy-recursively "scheme/prescheme"
+                                  (string-append share-dir "/prescheme"))
+                (copy-recursively "ps-compiler"
+                                  (string-append share-dir "/ps-compiler"))
+                ;; Remove files specific to building the Scheme 48 VM
+                (for-each (lambda (file)
+                            (delete-file (string-append share-dir "/" file)))
+                          '("ps-compiler/compile-bibop-gc-32.scm"
+                            "ps-compiler/compile-bibop-gc-64.scm"
+                            "ps-compiler/compile-gc.scm"
+                            "ps-compiler/compile-twospace-gc-32.scm"
+                            "ps-compiler/compile-twospace-gc-64.scm"
+                            "ps-compiler/compile-vm-no-gc-32.scm"
+                            "ps-compiler/compile-vm-no-gc-64.scm"))))))))
+    (propagated-inputs (list scheme48))
+    (home-page "http://s48.org/")
+    (synopsis "Pre-Scheme compiler from Scheme 48")
+    (description
+     "Pre-Scheme is a statically compilable dialect of Scheme, used to implement the
+Scheme 48 virtual machine.  Scheme 48 ships with a Pre-Scheme to C compiler written
+in Scheme, and a runtime library which allows Pre-Scheme code to run as Scheme.")
+    (license bsd-3)))
+
 (define-public gambit-c
   (package
     (name "gambit-c")
-    (version "4.9.3")
+    (version "4.9.4")
     (source
      (origin
        (method url-fetch)
        (uri (string-append
-             "http://www.iro.umontreal.ca/~gambit/download/gambit/v"
-             (version-major+minor version) "/source/gambit-v"
+             "http://www.gambitscheme.org/"
+             version "/gambit-v"
              (string-map (lambda (c) (if (char=? c #\.) #\_ c)) version)
              ".tgz"))
        (sha256
-        (base32 "1p6172vhcrlpjgia6hsks1w4fl8rdyjf9xjh14wxfkv7dnx8a5hk"))))
+        (base32 "025x8zi9176qwww4d3pk8aj9ab1fpqyxqz26q3v394k6bfk49yqr"))))
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags
        ;; According to the ./configure script, this makes the build slower and
        ;; use >= 1 GB memory, but makes Gambit much faster.
        '("--enable-single-host")))
-    (home-page "http://dynamo.iro.umontreal.ca/wiki/index.php/Main_Page")
+    (home-page "http://www.gambitscheme.org/")
     (synopsis "Efficient Scheme interpreter and compiler")
     (description
      "Gambit consists of two main programs: gsi, the Gambit Scheme
@@ -698,7 +833,7 @@ linked with a SCM executable.")
                (install-file "init.scm" scm)
                #t))))
        #:tests? #f))                    ; no tests
-    (home-page "http://tinyscheme.sourceforge.net/")
+    (home-page "https://tinyscheme.sourceforge.net/")
     (synopsis "Light-weight interpreter for the Scheme programming language")
     (description
      "TinyScheme is a light-weight Scheme interpreter that implements as large a
@@ -885,21 +1020,17 @@ The core is 12 builtin special forms and 33 builtin functions.")
 (define-public gauche
   (package
     (name "gauche")
-    (version "0.9.10")
+    (version "0.9.12")
     (home-page "https://practical-scheme.net/gauche/index.html")
     (source
      (origin
        (method url-fetch)
        (uri (string-append
-             "mirror://sourceforge/gauche/Gauche/Gauche-"
-             version ".tgz"))
+             "https://github.com/shirok/Gauche/releases/download/release"
+             (string-replace-substring version "." "_")
+             "/Gauche-" version ".tgz"))
        (sha256
-        (base32 "0ci57ak5cp3lkmfy3nh50hifh8nbg58hh6r18asq0rn5mqfxyf8g"))
-       (modules '((guix build utils)))
-       (snippet '(begin
-                   ;; Remove libatomic-ops.
-                   (delete-file-recursively "gc/libatomic_ops")
-                   #t))))
+        (base32 "05xnym1phg8i14bacip5d0d3v0gc1nn5mgayd5hnda873f969bml"))))
     (build-system gnu-build-system)
     (inputs
      (list libatomic-ops slib zlib))
@@ -930,8 +1061,8 @@ The core is 12 builtin special forms and 33 builtin functions.")
          (add-before 'check 'patch-network-tests
            ;; Remove net checks.
            (lambda _
-             (delete-file "ext/net/test.scm")
-             (invoke "touch" "ext/net/test.scm")
+             (delete-file "test/net.scm")
+             (invoke "touch" "test/net.scm")
              #t))
          (add-after 'install 'install-docs
            (lambda _
@@ -946,6 +1077,38 @@ multilingual support are some of the goals.  Gauche comes with a package
 manager/installer @code{gauche-package} which can download, compile, install
 and list gauche extension packages.")
     (license bsd-3)))
+
+(define-public sbcl-airship-scheme
+  (let ((commit "1862db81dfa67729444916c361f39f9f1c5a2ccd")
+        (revision "0"))
+    (package
+      (name "sbcl-airship-scheme")
+      (version (git-version "0.0.0" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://gitlab.com/mbabich/airship-scheme.git")
+               (commit commit)))
+         (file-name (git-file-name "cl-airship-scheme" version))
+         (sha256
+          (base32 "1d1kvrzlx5kcfsn3rn30ww8jihjflpgcka3n3awj2k4f0sq4mplg"))))
+      (build-system asdf-build-system/sbcl)
+      (native-inputs (list sbcl-fiveam))
+      (inputs
+        (list sbcl-alexandria
+              sbcl-float-features
+              sbcl-trivial-features
+              sbcl-zr-utils))
+      (synopsis "R7RS Scheme implementation in Common Lisp")
+      (description
+       "This is a R7RS Scheme implementation designed to run within
+a Common Lisp environment.")
+      (home-page "https://gitlab.com/mbabich/airship-scheme")
+      (license expat))))
+
+(define-public cl-airship-scheme
+  (sbcl-package->cl-source-package sbcl-airship-scheme))
 
 (define-public gerbil
   (package

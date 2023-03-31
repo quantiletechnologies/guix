@@ -4,6 +4,7 @@
 ;;; Copyright © 2021 Kyle Meyer <kyle@kyleam.com>
 ;;; Copyright © 2021 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2022 Maxime Devos <maximedevos@telenet.be>
+;;; Copyright © 2023 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -22,8 +23,6 @@
 
 (define-module (guix git)
   #:use-module (git)
-  #:use-module (git object)
-  #:use-module (git submodule)
   #:use-module (guix i18n)
   #:use-module (guix base32)
   #:use-module (guix cache)
@@ -62,6 +61,7 @@
             commit-difference
             commit-relation
             commit-descendant?
+            commit-id?
 
             remote-refs
 
@@ -140,11 +140,6 @@ the 'SSL_CERT_FILE' and 'SSL_CERT_DIR' environment variables."
   (define total
     (indexer-progress-total-objects progress))
 
-  (define hundredth
-    (match (quotient (indexer-progress-total-objects progress) 100)
-      (0 1)
-      (x x)))
-
   (define-values (done label)
     (if (< (indexer-progress-received-objects progress) total)
         (values (indexer-progress-received-objects progress)
@@ -155,14 +150,22 @@ the 'SSL_CERT_FILE' and 'SSL_CERT_DIR' environment variables."
   (define %
     (* 100. (/ done total)))
 
-  (when (and (< % 100) (zero? (modulo done hundredth)))
+  ;; TODO: Both should be handled & exposed by the PROGRESS-BAR API instead.
+  (define width
+    (max (- (current-terminal-columns)
+            (string-length label) 7)
+         3))
+
+  (define grain
+    (match (quotient total (max 100 (* 8 width))) ; assume 1/8 glyph resolution
+      (0 1)
+      (x x)))
+
+  (when (and (< % 100) (zero? (modulo done grain)))
     (erase-current-line (current-error-port))
-    (let ((width (max (- (current-terminal-columns)
-                         (string-length label) 7)
-                      3)))
-      (format (current-error-port) "~a ~3,d% ~a"
+    (format (current-error-port) "~a ~3,d% ~a"
               label (inexact->exact (round %))
-              (progress-bar % width)))
+              (progress-bar % width))
     (force-output (current-error-port)))
 
   (when (= % 100.)
@@ -219,6 +222,12 @@ of SHA1 string."
     (last (string-split url #\/)) ".git" "")
    "-" (string-take sha1 7)))
 
+(define (commit-id? str)
+  "Return true if STR is likely a Git commit ID, false otherwise---e.g., if it
+is a tag name.  This is based on a simple heuristic so use with care!"
+  (and (= (string-length str) 40)
+       (string-every char-set:hex-digit str)))
+
 (define (resolve-reference repository ref)
   "Resolve the branch, commit or tag specified by REF, and return the
 corresponding Git object."
@@ -265,12 +274,15 @@ corresponding Git object."
                   ;; There's no such tag, so it must be a commit ID.
                   (resolve `(commit . ,str)))))))
       (('tag    . tag)
-       (let ((oid (reference-name->oid repository
-                                       (string-append "refs/tags/" tag))))
-         ;; OID may point to a "tag" object, but it can also point directly
-         ;; to a "commit" object, as surprising as it may seem.  Return that
-         ;; object, whatever that is.
-         (object-lookup repository oid))))))
+       (let* ((oid (reference-name->oid repository
+                                        (string-append "refs/tags/" tag)))
+              (obj (object-lookup repository oid)))
+         ;; OID may designate an "annotated tag" object or a "commit" object.
+         ;; Return the commit object in both cases.
+         (if (= OBJ-TAG (object-type obj))
+             (object-lookup repository
+                            (tag-target-id (tag-lookup repository oid)))
+             obj))))))
 
 (define (switch-to-ref repository ref)
   "Switch to REPOSITORY's branch, commit or tag specified by REF.  Return the

@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2018-2022 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2018-2023 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2018 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2019 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
@@ -29,8 +29,6 @@
   #:use-module (guix base16)
   #:use-module (guix records)
   #:use-module (guix gexp)
-  #:use-module (guix modules)
-  #:use-module (guix discovery)
   #:use-module (guix monads)
   #:use-module (guix profiles)
   #:use-module (guix packages)
@@ -55,8 +53,6 @@
   #:use-module (ice-9 format)
   #:use-module (ice-9 match)
   #:use-module (ice-9 vlist)
-  #:use-module ((ice-9 rdelim) #:select (read-string))
-  #:use-module ((rnrs bytevectors) #:select (bytevector=?))
   #:export (channel
             channel?
             channel-name
@@ -248,7 +244,7 @@ could be found at DIRECTORY or one of its ancestors."
 'latest-repository-commit'."
   (match (channel-commit channel)
     (#f      `(branch . ,(channel-branch channel)))
-    (commit  `(commit . ,(channel-commit channel)))))
+    (commit  `(tag-or-commit . ,(channel-commit channel)))))
 
 (define sexp->channel-introduction
   (match-lambda
@@ -419,19 +415,28 @@ their relation.  When AUTHENTICATE? is false, CHANNEL is not authenticated."
     (if authenticate?
         (if (channel-introduction channel)
             (authenticate-channel channel checkout commit)
-            ;; TODO: Warn for all the channels once the authentication interface
-            ;; is public.
-            (when (guix-channel? channel)
-              (raise (make-compound-condition
-                      (formatted-message (G_ "channel '~a' lacks an \
+            (begin
+              (when (file-exists?
+                     (string-append checkout "/.guix-authorizations"))
+                (warning (and=> (channel-location channel)
+                                source-properties->location)
+                         (G_ "channel '~a' lacks 'introduction' field but \
+'.guix-authorizations' found\n")
+                         (channel-name channel)))
+
+              ;; TODO: Warn for all the channels once the authentication interface
+              ;; is public.
+              (when (guix-channel? channel)
+                (raise (make-compound-condition
+                        (formatted-message (G_ "channel '~a' lacks an \
 introduction and cannot be authenticated~%")
-                                         (channel-name channel))
-                      (condition
-                       (&fix-hint
-                        (hint (G_ "Add the missing introduction to your
+                                           (channel-name channel))
+                        (condition
+                         (&fix-hint
+                          (hint (G_ "Add the missing introduction to your
 channels file to address the issue.  Alternatively, you can pass
 @option{--disable-authentication}, at the risk of running unauthenticated and
-thus potentially malicious code."))))))))
+thus potentially malicious code.")))))))))
         (warning (G_ "channel authentication disabled~%")))
 
     (when (guix-channel? channel)
@@ -943,6 +948,10 @@ be used as a profile hook."
                       (backtrace))))
               (mkdir #$output))))
 
+    (define channels
+      (map (compose string->symbol manifest-entry-name)
+           (manifest-entries manifest)))
+
     (gexp->derivation-in-inferior "guix-package-cache" build
                                   profile
 
@@ -951,8 +960,9 @@ be used as a profile hook."
                                   ;; instead of failing.
                                   #:silent-failure? #t
 
-                                  #:properties '((type . profile-hook)
-                                                 (hook . package-cache))
+                                  #:properties `((type . profile-hook)
+                                                 (hook . package-cache)
+                                                 (channels . ,channels))
                                   #:local-build? #t)))
 
 (define %channel-profile-hooks
@@ -1048,7 +1058,9 @@ true, include its introduction, if any."
       (name ',(channel-name channel))
       (url ,(channel-url channel))
       (branch ,(channel-branch channel))
-      (commit ,(channel-commit channel))
+      ,@(if (channel-commit channel)
+            `((commit ,(channel-commit channel)))
+            '())
       ,@(if intro
             `((introduction (make-channel-introduction
                              ,(channel-introduction-first-signed-commit intro)

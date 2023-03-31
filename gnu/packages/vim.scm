@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Cyril Roelandt <tipecaml@gmail.com>
-;;; Copyright © 2016, 2017, 2018, 2019, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016-2023 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016, 2017 Nikita <nikita@n0.is>
 ;;; Copyright © 2017 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2017 Marius Bakke <mbakke@fastmail.com>
@@ -12,7 +12,7 @@
 ;;; Copyright © 2021 Simon Tournier <zimon.toutoune@gmail.com>
 ;;; Copyright © 2021 Tissevert <tissevert+guix@marvid.fr>
 ;;; Copyright © 2021 Foo Chuan Wei <chuanwei.foo@hotmail.com>
-;;; Copyright © 2022 Luis Henrique Gomes Higino <luishenriquegh2701@gmail.com>
+;;; Copyright © 2022, 2023 Luis Henrique Gomes Higino <luishenriquegh2701@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -40,6 +40,7 @@
   #:use-module (guix build-system copy)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system python)
+  #:use-module (guix build-system pyproject)
   #:use-module (gnu packages)
   #:use-module (gnu packages acl)
   #:use-module (gnu packages admin) ; For GNU hostname
@@ -71,13 +72,14 @@
   #:use-module (gnu packages tcl)
   #:use-module (gnu packages text-editors)
   #:use-module (gnu packages terminals)
+  #:use-module (gnu packages tree-sitter)
   #:use-module (gnu packages xdisorg)
   #:use-module (gnu packages xorg))
 
 (define-public vim
   (package
     (name "vim")
-    (version "9.0.0235")
+    (version "9.0.1303")
     (source (origin
              (method git-fetch)
              (uri (git-reference
@@ -86,7 +88,7 @@
              (file-name (git-file-name name version))
              (sha256
               (base32
-               "1fshlggcq1fw4cbsgmagwxkmdiwv2cla0vds383z49ayqgqnamnj"))))
+               "16difqsdl3v9irjiaj2zqiyn5q94r70ws4i1ygrrcpzk6127mk2q"))))
     (build-system gnu-build-system)
     (arguments
      `(#:test-target "test"
@@ -94,9 +96,8 @@
        #:phases
        (modify-phases %standard-phases
          (add-after 'configure 'patch-absolute-paths
-           (lambda _
-             (substitute* '("runtime/autoload/context.vim"
-                            "src/testdir/Makefile"
+           (lambda* (#:key inputs #:allow-other-keys)
+             (substitute* '("src/testdir/Makefile"
                             "src/testdir/test_filetype.vim"
                             "src/testdir/test_normal.vim"
                             "src/testdir/test_popupwin.vim"
@@ -107,7 +108,9 @@
                             "src/testdir/test_terminal2.vim")
                (("/bin/sh") (which "sh")))
              (substitute* "src/testdir/test_autocmd.vim"
-               (("/bin/kill") (which "kill")))))
+               (("/bin/kill") (which "kill")))
+             (substitute* "src/if_cscope.c"
+               (("/bin/sh") (search-input-file inputs "/bin/sh")))))
          (add-before 'check 'set-environment-variables
            (lambda* (#:key inputs #:allow-other-keys)
              ;; One of the tests tests timezone-dependent functions.
@@ -127,6 +130,9 @@
              ;; actions.  The path of the bash binary is shown, which results in
              ;; a difference being detected.  Patching the expected result is
              ;; non-trivial due to the special format used, so skip the test.
+             (substitute* "src/testdir/test_messages.vim"
+               ((".*Test_echo_verbose_system.*" line)
+                (string-append line "return\n")))
              (substitute* "src/testdir/test_terminal.vim"
                ((".*Test_open_term_from_cmd.*" line)
                 (string-append line "return\n"))
@@ -639,6 +645,34 @@ various text editors which allow this file format to be read and used by those
 editors.")
     (license license:bsd-2)))
 
+(define-public neovim-packer
+  (let ((commit "3a9f9801f683946b9f1047d8f4bf9946c29e927d")
+        (revision "0"))
+    (package
+      (name "neovim-packer")
+      (version (git-version "0.0.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/wbthomason/packer.nvim")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "1xn08z3a21mgfvp5i1nv57jnldwxwnl5nkryiff3zc99b1mizigp"))))
+      (build-system copy-build-system)
+      (arguments
+       (list #:install-plan
+             #~'(("lua" "share/nvim/site/pack/guix/start/packer.nvim/")
+                 ("doc" "share/nvim/site/pack/guix/start/packer.nvim/"))))
+      (home-page "https://github.com/wbthomason/packer.nvim")
+      (synopsis "Plugin manager for Neovim")
+      (description
+       "This package provides a plugin manager for Neovim, inspired by Emacs's
+@code{use-package}.  It's written in Lua, supports Luarocks dependencies, and
+is based on Vim's builtin plugin support.")
+      (license license:expat))))
+
 (define-public neovim-syntastic
   (package
     (inherit vim-syntastic)
@@ -659,7 +693,7 @@ are detected, the user is notified.")))
 (define-public neovim
   (package
     (name "neovim")
-    (version "0.7.2")
+    (version "0.8.3")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -668,7 +702,7 @@ are detected, the user is notified.")))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1jn4i4ral79ys06i50bimylm515sfh41z503gj50a74h1ylg0z4w"))))
+                "1zff73yxbnxym6sn43xk6r0zc2ncingsib81v9g39ibrcinpwaa9"))))
     (build-system cmake-build-system)
     (arguments
      (list #:modules
@@ -798,7 +832,7 @@ and support for fonts with ligatures.")
 (define-public vifm
   (package
     (name "vifm")
-    (version "0.12")
+    (version "0.12.1")
     (source
       (origin
         (method url-fetch)
@@ -809,7 +843,7 @@ and support for fonts with ligatures.")
                               "vifm-" version ".tar.bz2")))
         (sha256
          (base32
-          "1h5j4y704nciyzg3aaav8sl3r5h9mpwq8f28cj65nnxk6a7n3a9k"))))
+          "122ncp319xisxjxcy33bshjib6905bb0aaz0xjdfkkycplz83qlg"))))
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags '("--disable-build-timestamp")
@@ -824,8 +858,7 @@ and support for fonts with ligatures.")
                (("/bin/bash") (which "bash")))
              ;; This test segfaults
              (substitute* "tests/Makefile"
-               (("misc") ""))
-             #t))
+               (("misc") ""))))
           (add-after 'install 'install-vim-plugin-files
             (lambda* (#:key outputs #:allow-other-keys)
               (let* ((out (assoc-ref outputs "out"))
@@ -836,8 +869,7 @@ and support for fonts with ligatures.")
                 (copy-recursively (string-append vifm "/vim")
                                   vimfiles)
                 (delete-file-recursively (string-append vifm "/colors"))
-                (delete-file-recursively (string-append vifm "/vim")))
-              #t)))))
+                (delete-file-recursively (string-append vifm "/vim"))))))))
     (native-inputs
      (list groff)) ; for the documentation
     (inputs
@@ -895,6 +927,25 @@ With the package comes a plugin to use vifm as a vim file selector.")
 also works as a library for connecting to and scripting neovim processes
 through its msgpack-rpc API.")
     (license license:asl2.0)))
+
+(define-public python-neovim-remote
+  (package
+    (name "python-neovim-remote")
+    (version "2.5.1")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "neovim-remote" version))
+              (sha256
+               (base32
+                "00kxlb3f1k7iaxzpsr07scavmnyg8c1jmicmr13mfk2lcdac6g2b"))))
+    (build-system pyproject-build-system)
+    (propagated-inputs (list python-psutil python-pynvim))
+    (home-page "https://github.com/mhinz/neovim-remote")
+    (synopsis "Control nvim processes using `nvr` commandline tool")
+    (description "This package provide a `nvr` command, which can open File in
+remote nvim.  Also allow opening files from within :terminal without starting
+a nested nvim process.")
+    (license license:expat)))
 
 (define-public vim-guix-vim
   (package
@@ -1352,30 +1403,29 @@ files for reading or editing, and perform basic file system operations.")
     (license license:wtfpl2)))
 
 (define-public vim-nerdcommenter
-  (let ((commit "a65465d321f2f8a74b2ffa540b9b87563f7e12e8")
-        (revision "1"))
-    (package
-      (name "vim-nerdcommenter")
-      (version (git-version "2.5.2" revision commit))
-      (source
-       (origin
-         (method git-fetch)
-         (uri (git-reference
-                (url "https://github.com/preservim/nerdcommenter")
-                (commit commit)))
-         (file-name (git-file-name name version))
-         (sha256
-          (base32 "00ir65iv8jfbgzjmj7332fmydh0qhabbhx8zbvd3j6pgfxqpaafw"))))
-      (build-system copy-build-system)
-      (arguments
-       '(#:install-plan
-         '(("autoload" "share/vim/vimfiles/")
-           ("doc" "share/vim/vimfiles/")
-           ("plugin" "share/vim/vimfiles/"))))
-      (home-page "https://github.com/preservim/nerdcommenter")
-      (synopsis "Vim plugin for easy commenting of code")
-      (description
-       "NERD commenter is a Vim plugin that provides many different commenting
+  (package
+    (name "vim-nerdcommenter")
+    (version "2.6.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/preservim/nerdcommenter")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1ka2rqn7rby55aps3iblh1dcqxm7m7qx72mpkz6y2aaj8mkj0zyd"))))
+    (build-system copy-build-system)
+    (arguments
+     (list
+      #:install-plan
+      #~`(("autoload" "share/vim/vimfiles/")
+          ("doc" "share/vim/vimfiles/")
+          ("plugin" "share/vim/vimfiles/"))))
+    (home-page "https://github.com/preservim/nerdcommenter")
+    (synopsis "Vim plugin for easy commenting of code")
+    (description
+     "NERD commenter is a Vim plugin that provides many different commenting
 operations and styles which are invoked via key mappings and a menu.  These
 operations are available for most filetypes.")
-      (license license:cc0))))
+    (license license:cc0)))

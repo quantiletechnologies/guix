@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013-2022 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013-2023 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015, 2017, 2020, 2021, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2017 Muriithi Frederick Muriuki <fredmanglis@gmail.com>
 ;;; Copyright © 2017, 2018 Oleg Pykhalov <go.wigust@gmail.com>
@@ -9,7 +9,7 @@
 ;;; Copyright © 2018, 2019 Rutger Helling <rhelling@mykolab.com>
 ;;; Copyright © 2018 Sou Bunnbu <iyzsong@member.fsf.org>
 ;;; Copyright © 2018, 2019 Eric Bavier <bavier@member.fsf.org>
-;;; Copyright © 2019, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2019-2023 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2019 Jonathan Brielmaier <jonathan.brielmaier@web.de>
 ;;; Copyright © 2020 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
@@ -18,7 +18,7 @@
 ;;; Copyright © 2020 Martin Becze <mjbecze@riseup.net>
 ;;; Copyright © 2020 Vincent Legoll <vincent.legoll@gmail.com>
 ;;; Copyright © 2021 Ivan Gankevich <i.gankevich@spbu.ru>
-;;; Copyright © 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2021, 2022, 2023 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 John Kehayias <john.kehayias@protonmail.com>
 ;;; Copyright © 2022 Zhu Zihao <all_but_last@163.com>
 ;;;
@@ -59,10 +59,12 @@
   #:use-module (gnu packages crypto)
   #:use-module (gnu packages curl)
   #:use-module (gnu packages databases)
+  #:use-module (gnu packages debian)
   #:use-module (gnu packages dejagnu)
   #:use-module (gnu packages dbm)
   #:use-module (gnu packages docbook)
   #:use-module (gnu packages file)
+  #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages flex)
   #:use-module (gnu packages gcc)
   #:use-module (gnu packages gettext)
@@ -86,6 +88,7 @@
   #:use-module (gnu packages nettle)
   #:use-module (gnu packages networking)
   #:use-module (gnu packages ninja)
+  #:use-module (gnu packages node)
   #:use-module (gnu packages nss)
   #:use-module (gnu packages patchutils)
   #:use-module (gnu packages perl)
@@ -97,6 +100,7 @@
   #:use-module (gnu packages python-check)
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
+  #:use-module (gnu packages ruby)
   #:use-module (gnu packages serialization)
   #:use-module (gnu packages sqlite)
   #:use-module (gnu packages ssh)
@@ -116,6 +120,7 @@
   #:use-module (guix build-system guile)
   #:use-module (guix build-system meson)
   #:use-module (guix build-system python)
+  #:use-module (guix build-system ruby)
   #:use-module (guix build-system trivial)
   #:use-module (guix download)
   #:use-module (guix gexp)
@@ -163,9 +168,9 @@
   ;; Latest version of Guix, which may or may not correspond to a release.
   ;; Note: the 'update-guix-package.scm' script expects this definition to
   ;; start precisely like this.
-  (let ((version "1.3.0")
-        (commit "9e4632081ff31bf0d1715edd66f514614c6dc4bb")
-        (revision 29))
+  (let ((version "1.4.0")
+        (commit "01fd830f2fdd388f56e6e00df747f052bbde3906")
+        (revision 4))
     (package
       (name "guix")
 
@@ -181,7 +186,7 @@
                       (commit commit)))
                 (sha256
                  (base32
-                  "1x32l8szclv8zlwdjr8yfidxxm4n7dgm6j7xypmx5mg5pkakyan5"))
+                  "1kc4p6sakj57mdcd6avvbbw72q8irddn0cz7l17k0dp1463vjfl1"))
                 (file-name (string-append "guix-" version "-checkout"))))
       (build-system gnu-build-system)
       (arguments
@@ -349,7 +354,7 @@ $(prefix)/etc/openrc\n")))
                                (bs     (assoc-ref inputs
                                                   "guile-bytestructures"))
                                (ssh    (assoc-ref inputs "guile-ssh"))
-                               (gnutls (assoc-ref inputs "gnutls"))
+                               (gnutls (assoc-ref inputs "guile-gnutls"))
                                (disarchive (assoc-ref inputs "disarchive"))
                                (lzma (assoc-ref inputs "guile-lzma"))
                                (locales (assoc-ref inputs "glibc-utf8-locales"))
@@ -405,8 +410,8 @@ $(prefix)/etc/openrc\n")))
                        ;; Guile libraries are needed here for
                        ;; cross-compilation.
                        ("guile" ,guile-3.0-latest) ;for faster builds
-                       ("gnutls" ,gnutls)
-                       ,@(if (%current-target-system)
+                       ("guile-gnutls" ,guile-gnutls)
+                       ,@(if (hurd-target?)
                              '()
                              `(("guile-avahi" ,guile-avahi)))
                        ("guile-gcrypt" ,guile-gcrypt)
@@ -434,6 +439,7 @@ $(prefix)/etc/openrc\n")))
          ("gzip" ,gzip)
          ("sqlite" ,sqlite)
          ("libgcrypt" ,libgcrypt)
+         ("zlib" ,zlib)
 
          ("guile" ,guile-3.0-latest)
 
@@ -462,9 +468,9 @@ $(prefix)/etc/openrc\n")))
 
          ("glibc-utf8-locales" ,glibc-utf8-locales)))
       (propagated-inputs
-       `(("gnutls" ,gnutls)
+       `(("guile-gnutls" ,guile-gnutls)
          ;; Avahi requires "glib" which doesn't cross-compile yet.
-         ,@(if (%current-target-system)
+         ,@(if (hurd-target?)
                '()
                `(("guile-avahi" ,guile-avahi)))
          ("guile-gcrypt" ,guile-gcrypt)
@@ -491,8 +497,7 @@ also a distribution thereof.  It includes a virtual machine image.  Besides
 the usual package management features, it also supports transactional
 upgrades and roll-backs, per-user profiles, and much more.  It is based on
 the Nix package manager.")
-      (license license:gpl3+)
-      (properties '((ftp-server . "alpha.gnu.org"))))))
+      (license license:gpl3+))))
 
 (define* (channel-source->package source #:key commit)
   "Return a package for the given channel SOURCE, a lowerable object."
@@ -508,30 +513,6 @@ the Nix package manager.")
     (propagated-inputs '())))
 
 (export channel-source->package)
-
-(define-public guix-for-cuirass
-  ;; Known-good revision before commit
-  ;; bd86bbd300474204878e927f6cd3f0defa1662a5, which introduced
-  ;; 'primitive-fork' in 'open-inferior'.
-  (let ((version "1.3.0")
-        (commit "a27e47f9d1e22dc32bb250cfeef88cfacb930e23")
-        (revision 23))
-    (package
-      (inherit guix)
-      (version (string-append version "-"
-                              (number->string revision)
-                              "." (string-take commit 7)))
-      (source (origin
-                (method git-fetch)
-                (uri (git-reference
-                      (url "https://git.savannah.gnu.org/git/guix.git")
-                      (commit commit)))
-                (sha256
-                 (base32
-                  "12jmvagbw05hmmlrb82i0qazhlv7mcfnl4dmknwx3a9hd760g9y1"))
-                (file-name (string-append "guix-" version "-checkout"))))
-      (properties `((hidden? . #t)
-                    ,@(package-properties guix))))))
 
 (define-public guix-daemon
   ;; This package is for internal consumption: it allows us to quickly build
@@ -549,7 +530,7 @@ the Nix package manager.")
     (inputs
      (modify-inputs (package-inputs guix)
        (delete "boot-guile" "boot-guile/i686" "util-linux")
-       (prepend gnutls guile-git guile-json-3 guile-gcrypt)))
+       (prepend guile-gnutls guile-git guile-json-3 guile-gcrypt)))
 
     (propagated-inputs '())
 
@@ -650,6 +631,11 @@ overridden by setting the 'current-guix-package' parameter."
     (arguments
      `(#:modules ((guix build utils)
                   (gnu build svg))
+
+       ;; There's no point in cross-compiling: a native build gives the same
+       ;; result, independently of the system type.
+       #:target #f
+
        #:builder
        ,(with-extensions (list guile-rsvg guile-cairo)
           #~(begin
@@ -726,16 +712,7 @@ GTK icon cache for instance.")))
 module} command.  The @command{guix module create} sub-command creates
 @dfn{environment modules}, allowing you to manipulate software environments
 with the @command{module} command commonly found on @acronym{HPC,
-high-performance computing} clusters.
-
-To use this extension, set the @env{GUIX_EXTENSIONS_PATH} environment
-variable, along these lines:
-
-@example
-export GUIX_EXTENSIONS_PATH=\"$HOME/.guix-profile/share/guix/extensions\"
-@end example
-
-Replace @code{$HOME/.guix-profile} with the appropriate profile.")
+high-performance computing} clusters.")
     (license license:gpl3+)))
 
 
@@ -856,13 +833,13 @@ symlinks to the files in a common directory such as /usr/local.")
     (description
      "XStow is a replacement of GNU Stow written in C++.  It supports all
 features of Stow with some extensions.")
-    (home-page "http://xstow.sourceforge.net/")
+    (home-page "https://xstow.sourceforge.net/")
     (license license:gpl2)))
 
 (define-public rpm
   (package
     (name "rpm")
-    (version "4.17.1")
+    (version "4.18.0")
     (source (origin
               (method url-fetch)
               (uri (string-append "http://ftp.rpm.org/releases/rpm-"
@@ -870,39 +847,39 @@ features of Stow with some extensions.")
                                   version ".tar.bz2"))
               (sha256
                (base32
-                "0pbfj94ha59lbnd8dk0aqyxjv37xixfdcazq3y2mhwkf8s9vf48c"))))
+                "0m250plyananjn0790xmwy6kixmxcdj5iyy2ybnk1aw7f4nia5ra"))))
+    (outputs '("out" "debug"))
     (build-system gnu-build-system)
     (arguments
-     '(#:configure-flags '("--with-external-db" ;use the system's bdb
-                           "--enable-python")
+     '(#:configure-flags '("--enable-python"
+                           ;; The RPM database must be writable.
+                           "--localstatedir=/var")
        #:phases (modify-phases %standard-phases
                   (add-after 'unpack 'fix-lua-check
                     (lambda _
                       (substitute* "configure"
-                        (("lua >= 5.3")
+                        (("lua >= ?.?")
                          "lua-5.3 >= 5.3"))))
-                  (add-before 'configure 'set-nss-library-path
-                    (lambda* (#:key inputs #:allow-other-keys)
-                      (let ((nss (assoc-ref inputs "nss")))
-                        (setenv "LIBRARY_PATH"
-                                (string-append (getenv "LIBRARY_PATH") ":"
-                                               nss "/lib/nss"))))))))
+                  (add-after 'unpack 'patch-build-system
+                    (lambda _
+                      ;; The build system attempts to create /var in the build
+                      ;; chroot, and fails.
+                      (substitute* "Makefile.in"
+                        ((".*MKDIR_P) \\$\\(DESTDIR)\\$\\(localstatedir.*")
+                         "")))))))
     (native-inputs
-     (list pkg-config))
+     (list pkg-config
+           python))
     (inputs
-     (list bdb
-           bzip2
-           cpio
+     (list bzip2
            file
            libarchive
            libgcrypt
            lua
-           nspr
-           nss
-           python
            sqlite
            xz
-           zlib))
+           zlib
+           zstd))
     (propagated-inputs
      ;; popt is listed in the 'Requires' of rpm.pc.
      (list popt))
@@ -1014,7 +991,7 @@ extracting, creating, and converting between formats.")
 (define-public conda
   (package
     (name "conda")
-    (version "4.10.3")
+    (version "22.9.0")
     (source
      (origin
        (method git-fetch)
@@ -1024,17 +1001,16 @@ extracting, creating, and converting between formats.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "1w4yy62bsvkybjvcm5fspck4ns5j16nplzpbx6bxv7zhx69pcp4n"))))
+         "16vz4vx311ry9w35mi5wna8p8n3abd6wdqrpqzjfdlwv7hcr44s4"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
        (modify-phases %standard-phases
-         (add-after 'unpack 'fix-permissions
+         ;; The default version of pytest does not support these options.
+         (add-after 'unpack 'use-older-pytest
            (lambda _
-             ;; This file is no longer writable after downloading with
-             ;; 'git-fetch'
-             (make-file-writable
-              "tests/conda_env/support/saved-env/environment.yml")))
+             (substitute* "setup.cfg"
+               (("--xdoctest-.*") ""))))
          (add-after 'unpack 'fix-ruamel-yaml-dependency
            (lambda _
              (substitute* "setup.py"
@@ -1049,8 +1025,7 @@ extracting, creating, and converting between formats.")
                (substitute* "conda/core/initialize.py"
                  (("python_exe = join")
                   (format #f "python_exe = \"~a/bin/python\" #"
-                          python))))
-             #t))
+                          python))))))
          (add-after 'unpack 'do-not-use-python-root-as-prefix
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (let ((out (assoc-ref outputs "out"))
@@ -1073,45 +1048,50 @@ extracting, creating, and converting between formats.")
                  (("os.path.join\\(sys.prefix, bin_dir, exe\\)")
                   (format #f "\"~a/bin/conda\"" out))
                  (("'CONDA_EXE', sys.executable")
-                  (format #f "'CONDA_EXE', \"~a/bin/conda\"" out))))
-             #t))
+                  (format #f "'CONDA_EXE', \"~a/bin/conda\"" out))))))
          (add-before 'build 'create-version-file
            (lambda _
              (with-output-to-file "conda/.version"
-               (lambda () (display ,version)))
-             #t))
+               (lambda () (display ,version)))))
          (replace 'check
-           (lambda _
-             (setenv "HOME" "/tmp")
-             (invoke "py.test" "-vv"
-                     "-k"
-                     (string-append
-                      "not integration"
-                      ;; This one reports a newer version of conda than
-                      ;; expected.
-                      " and not test_auto_update_conda"
-                      ;; This fails because the output directory is not a
-                      ;; Conda environment.
-                      " and not test_list"
-                      ;; This fails because we patched the default root
-                      ;; prefix.
-                      " and not test_default_target_is_root_prefix"
+           (lambda* (#:key tests? #:allow-other-keys)
+             ;; These tests all require network access.
+             (for-each delete-file '("tests/cli/test_main_clean.py"
+                                     "tests/cli/test_main_rename.py"))
+             (when tests?
+               (setenv "HOME" "/tmp")
+               (invoke "py.test" "-vv"
+                       "-k"
+                       (string-append
+                        "not integration"
+                        ;; This one reports a newer version of conda than
+                        ;; expected; conda-1.5.2-py27_0 instead of
+                        ;; conda-1.3.5-py27_0.
+                        " and not test_auto_update_conda"
+                        ;; This fails because the output directory is not a
+                        ;; Conda environment.
+                        " and not test_list"
+                        ;; This fails because we patched the default root
+                        ;; prefix.
+                        " and not test_default_target_is_root_prefix"
+                        ;; This fails because of missing features in python-flaky.
+                        " and not test_no_features"
+                        ;; These fail because they require network access
+                        " and not test_no_ssl"
+                        " and not test_run_readonly_env"
+                        " and not test_run_returns_int"
+                        " and not test_run_returns_nonzero_errorlevel"
+                        " and not test_run_returns_zero_errorlevel"
+                        " and not test_run_uncaptured"
 
-                      ;; These fail because ...
-                      ;; TODO: conda patches its own shebang to
-                      ;; $conda-prefix/bin/python, which is obviously wrong.
-                      " and not test_run_returns_int"
-                      " and not test_run_returns_zero_errorlevel"
-                      " and not test_run_returns_nonzero_errorlevel"
-
-                      ;; TODO: I don't understand what this failure means
-                      " and not test_PrefixData_return_value_contract"
-                      ;; TODO: same here
-                      " and not test_install_1"
-                      ;; Not sure if this is really wrong.  This fails because
-                      ;; /gnu/store/...python-conda-4.8.3/bin/python
-                      ;; is not /gnu/store/...python-wrapper-3.8.2/bin/python
-                      " and not test_make_entry_point"))))
+                        ;; TODO: I don't understand what this failure means
+                        " and not test_PrefixData_return_value_contract"
+                        ;; TODO: same here
+                        " and not test_install_1"
+                        ;; Not sure if this is really wrong.  This fails because
+                        ;; /gnu/store/...conda-22.9.0/bin/python
+                        ;; is not /gnu/store/...python-wrapper-3.9.9/bin/python
+                        " and not test_make_entry_point")))))
          (add-after 'install 'init
            ;; This writes a whole bunch of shell initialization files to the
            ;; prefix directory.  Many features of conda can only be used after
@@ -1126,8 +1106,10 @@ extracting, creating, and converting between formats.")
      (list python-wrapper))
     (propagated-inputs
      (list python-anaconda-client
+           python-boto3
            python-conda-package-handling
            python-cytoolz
+           python-pluggy
            python-pycosat
            python-pytest
            python-pyyaml
@@ -1138,7 +1120,10 @@ extracting, creating, and converting between formats.")
            ;; XXX: This is dragged in by libarchive and is needed at runtime.
            zstd))
     (native-inputs
-     (list python-pytest-timeout))
+     (list python-coverage
+           python-flaky
+           python-pytest-timeout
+           python-pytest-xprocess))
     (home-page "https://github.com/conda/conda")
     (synopsis "Cross-platform, OS-agnostic, system-level binary package manager")
     (description
@@ -1152,7 +1137,7 @@ written entirely in Python.")
 (define-public conan
   (package
     (name "conan")
-    (version "1.50.0")
+    (version "2.0.2")
     (source
      (origin
        (method git-fetch)               ;no tests in PyPI archive
@@ -1162,104 +1147,113 @@ written entirely in Python.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "1jjrinz5wkcxfvwdpldrv4h7vacdyz88cc4af5vi3sdnjra0i0m5"))))
+         "1y4qmqnw3s8xv64lgp388qpj9vqharyfqi5s8dxvgsns6cafv7lf"))))
     (build-system python-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'relax-requirements
-           (lambda _
-             (substitute* "conans/requirements.txt"
-               (("node-semver==0.6.1")
-                "node-semver>=0.6.1")
-               (("Jinja2>=2.9, <3")
-                "Jinja2>=2.9")
-               (("PyYAML>=3.11, <6.0")
-                "PyYAML"))))
-         (add-after 'unpack 'patch-paths
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let ((coreutils (assoc-ref inputs "coreutils")))
-               ;; It seems that PATH is manipulated, as printenv is not found
-               ;; during tests.  Patch in its exact location.
-               (substitute* "conan/tools/env/environment.py"
-                 (("printenv")
-                  (string-append coreutils "/bin/printenv")))
-               (substitute* "conans/client/envvars/environment.py"
-                 (("#!/usr/bin/env")
-                  (string-append "#!" coreutils "/bin/env"))))))
-         (add-before 'check 'set-home
-           (lambda _
-             (setenv "HOME" "/tmp")))
-         (replace 'check
-           (lambda* (#:key tests? outputs #:allow-other-keys)
-             (define system ,(or (%current-target-system)
-                                 (%current-system)))
-             (when tests?
-               (setenv "PATH" (string-append (getenv "PATH") ":"
-                                             (assoc-ref outputs "out") "/bin"))
-               (invoke "python" "-m" "pytest"
-                       "-n" "auto"      ;parallelize tests
-                       "-m" "not slow and not tool_svn"
-                       ;; Disable problematic tests.
-                       "-k"
-                       (string-append
-                        ;; These tests rely on networking.
-                        "not shallow_clone_remote "
-                        "and not remote_build "
-                        "and not download_retries_errors "
-                        "and not ftp "
-                        "and not build_local_different_folders "
-                        ;; These expect CMake available at fixed versions.
-                        "and not custom_cmake "
-                        "and not default_cmake "
-                        "and not bazel " ;bazel is not packaged
-                        ;; Guix sets PKG_CONFIG_PATH itself, which is not
-                        ;; expected by the following test.
-                        "and not pkg_config_path "
-                        "and not compare " ;caused by newer node-semver?
-                        ;; Guix is not currently a supported package manager.
-                        "and not system_package_tool "
-                        ;; These expect GCC 5 to be available.
-                        "and not test_reuse "
-                        "and not test_install "
-                        ;; The installed configure script trips on the /bin/sh
-                        ;; shebang.  We'd have to patch it in the Python code.
-                        "and not test_autotools "
-                        "and not test_use_build_virtualenv "
-                        ;; This test is architecture-dependent.
-                        "and not test_toolchain_linux "
-                        ;; This one fails for unknown reasons (see:
-                        ;; https://github.com/conan-io/conan/issues/9671).
-                        "and not test_build "
-                        ;; These tests expect the 'apt' command to be available.
-                        "and not test_apt_check "
-                        "and not test_apt_install_substitutes "
-                        (if (not (string-prefix? "x86_64" system))
-                            ;; These tests either assume the machine is
-                            ;; x86_64, or require a cross-compiler to target
-                            ;; it.
-                            (string-append
-                             "and not cpp_package "
-                             "and not exclude_code_analysis "
-                             "and not cmakedeps_multi "
-                             "and not locally_build_linux "
-                             "and not custom_configuration "
-                             "and not package_from_system "
-                             "and not cross_build_command "
-                             "and not test_package "
-                             "and not test_deleted_os "
-                             "and not test_same ")
-                            "")
-                        (if (not (or (string-prefix? "x86_64" system)
-                                     (string-prefix? "i686" system)))
-                            ;; These tests either assume the machine is i686,
-                            ;; or require a cross-compiler to target it.
-                            (string-append
-                             "and not vcvars_raises_when_not_found "
-                             "and not conditional_generators "
-                             "and not test_folders "
-                             "and not settings_as_a_dict_conanfile ")
-                            "")))))))))
+     (list
+      #:modules '((guix build python-build-system)
+                  (guix build utils)
+                  (ice-9 format))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'patch-paths
+            (lambda* (#:key inputs #:allow-other-keys)
+              ;; It seems that PATH is manipulated, as printenv is not found
+              ;; during tests.  Patch in its exact location.
+              (substitute* "conan/tools/env/environment.py"
+                (("printenv")
+                 (search-input-file inputs "bin/printenv")))))
+          (add-after 'unpack 'patch-hard-coded-GCC-references
+            (lambda _
+              ;; The test suite expects GCC 9 to be used (see:
+              ;; https://github.com/conan-io/conan/issues/13575).  Render the
+              ;; check version agnostic.
+              (substitute* "conans/test/functional/toolchains/meson/_base.py"
+                (("__GNUC__9")
+                 "__GNUC__"))))
+          (add-after 'unpack 'use-current-cmake-for-tests
+            (lambda _
+              (substitute* (find-files "conans/test" "\\.py$")
+                (("@pytest.mark.tool\\(\"cmake\", \"3.23\")")
+                 "@pytest.mark.tool(\"cmake\")"))))
+          (add-before 'check 'configure-tests
+            (lambda _
+              (let* ((cmake-version #$(version-major+minor
+                                       (package-version cmake)))
+                     (pkg-config-version #$(version-major+minor
+                                            (package-version pkg-config))))
+                (call-with-output-file "conans/test/conftest_user.py"
+                  (lambda (port)
+                    (format port "\
+tools_locations = {
+    'apt_get': {'disabled': True},
+    'bazel': {'disabled': True},
+    'cmake': {'default': '~a',
+              '3.15': {'disabled': True},
+              '3.16': {'disabled': True},
+              '3.17': {'disabled': True},
+              '3.19': {'disabled': True},
+              '~:*~a': {}},
+    'pkg_config': {'exe': 'pkg-config',
+                   'default': '~a',
+                   '~:*~a': {}},
+    'svn': {'disabled': True}}~%" cmake-version pkg-config-version))))))
+          (add-before 'check 'set-home
+            (lambda _
+              (setenv "HOME" "/tmp")))
+          (replace 'check
+            (lambda* (#:key tests? outputs #:allow-other-keys)
+              (define system #$(or (%current-target-system)
+                                   (%current-system)))
+              (when tests?
+                (setenv "CONFIG_SHELL" (which "sh"))
+                (setenv "PATH" (string-append (getenv "PATH") ":"
+                                              #$output "/bin"))
+                (invoke "python" "-m" "pytest" "-vv"
+                        "-n" (number->string (parallel-job-count))
+                        "-m" "not slow"
+                        ;; Disable problematic tests.
+                        "-k"
+                        (string-append
+                         ;; These tests rely on networking.
+                         "not download_retries_errors "
+                         "and not ftp "
+                         ;; Guix sets PKG_CONFIG_PATH itself, which is not
+                         ;; expected by the following test.
+                         "and not pkg_config_path "
+                         "and not compare " ;caused by newer node-semver?
+                         ;; This test hard-codes a compiler version.
+                         "and not test_toolchain "
+                         ;; The 'test_list' tests may fail
+                         ;; non-deterministically (see:
+                         ;; https://github.com/conan-io/conan/issues/13583).
+                         "and not test_list "
+                         ;; These tests fail when Autoconf attempt to load a
+                         ;; shared library in the same directory (see:
+                         ;; https://github.com/conan-io/conan/issues/13577).
+                         "and not test_other_client_can_link_autotools "
+                         "and not test_autotools_lib_template "
+                         (if (not (string-prefix? "x86_64" system))
+                             ;; These tests either assume the machine is
+                             ;; x86_64, or require a cross-compiler to target
+                             ;; it.
+                             (string-append
+                              "and not cpp_package "
+                              "and not exclude_code_analysis "
+                              "and not cmakedeps_multi "
+                              "and not locally_build_linux "
+                              "and not custom_configuration "
+                              "and not package_from_system "
+                              "and not cross_build_command "
+                              "and not test_package "
+                              "and not test_same ")
+                             "")
+                         (if (not (or (string-prefix? "x86_64" system)
+                                      (string-prefix? "i686" system)))
+                             ;; This test only works with default arch "x86",
+                             ;; "x86_64", "sparc" or "sparcv9".
+                             "and not settings_as_a_dict_conanfile "
+                             "")))))))))
     (propagated-inputs
      (list python-bottle
            python-colorama
@@ -1279,22 +1273,23 @@ written entirely in Python.")
            python-tqdm
            python-urllib3))
     (inputs
-     (list coreutils))       ;for printenv
+     (list coreutils))                  ;for printenv
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("cmake" ,cmake)
-       ("git" ,git-minimal)
-       ("meson" ,meson)
-       ("ninja",ninja)
-       ("pkg-config" ,pkg-config)
-       ("python-bottle" ,python-bottle)
-       ("python-mock" ,python-mock)
-       ("python-parameterized" ,python-parameterized)
-       ("python-pytest" ,python-pytest)
-       ("python-pytest-xdist" ,python-pytest-xdist)
-       ("python-webtest" ,python-webtest)
-       ("which" ,which)))
+     (list autoconf-wrapper
+           automake
+           cmake
+           git-minimal
+           libtool
+           meson
+           ninja
+           pkg-config
+           python-bottle
+           python-mock
+           python-parameterized
+           python-pytest
+           python-pytest-xdist
+           python-webtest
+           which))
     (home-page "https://conan.io")
     (synopsis "Decentralized C/C++ package manager")
     (description "Conan is a package manager for C and C++ developers that
@@ -1317,18 +1312,26 @@ allow for great power and flexibility.
 (define-public gwl
   (package
     (name "gwl")
-    (version "0.5.0")
+    (version "0.5.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://gnu/gwl/gwl-" version ".tar.gz"))
               (sha256
                (base32
-                "09r22gqgaj2mxvlwvfach5j1n66y3yggmzc6d2gxq7lyywbcvjvs"))))
+                "08h76ib7hmqyj354aazxqyz0galhywz4093f8hc4py7hbg0rcm27"))))
     (build-system gnu-build-system)
     (arguments
      `(#:parallel-build? #false ; for reproducibility
        #:make-flags
-       '("GUILE_AUTO_COMPILE=0" "GWL_SKIP_INTEGRATION_TESTS=1")))
+       '("GUILE_AUTO_COMPILE=0" "GWL_SKIP_INTEGRATION_TESTS=1")
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'disable-test
+           (lambda _
+             ;; This test loads a workflow, which requires a working Guix installation.
+             (substitute* "tests/cache.scm"
+               (("\\(test-assert \"workflows with same file name have different cache prefixes\"" m)
+                (string-append "#;" m))))))))
     (native-inputs
      (list autoconf automake pkg-config texinfo graphviz))
     (inputs
@@ -1374,19 +1377,19 @@ environments.")
                   "0k9zkdyyzir3fvlbcfcqy17k28b51i20rpbjwlx2i1mwd2pw9cxc")))))))
 
 (define-public guix-build-coordinator
-  (let ((commit "cc884efa7ee8a481cd3dae1b93d27454ac8dfcd2")
-        (revision "59"))
+  (let ((commit "3c9354e1c0b0767e0121ecbd03abfe37c895e34b")
+        (revision "76"))
     (package
       (name "guix-build-coordinator")
       (version (git-version "0" revision commit))
       (source (origin
                 (method git-fetch)
                 (uri (git-reference
-                      (url "https://git.cbaines.net/git/guix/build-coordinator")
+                      (url "https://git.savannah.gnu.org/git/guix/build-coordinator.git")
                       (commit commit)))
                 (sha256
                  (base32
-                  "03yz8if282mvkgqn0pxlqj0h3nyjfag7a835v9s98nkqfbj1ixcl"))
+                  "19gc4ya56inxnjpf1br2sdva0k4jyc1jn5q84qdfpiwn1ryb0jjd"))
                 (file-name (string-append name "-" version "-checkout"))))
       (build-system gnu-build-system)
       (arguments
@@ -1422,10 +1425,10 @@ environments.")
                                          "guile-lzlib"
                                          "guile-zlib"
                                          "guile-sqlite3"
-                                         "gnutls"
+                                         "guile-gnutls"
                                          ,@(if (hurd-target?)
                                                '()
-                                               '("guile-fibers")))))
+                                               '("guile-fibers-next")))))
                       (wrap-program file
                         `("PATH" ":" prefix
                           (,bin
@@ -1451,14 +1454,7 @@ environments.")
                                          (assoc-ref inputs input)
                                          version))
                                       guile-inputs)
-                                 ":"))))
-                      (when target
-                        ;; XXX work around wrap-program picking bash for the
-                        ;; host rather than target
-                        (let ((bash (assoc-ref inputs "bash")))
-                          (substitute* file
-                            (("^#!.*/bash")
-                             (string-append "#! " bash "/bin/bash")))))))
+                                 ":"))))))
                   (find-files bin)))
                #t))
            (delete 'strip))))             ; As the .go files aren't compatible
@@ -1466,14 +1462,14 @@ environments.")
        (list pkg-config
              autoconf
              automake
-             gnutls
+             guile-gnutls
 
              ;; Guile libraries are needed here for cross-compilation.
              guile-json-4
              guile-gcrypt
              guix
              guile-prometheus
-             guile-fibers-1.1
+             guile-fibers-next
              guile-lib
              (first (assoc-ref (package-native-inputs guix) "guile"))))
       (inputs
@@ -1494,10 +1490,10 @@ environments.")
               guile-zlib
               guile-sqlite3
               guix
-              gnutls)
+              guile-gnutls)
         (if (hurd-target?)
             '()
-            (list guile-fibers-1.1))))
+            (list guile-fibers-next))))
       (home-page "https://git.cbaines.net/guix/build-coordinator/")
       (synopsis "Tool to help build derivations")
       (description
@@ -1543,7 +1539,7 @@ outputs of those builds.")
                                        "guile-lzlib"
                                        "guile-zlib"
                                        "guile-sqlite3"
-                                       "gnutls")))
+                                       "guile-gnutls")))
                     (wrap-program file
                       `("PATH" ":" prefix (,bin))
                       `("GUILE_LOAD_PATH" ":" prefix
@@ -1571,7 +1567,7 @@ outputs of those builds.")
      (list pkg-config
            autoconf
            automake
-           gnutls
+           guile-gnutls
 
            ;; Guile libraries are needed here for cross-compilation.
            guile-json-4
@@ -1592,7 +1588,7 @@ outputs of those builds.")
                guile-lzlib
                guile-zlib
                guix
-               gnutls)))
+               guile-gnutls)))
     (description
      "The Guix Build Coordinator helps with performing lots of builds across
 potentially many machines, and with doing something with the results and
@@ -1621,6 +1617,7 @@ This package just includes the agent component.")))
                   (ice-9 rdelim)
                   (guix build utils)
                   (guix build gnu-build-system))
+
        #:phases
        (modify-phases %standard-phases
          (add-after 'install 'sed-kernel-json
@@ -1656,9 +1653,17 @@ This package just includes the agent component.")))
                          "-s")
                    "\",\n\t\t\""))
                  (("guix-jupyter-kernel.scm")
-                  (string-append out "/share/guile/site/3.0/"
-                                 "guix-jupyter-kernel.scm")))
-               #t))))))
+                  (string-append out "/share/guile/site/" effective
+                                 "/guix-jupyter-kernel.scm"))))))
+         (add-before 'check 'define-home
+           (lambda _
+             ;; IPython goes awry when HOME points to a non-existent
+             ;; directory:
+             ;;
+             ;; IPython/paths.py:70: UserWarning: IPython parent '/homeless-shelter' is not a writable location, using a temp directory.
+             ;;
+             ;; This in turn leads to test failures, so define HOME.
+             (setenv "HOME" (getcwd)))))))
     (native-inputs
      (list autoconf
            automake
@@ -1668,8 +1673,7 @@ This package just includes the agent component.")))
            python-ipython
            python-ipykernel))
     (inputs
-     `(("guix" ,guix)
-       ("guile" ,@(assoc-ref (package-native-inputs guix) "guile"))))
+     (list guix (lookup-package-native-input guix "guile")))
     (propagated-inputs
      (list guile-json-4 guile-simple-zmq guile-gcrypt))
     (synopsis "Guix kernel for Jupyter")
@@ -1682,19 +1686,19 @@ in an isolated environment, in separate namespaces.")
     (license license:gpl3+)))
 
 (define-public nar-herder
-  (let ((commit "5acfcc0a9d99d78a167c365534aa5bf592f5625e")
-        (revision "9"))
+  (let ((commit "659543cd9ad78f712b4b067863db0613423dd23b")
+        (revision "18"))
     (package
       (name "nar-herder")
       (version (git-version "0" revision commit))
       (source (origin
                 (method git-fetch)
                 (uri (git-reference
-                      (url "https://git.cbaines.net/git/guix/nar-herder")
+                      (url "https://git.savannah.gnu.org/git/guix/nar-herder.git")
                       (commit commit)))
                 (sha256
                  (base32
-                  "1mxdkay3l1la7b6m0455s8cansd6qcdhv0k231aik0ayhbck8kby"))
+                  "09ghbbrk5gazkpqxcvfnn56pp11sndn7hw00ipc8d95wqk53g9qg"))
                 (file-name (string-append name "-" version "-checkout"))))
       (build-system gnu-build-system)
       (arguments
@@ -1726,10 +1730,11 @@ in an isolated environment, in separate namespaces.")
                                          "guix"
                                          "guile-lib"
                                          "guile-lzlib"
+                                         "guile-zstd"
                                          "guile-prometheus"
                                          "guile-sqlite3"
-                                         "gnutls"
-                                         "guile-fibers")))
+                                         "guile-gnutls"
+                                         "guile-fibers-next")))
                       (wrap-program file
                         `("GUILE_LOAD_PATH" ":" prefix
                           (,scm ,(string-join
@@ -1755,17 +1760,18 @@ in an isolated environment, in separate namespaces.")
        (list pkg-config
              autoconf
              automake
-             gnutls
+             guile-gnutls
 
              ;; Guile libraries are needed here for cross-compilation.
              (car (assoc-ref (package-native-inputs guix) "guile"))
              guile-json-4
              guile-gcrypt
              guix
-             guile-fibers-1.1
+             guile-fibers-next
              guile-prometheus
              guile-lib
              guile-lzlib
+             guile-zstd
              guile-sqlite3))
       (inputs
        (list bash-minimal
@@ -1774,12 +1780,13 @@ in an isolated environment, in separate namespaces.")
        (list guile-json-4
              guile-gcrypt
              guix
-             guile-fibers-1.1
+             guile-fibers-next
              guile-prometheus
              guile-lib
              guile-lzlib
+             guile-zstd
              guile-sqlite3
-             gnutls))
+             guile-gnutls))
       (home-page "https://git.cbaines.net/guix/nar-herder")
       (synopsis "Utility for managing and serving nars")
       (description
@@ -1855,7 +1862,7 @@ for packaging and deployment of cross-compiled Windows applications.")
 (define-public libostree
   (package
     (name "libostree")
-    (version "2022.5")
+    (version "2022.7")
     (source
      (origin
        (method url-fetch)
@@ -1863,7 +1870,7 @@ for packaging and deployment of cross-compiled Windows applications.")
              "https://github.com/ostreedev/ostree/releases/download/v"
              (version-major+minor version) "/libostree-" version ".tar.xz"))
        (sha256
-        (base32 "0gq53g601x09gc4ips6n3zmmdaz8zyv235xf63fxf4f17fclsk4i"))))
+        (base32 "07s14awf9ynlp84s08dkbwj9i18g93y0yf0k87nbks4l3hkakqlb"))))
     (build-system gnu-build-system)
     (arguments
      '(#:phases
@@ -1908,14 +1915,14 @@ the boot loader configuration.")
 (define-public flatpak
   (package
     (name "flatpak")
-    (version "1.12.7")
+    (version "1.14.4")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://github.com/flatpak/flatpak/releases/download/"
                            version "/flatpak-" version ".tar.xz"))
        (sha256
-        (base32 "05lkpbjiwp69q924i1jfyk5frcqbdbv9kyzbqwm2hy723i9jmdbd"))
+        (base32 "16b7f7n2mms6zgm0lj3fn86ny11xjn8cd3mrk1slwhvwnv8dnd4a"))
        (patches
         (search-patches "flatpak-fix-path.patch"
                         "flatpak-unset-gdk-pixbuf-for-sandbox.patch"))))
@@ -1966,10 +1973,12 @@ cp -r /tmp/locale/*/en_US.*")))
           ;; Many tests fail for unknown reasons, so we just run a few basic
           ;; tests.
           (replace 'check
-            (lambda _
-              (setenv "HOME" "/tmp")
-              (invoke "make" "check"
-                      "TESTS=tests/test-basic.sh tests/test-config.sh testcommon"))))))
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                (setenv "HOME" "/tmp")
+                (invoke "make" "check"
+                        "TESTS=tests/test-basic.sh tests/test-config.sh
+                        testcommon")))))))
     (native-inputs
      (list bison
            dbus ; for dbus-daemon
@@ -1984,8 +1993,10 @@ cp -r /tmp/locale/*/en_US.*")))
            socat
            which))
     (inputs
-     (list appstream-glib
+     (list appstream
+           appstream-glib
            bubblewrap
+           curl
            dconf
            fuse
            gdk-pixbuf
@@ -2007,6 +2018,88 @@ applications")
     (description "Flatpak is a system for building, distributing, and running
 sandboxed desktop applications on GNU/Linux.")
     (license license:lgpl2.1+)))
+
+(define-public fpm
+  (package
+    (name "fpm")
+    (version "1.15.1")
+    (source (origin
+              (method git-fetch)        ;for tests
+              (uri (git-reference
+                    (url "https://github.com/jordansissel/fpm")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1m2zxf7wyk7psvm611yxs68hnwm0pyqilsmcq3x791hz7rvbg68w"))
+              (patches (search-patches "fpm-newer-clamp-fix.patch"))))
+    (build-system ruby-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'extract-gemspec 'patch-paths
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (substitute* '("lib/fpm/util.rb"
+                                  "spec/fpm/util_spec.rb"
+                                  "spec/fpm/package/rpm_spec.rb")
+                     (("\"/bin/sh\"")
+                      (string-append "\"" (search-input-file inputs "bin/sh")
+                                     "\"")))))
+               (add-after 'extract-gemspec 'relax-requirements
+                 (lambda _
+                   (substitute* "fpm.gemspec"
+                     (("\"clamp\", \"~> 1.0.0\"")
+                      "\"clamp\", \">= 1.0.0\""))))
+               (add-after 'extract-gemspec 'disable-problematic-tests
+                 ;; Disable some tests which are failing (see:
+                 ;; https://github.com/jordansissel/fpm/issues/2000).
+                 (lambda _
+                   ;; There are 4 'NoMethodError' test failures in the
+                   ;; command_spec suite, for unknown reasons.
+                   (delete-file "spec/fpm/command_spec.rb")
+                   (substitute* "spec/fpm/package_spec.rb"
+                     (("@oldtmp = ENV\\[\"TMP\"]" all)
+                      "skip('fails with guix')"))
+                   (substitute* "spec/fpm/package/cpan_spec.rb"
+                     ;; This test is marked as expected to fail (pending) when
+                     ;; TRAVIS_OS_NAME is set, but passes with Guix; skip it.
+                     (("it \"should unpack tarball containing" all)
+                      (string-append "x" all)))
+                   (substitute* "spec/fpm/package/gem_spec.rb"
+                     ;; This test fails for unknown reason; perhaps a patched
+                     ;; shebang.
+                     (("it 'should not change the shebang'" all)
+                      (string-append "x" all)))))
+               (replace 'check
+                 (lambda* (#:key tests? #:allow-other-keys)
+                   (when tests?
+                     ;; Set TRAVIS_OS_NAME to skip tests known to cause
+                     ;; problems in minimal environments.
+                     (setenv "TRAVIS_OS_NAME" "GNU Guix")
+                     (invoke "rspec")))))))
+    (native-inputs
+     (list dpkg
+           libarchive
+           node
+           perl-app-cpanminus
+           python
+           ruby-rspec
+           squashfs-tools
+           zstd))
+    (inputs
+     (list bash-minimal
+           ruby-arr-pm
+           ruby-backports
+           ruby-cabin
+           ruby-clamp
+           ruby-pleaserun
+           ruby-rexml
+           ruby-stud))
+    (home-page "https://github.com/jordansissel/fpm/")
+    (synopsis "Package building and mangling tool")
+    (description "@command{fpm} is a command to convert directories, RPMs,
+Python eggs, Ruby gems, and more to RPMs, debs, Solaris packages and more.")
+    (license license:expat)))
 
 (define-public akku
   (package
@@ -2153,7 +2246,7 @@ from R7RS, which allows most R7RS code to run on R6RS implementations.")
       (list dejagnu autoconf which))
     (inputs
       (list tcl less procps coreutils python-3))
-    (home-page "http://modules.sourceforge.net/")
+    (home-page "https://modules.sourceforge.net/")
     (synopsis "Shell environment variables and aliases management")
     (description "Modules simplify shell initialization and let users
 modify their environment during the session with modulefiles.  Modules are

@@ -5,6 +5,7 @@
 ;;; Copyright © 2020 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2020 Google LLC
 ;;; Copyright © 2022 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2023 Pierre Langlois <pierre.langlois@gmx.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -49,9 +50,12 @@ from OS that are needed on the bare metal and not in a container."
   (define base
     (remove (lambda (service)
               (memq (service-kind service)
-                    (list (service-kind %linux-bare-metal-service)
-                          firmware-service-type
-                          system-service-type)))
+                    (cons* (service-kind %linux-bare-metal-service)
+                           firmware-service-type
+                           system-service-type
+                           (if shared-network?
+                               (list hosts-service-type)
+                               '()))))
             (operating-system-default-essential-services os)))
 
   (cons (service system-service-type
@@ -121,9 +125,7 @@ containerized OS.  EXTRA-FILE-SYSTEMS is a list of file systems to add to OS."
     ;; different configs that are better suited to containers.
     (append (list console-font-service-type
                   mingetty-service-type
-                  agetty-service-type
-                  ;; Reinstantiated below with smaller caches.
-                  nscd-service-type)
+                  agetty-service-type)
             (if shared-network?
                 ;; Replace these with dummy-networking-service-type below.
                 (list
@@ -134,17 +136,13 @@ containerized OS.  EXTRA-FILE-SYSTEMS is a list of file systems to add to OS."
                 (list))))
 
   (define services-to-add
-    (append
-     ;; Many Guix services depend on a 'networking' shepherd
-     ;; service, so make sure to provide a dummy 'networking'
-     ;; service when we are sure that networking is already set up
-     ;; in the host and can be used.  That prevents double setup.
-     (if shared-network?
-         (list (service dummy-networking-service-type))
-         '())
-     (list
-      (nscd-service (nscd-configuration
-                     (caches %nscd-container-caches))))))
+    ;; Many Guix services depend on a 'networking' shepherd
+    ;; service, so make sure to provide a dummy 'networking'
+    ;; service when we are sure that networking is already set up
+    ;; in the host and can be used.  That prevents double setup.
+    (if shared-network?
+        (list (service dummy-networking-service-type))
+        '()))
 
   (operating-system
     (inherit os)
@@ -155,7 +153,11 @@ containerized OS.  EXTRA-FILE-SYSTEMS is a list of file systems to add to OS."
     (services (append (remove (lambda (service)
                                 (memq (service-kind service)
                                       services-to-drop))
-                              (operating-system-user-services os))
+                              (modify-services (operating-system-user-services os)
+                                (nscd-service-type
+                                 config => (nscd-configuration
+                                            (inherit config)
+                                            (caches %nscd-container-caches)))))
                       services-to-add))
     (file-systems (append (map mapping->fs
                                (if shared-network?

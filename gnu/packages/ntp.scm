@@ -46,14 +46,14 @@
 (define-public chrony
   (package
     (name "chrony")
-    (version "4.2")
+    (version "4.3")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://download.tuxfamily.org/chrony/"
                            "chrony-" version ".tar.gz"))
        (sha256
-        (base32 "16nv90h73c99adh2bdrvlws1lhjsqfp6pfpnlprxd3ijbk8rygr7"))))
+        (base32 "0148bgzymdigkjs66fihrqw98g1yf6vgy40nlajqkw35m24sh3cx"))))
     (build-system gnu-build-system)
     (arguments
      `(#:modules ((srfi srfi-26)
@@ -129,7 +129,17 @@ time-stamping or reference clock, sub-microsecond accuracy is possible.")
                         (file-name "ntp-gcc-compat.patch")
                         (sha256
                          (base32
-                          "13d28sg45rflc7kqiv30asrhna8n69wlpwx16l65rravgpvp90h2")))))
+                          "13d28sg45rflc7kqiv30asrhna8n69wlpwx16l65rravgpvp90h2")))
+                      ;; And another one that fixes the build with glibc 2.34:
+                      ;; <https://bugs.ntp.org/show_bug.cgi?id=3741>.
+                      (origin
+                        (method url-fetch)
+                        (uri "https://bugs.ntp.org/attachment.cgi?id=1814\
+&action=diff&collapsed=&headers=1&format=raw")
+                        (file-name "ntp-glibc-compat.patch")
+                        (sha256
+                         (base32
+                          "0z8ndaw3l086mbm42v9gfgxild1yvg0anxf3724lsalvgqlndcj4")))))
        (modules '((guix build utils)))
        (snippet
         '(begin
@@ -145,7 +155,7 @@ time-stamping or reference clock, sub-microsecond accuracy is possible.")
            #t))))
    (native-inputs (list which pkg-config))
    (inputs
-    `(("openssl" ,openssl)
+    `(("openssl" ,openssl-1.1)
       ("libevent" ,libevent)
       ;; Build with POSIX capabilities support on GNU/Linux.  This allows 'ntpd'
       ;; to run as non-root (when invoked with '-u'.)
@@ -206,7 +216,7 @@ computers over a network.")
              #t)))))
     (inputs
      (list libressl)) ; enable TLS time constraints. See ntpd.conf(5).
-    (home-page "http://www.openntpd.org/")
+    (home-page "https://www.openntpd.org/")
     (synopsis "NTP client and server by the OpenBSD Project")
     (description "OpenNTPD is the OpenBSD Project's implementation of a client
 and server for the Network Time Protocol.  Its design goals include being

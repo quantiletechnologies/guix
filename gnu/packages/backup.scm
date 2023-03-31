@@ -15,7 +15,7 @@
 ;;; Copyright © 2019 Alex Vong <alexvong1995@gmail.com>
 ;;; Copyright © 2019 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2019 Mathieu Othacehe <m.othacehe@gmail.com>
-;;; Copyright © 2020 Nicolas Goaziou <mail@nicolasgoaziou.fr>
+;;; Copyright © 2020, 2022 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2020 Marcin Karpezo <sirmacik@wioo.waw.pl>
 ;;; Copyright © 2020 Michael Rohleder <mike@rohleder.de>
 ;;; Copyright © 2021 Timothy Sample <samplet@ngyro.com>
@@ -50,7 +50,6 @@
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system go)
-  #:use-module (guix build-system perl)
   #:use-module (guix build-system python)
   #:use-module (guix build-system qt)
   #:use-module (gnu packages)
@@ -333,7 +332,8 @@ reading and writing archives compressed using various compression filters such
 as gzip and bzip2.  The library is inherently stream-oriented; readers
 serially iterate through the archive, writers serially add things to the
 archive.  In particular, note that there is currently no built-in support for
-random access nor for in-place modification.")
+random access nor for in-place modification.  This package provides the
+@command{bsdcat}, @command{bsdcpio} and @command{bsdtar} commands.")
     (license license:bsd-2)))
 
 (define-public rdup
@@ -523,7 +523,7 @@ rdiff-backup is easy to use and settings have sensible defaults.")
 (define-public rsnapshot
   (package
     (name "rsnapshot")
-    (version "1.4.4")
+    (version "1.4.5")
     (source
      (origin
        (method url-fetch)
@@ -531,7 +531,7 @@ rdiff-backup is easy to use and settings have sensible defaults.")
              "https://github.com/rsnapshot/rsnapshot/releases/download/"
              version "/rsnapshot-" version ".tar.gz"))
        (sha256
-        (base32 "0yc5k2fhm54ypxgm1fsaf8vrg5b7qbvbsqk371n6baf592vprjy1"))))
+        (base32 "0hl2ncld0xkwlnv1cqjmmnld2nlp65alkkdacs11wl95r80mxdqh"))))
     (build-system gnu-build-system)
     (arguments
      `(#:phases
@@ -563,6 +563,13 @@ rsnapshot uses hard links to deduplicate identical files.")
               (modules '((guix build utils)))
               (snippet
                '(begin
+                  ;; Gnulib's <stdio.h> refers to 'gets' for the purposes of
+                  ;; warning against its use, but 'gets' is no longer declared
+                  ;; in glibc's <stdio.h>.  Remove that warning.
+                  (substitute* "lib/stdio.in.h"
+                    (("_GL_WARN_ON_USE \\(gets,.*")
+                     "\n/* 'gets' is gone, rejoice! */\n"))
+
                   ;; Include all the libtirpc headers necessary to get the
                   ;; definitions of 'u_int', etc.
                   (substitute* '("src/block-server.c"
@@ -571,8 +578,7 @@ rsnapshot uses hard links to deduplicate identical files.")
                     (("#include <rpc/(.*)\\.h>" _ header)
                      (string-append "#include <rpc/types.h>\n"
                                     "#include <rpc/rpc.h>\n"
-                                    "#include <rpc/" header ".h>\n")))
-                  #t))))
+                                    "#include <rpc/" header ".h>\n")))))))
     (build-system gnu-build-system)
     (arguments
      '(;; Link against libtirpc.
@@ -597,12 +603,16 @@ rsnapshot uses hard links to deduplicate identical files.")
                                   (string-append (getenv "CPATH")
                                                  ":" tirpc))
                           (setenv "CPATH" tirpc)))))
-                  (add-before 'check 'skip-test
+                  (add-before 'check 'adjust-test
                     (lambda _
-                      ;; XXX: This test fails (1) because current GnuTLS no
-                      ;; longer supports OpenPGP authentication, and (2) for
-                      ;; some obscure reason.  Better skip it.
-                      (setenv "XFAIL_TESTS" "utils/block-server"))))))
+                      ;; This test uses a weird construct to spawn
+                      ;; 'chop-block-server' in the background.  Replace it
+                      ;; with something that actually works.
+                      (substitute* "tests/utils/block-server"
+                        (("chop_fail_if ! chop-block-server")
+                         "chop-block-server")
+                        (("'&'")
+                         "&")))))))
     (native-inputs
      (list guile-2.0 gperf-3.0 ;see <https://bugs.gnu.org/32382>
            pkg-config rpcsvc-proto))           ;for 'rpcgen'
@@ -633,117 +643,114 @@ detection, and lossless compression.")
 (define-public borg
   (package
     (name "borg")
-    (version "1.2.1")
+    (version "1.2.3")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "borgbackup" version))
        (sha256
-        (base32 "0cy6chpa053rlvy4448vf9klb5v0v1vq3l76gqa3mcrwjb8y574z"))
+        (base32 "11b7jqv9sw22a9512b270d12k3mrcgmmcaimh6bgm5iwcgw1h973"))
        (modules '((guix build utils)))
        (snippet
-        '(begin
-           ;; Delete files generated by Cython.  We used to have a regex
-           ;; that created the list of generated files but Borg has
-           ;; added new non-generated C files that cause the regex to
-           ;; generate the wrong list.
-           (for-each delete-file
-                     '("src/borg/algorithms/checksums.c"
-                       "src/borg/chunker.c"
-                       "src/borg/compress.c"
-                       "src/borg/crypto/low_level.c"
-                       "src/borg/hashindex.c"
-                       "src/borg/item.c"
-                       "src/borg/platform/darwin.c"
-                       "src/borg/platform/freebsd.c"
-                       "src/borg/platform/linux.c"
-                       "src/borg/platform/posix.c"
-                       "src/borg/platform/syncfilerange.c"
-                       "src/borg/platform/windows.c"))
-           ;; Remove bundled shared libraries.
-           (with-directory-excursion "src/borg/algorithms"
-             (for-each delete-file-recursively
-                       (list "lz4" "xxh64" "zstd")))
-           #t))))
+        #~(begin
+            ;; Delete files generated by Cython.  We used to have a regex that
+            ;; created the list of generated files but Borg has added new
+            ;; non-generated C files that cause the regex to generate the
+            ;; wrong list.
+            (for-each delete-file
+                      '("src/borg/algorithms/checksums.c"
+                        "src/borg/chunker.c"
+                        "src/borg/compress.c"
+                        "src/borg/crypto/low_level.c"
+                        "src/borg/hashindex.c"
+                        "src/borg/item.c"
+                        "src/borg/platform/darwin.c"
+                        "src/borg/platform/freebsd.c"
+                        "src/borg/platform/linux.c"
+                        "src/borg/platform/posix.c"
+                        "src/borg/platform/syncfilerange.c"
+                        "src/borg/platform/windows.c"))
+            ;; Remove bundled shared libraries.
+            (with-directory-excursion "src/borg/algorithms"
+              (for-each delete-file-recursively
+                        (list "lz4" "xxh64" "zstd")))))))
     (build-system python-build-system)
     (arguments
-     `(#:modules ((srfi srfi-26)        ; for cut
+     (list
+      #:modules '((srfi srfi-26)        ; for cut
                   (guix build utils)
                   (guix build python-build-system))
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'set-env
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let ((openssl (assoc-ref inputs "openssl"))
-                   (lz4 (assoc-ref inputs "lz4"))
-                   (xxhash (assoc-ref inputs "xxhash"))
-                   (zstd (assoc-ref inputs "zstd")))
-               (setenv "BORG_OPENSSL_PREFIX" openssl)
-               (setenv "BORG_LIBLZ4_PREFIX" lz4)
-               (setenv "BORG_LIBXXHASH_PREFIX" xxhash)
-               (setenv "BORG_LIBZSTD_PREFIX" zstd)
-               (setenv "PYTHON_EGG_CACHE" "/tmp")
-               ;; The test 'test_return_codes[python]' fails when
-               ;; HOME=/homeless-shelter.
-               (setenv "HOME" "/tmp")
-               #t)))
-         ;; The tests need to be run after Borg is installed.
-         (delete 'check)
-         (add-after 'install 'check
-           (lambda* (#:key inputs outputs tests? #:allow-other-keys)
-             (when tests?
-              ;; Make the installed package available for the test suite.
-              (add-installed-pythonpath inputs outputs)
-              ;; The tests should be run in an empty directory.
-              (mkdir-p "tests")
-              (with-directory-excursion "tests"
-                (invoke "py.test" "-v" "--pyargs" "borg.testsuite" "-k"
-                        (string-append
-                         ;; These tests need to write to '/var'.
-                         "not test_get_cache_dir "
-                         "and not test_get_config_dir "
-                         "and not test_get_keys_dir "
-                         "and not test_get_security_dir "
-                         ;; These tests assume there is a root user in '/etc/passwd'.
-                         "and not test_access_acl "
-                         "and not test_default_acl "
-                         "and not test_get_item_uid_gid "
-                         "and not test_non_ascii_acl "
-                         "and not test_create_content_from_command "
-                         "and not test_create_content_from_command_with_failed_command "
-                         "and not test_create_stdin "
-                         ;; We don't need to run benchmarks
-                         "and not benchmark "
-                         ;; These tests assume the kernel supports FUSE.
-                         "and not test_fuse "
-                         "and not test_fuse_allow_damaged_files "
-                         "and not test_mount_hardlinks "
-                         "and not test_readonly_mount "
-                         "and not test_fuse_versions_view "
-                         "and not test_migrate_lock_alive"))))))
-         (add-after 'install 'install-doc
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (man (string-append out "/share/man/man1"))
-                    (misc (string-append out "/share/borg/misc")))
-               (for-each (cut install-file <> misc)
-                         '("docs/misc/create_chunker-params.txt"
-                           "docs/misc/borg-data-flow.png"
-                           "docs/misc/internals-picture.txt"
-                           "docs/misc/prune-example.txt"))
-               (copy-recursively "docs/man" man))))
-         (add-after 'install-docs 'install-shell-completions
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (etc (string-append out "/etc"))
-                    (share (string-append out "/share")))
-               (with-directory-excursion "scripts/shell_completions"
-                 (install-file "bash/borg"
-                               (string-append etc "/bash_completion.d"))
-                 (install-file "zsh/_borg"
-                               (string-append share "/zsh/site-functions"))
-                 (install-file "fish/borg.fish"
-                               (string-append share "/fish/vendor_completions.d")))))))))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'set-env
+            (lambda* (#:key inputs #:allow-other-keys)
+              (let ((openssl #$(this-package-input "openssl"))
+                    (lz4 #$(this-package-input "lz4"))
+                    (xxhash #$(this-package-input "xxhash"))
+                    (zstd #$(this-package-input "zstd")))
+                (setenv "BORG_OPENSSL_PREFIX" openssl)
+                (setenv "BORG_LIBLZ4_PREFIX" lz4)
+                (setenv "BORG_LIBXXHASH_PREFIX" xxhash)
+                (setenv "BORG_LIBZSTD_PREFIX" zstd)
+                (setenv "PYTHON_EGG_CACHE" "/tmp")
+                ;; The test 'test_return_codes[python]' fails when
+                ;; HOME=/homeless-shelter.
+                (setenv "HOME" "/tmp"))))
+          ;; The tests need to be run after Borg is installed.
+          (delete 'check)
+          (add-after 'install 'check
+            (lambda* (#:key inputs outputs tests? #:allow-other-keys)
+              (when tests?
+                ;; Make the installed package available for the test suite.
+                (add-installed-pythonpath inputs outputs)
+                ;; The tests should be run in an empty directory.
+                (mkdir-p "tests")
+                (with-directory-excursion "tests"
+                  (invoke "py.test" "-v" "--pyargs" "borg.testsuite" "-k"
+                          (string-append
+                           ;; These tests need to write to '/var'.
+                           "not test_get_cache_dir "
+                           "and not test_get_config_dir "
+                           "and not test_get_keys_dir "
+                           "and not test_get_security_dir "
+                           ;; These tests assume there is a root user in '/etc/passwd'.
+                           "and not test_access_acl "
+                           "and not test_default_acl "
+                           "and not test_get_item_uid_gid "
+                           "and not test_non_ascii_acl "
+                           "and not test_create_content_from_command "
+                           "and not test_create_content_from_command_with_failed_command "
+                           "and not test_create_stdin "
+                           ;; We don't need to run benchmarks
+                           "and not benchmark "
+                           ;; These tests assume the kernel supports FUSE.
+                           "and not test_fuse "
+                           "and not test_fuse_allow_damaged_files "
+                           "and not test_mount_hardlinks "
+                           "and not test_readonly_mount "
+                           "and not test_fuse_versions_view "
+                           "and not test_migrate_lock_alive"))))))
+          (add-after 'install 'install-doc
+            (lambda _
+              (let ((man (string-append #$output "/share/man/man1"))
+                    (misc (string-append #$output "/share/borg/misc")))
+                (for-each (cut install-file <> misc)
+                          '("docs/misc/create_chunker-params.txt"
+                            "docs/misc/borg-data-flow.png"
+                            "docs/misc/internals-picture.txt"
+                            "docs/misc/prune-example.txt"))
+                (copy-recursively "docs/man" man))))
+          (add-after 'install-docs 'install-shell-completions
+            (lambda _
+              (let ((etc (string-append #$output "/etc"))
+                    (share (string-append #$output "/share")))
+                (with-directory-excursion "scripts/shell_completions"
+                  (install-file "bash/borg"
+                                (string-append etc "/bash_completion.d"))
+                  (install-file "zsh/_borg"
+                                (string-append share "/zsh/site-functions"))
+                  (install-file "fish/borg.fish"
+                                (string-append share "/fish/vendor_completions.d")))))))))
     (native-inputs
      (list python-cython python-dateutil python-setuptools-scm python-pytest))
     (inputs
@@ -755,8 +762,8 @@ detection, and lossless compression.")
            ;; FUSE 3 isn't working well, so we stick with FUSE 2 for now:
            ;; <https://issues.guix.gnu.org/53407>
            python-llfuse
-           `(,zstd "lib")
-           xxhash))
+           xxhash
+           `(,zstd "lib")))
     (synopsis "Deduplicated, encrypted, authenticated and compressed backups")
     (description "Borg is a deduplicating backup program.  Optionally, it
 supports compression and authenticated encryption.  The main goal of Borg is to
@@ -1039,7 +1046,7 @@ precious backup space.
     (arguments
      `(#:tests? #f))                    ;no test
     (inputs
-     (list lzo libressl protobuf xz zlib))
+     (list lzo libressl protobuf-3.6 xz zlib))
     (home-page "http://zbackup.org")
     (synopsis "Versatile deduplicating backup tool")
     (description
@@ -1091,14 +1098,14 @@ interactive mode.")
 (define-public btrbk
   (package
     (name "btrbk")
-    (version "0.32.2")
+    (version "0.32.5")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://digint.ch/download/btrbk/releases/"
                                   "btrbk-" version ".tar.xz"))
               (sha256
                (base32
-                "0gi0j09fm4pgw3dq0z27lkpyvrs3ssyqg9b46v5ba794z63w753z"))))
+                "1d4zqf5klad55gdzzldipsjrhpprixzjmn03g66df5h2d28l1zpi"))))
     (build-system gnu-build-system)
     (arguments
      (list
@@ -1214,14 +1221,14 @@ backup.")
 (define-public disarchive
   (package
     (name "disarchive")
-    (version "0.4.0")
+    (version "0.5.0")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://files.ngyro.com/disarchive/"
                                   "disarchive-" version ".tar.gz"))
               (sha256
                (base32
-                "1pql8cspsxyx8cpw3xyhirnisv6rb4vj5mxr1d7w9la72q740n8s"))))
+                "16sjplkn9nr7zhfrqll7l1m2b2j4hg8k29p6bqjap9fkj6zpn2q2"))))
     (build-system gnu-build-system)
     (native-inputs
      (list autoconf
@@ -1248,13 +1255,13 @@ compression parameters used by Gzip.")
 (define-public borgmatic
   (package
     (name "borgmatic")
-    (version "1.5.22")
+    (version "1.7.9")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "borgmatic" version))
        (sha256
-        (base32 "0pvqlj17vp81i7saxqh5hsaxqz29ldrjd7bcssh4g1h0ikmnaf2r"))))
+        (base32 "1scfh90qgv8xhafnnpl3pa9d8m4rg9xgvf21yybvmsnm5v1k2x5z"))))
     (build-system python-build-system)
     (arguments
      (list #:phases
@@ -1263,10 +1270,15 @@ compression parameters used by Gzip.")
                  (lambda* (#:key inputs #:allow-other-keys)
                    ;; Set absolute store path to borg.
                    (substitute* "borgmatic/commands/borgmatic.py"
-                     (("location\\.get\\('local_path', 'borg'\\)")
-                      (string-append "location.get('local_path', '"
+                     (("\\.get\\('local_path', 'borg'\\)")
+                      (string-append ".get('local_path', '"
                                      (search-input-file inputs "bin/borg")
-                                     "')")))))
+                                     "')")))
+                   (substitute* "tests/unit/commands/test_borgmatic.py"
+                     (("(module.get_local_path.+ == )'borg'" all start)
+                      (string-append start "'"
+                                     (search-input-file inputs "bin/borg")
+                                     "'")))))
                (replace 'check
                  (lambda* (#:key tests? #:allow-other-keys)
                    (when tests?
@@ -1336,7 +1348,7 @@ borgmatic is powered by borg.")
            python-paramiko
            python-peewee
            python-psutil
-           python-pyqt-without-qtwebkit
+           python-pyqt
            python-secretstorage
            ;; This is included so that the qt-wrap phase picks it up.
            qtsvg-5))
@@ -1363,7 +1375,7 @@ archives.")
     (native-inputs (list intltool pkg-config))
     (inputs (list gtk+))
     (propagated-inputs (list rsync))
-    (home-page "http://www.opbyte.it/grsync/")
+    (home-page "https://www.opbyte.it/grsync/")
     (synopsis "GTK frontend for rsync")
     (description
      "Grsync is a simple graphical interface using GTK for the @command{rsync}

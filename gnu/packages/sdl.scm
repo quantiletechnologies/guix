@@ -13,6 +13,7 @@
 ;;; Copyright © 2019 Pierre Neidhardt <mail@ambrevar.xyz>
 ;;; Copyright © 2020 Timotej Lazar <timotej.lazar@araneo.si>
 ;;; Copyright © 2020 Oleg Pykhalov <go.wigust@gmail.com>
+;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -34,6 +35,7 @@
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-26)
   #:use-module (gnu packages)
+  #:use-module (guix gexp)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
   #:use-module (guix download)
@@ -53,7 +55,6 @@
   #:use-module (gnu packages ibus)
   #:use-module (gnu packages image)
   #:use-module (gnu packages linux)
-  #:use-module (gnu packages mono)
   #:use-module (gnu packages mp3)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages pulseaudio)
@@ -111,47 +112,62 @@ joystick, and graphics hardware.")
     (license license:lgpl2.1)))
 
 (define-public sdl2
-  (package (inherit sdl)
+  (package
+    (inherit sdl)
     (name "sdl2")
-    (version "2.0.14")
+    (version "2.24.0")
     (source (origin
-             (method url-fetch)
-             (uri
-              (string-append "https://libsdl.org/release/SDL2-"
-                             version ".tar.gz"))
-             (sha256
-              (base32
-               "1g1jahknv5r4yhh1xq5sf0md20ybdw1zh1i15lry26sq39bmn8fq"))))
+              (method url-fetch)
+              (uri
+               (string-append "https://libsdl.org/release/SDL2-"
+                              version ".tar.gz"))
+              (sha256
+               (base32
+                "15vd9najhjh6s9z9hhx7zp51iby690a1g3h7kcwjvyb82x5w7r4i"))))
     (arguments
      (substitute-keyword-arguments (package-arguments sdl)
        ((#:configure-flags flags)
-        `(append '("--disable-wayland-shared" "--enable-video-kmsdrm"
-                   "--disable-kmsdrm-shared")
-                 ,flags))
+        #~(append '("--disable-wayland-shared" "--enable-video-kmsdrm"
+                    "--disable-kmsdrm-shared")
+                  #$flags))
        ((#:make-flags flags ''())
-        `(cons*
-          ;; SDL dlopens libudev, so make sure it is in rpath. This overrides
-          ;; the LDFLAG set in sdl’s configure-flags, which isn’t necessary
-          ;; as sdl2 includes Mesa by default.
-          (string-append "LDFLAGS=-Wl,-rpath,"
-                         (assoc-ref %build-inputs "eudev") "/lib")
-          ,flags))))
+        #~(cons*
+           ;; SDL dlopens libudev, so make sure it is in rpath. This overrides
+           ;; the LDFLAG set in sdl’s configure-flags, which isn’t necessary
+           ;; as sdl2 includes Mesa by default.
+           (string-append "LDFLAGS=-Wl,-rpath,"
+                          #$(this-package-input "eudev") "/lib")
+           #$flags))))
     (inputs
      ;; SDL2 needs to be built with ibus support otherwise some systems
      ;; experience a bug where input events are doubled.
      ;;
      ;; For more information, see: https://dev.solus-project.com/T1721
-     (append `(("dbus" ,dbus)
-               ("eudev" ,eudev) ; for discovering input devices
-               ("fcitx" ,fcitx) ; helps with CJK input
-               ("glib" ,glib)
-               ("ibus" ,ibus)
-               ("libxkbcommon" ,libxkbcommon)
-               ("libxcursor" ,libxcursor) ; enables X11 cursor support
-               ("wayland" ,wayland)
-               ("wayland-protocols" ,wayland-protocols))
-             (package-inputs sdl)))
+     (modify-inputs (package-inputs sdl)
+       (append dbus
+               eudev                    ;for discovering input devices
+               fcitx                    ;helps with CJK input
+               glib
+               ibus-minimal
+               libxkbcommon
+               libxcursor               ;enables X11 cursor support
+               wayland
+               wayland-protocols)))
     (license license:bsd-3)))
+
+(define-public sdl2-2.0
+  (package
+    (inherit sdl2)
+    (name "sdl2")
+    (version "2.0.14")
+    (source (origin
+              (method url-fetch)
+              (uri
+               (string-append "https://libsdl.org/release/SDL2-"
+                              version ".tar.gz"))
+              (sha256
+               (base32
+                "1g1jahknv5r4yhh1xq5sf0md20ybdw1zh1i15lry26sq39bmn8fq"))))))
 
 (define-public libmikmod
   (package
@@ -181,7 +197,7 @@ joystick, and graphics hardware.")
 digital sound files.  It can take advantage of particular features of your
 system, such as sound redirection over the network.")
     (license license:lgpl2.1)
-    (home-page "http://mikmod.sourceforge.net/")))
+    (home-page "https://mikmod.sourceforge.net/")))
 
 (define-public sdl-gfx
   (package
@@ -361,7 +377,7 @@ SDL.")
        ("harfbuzz" ,harfbuzz)
        ("pango" ,pango)
        ("sdl" ,sdl)))
-    (home-page "http://sdlpango.sourceforge.net")
+    (home-page "https://sdlpango.sourceforge.net")
     (synopsis "Pango SDL binding")
     (description "This library is a wrapper around the Pango library.
 It allows you to use TrueType fonts to render internationalized and
@@ -541,7 +557,7 @@ directory.")
 (define-public guile-sdl
   (package
     (name "guile-sdl")
-    (version "0.5.3")
+    (version "0.6.1")
     (source (origin
               (method url-fetch)
               (uri
@@ -549,7 +565,7 @@ directory.")
                               version ".tar.lz"))
               (sha256
                (base32
-                "040gyk3n3yp8i30ngdg97n3083g8b6laky2nlh10jqcyjdd550d6"))))
+                "1q985nd3birr5pny74915x098fisa6llas3ijgf1b4gdz5717nzz"))))
     (build-system gnu-build-system)
     (native-inputs
      `(("lzip" ,lzip)
@@ -622,14 +638,14 @@ sound and device input (keyboards, joysticks, mice, etc.).")
 (define-public guile-sdl2
   (package
     (name "guile-sdl2")
-    (version "0.7.0")
+    (version "0.8.0")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://files.dthompson.us/guile-sdl2/"
                                   "guile-sdl2-" version ".tar.gz"))
               (sha256
                (base32
-                "197dzkxw8nv92da56iv2r8ih5r3pr4pd5c5j2q83aqb78h4jqjl7"))))
+                "1v57ghgqp9m32b2x47dya9zb0xvvfs5v8q8ak2wi8fzabajfpxap"))))
     (build-system gnu-build-system)
     (arguments
      '(#:make-flags '("GUILE_AUTO_COMPILE=0")))
@@ -654,43 +670,3 @@ interface.")
 
 (define-public guile3.0-sdl2
   (deprecated-package "guile3.0-sdl2" guile-sdl2))
-
-(define-public sdl2-cs
-  (let ((commit "1a3556441e1394eb0b5d46aeb514b8d1090b93f8"))
-    (package
-      (name "sdl2-cs")
-      (version (git-version "B1" "1" commit))
-      (source (origin
-                (method git-fetch)
-                (uri (git-reference
-                      (url "https://github.com/flibitijibibo/SDL2-CS")
-                      (commit commit)))
-                (file-name (git-file-name name version))
-                (sha256
-                 (base32
-                  "007mzkqr9nmvfrvvhs2r6cm36lzgsww24kwshsz9c4fd97f9qk58"))))
-      (build-system gnu-build-system)
-      (arguments
-       '(#:tests? #f  ; No tests.
-         #:phases
-         (modify-phases %standard-phases
-           (delete 'configure)
-           (replace 'build
-             (lambda _
-               (invoke "make" "release")))
-           (replace 'install
-             (lambda* (#:key outputs #:allow-other-keys)
-               (let ((out (assoc-ref outputs "out")))
-                 (install-file "bin/Release/SDL2-CS.dll" (string-append out "/lib"))
-                 #t))))))
-      (native-inputs
-       (list mono))
-      (inputs
-       (list sdl2 sdl2-image sdl2-mixer sdl2-ttf))
-      (home-page "https://dthompson.us/projects/guile-sdl2.html")
-      (synopsis "C# wrapper for SDL2")
-      (description
-       "SDL2-CS provides C# bindings for the SDL2 C shared library.
-The C# wrapper was written to be used for FNA's platform support.  However, this
-is written in a way that can be used for any general C# application.")
-      (license license:zlib))))

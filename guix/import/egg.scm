@@ -2,6 +2,7 @@
 ;;; Copyright © 2021 Xinglu Chen <public@yoctocell.xyz>
 ;;; Copyright © 2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2021 Sarah Morgensen <iskarian@mgsn.dev>
+;;; Copyright © 2022 Hartmut Goebel <h.goebel@crazy-compilers.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -25,18 +26,14 @@
   #:use-module (srfi srfi-71)
   #:use-module (gcrypt hash)
   #:use-module (guix git)
-  #:use-module (guix i18n)
   #:use-module (guix base32)
-  #:use-module (guix diagnostics)
   #:use-module (guix memoization)
   #:use-module (guix packages)
   #:use-module (guix upstream)
-  #:use-module (guix build-system)
   #:use-module (guix build-system chicken)
   #:use-module (guix store)
   #:use-module ((guix download) #:select (download-to-store url-fetch))
   #:use-module (guix import utils)
-  #:use-module ((guix licenses) #:prefix license:)
   #:export (egg->guix-package
             egg-recursive-import
             %egg-updater
@@ -67,7 +64,7 @@
 ;;;
 ;;; * Support for CHICKEN 4?
 ;;;
-;;; * Some packages will specify a specific version of a depencency in the
+;;; * Some packages will specify a specific version of a dependency in the
 ;;;   PACKAGE.egg file, how should we handle this?
 ;;;
 ;;; Code:
@@ -170,7 +167,8 @@ FILE is specified, return the package metadata in FILE."
 ;;; Egg importer.
 ;;;
 
-(define* (egg->guix-package name version #:key (file #f) (source #f))
+(define* (egg->guix-package name version #:key (file #f) (source #f)
+                            #:allow-other-keys)
   "Import a CHICKEN egg called NAME from either the given .egg FILE, or from the
 latest NAME metadata downloaded from the official repository if FILE is #f.
 Return a <package> record or #f on failure.  If VERSION is specified, import
@@ -333,10 +331,11 @@ not work."
 ;;; Updater.
 ;;;
 
-(define (latest-release package)
-  "Return an @code{<upstream-source>} for the latest release of PACKAGE."
+(define* (import-release package #:key (version #f))
+  "Return an @code{<upstream-source>} for the latest release of PACKAGE.
+Optionally include a VERSION string to fetch a specific version."
   (let* ((egg-name (guix-package->egg-name package))
-         (version (find-latest-version egg-name))
+         (version (or version (find-latest-version egg-name)))
          (source-url (egg-uri egg-name version)))
     (upstream-source
      (package (package-name package))
@@ -348,6 +347,6 @@ not work."
    (name 'egg)
    (description "Updater for CHICKEN egg packages")
    (pred egg-package?)
-   (latest latest-release)))
+   (import import-release)))
 
 ;;; egg.scm ends here

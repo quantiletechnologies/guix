@@ -28,11 +28,11 @@
 ;;; Copyright © 2017, 2018 Ben Woodcroft <donttrustben@gmail.com>
 ;;; Copyright © 2017 Rutger Helling <rhelling@mykolab.com>
 ;;; Copyright © 2017, 2018, 2019 Pierre Langlois <pierre.langlois@gmx.com>
-;;; Copyright © 2015, 2017, 2018, 2019, 2021, 2022 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2015, 2017, 2018, 2019, 2021, 2022, 2023 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2017 Kristofer Buffington <kristoferbuffington@gmail.com>
 ;;; Copyright © 2018 Amirouche Boubekki <amirouche@hypermove.net>
 ;;; Copyright © 2018 Joshua Sierles, Nextjournal <joshua@nextjournal.com>
-;;; Copyright © 2018, 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2018, 2021, 2022, 2023 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2019 Jack Hill <jackhill@jackhill.us>
 ;;; Copyright © 2019 Alex Griffin <a@ajgrf.com>
 ;;; Copyright © 2019 Gábor Boskovits <boskovits@gmail.com>
@@ -53,11 +53,13 @@
 ;;; Copyright © 2021 Simon Streit <simon@netpanic.org>
 ;;; Copyright © 2021 Alexandre Hannud Abdo <abdo@member.fsf.org>
 ;;; Copyright © 2021 Simon Tournier <zimon.toutoune@gmail.com>
-;;; Copyright © 2021 jgart <jgart@dismail.de>
 ;;; Copyright © 2021 Foo Chuan Wei <chuanwei.foo@hotmail.com>
 ;;; Copyright © 2022 Zhu Zihao <all_but_last@163.com>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
 ;;; Copyright © 2022 muradm <mail@muradm.net>
+;;; Copyright © 2022 Thomas Albers Raviola <thomas@thomaslabs.org>
+;;; Copyright © 2021, 2022 jgart <jgart@dismail.de>
+;;; Copyright © 2023 Felix Gruber <felgru@posteo.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -172,12 +174,11 @@
   #:use-module (guix build-system go)
   #:use-module (guix build-system meson)
   #:use-module (guix build-system perl)
+  #:use-module (guix build-system pyproject)
   #:use-module (guix build-system python)
   #:use-module (guix build-system qt)
   #:use-module (guix build-system ruby)
   #:use-module (guix build-system cmake)
-  #:use-module (guix build-system scons)
-  #:use-module (guix build-system trivial)
   #:use-module (guix utils)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-26)
@@ -258,17 +259,19 @@ ElasticSearch server")
 (define-public firebird
   (package
     (name "firebird")
-    (version "3.0.7")
+    (version "3.0.10")
     (source
-     (let ((revision "33374-0"))
+     (let ((revision "33601-0"))
        (origin
          (method url-fetch)
          (uri (string-append "https://github.com/FirebirdSQL/"
-                             "firebird/releases/download/R"
-                             (string-replace-substring version "." "_") "/"
+                             "firebird/releases/download/v"
+                             version "/"
                              "Firebird-" version "." revision ".tar.bz2"))
          (sha256
-          (base32 "0xpy1bncz36c6n28y7kllm1dkrdkn4vb4gw2n43f2351mznmrf5c"))
+          (base32 "0h033xj1kxwgvdv4ncm6kk0mqybvvn203gf88xcv3avys9hbnf4i"))
+         (patches (search-patches "firebird-riscv64-support-pt1.patch"
+                                  "firebird-riscv64-support-pt2.patch"))
          (modules '((guix build utils)))
          (snippet
           `(begin
@@ -290,8 +293,7 @@ ElasticSearch server")
                     "doc/Firebird-3-QuickStart.pdf"
                     (string-append "doc/Firebird-" ,version
                                    "-ReleaseNotes.pdf")
-                    "doc/README.SecureRemotePassword.html"))
-             #t)))))
+                    "doc/README.SecureRemotePassword.html")))))))
     (build-system gnu-build-system)
     (outputs (list "debug" "out"))
     (arguments
@@ -324,13 +326,19 @@ ElasticSearch server")
                   (srfi srfi-26))
        #:phases
        (modify-phases %standard-phases
+         ,@(if (target-riscv64?)
+             `((add-before 'bootstrap 'force-bootstrap
+                 (lambda _
+                   (delete-file "configure")
+                   ;; This file prevents automake from running.
+                   (delete-file "autogen.sh"))))
+             '())
          (add-after 'unpack 'use-system-boost
            (lambda _
              (substitute* "src/include/firebird/Message.h"
                (("\"\\./impl/boost/preprocessor/seq/for_each_i\\.hpp\"")
                 "<boost/preprocessor/seq/for_each_i.hpp>")
-               (("FB_BOOST_") "BOOST_"))
-             #t))
+               (("FB_BOOST_") "BOOST_"))))
          (add-after 'unpack 'patch-installation
            (lambda _
              (substitute*
@@ -358,27 +366,23 @@ ElasticSearch server")
 
              ;; These promote proprietary workflows not relevant on Guix.
              (for-each delete-file-recursively
-                       (find-files "doc" "README\\.(build\\.msvc|NT|Win)"))
-             #t))
+                       (find-files "doc" "README\\.(build\\.msvc|NT|Win)"))))
          (add-after 'configure 'delete-init-scripts
            (lambda _
-             (delete-file-recursively "gen/install/misc")
-             #t))
+             (delete-file-recursively "gen/install/misc")))
          (add-before 'build 'set-build-environment-variables
            (lambda _
              ;; ‘isql’ needs to run & find libfbclient.so during the build.
              ;; This doubles as a rudimentary test in lieu of a test suite.
              (setenv "LD_LIBRARY_PATH"
-                     (string-append (assoc-ref %build-inputs "icu4c") "/lib"))
-             #t))
+                     (string-append (assoc-ref %build-inputs "icu4c") "/lib"))))
          (add-before 'install 'keep-embedded-debug-symbols
            (lambda _
              ;; Let the gnu-build-system separate & deal with them later.
              ;; XXX Upstream would use ‘--strip-unneeded’, shaving a whole
              ;; megabyte off Guix's 7.7M libEngine12.so, for example.
              (substitute* "gen/Makefile.install"
-               (("readelf") "false"))
-             #t))
+               (("readelf") "false"))))
          (add-after 'install 'prune-undesirable-files
            (lambda* (#:key outputs #:allow-other-keys)
              (let ((out (assoc-ref outputs "out")))
@@ -389,12 +393,15 @@ ElasticSearch server")
                  ;; Delete (now-)empty directories.
                  (for-each rmdir
                            (list "include/firebird/impl"
-                                 "lib/firebird/plugins/udr"))
-                 #t)))))))
+                                 "lib/firebird/plugins/udr")))))))))
+    (native-inputs
+     (if (target-riscv64?)
+       (list autoconf automake libtool)
+       '()))
     (inputs
      (list boost
            editline
-           icu4c-67
+           icu4c
            libtommath
            ncurses
            zlib))
@@ -417,8 +424,6 @@ Firebird can also be embedded into stand-alone applications that don't want or
 need a full client & server.  Used in this manner, it offers richer SQL support
 than SQLite as well as the option to seamlessly migrate to a client/server
 database later.")
-    (properties
-     `((lint-hidden-cve . ("CVE-2017-6369"))))
     (license
      ;; See doc/license/README.license.usage.txt for rationale & details.
      (list license:bsd-3                ; src/common/sha2/
@@ -481,14 +486,14 @@ mapping from string keys to string values.")
 (define-public memcached
   (package
     (name "memcached")
-    (version "1.6.16")
+    (version "1.6.18")
     (source
      (origin
        (method url-fetch)
        (uri (string-append
              "https://memcached.org/files/memcached-" version ".tar.gz"))
        (sha256
-        (base32 "1nilmfhy8hc7zzlihnx3hmiqf7siyrpgz2g5s3r3l36xy4xsjl9h"))))
+        (base32 "0n21svnjw8j7bdbwrn0apnfql7ckraqgrl7wj9fsqj86h6w6mpfb"))))
     (build-system gnu-build-system)
     (inputs
      (list libevent cyrus-sasl))
@@ -571,13 +576,13 @@ the API, and provides features such as:
 (define-public python-pylibmc
   (package
     (name "python-pylibmc")
-    (version "1.6.1")
+    (version "1.6.3")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "pylibmc" version))
        (sha256
-        (base32 "1sg7d9j0v6g3xg3finf4l1hb72c13vcyyi6rqrc9shbx903d93ca"))))
+        (base32 "1q06696lxpqn155sydg3z6dksimks6n35q72zdjsvarpal8ldypf"))))
     (build-system python-build-system)
     (arguments
      '(#:phases
@@ -587,10 +592,10 @@ the API, and provides features such as:
            (lambda _
              (invoke "memcached" "-d"))))))
     (native-inputs
-     (list memcached python-nose))
+     (list memcached python-pytest))
     (inputs
      (list libmemcached zlib cyrus-sasl))
-    (home-page "http://sendapatch.se/projects/pylibmc/")
+    (home-page "https://sendapatch.se/projects/pylibmc/")
     (synopsis "Python client for memcached")
     (description
      "@code{pylibmc} is a client in Python for memcached.  It is a wrapper
@@ -987,7 +992,7 @@ Language.")
              `((add-after 'unpack 'apply-libatomics-patch
                  (lambda* (#:key inputs #:allow-other-keys)
                    (let ((patch-file
-                           (assoc-ref inputs 
+                           (assoc-ref inputs
                                                "mariadb-link-libatomic.patch")))
                      (invoke "patch" "-p1" "-i" patch-file)))))
              '())
@@ -1153,7 +1158,7 @@ Language.")
        ("libaio" ,libaio)
        ("libxml2" ,libxml2)
        ("ncurses" ,ncurses)
-       ("openssl" ,openssl)
+       ("openssl" ,openssl-1.1)
        ("pam" ,linux-pam)
        ("pcre2" ,pcre2)
        ("xz" ,xz)
@@ -1196,7 +1201,7 @@ developed in C/C++ to MariaDB and MySQL databases.")
 (define-public galera
   (package
     (name "galera")
-    (version "26.4.12")
+    (version "26.4.13")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1205,7 +1210,7 @@ developed in C/C++ to MariaDB and MySQL databases.")
                     (recursive? #t)))
               (file-name (git-file-name name version))
               (sha256
-               (base32 "0n4272mvr8a6h5prbhvl376asdp89ipix5yx5n6i1iiw9bs3v76l"))))
+               (base32 "06kf6w0bjkgcmddjd3k1q4cjpg8i78l0c7hcf368h09i1hqd23i6"))))
     (build-system cmake-build-system)
     (inputs
      (list check boost openssl))
@@ -1217,17 +1222,17 @@ and high-availability (HA).")
     (license license:gpl2)))                  ;'COPYING' says "version 2" only
 
 ;; Don't forget to update the other postgresql packages when upgrading this one.
-(define-public postgresql-14
+(define-public postgresql-15
   (package
     (name "postgresql")
-    (version "14.4")
+    (version "15.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://ftp.postgresql.org/pub/source/v"
                                   version "/postgresql-" version ".tar.bz2"))
               (sha256
                (base32
-                "0slg7ld5mldmv3pn1wxxwglm4s3xc6c91ixx24apj713qlvn4fy2"))
+                "1bi19sqmri569hyjvbk8grlws7f5dalsqz87wkgx1yjafcyz5zb4"))
               (patches (search-patches "postgresql-disable-resolve_symlinks.patch"))))
     (build-system gnu-build-system)
     (arguments
@@ -1279,58 +1284,43 @@ TIMESTAMP.  It also supports storage of binary large objects, including
 pictures, sounds, or video.")
     (license (license:x11-style "file://COPYRIGHT"))))
 
+(define-public postgresql-14
+  (package
+    (inherit postgresql-15)
+    (name "postgresql")
+    (version "14.4")
+    (source (origin
+              (inherit (package-source postgresql-15))
+              (uri (string-append "https://ftp.postgresql.org/pub/source/v"
+                                  version "/postgresql-" version ".tar.bz2"))
+              (sha256
+               (base32
+                "0slg7ld5mldmv3pn1wxxwglm4s3xc6c91ixx24apj713qlvn4fy2"))))))
+
 (define-public postgresql-13
   (package
     (inherit postgresql-14)
-    (version "13.6")
-    (replacement postgresql-13/replacement)
+    (version "13.9")
     (source (origin
               (inherit (package-source postgresql-14))
               (uri (string-append "https://ftp.postgresql.org/pub/source/v"
                                   version "/postgresql-" version ".tar.bz2"))
               (sha256
                (base32
-                "1z37ix80hb2bqa2smh1hbj9r507ypnl3pil43gkqznnlv6ipzz5s"))
-              (patches (search-patches "postgresql-riscv-spinlocks.patch"))))))
-
-;; The merge of commit ...
-;;  781dd2de230e3 gnu: postgresql-13: Fix building on riscv64-linux.
-;; ... in ...
-;;  49b350fafc2c3 Merge branch 'master' into staging.
-;; ... lost the inherited patch from postgresql-14, causing problems such as ...
-;;  05fef7bfc6005 gnu: timescaledb: Adjust test preparation to PostgreSQL 13.6.
-;;
-;; While at it, remove the RISC-V spinlock patch, which has been upstreamed
-;; in a different form (so the old patch still applies).
-;; TODO: Remove in the next rebuild cycle.
-(define postgresql-13/replacement
-  (package
-    (inherit postgresql-13)
-    (version "13.7")
-    (source
-     (origin
-       (inherit (package-source postgresql-13))
-       (uri (string-append "https://ftp.postgresql.org/pub/source/v"
-                           version "/postgresql-" version ".tar.bz2"))
-       (sha256
-        (base32
-         "16b3ljid7zd1v5l4l4pmwihx43wi8p9izidkjfii8dnqygs5p40v"))
-       (patches (search-patches "postgresql-disable-resolve_symlinks.patch"))))))
+                "05d46dzkya6s0qbaxvksc5j12syb514q5lha6z9vx7z4lp06c6gg"))))))
 
 (define-public postgresql-11
   (package
     (inherit postgresql-13)
     (name "postgresql")
-    (version "11.16")
+    (version "11.18")
     (source (origin
               (inherit (package-source postgresql-13))
               (uri (string-append "https://ftp.postgresql.org/pub/source/v"
                                   version "/postgresql-" version ".tar.bz2"))
               (sha256
                (base32
-                "1983a7y4y6zhbgh0qcdfkf99445j1zm5q1ncrbkrx555y08y3n9d"))
-              (patches (search-patches
-                        "postgresql-disable-resolve_symlinks.patch"))))
+                "013m1x53qfxcry7l033ahhxjc3lflb7fj8fapk7qm49fqppj0kyj"))))
     (native-inputs
      (modify-inputs (package-native-inputs postgresql-13)
        (replace "docbook-xml" docbook-xml-4.2)))))
@@ -1338,14 +1328,14 @@ pictures, sounds, or video.")
 (define-public postgresql-10
   (package
     (inherit postgresql-11)
-    (version "10.21")
+    (version "10.23")
     (source (origin
               (inherit (package-source postgresql-11))
               (uri (string-append "https://ftp.postgresql.org/pub/source/v"
                                   version "/postgresql-" version ".tar.bz2"))
               (sha256
                (base32
-                "1la5dx4hhy5yaznwk9gwdsymih3sd23fyhh6spssdaajdn2rh8fk"))))
+                "1sgfssjc9lnzijhn108r6z26fri655k413f1c9b8wibjhd9b594l"))))
     (native-inputs
      (modify-inputs (package-native-inputs postgresql-11)
        (append opensp docbook-sgml-4.2)
@@ -1356,7 +1346,7 @@ pictures, sounds, or video.")
 (define-public timescaledb
   (package
     (name "timescaledb")
-    (version "2.7.0")
+    (version "2.8.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1365,8 +1355,7 @@ pictures, sounds, or video.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "18wszj8ia5rs4y4zkyfb0f5z4y1g7ac3jym748nbkbszhxmq7nc7"))
-              (patches (search-patches "timescaledb-flaky-test.patch"))
+                "1gbadna0ilmqad7sbrixm12wd71h43njhsbp1kh5lispb6drdb6r"))
               (modules '((guix build utils)))
               (snippet
                ;; Remove files carrying the proprietary TIMESCALE license.
@@ -1462,7 +1451,7 @@ PostgreSQL extension, providing automatic partitioning across time and space
 (define-public pgloader
   (package
     (name "pgloader")
-    (version "3.6.4")
+    (version "3.6.9")
     (source
      (origin
        (method git-fetch)
@@ -1470,7 +1459,7 @@ PostgreSQL extension, providing automatic partitioning across time and space
              (url "https://github.com/dimitri/pgloader")
              (commit (string-append "v" version))))
        (sha256
-        (base32 "05lpa0r5l7pvx97ljfb0cryxz11krczbb86gi1i1ixp0h9bvqw2a"))
+        (base32 "03kp3ms2sjz4gwb94xs404mi63fnv1bq00hyqxyvc9csmicxzawn"))
        (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     (arguments
@@ -1631,25 +1620,32 @@ types are supported, as is encryption.")
 (define-public emacs-rec-mode
   (package
     (name "emacs-rec-mode")
-    (version "1.9.0")
+    (version "1.9.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://elpa.gnu.org/packages/"
                                   "rec-mode-" version ".tar"))
               (sha256
                (base32
-                "1w1q6kh567fd8xismq9i6wr1y893lypd30l452yvydi1qjiq1n6x"))
-              (snippet '(begin (delete-file "rec-mode.info")))))
+                "0f60bw07l6kk1kkjjxsk30p6rxj9mpngaxqy8piyabnijfgjzd3s"))
+              (snippet #~(begin (delete-file "rec-mode.info")))))
     (build-system emacs-build-system)
     (arguments
-     '(#:phases
-       (modify-phases %standard-phases
-         (add-before 'install 'make-info
-           (lambda _
-             (invoke "makeinfo" "--no-split"
-                     "-o" "rec-mode.info" "rec-mode.texi"))))))
-    (native-inputs
-     (list texinfo))
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'patch-program-paths
+            (lambda* (#:key inputs #:allow-other-keys)
+              (emacs-substitute-variables "rec-mode.el"
+                ("rec-recfix" (search-input-file inputs "bin/recfix"))
+                ("rec-recinf" (search-input-file inputs "bin/recinf"))
+                ("rec-recsel" (search-input-file inputs "bin/recsel")))))
+          (add-before 'install 'make-info
+            (lambda _
+              (invoke "makeinfo" "--no-split"
+                      "-o" "rec-mode.info" "rec-mode.texi"))))))
+    (inputs (list recutils))
+    (native-inputs (list texinfo))
     (home-page "https://www.gnu.org/software/recutils/")
     (synopsis "Emacs mode for working with recutils database files")
     (description "This package provides an Emacs major mode @code{rec-mode}
@@ -2349,7 +2345,7 @@ data sources.  Data sources include SQL Servers and any software with an ODBC
 Driver.")
    (license license:lgpl2.1+)
    ;; COPYING contains copy of lgpl2.1 - but copyright notices just say "LGPL"
-   (home-page "http://www.unixodbc.org")))
+   (home-page "https://www.unixodbc.org")))
 
 (define-public nanodbc
   (package
@@ -2447,51 +2443,142 @@ similar to BerkeleyDB, LevelDB, etc.")
 (define-public redis
   (package
     (name "redis")
-    (version "6.2.6")
+    (version "7.0.9")
     (source (origin
               (method url-fetch)
               (uri (string-append "http://download.redis.io/releases/redis-"
                                   version".tar.gz"))
               (sha256
                (base32
-                "1ariw5x33hmmm3d5al0j3307l5kf3vhmn78wpyaz67hia1x8nasv"))
+                "0rczzcy2mwy6hjdgg10l9lr4vavh8jrs7zlb0ba534bwlk13awgp"))
               (modules '((guix build utils)))
               (snippet
                ;; Delete bundled jemalloc, as the package will use the libc one
                '(begin (delete-file-recursively "deps/jemalloc")))))
     (build-system gnu-build-system)
-    (native-inputs
-     (list procps ; for tests
-           tcl))                   ; for tests
     (arguments
-     '(#:phases
-       (modify-phases %standard-phases
-         (delete 'configure)
-         (add-after 'unpack 'use-correct-tclsh
-           (lambda* (#:key inputs #:allow-other-keys)
-             (substitute* "runtest"
-               (("^TCLSH=.*")
-                (string-append "TCLSH="
-                               (assoc-ref inputs "tcl")
-                               "/bin/tclsh")))))
-         (add-after 'unpack 'adjust-tests
-           (lambda _
-             ;; Disable failing tests
-             (substitute* "tests/test_helper.tcl"
-               (("integration/failover") "")
-               (("integration/replication-4") "")
-               (("integration/replication-psync") "")
-               (("integration/replication[^-]") "")))))
-       #:make-flags `("CC=gcc"
-                      "MALLOC=libc"
-                      "LDFLAGS=-ldl"
-                      ,(string-append "PREFIX="
-                                      (assoc-ref %outputs "out")))))
+     (list
+      #:make-flags #~(list #$(string-append "CC=" (cc-for-target))
+                           "MALLOC=libc"
+                           "LDFLAGS=-ldl"
+                           (string-append "PREFIX=" #$output))
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)
+          (add-after 'unpack 'patch-paths
+            (lambda _
+              (substitute* "runtest"
+                (("^TCLSH=.*")
+                 (string-append "TCLSH=" (which "tclsh"))))
+              (substitute* "tests/support/server.tcl"
+                (("/usr/bin/env")
+                 (which "env")))))
+          (add-after 'unpack 'adjust-tests
+            (lambda _
+              ;; Disable failing tests
+              (substitute* "tests/test_helper.tcl"
+                ;; The AOF tests cause the test suite to hang waiting for a
+                ;; "background AOF rewrite to finish", perhaps because dead
+                ;; processes persist as zombies in the build environment.
+                (("unit/aofrw") "")
+                (("integration/aof(-multi-part)?") "")
+                (("integration/failover") "")
+                (("integration/replication-4") "")
+                (("integration/replication-psync") "")
+                (("integration/replication[^-]") "")))))))
+    (native-inputs (list pkg-config procps tcl which))
     (synopsis "Key-value cache and store")
     (description "Redis is an advanced key-value cache and store.  Redis
 supports many data structures including strings, hashes, lists, sets, sorted
 sets, bitmaps and hyperloglogs.")
     (home-page "https://redis.io/")
+    ;; These two CVEs have long been fixed.
+    (properties `((lint-hidden-cve . ("CVE-2022-3647" "CVE-2022-33105"))))
+    (license license:bsd-3)))
+
+(define-public hiredis
+  (package
+    (name "hiredis")
+    (version "1.1.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/redis/hiredis")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1zld30j3kpzqr9w3vkpd6mm3f1b1yk3dlgp9lp6gpsybjjfr2i6h"))))
+    (build-system cmake-build-system)
+    (native-inputs
+     ;; needed for testing
+     (list redis))
+    (synopsis "Minimalistic C client library for the Redis database")
+    (description "This package provides a library for sending commands and
+receiving replies to and from a Redis server.  It comes with a synchronous
+API, asynchronous API and reply parsing API.  Only the binary-safe Redis
+protocol is supported.")
+    (home-page "https://github.com/redis/hiredis")
+    (license license:bsd-3)))
+
+(define-public ruby-hiredis
+  (package
+    (name "ruby-hiredis")
+    (version "0.6.3")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/redis/hiredis-rb")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "05y4g7frhym59m9x208zpvg2qvqvfjlgqmygxj8sqgl07n0ww1ks"))
+              (patches (search-patches
+                        "ruby-hiredis-use-system-hiredis.patch"))))
+    (build-system ruby-build-system)
+    (arguments
+     (list
+      #:tests? #f                       ;require native extension
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'patch-hiredis-include-directory
+            (lambda* (#:key inputs #:allow-other-keys)
+              (substitute* "ext/hiredis_ext/extconf.rb"
+                ;; Adjust the hiredis include directory.
+                (("\\$CFLAGS << \" -I/usr/include/hiredis\"")
+                 (format #f "$CFLAGS << \" -I~a\""
+                         (search-input-directory inputs "include/hiredis"))))))
+          (add-after 'unpack 'disable-building-c-extension
+            (lambda _
+              ;; FIXME: The produced native extension appears to segfault when
+              ;; run; disable building it until a solution is found (see:
+              ;; https://github.com/redis/hiredis-rb/issues/93).
+              (substitute* "ext/hiredis_ext/extconf.rb"
+                (("build_hiredis = true")
+                 "build_hiredis = false"))))
+          ;; FIXME: Un-comment phase after the extension can be made to run
+          ;; without crashing (see above).
+          ;; (add-after 'build 'build-ext
+          ;;   (lambda _
+          ;;     (setenv "CC" #$(cc-for-target))
+          ;;     (invoke "rake" "compile")))
+          (add-before 'check 'start-redis
+            (lambda _
+              (invoke "redis-server" "--daemonize" "yes")))
+          (add-after 'install 'delete-mkmf.log
+            (lambda _
+              ;; This build log captures non-deterministic file names (see:
+              ;; https://github.com/rubygems/rubygems/issues/6259).
+              (for-each delete-file (find-files #$output "^mkmf\\.log$")))))))
+    (native-inputs (list redis ruby-rake-compiler))
+    (inputs (list hiredis))
+    (synopsis "Ruby wrapper for hiredis")
+    (description "@code{hiredis-rb} is a Ruby extension that wraps
+@code{hiredis}, a minimalist C client for Redis.  Both the synchronous
+connection API and a separate protocol reader are supported.  It is primarily
+intended to speed up parsing multi bulk replies.")
+    (home-page "https://github.com/redis/hiredis-rb")
     (license license:bsd-3)))
 
 (define-public ruby-redis
@@ -2648,7 +2735,7 @@ organized in hash table, B+ tree, or fixed-length array.")
              #t)))))
     (inputs
      (list lz4 zlib snappy))
-    (home-page "http://source.wiredtiger.com/")
+    (home-page "https://source.wiredtiger.com/")
     (synopsis "NoSQL data engine")
     (description
      "WiredTiger is an extensible platform for data management.  It supports
@@ -2822,7 +2909,7 @@ semantics.")
 (define-public libpqxx
   (package
     (name "libpqxx")
-    (version "7.7.3")
+    (version "7.7.4")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -2831,7 +2918,7 @@ semantics.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1mrhsih5bhiin0l3c4vp22l9p7c5035m0vvqpx18c0407fkzc7hp"))))
+                "1qwpfba8g55jjv0xnsk4hhf2cmhk7mdirxx115cvnjjw97ppy0z0"))))
     (build-system gnu-build-system)
     (native-inputs (list gcc-11 python-wrapper))
     (inputs (list postgresql))
@@ -2841,7 +2928,7 @@ semantics.")
      "Libpqxx is a C++ library to enable user programs to communicate with the
 PostgreSQL database back-end.  The database back-end can be local or it may be
 on another machine, accessed via TCP/IP.")
-    (home-page "http://pqxx.org/")
+    (home-page "https://pqxx.org/")
     (license license:bsd-3)))
 
 (define-public go-go-etcd-io-bbolt
@@ -2964,13 +3051,13 @@ with Python's asyncio framework.")
 (define-public python-asyncmy
   (package
     (name "python-asyncmy")
-    (version "0.2.3")
+    (version "0.2.5")
     (source
       (origin
         (method url-fetch)
         (uri (pypi-uri "asyncmy" version))
         (sha256
-          (base32 "19p81jd4w7m7v2x1jdrwibp67wzqx1a7rdw5n4qqmch3iffp97vn"))))
+          (base32 "0i18zxy6xvzv6dk791xifn2sw2q4zvqwpzrzy8qx51d3mp8z6gng"))))
     (build-system python-build-system)
     (native-inputs (list python-cython))
     (home-page "https://github.com/long2ice/asyncmy")
@@ -3041,12 +3128,13 @@ with relational data.")
     (version "3.4.2")
     (source
      (origin
-       (method url-fetch)
-       (uri (string-append "https://github.com/sqlcipher/" name
-                           "/archive/v" version ".tar.gz"))
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/sqlcipher/sqlcipher")
+             (commit (string-append "v" version))))
        (sha256
-        (base32 "1nxarwbci8jx99f1d0y1ivxcv25s78l1p7q6qy28lkpkcx8pm2b9"))
-       (file-name (string-append name "-" version ".tar.gz"))))
+        (base32 "168wb6fvyap7y8j86fb3xl5rd4wmhiq0dxvx9wxwi5kwm1j4vn1a"))
+       (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     (inputs
      `(("libcrypto" ,openssl)
@@ -3115,13 +3203,13 @@ or languages.  It uses only Python's built-in data types.")
 (define-public python-pyodbc
   (package
     (name "python-pyodbc")
-    (version "4.0.32")
+    (version "4.0.35")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "pyodbc" version))
        (sha256
-        (base32 "0sqs0x2l5mk3yv0wwz3ya8yh5f4babihyhc8hjbf2m86b71z1rcv"))
+        (base32 "1j7577acd2f16zifw49ajg0aw7vm0pdg6jxrr1dlaa5rx14azfcj"))
        (modules '((guix build utils)))
        (snippet
         ;; Delete precompiled binaries.  The corresponding source is included.
@@ -3169,7 +3257,7 @@ for ODBC.")
            pkg-config
            txt2man
            which))
-    (home-page "http://mdbtools.sourceforge.net/")
+    (home-page "https://mdbtools.sourceforge.net/")
     (synopsis "Read Microsoft Access databases")
     (description "MDB Tools is a set of tools and applications to read the
 proprietary MDB file format used in Microsoft's Access database package.  This
@@ -3252,14 +3340,14 @@ Memory-Mapped Database} (LMDB), a high-performance key-value store.")
 (define-public virtuoso-ose
   (package
     (name "virtuoso-ose")
-    (version "7.2.7")
+    (version "7.2.9")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://sourceforge/virtuoso/virtuoso/" version "/"
                            "virtuoso-opensource-" version ".tar.gz"))
        (sha256
-        (base32 "1853ln0smiilf3pni70gq6nmi9ps039cy44g6b5i9d2z1n9hnj02"))
+        (base32 "145s4lqixdxa3j0lp9lgzbb664zzy1imw04hmgia5y5679i8r0xy"))
        (patches (search-patches "virtuoso-ose-remove-pre-built-jar-files.patch"))
        (modules '((guix build utils)))
        ;; This snippet removes pre-built Java archives.
@@ -3332,8 +3420,8 @@ Memory-Mapped Database} (LMDB), a high-performance key-value store.")
     (native-inputs
      (list autoconf automake bison flex gperf libtool))
     (inputs
-     (list openssl net-tools readline zlib))
-    (home-page "http://vos.openlinksw.com/owiki/wiki/VOS/")
+     (list openssl net-tools readline which zlib))
+    (home-page "https://vos.openlinksw.com/owiki/wiki/VOS/")
     (synopsis "Multi-model database system")
     (description "Virtuoso is a scalable cross-platform server that combines
 relational, graph, and document data management with web application server
@@ -3429,14 +3517,13 @@ framework.")
 (define-public python-sqlalchemy-utils
   (package
     (name "python-sqlalchemy-utils")
-    (version "0.38.2")
+    (version "0.38.3")
     (source
       (origin
         (method url-fetch)
         (uri (pypi-uri "SQLAlchemy-Utils" version))
         (sha256
-         (base32
-          "1d6fq81489kqzxmk3l6f39sinw206lzs392frmpr5lsjzg9xc0cy"))))
+         (base32 "0k8z0mjhvdv302kn0nhci8b2dgw4cn2akprsf37ma1540ykgp6lz"))))
     (build-system python-build-system)
     (arguments
      '(#:tests? #f)) ; FIXME: Many tests require a running database server.
@@ -3535,6 +3622,79 @@ this library provides functions to facilitate such comparisons.")
 SQLAlchemy Database Toolkit for Python.")
     (license license:expat)))
 
+(define-public python-sqlite-fts4
+  (package
+    (name "python-sqlite-fts4")
+    (version "1.0.3")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "sqlite-fts4" version))
+              (sha256
+               (base32
+                "034kx0ac556sywy1p4qcrc36l24w3q0xwswqv2z9s3k8yvm5xc3q"))))
+    (build-system python-build-system)
+    (native-inputs (list python-pytest))
+    (home-page "https://github.com/simonw/sqlite-fts4")
+    (synopsis "Python functions for working with SQLite FTS4 search")
+    (description "This package provides custom SQLite functions written
+in Python for ranking documents indexed using the SQLite's FTS4 full
+text search extension.")
+    (license license:asl2.0)))
+
+(define-public python-sqlite-utils
+  (package
+    (name "python-sqlite-utils")
+    (version "3.30")
+    (source (origin
+              (method git-fetch)        ;for tests
+              (uri (git-reference
+                    (url "https://github.com/simonw/sqlite-utils")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1a58syvh5jp40vi5libsxkqy99z75kj4ckxqmylbhd342ppfy1wp"))))
+    (build-system pyproject-build-system)
+    (arguments
+     (list #:phases #~(modify-phases %standard-phases
+                        (add-after 'unpack 'relax-requirements
+                          (lambda _
+                            (substitute* "setup.py"
+                              ;; This is a variant designed to have a binary
+                              ;; wheel made available on PyPI, which is not a
+                              ;; concern to Guix.
+                              (("click-default-group-wheel")
+                               "click-default-group")))))))
+    (propagated-inputs (list python-click python-click-default-group
+                             python-dateutil python-sqlite-fts4
+                             python-tabulate))
+    (native-inputs (list python-pytest))
+    (home-page "https://github.com/simonw/sqlite-utils")
+    (synopsis
+     "CLI tool and Python utility functions for manipulating SQLite databases")
+    (description
+     "This package provides a CLI tool and Python utility functions for
+manipulating SQLite databases.  It's main features are:
+@itemize
+@item
+Pipe JSON (or CSV or TSV) directly into a new SQLite database file,
+automatically creating a table with the appropriate schema.
+@item
+Run in-memory SQL queries, including joins, directly against data in
+CSV, TSV or JSON files and view the results.
+@item
+Configure SQLite full-text search against your database tables and run
+search queries against them, ordered by relevance.
+@item
+Run transformations against your tables to make schema changes that
+SQLite ALTER TABLE does not directly support, such as changing the type
+of a column.
+@item
+Extract columns into separate tables to better normalize your existing
+data.
+@end itemize")
+    (license license:asl2.0)))
+
 (define-public python-pickleshare
   (package
     (name "python-pickleshare")
@@ -3568,44 +3728,40 @@ PickleShare.")
 (define-public python-apsw
   (package
     (name "python-apsw")
-    (version "3.36.0-r1")
+    (version "3.40.0.0")
+    ;; The compressed release has fetching functionality disabled.
     (source
-      (origin
-        (method url-fetch)
-        (uri (string-append "https://github.com/rogerbinns/apsw/releases"
-                            "/download/" version "/apsw-" version ".zip"))
-        (sha256
-          (base32
-           "0w8q73147hv77dlpqrx6h1gx03acc8xqhvdpfp6vkffdm0wmqd8p"))))
-    (build-system python-build-system)
+     (origin
+       (method url-fetch)
+       (uri (string-append
+             "https://github.com/rogerbinns/apsw/releases/download/"
+             version "/apsw-" version ".zip"))
+       (sha256
+        (base32
+         "02sgja00azvd08wi2wm105apmhp2644s7aw9b1zdg3dkcwjnsiad"))))
+    (build-system pyproject-build-system)
     (native-inputs
-     (list unzip))
-    (inputs
-     (list sqlite))
+     (list python-cython unzip))
+    (inputs (list sqlite-next))         ;SQLite 3.40 required.
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (replace 'build
-           (lambda _
-             (invoke "python" "setup.py" "build" "--enable-all-extensions"
-                     "--enable=load_extension")
-             #t))
-         (add-after 'build 'build-test-helper
-           (lambda _
-             (invoke "gcc" "-fPIC" "-shared" "-o" "./testextension.sqlext"
-                     "-I." "-Isqlite3" "src/testextension.c")
-             #t))
-         (replace 'check
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (add-installed-pythonpath inputs outputs)
-             (invoke "python" "setup.py" "test")
-             #t)))))
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-before 'build 'build-extensions
+            (lambda _
+              (invoke "python" "setup.py" "build" "--enable-all-extensions"
+                      "--enable=load_extension")))
+          (add-after 'build 'build-test-helper
+            (lambda _
+              (invoke "gcc" "-fPIC" "-shared" "-o" "./testextension.sqlext"
+                      "-I." "-Isqlite3" "src/testextension.c"))))))
     (home-page "https://github.com/rogerbinns/apsw/")
     (synopsis "Another Python SQLite Wrapper")
-    (description "APSW is a Python wrapper for the SQLite
-embedded relational database engine.  In contrast to other wrappers such as
-pysqlite it focuses on being a minimal layer over SQLite attempting just to
-translate the complete SQLite API into Python.")
+    (description
+     "APSW is a Python wrapper for the SQLite embedded relational database
+engine.  In contrast to other wrappers such as pysqlite it focuses on being a
+minimal layer over SQLite attempting just to translate the complete SQLite API
+into Python.")
     (license license:zlib)))
 
 (define-public python-aiosqlite
@@ -3660,20 +3816,20 @@ managers for automatically closing connections.")
            python-asyncmy
            python-sqlalchemy))
     (home-page "https://github.com/encode/databases")
-    (synopsis "Async database support for Python.")
+    (synopsis "Async database support for Python")
     (description "This package implements async database support for Python.")
     (license license:bsd-3)))
 
 (define-public python-psycopg2
   (package
     (name "python-psycopg2")
-    (version "2.9.3")
+    (version "2.9.5")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "psycopg2" version))
        (sha256
-        (base32 "1099as8ind9kpz30rmqzc3nir668fmpkxwayrj2sjka3ycdiv14f"))))
+        (base32 "0ni4kq6p7hbkm2qsky998q36q5gq5if4nwd8hwhjx5rsd0p6s955"))))
     (build-system python-build-system)
     (arguments
      ;; Tests would require a postgresql database "psycopg2_test"
@@ -3882,77 +4038,60 @@ for Python.  The design goals are:
 (define-public python-hiredis
   (package
     (name "python-hiredis")
-    (version "0.2.0")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (pypi-uri "hiredis" version))
-       (sha256
-        (base32
-         "1dfm2k9l9zar9nw9fwmm74zrgraxdxs04vx9li56fjcf289qx5fa"))))
-    (build-system python-build-system)
+    (version "2.2.2")
+    (source (origin
+              (method git-fetch)        ;for tests
+              (uri (git-reference
+                    (url "https://github.com/redis/hiredis-py")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "066rm5m7aa8skm0a57cf45153bwmbl9yyi4s60an14hb25n947gi"))
+              (patches
+               (search-patches "python-hiredis-fix-header.patch"
+                               "python-hiredis-use-system-hiredis.patch"))))
+    (build-system pyproject-build-system)
     (arguments
-     ;; no tests
-     `(#:tests? #f))
+     (list #:phases #~(modify-phases %standard-phases
+                        (add-before 'check 'delete-extraneous-__init__.py
+                          (lambda _
+                            ;; The fix was forwarded upstream, see:
+                            ;; https://github.com/redis/hiredis-py/pull/160.
+                            (delete-file "tests/__init__.py"))))))
+    (native-inputs (list python-pytest))
+    (inputs (list hiredis))
     (home-page "https://github.com/redis/hiredis-py")
     (synopsis "Python extension that wraps protocol parsing code in hiredis")
     (description "Python-hiredis is a python extension that wraps protocol
 parsing code in hiredis.  It primarily speeds up parsing of multi bulk replies.")
     (license license:bsd-3)))
 
-(define-public python-aioredis
-  (package
-    (name "python-aioredis")
-    (version "2.0.1")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (pypi-uri "aioredis" version))
-       (sha256
-        (base32 "13nrkk45az6qdiwfpbw80ls6bfip0i27qlkh9gsp2b9zk6pim9ga"))))
-    (build-system python-build-system)
-    (arguments
-     (list #:phases #~(modify-phases %standard-phases
-                        (add-before 'check 'start-redis
-                          (lambda _
-                            (invoke "redis-server" "--daemonize" "yes")))
-                        (replace 'check
-                          (lambda* (#:key tests? #:allow-other-keys)
-                            (when tests?
-                              (invoke "pytest" "-vv")))))))
-    (native-inputs
-     (list python-pytest
-           python-pytest-asyncio
-           python-uvloop
-           redis))
-    (propagated-inputs
-     (list python-async-timeout
-           python-hiredis
-           python-typing-extensions))
-    (home-page "https://github.com/aio-libs/aioredis-py")
-    (synopsis "Redis support for Python's @code{asyncio} module")
-    (description "This package provides Redis support for the Python
-@code{asyncio} (PEP 3156) module.")
-    (license license:expat)))
-
 (define-public python-fakeredis
   (package
     (name "python-fakeredis")
-    (version "1.7.1")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (pypi-uri "fakeredis" version))
-       (sha256
-        (base32
-         "1v68my2v7fg44zwky3k5d52nn1bi0szpgdslghrpa2ifnjhlnb3w"))))
-    (build-system python-build-system)
+    (version "2.10.1")
+    (source (origin
+              (method git-fetch)        ;for tests
+              (uri (git-reference
+                    (url "https://github.com/cunla/fakeredis-py")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1imsi9dswvkda894sm53lfzdsna0qlrgxszczlq2sam68zn4hfz6"))))
+    (build-system pyproject-build-system)
     (arguments
-     ;; no tests
-     `(#:tests? #f))
-    (propagated-inputs
-     (list python-aioredis python-packaging python-redis python-sortedcontainers))
-    (home-page "https://github.com/jamesls/fakeredis")
+     (list #:phases #~(modify-phases %standard-phases
+                        (add-after 'unpack 'relax-requirements
+                          (lambda _
+                            (substitute* "pyproject.toml"
+                              (("sortedcontainers = \"\\^2\\.4\"")
+                               "sortedcontainers = \"^2.1\"")))))))
+    (native-inputs (list python-poetry-core python-pytest
+                         python-pytest-asyncio python-pytest-mock))
+    (propagated-inputs (list python-redis python-sortedcontainers))
+    (home-page "https://github.com/cunla/fakeredis-py")
     (synopsis "Fake implementation of redis API for testing purposes")
     (description
      "Fakeredis is a pure-Python implementation of the redis-py Python client
@@ -3967,29 +4106,67 @@ reasonable substitute.")
 (define-public python-redis
   (package
     (name "python-redis")
-    (version "3.5.3")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (pypi-uri "redis" version))
-       (sha256
-        (base32 "18h5b87g15x3j6pb1h2q27ri37p2qpvc9n2wgn5yl3b6m3y0qzhf"))))
-    (build-system python-build-system)
-    ;; Tests require a running Redis server.
-    (arguments '(#:tests? #f))
-    ;; As long as we are not running test, we do not need this input :-)
-    ;;(native-inputs
-    ;; `(("python-pytest" ,python-pytest)))
-    (home-page "https://github.com/andymccurdy/redis-py")
+    (version "4.5.2")
+    (source (origin
+              ;; The PyPI archive lacks some test resources such as the TLS
+              ;; certificates under docker/stunnel/keys.
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/redis/redis-py")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0cz3gji3rb1h5dczyl11hm42wgsbz5v896cgbi14dij160b7m35i"))))
+    (build-system pyproject-build-system)
+    (arguments
+     (list
+      #:test-flags
+      #~(list "-m"
+              ;; These tests are disabled in the official CI run (see:
+              ;; https://raw.githubusercontent.com/redis/redis-py/master/
+              ;; .github/workflows/install_and_test.sh).
+              (string-append "not onlycluster "
+                             "and not redismod "
+                             "and not ssl")
+              "-k" (string-append
+                    ;; The autoclaim test fails with "AssertionError: assert
+                    ;; [b'0-0', [], []] == [b'0-0', []]".
+                    "not test_xautoclaim "
+                    ;; These tests cause the following error: "Error 111
+                    ;; connecting to localhost:6380. Connection refused."
+                    ;; (see: https://github.com/redis/redis-py/issues/2109).
+                    "and not test_sync "
+                    "and not test_psync"))
+      #:phases
+      #~(modify-phases %standard-phases
+          ;; Tests require a running Redis server.
+          (add-before 'check 'start-redis
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                (invoke "redis-server" "--daemonize" "yes"
+                        "--enable-debug-command" "yes"
+                        "--enable-module-command" "local")))))))
+    (native-inputs
+     (list python-pytest
+           python-pytest-asyncio
+           python-pytest-timeout
+           redis))
+    (propagated-inputs
+     (list python-async-timeout))
+    (home-page "https://github.com/redis/redis-py")
     (synopsis "Redis Python client")
     (description
      "This package provides a Python interface to the Redis key-value store.")
     (license license:expat)))
 
+(define-public python-aioredis
+  (deprecated-package "python-aioredis" python-redis))
+
 (define-public python-rq
   (package
     (name "python-rq")
-    (version "1.11")
+    (version "1.11.1")
     (source
      (origin
        (method git-fetch)
@@ -3998,7 +4175,7 @@ reasonable substitute.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1dj3m8dh9vf1qiq1drjhfw5xbr975v1kpzn4fwja83cfd7jrpzvy"))))
+        (base32 "0dnjm2s036l4j4ypq0h903vh132dp2wiwjrn8jicz1nw829dqpzf"))))
     (build-system python-build-system)
     (arguments
      '(#:phases (modify-phases %standard-phases
@@ -4062,37 +4239,16 @@ is designed to have a low barrier to entry.")
 (Redis Queue).")
     (license license:expat)))
 
-(define-public python-trollius-redis
-  (package
-    (name "python-trollius-redis")
-    (version "0.1.4")
-    (source
-      (origin
-        (method url-fetch)
-        (uri (pypi-uri "trollius_redis" version))
-        (sha256
-         (base32
-          "0k3vypszmgmaipgw9xscvgm79h2zd6p6ci8gdp5sxl6g5kbqr9fy"))))
-    (build-system python-build-system)
-    ;; TODO: Tests require packaging 'hiredis'.
-    (arguments '(#:tests? #f))
-    (home-page "https://github.com/benjolitz/trollius-redis")
-    (synopsis "Port of asyncio-redis to trollius")
-    (description "@code{trollius-redis} is a Redis client for Python
-  trollius.  It is an asynchronous IO (PEP 3156) implementation of the
-  Redis protocol.")
-    (license license:bsd-2)))
-
 (define-public python-sqlparse
   (package
     (name "python-sqlparse")
-    (version "0.4.2")
+    (version "0.4.3")
     (source (origin
               (method url-fetch)
               (uri (pypi-uri "sqlparse" version))
               (sha256
                (base32
-                "1bkx52c2jh28c528b69qfk2ijfzw1laxx6lim7jr8fi6fh67600c"))))
+                "0s3jyllg0ka0n7pgqfng1hzvh39li853dr40qcp4s4dv8r481jk9"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
@@ -4168,7 +4324,7 @@ the SQL language using a syntax that reflects the resulting query.")
 (define-public apache-arrow
   (package
     (name "apache-arrow")
-    (version "8.0.0")
+    (version "11.0.0")
     (source
      (origin
        (method git-fetch)
@@ -4178,7 +4334,7 @@ the SQL language using a syntax that reflects the resulting query.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "1gwiflk72pq1krc0sjzabypmh7slfyf7ak71fiypy3xgzw8a777c"))))
+         "06d3jjxagj5f14j9c48rh63x7pr9f96v69anjnpc6lakr0gkpi1d"))))
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #f
@@ -4187,13 +4343,13 @@ the SQL language using a syntax that reflects the resulting query.")
          (add-before 'configure 'enter-source-directory
            (lambda _ (chdir "cpp")))
          (add-after 'unpack 'set-env
-           (lambda _
+           (lambda* (#:key inputs #:allow-other-keys)
              (substitute* "cpp/cmake_modules/ThirdpartyToolchain.cmake"
                (("set\\(xsimd_SOURCE.*") ""))
-             (setenv "BOOST_ROOT" (assoc-ref %build-inputs "boost"))
-             (setenv "BROTLI_HOME" (assoc-ref %build-inputs "brotli"))
-             (setenv "FLATBUFFERS_HOME" (assoc-ref %build-inputs "flatbuffers"))
-             (setenv "RAPIDJSON_HOME" (assoc-ref %build-inputs "rapidjson")))))
+             (setenv "BOOST_ROOT" (assoc-ref inputs "boost"))
+             (setenv "BROTLI_HOME" (assoc-ref inputs "brotli"))
+             (setenv "FLATBUFFERS_HOME" (assoc-ref inputs "flatbuffers"))
+             (setenv "RAPIDJSON_HOME" (assoc-ref inputs "rapidjson")))))
        #:build-type "Release"
        #:configure-flags
        (list "-DARROW_PYTHON=ON"
@@ -4280,6 +4436,138 @@ the SQL language using a syntax that reflects the resulting query.")
     (propagated-inputs
      (list `(,apache-thrift "lib") lz4 utf8proc zlib
            `(,zstd "lib")))
+    (native-inputs
+     (list pkg-config))
+    (outputs '("out" "lib" "include"))
+    (home-page "https://arrow.apache.org/")
+    (synopsis "Columnar in-memory analytics")
+    (description "Apache Arrow is a columnar in-memory analytics layer
+designed to accelerate big data.  It houses a set of canonical in-memory
+representations of flat and hierarchical data along with multiple
+language-bindings for structure manipulation.  It also provides IPC and common
+algorithm implementations.")
+    (license license:asl2.0)))
+
+(define-public apache-arrow-for-ceph
+  (package
+    (name "apache-arrow")
+    (version "6.0.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/apache/arrow")
+             (commit (string-append "apache-arrow-" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "0mcw361akqw4sxnnpnr9c9v1zk4hphk6gcq763pcb19yzljh88ig"))))
+    (build-system cmake-build-system)
+    (arguments
+     `(#:tests? #f
+       #:phases
+       (modify-phases %standard-phases
+         (add-before 'configure 'enter-source-directory
+           (lambda _ (chdir "cpp")))
+         (add-after 'unpack 'set-env
+           (lambda* (#:key inputs #:allow-other-keys)
+             (substitute* "cpp/src/parquet/parquet.pc.in"
+               (("includedir=\\$\\{prefix\\}/")
+                "includedir="))
+             (substitute* "cpp/cmake_modules/ThirdpartyToolchain.cmake"
+               (("set\\(xsimd_SOURCE.*") ""))
+             (setenv "BOOST_ROOT" (assoc-ref inputs "boost"))
+             (setenv "BROTLI_HOME" (assoc-ref inputs "brotli"))
+             (setenv "FLATBUFFERS_HOME" (assoc-ref inputs "flatbuffers"))
+             (setenv "RAPIDJSON_HOME" (assoc-ref inputs "rapidjson")))))
+       #:build-type "Release"
+       #:configure-flags
+       (list "-DARROW_PYTHON=ON"
+             "-DARROW_GLOG=ON"
+             ;; Parquet options
+             "-DARROW_PARQUET=ON"
+             "-DPARQUET_BUILD_EXECUTABLES=ON"
+             ;; The maintainers disallow using system versions of
+             ;; jemalloc:
+             ;; https://issues.apache.org/jira/browse/ARROW-3507. This
+             ;; is unfortunate because jemalloc increases performance:
+             ;; https://arrow.apache.org/blog/2018/07/20/jemalloc/.
+             "-DARROW_JEMALLOC=OFF"
+
+             ;; The CMake option ARROW_DEPENDENCY_SOURCE is a global
+             ;; option that instructs the build system how to resolve
+             ;; each dependency. SYSTEM = Finding the dependency in
+             ;; system paths using CMake's built-in find_package
+             ;; function, or using pkg-config for packages that do not
+             ;; have this feature
+             "-DARROW_DEPENDENCY_SOURCE=SYSTEM"
+             "-Dxsimd_SOURCE=SYSTEM"
+
+             "-DARROW_RUNTIME_SIMD_LEVEL=NONE"
+             "-DARROW_SIMD_LEVEL=NONE"
+             "-DARROW_PACKAGE_KIND=Guix"
+
+             ;; Split output into its component packages.
+             (string-append "-DCMAKE_INSTALL_PREFIX="
+                            (assoc-ref %outputs "lib"))
+             (string-append "-DCMAKE_INSTALL_RPATH="
+                            (assoc-ref %outputs "lib")
+                            "/lib")
+             (string-append "-DCMAKE_INSTALL_BINDIR="
+                            (assoc-ref %outputs "out")
+                            "/bin")
+             (string-append "-DCMAKE_INSTALL_INCLUDEDIR="
+                            (assoc-ref %outputs "include")
+                            "/share/include")
+
+             "-DARROW_WITH_SNAPPY=ON"
+             "-DARROW_WITH_ZLIB=ON"
+             "-DARROW_WITH_ZSTD=ON"
+             "-DARROW_WITH_LZ4=ON"
+             "-DARROW_COMPUTE=ON"
+             "-DARROW_CSV=ON"
+             "-DARROW_DATASET=ON"
+             "-DARROW_FILESYSTEM=ON"
+             "-DARROW_HDFS=ON"
+             "-DARROW_JSON=ON"
+             ;; Arrow Python C++ integration library (required for
+             ;; building pyarrow). This library must be built against
+             ;; the same Python version for which you are building
+             ;; pyarrow. NumPy must also be installed. Enabling this
+             ;; option also enables ARROW_COMPUTE, ARROW_CSV,
+             ;; ARROW_DATASET, ARROW_FILESYSTEM, ARROW_HDFS, and
+             ;; ARROW_JSON.
+             "-DARROW_PYTHON=ON"
+
+             ;; Building the tests forces on all the
+             ;; optional features and the use of static
+             ;; libraries.
+             "-DARROW_BUILD_TESTS=OFF"
+             "-DBENCHMARK_ENABLE_GTEST_TESTS=OFF"
+             ;;"-DBENCHMARK_ENABLE_TESTING=OFF"
+             "-DARROW_BUILD_STATIC=OFF")))
+    (inputs
+     (list boost
+           brotli
+           bzip2
+           double-conversion
+           gflags
+           glog
+           grpc
+           protobuf
+           python
+           python-numpy
+           rapidjson
+           re2
+           snappy
+           xsimd))
+    ;; These are all listed under Requires.private in arrow.pc
+    (propagated-inputs
+     (list (list apache-thrift "lib")
+           lz4
+           utf8proc
+           zlib
+           (list zstd "lib")))
     (native-inputs
      (list pkg-config))
     (outputs '("out" "lib" "include"))
@@ -4390,7 +4678,7 @@ algorithm implementations.")
              "-DARROW_BUILD_STATIC=OFF")))
     (inputs
      `(("boost" ,boost)
-       ("brotli" ,google-brotli)
+       ("brotli" ,brotli)
        ("double-conversion" ,double-conversion)
        ("snappy" ,snappy)
        ("gflags" ,gflags)
@@ -4433,40 +4721,23 @@ algorithm implementations.")
          (add-after 'unpack 'make-git-checkout-writable
            (lambda _
              (for-each make-file-writable (find-files "."))))
-         (add-before 'install 'patch-cmake-variables
-           (lambda* (#:key inputs #:allow-other-keys)
-             ;; Replace cmake locations with hardcoded guix links for the
-             ;; underlying C++ library and headers.  This is a pretty awful
-             ;; hack.
-             (substitute* "cmake_modules/FindParquet.cmake"
-               (("# Licensed to the Apache Software Foundation" m)
-                (string-append "set(PARQUET_INCLUDE_DIR \""
-                               (assoc-ref inputs "apache-arrow:include")
-                               "/share/include\")\n" m))
-               (("find_package_handle_standard_args" m)
-                (string-append "set(PARQUET_LIB_DIR \""
-                               (assoc-ref inputs "apache-arrow:lib")
-                               "/lib\")\n" m)))))
-         (add-before 'install 'patch-parquet-library
-           (lambda _
-             (substitute* "CMakeLists.txt"
-               (("parquet_shared") "parquet"))))
          (add-before 'install 'set-PYARROW_WITH_PARQUET
            (lambda _
+             (setenv "PYARROW_BUNDLE_ARROW_CPP_HEADERS" "0")
              (setenv "PYARROW_WITH_PARQUET" "1"))))))
     (propagated-inputs
-     `(("apache-arrow:lib" ,apache-arrow "lib")
-       ("apache-arrow:include" ,apache-arrow "include")
-       ("python-numpy" ,python-numpy)
-       ("python-pandas" ,python-pandas)
-       ("python-six" ,python-six)))
+     (list (list apache-arrow "lib")
+           (list apache-arrow "include")
+           python-numpy
+           python-pandas
+           python-six))
     (native-inputs
-     `(("cmake" ,cmake-minimal)
-       ("pkg-config" ,pkg-config)
-       ("python-cython" ,python-cython)
-       ("python-pytest" ,python-pytest)
-       ("python-pytest-runner" ,python-pytest-runner)
-       ("python-setuptools-scm" ,python-setuptools-scm)))
+     (list cmake-minimal
+           pkg-config
+           python-cython
+           python-pytest
+           python-pytest-runner
+           python-setuptools-scm))
     (outputs '("out"))
     (home-page "https://arrow.apache.org/docs/python/")
     (synopsis "Python bindings for Apache Arrow")
@@ -4573,7 +4844,7 @@ SQLAlchemy.")
 similar to the DBI/DBD layer in Perl.  Writing one generic set of code,
 programmers can leverage the power of multiple databases and multiple
 simultaneous database connections by using this framework.")
-    (home-page "http://libdbi.sourceforge.net/")
+    (home-page "https://libdbi.sourceforge.net/")
     (license license:lgpl2.1+)))
 
 (define-public libdbi-drivers
@@ -4644,7 +4915,7 @@ The drivers officially supported by @code{libdbi} are:
 @item PostgreSQL,
 @item SQLite.
 @end itemize")
-    (home-page "http://libdbi-drivers.sourceforge.net/")
+    (home-page "https://libdbi-drivers.sourceforge.net/")
     (license license:lgpl2.1+)))
 
 (define-public soci
@@ -4679,7 +4950,7 @@ The drivers officially supported by @code{libdbi} are:
     (description
      "SOCI is an abstraction layer for several database backends, including
 PostreSQL, SQLite, ODBC and MySQL.")
-    (home-page "http://soci.sourceforge.net/")
+    (home-page "https://soci.sourceforge.net/")
     (license license:boost1.0)))
 
 (define-public freetds
@@ -4882,3 +5153,84 @@ generic interface to caching backends of any variety, and additionally
 provides API hooks which integrate these cache backends with the locking
 mechanism of @code{dogpile}.")
     (license license:expat)))
+
+(define-public datasette
+  (package
+    (name "datasette")
+    (version "0.64.2")
+    (source (origin
+              (method git-fetch)        ;for tests
+              (uri (git-reference
+                    (url "https://github.com/simonw/datasette")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1c8ajdaraynrjvsb8xxxnkb7zgm5fwq60qczaz00n465ki80j4h3"))))
+    (build-system pyproject-build-system)
+    (arguments
+     (list
+      #:test-flags
+      ;; There are multiple unexplained test failures (see:
+      ;; https://github.com/simonw/datasette/issues/2048).
+      #~(list "-k" (string-append
+                    "not (test_database_page_for_database_with_dot_in_name"
+                    " or test_row_strange_table_name"
+                    " or test_database_with_space_in_name"
+                    " or test_tilde_encoded_database_names"
+                    " or test_weird_database_names"
+                    " or test_css_classes_on_body"
+                    " or test_templates_considered"
+                    " or test_row_html_compound_primary_key"
+                    " or test_edit_sql_link_on_canned_queries"
+                    " or test_alternate_url_json"
+                    " or test_table_with_slashes_in_name"
+                    " or test_searchable"
+                    " or test_custom_query_with_unicode_characters"
+                    " or test_searchmode)")
+              "-n" (number->string (parallel-job-count))
+              "-m" "not serial")        ;cannot run in parallel
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'relax-requirements
+            (lambda _
+              ;; The package needlessly specifies exact versions
+              ;; of dependencies, when it works fine with others.
+              (substitute* "setup.py"
+                (("(black)==[0-9\\.]+" _ package)
+                 package)
+                (("click-default-group-wheel")
+                 "click-default-group")))))))
+    (propagated-inputs
+     (list python-aiofiles
+           python-asgi-csrf
+           python-asgiref
+           python-click
+           python-click-default-group
+           python-httpx
+           python-hupper
+           python-itsdangerous
+           python-janus
+           python-jinja2
+           python-mergedeep
+           python-pint
+           python-pluggy-next
+           python-pyyaml
+           python-uvicorn))
+    (native-inputs
+     (list python-beautifulsoup4
+           python-black
+           python-cogapp
+           python-pytest-7.1
+           python-pytest-asyncio
+           python-pytest-runner
+           python-pytest-timeout
+           python-pytest-xdist-next
+           python-setuptools
+           python-trustme))
+    (home-page "https://datasette.io/")
+    (synopsis "Multi-tool for exploring and publishing data")
+    (description "Datasette is a tool for exploring and publishing data.
+It helps people take data of any shape or size and publish that as an
+interactive, explorable website and accompanying API.")
+    (license license:asl2.0)))

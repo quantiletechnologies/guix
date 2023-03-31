@@ -19,7 +19,6 @@
 
 (define-module (guix self)
   #:use-module (guix config)
-  #:use-module (guix i18n)
   #:use-module (guix modules)
   #:use-module (guix gexp)
   #:use-module (guix store)
@@ -62,7 +61,7 @@
       ("guile-lzlib" (ref '(gnu packages guile) 'guile-lzlib))
       ("guile-zstd" (ref '(gnu packages guile) 'guile-zstd))
       ("guile-gcrypt"  (ref '(gnu packages gnupg) 'guile-gcrypt))
-      ("gnutls"     (ref '(gnu packages tls) 'gnutls))
+      ("guile-gnutls"  (ref '(gnu packages tls) 'guile-gnutls))
       ("disarchive" (ref '(gnu packages backup) 'disarchive))
       ("guile-lzma" (ref '(gnu packages guile) 'guile-lzma))
       ("gzip"       (ref '(gnu packages compression) 'gzip))
@@ -787,8 +786,8 @@ itself."
   (define guile-semver
     (specification->package "guile-semver"))
 
-  (define gnutls
-    (specification->package "gnutls"))
+  (define guile-gnutls
+    (specification->package "guile-gnutls"))
 
   (define disarchive
     (specification->package "disarchive"))
@@ -798,7 +797,7 @@ itself."
 
   (define dependencies
     (append-map transitive-package-dependencies
-                (list guile-gcrypt gnutls guile-git guile-avahi
+                (list guile-gcrypt guile-gnutls guile-git guile-avahi
                       guile-json guile-semver guile-ssh guile-sqlite3
                       guile-lib guile-zlib guile-lzlib guile-zstd)))
 
@@ -1090,6 +1089,12 @@ itself."
   (scheme-file "config.scm"
                #~(;; The following expressions get spliced.
                    (#$defmod (guix config)
+
+                     ;; Mark it as non-declarative to prevent cross-module
+                     ;; inlining that could lead to inlining %GUIX-VERSION in
+                     ;; (guix ui).
+                     #:declarative? #f
+
                      #:export (%guix-package-name
                                %guix-version
                                %guix-bug-report-address

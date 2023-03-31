@@ -3,7 +3,7 @@
 ;;; Copyright © 2015, 2017, 2019, 2020, 2021 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2015, 2016, 2017 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2016 Hartmut Goebel <h.goebel@crazy-compilers.com>
-;;; Copyright © 2016, 2017, 2018, 2019 Marius Bakke <mbakke@fastmail.com>
+;;; Copyright © 2016-2019, 2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2017 Danny Milosavljevic <dannym+a@scratchpost.org>
 ;;; Copyright © 2017, 2018, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2017 Frederick M. Muriithi <fredmanglis@gmail.com>
@@ -42,6 +42,7 @@
   #:use-module (guix gexp)
   #:use-module (guix utils)
   #:use-module (guix build-system python)
+  #:use-module (guix build-system pyproject)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (gnu packages)
   #:use-module (gnu packages check)
@@ -62,17 +63,17 @@
 (define-public python-sphinx
   (package
     (name "python-sphinx")
-    (version "4.5.0")
+    (version "5.1.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "Sphinx" version))
        (sha256
         (base32
-         "1rp28jryxwy24y8vpacclqihbizyi6b1s6id86pibvm46ybcmy3v"))))
+         "12cdy3m5c09lpf2bbxzbhm5v5y9fk7jgm94qrzggpq86waj28cms"))))
     (build-system python-build-system)
     (arguments
-     `(#:phases
+     '(#:phases
        (modify-phases %standard-phases
          (replace 'check
            (lambda* (#:key tests? #:allow-other-keys)
@@ -111,10 +112,6 @@
            texlive-etoolbox
            texlive-generic-ltxcmds
            texlive-hyperref
-           ;; TODO: Remove texlive-stringenc and texlive-zapfding after
-           ;; propagating them in texlive-hyperref in next rebuild cycle.
-           texlive-stringenc
-           texlive-zapfding
            texlive-latex-base           ;alltt, atbegshi, makeidx, textcomp
            texlive-latex-cmap
            texlive-latex-fancyhdr
@@ -148,6 +145,18 @@ for Python projects or other documents consisting of multiple reStructuredText
 sources.")
     (license license:bsd-2)))
 
+;; Some packages do not support Sphinx 5 yet.  Remove when unused.
+(define-public python-sphinx-4
+  (package
+    (inherit python-sphinx)
+    (version "4.5.0")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "Sphinx" version))
+              (sha256
+               (base32
+                "1rp28jryxwy24y8vpacclqihbizyi6b1s6id86pibvm46ybcmy3v"))))))
+
 (define-public python-sphinxcontrib-apidoc
   (package
     (name "python-sphinxcontrib-apidoc")
@@ -164,7 +173,6 @@ sources.")
      `(#:tests? #f))                    ;requires python-pytest<4.0
     (native-inputs
      (list python-pbr
-           python-pre-commit
            python-pytest
            python-sphinx
            python-testrepository))
@@ -365,14 +373,43 @@ Blog, News or Announcements section to a Sphinx website.")
            (lambda* (#:key tests? #:allow-other-keys)
              (when tests?
                (invoke "pytest")))))))
-    (propagated-inputs (list python-docutils python-sphinx))
+    (propagated-inputs (list python-docutils python-sphinx-4))
     (native-inputs
      (list python-pytest
            python-pytest-regressions))
     (home-page "https://github.com/executablebooks/sphinx-panels")
     (synopsis "Sphinx extension for creating panels in a grid layout")
     (description
-     "This package provides a sphinx extension for creating panels in a grid layout.")
+     "This package provides a sphinx extension for creating panels in a
+grid layout.  It is no longer maintained and users are encouraged to use
+@code{sphinx-design} instead.")
+    (license license:expat)))
+
+(define-public python-sphinx-tabs
+  (package
+    (name "python-sphinx-tabs")
+    (version "3.4.1")
+    (home-page "https://github.com/executablebooks/sphinx-tabs")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "sphinx-tabs" version))
+              (sha256
+               (base32
+                "0cmqw5ck2jcxqyf5ibz543idspq0g0fdzxh3fpah1r0nhfg9z86j"))))
+    (build-system python-build-system)
+    (arguments
+     '(#:tests? #f                ;TODO: requires sphinx-testing and rinohtype
+       #:phases (modify-phases %standard-phases
+                  (add-after 'unpack 'loosen-docutils-requirement
+                    (lambda _
+                      (substitute* "setup.py"
+                        (("docutils~=0\\.18\\.0")
+                         "docutils>=0.17.0")))))))
+    (propagated-inputs
+     (list python-docutils python-pygments python-sphinx))
+    (synopsis "Tabbed views for Sphinx")
+    (description
+     "Create tabbed content in Sphinx documentation when building HTML.")
     (license license:expat)))
 
 (define-public python-sphinxcontrib-programoutput
@@ -697,6 +734,54 @@ and several other projects.")
     (description "This package provides a Matplotlib theme for Sphinx.")
     (license license:bsd-3)))
 
+(define-public python-myst-parser
+  (package
+    (name "python-myst-parser")
+    (version "0.18.1")
+    (source (origin
+              (method git-fetch)        ;for tests
+              (uri (git-reference
+                    (url "https://github.com/executablebooks/MyST-Parser")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0lcz9vvy8hbp6cjmbslrlxn3pinf98jykiq8nx5lw5y0lz0mj162"))))
+    (build-system pyproject-build-system)
+    (arguments
+     ;; There are 3 test failures, seemingly due to expecting a slightly
+     ;; different output from Sphinx (see:
+     ;; https://github.com/executablebooks/MyST-Parser/issues/645).
+     (list #:test-flags #~(list "-k" (string-append
+                                      "not test_basic "
+                                      "and not test_gettext_html "
+                                      "and not test_fieldlist_extension"))))
+    (native-inputs
+     (list python-beautifulsoup4
+           python-docutils
+           python-flit-core
+           python-pytest
+           python-pytest-param-files
+           python-pytest-regressions
+           python-sphinx
+           python-sphinx-pytest))
+    (propagated-inputs
+     (list python-docutils
+           python-jinja2
+           python-linkify-it-py
+           python-markdown-it-py
+           python-linkify-it-py
+           python-mdit-py-plugins
+           python-pyyaml
+           python-sphinx
+           python-typing-extensions))
+    (home-page "https://myst-parser.readthedocs.io/en/latest/")
+    (synopsis "Sphinx and Docutils extension to parse MyST")
+    (description "This package provides a Sphinx and Docutils extension to parse
+MyST, a rich and extensible flavour of Markdown for authoring technical and
+scientific documentation.")
+    (license license:expat)))
+
 (define-public python-sphinx-rtd-theme
   (package
     (name "python-sphinx-rtd-theme")
@@ -861,6 +946,26 @@ enabled web server.")
 documenting acceptable argument types and return value types of functions.")
     (license license:expat)))
 
+(define-public python-sphinx-pytest
+  (package
+    (name "python-sphinx-pytest")
+    (version "0.0.5")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "sphinx_pytest" version))
+              (sha256
+               (base32
+                "13d3psm5vyb8rdj0mhnpn5m09k8xdaszcxdpng52fpz9sw8pngk7"))))
+    (build-system pyproject-build-system)
+    (native-inputs (list python-flit-core))
+    (propagated-inputs (list python-pytest python-sphinx))
+    (home-page "https://github.com/chrisjsewell/sphinx-pytest")
+    (synopsis "Pytest fixtures for Sphinx extensions")
+    (description "This Pytest extension mainly provides some Pytest fixtures
+to simulate converting some source text to Docutils @acronym{AST, Abstract
+Syntax Tree} at different stages: before transforms, after transforms, etc.")
+    (license license:expat)))
+
 (define-public python-nbsphinx
   (package
     (name "python-nbsphinx")
@@ -976,7 +1081,7 @@ automated way to document command-line programs.  It scans
 (define-public python-sphinx-theme-builder
   (package
     (name "python-sphinx-theme-builder")
-    (version "0.2.0a14")
+    (version "0.2.0b1")
     (source
      (origin
        (method git-fetch)               ;no tests in pypi archive
@@ -986,7 +1091,7 @@ automated way to document command-line programs.  It scans
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "1brqp34q716gglliallbgq4m63hl3nk8j6w8wcl8f2vvnkch6v98"))))
+         "15gvwzd4l3wcmd6fns8xvv44yzxmamr1nfn28mp12sdw2y10v2ba"))))
     (build-system python-build-system)
     (arguments
      (list
@@ -1013,7 +1118,7 @@ automated way to document command-line programs.  It scans
            python-click
            python-nodeenv
            python-packaging
-           python-pep621
+           python-pyproject-metadata
            python-rich
            python-sphinx-autobuild
            python-tomli))

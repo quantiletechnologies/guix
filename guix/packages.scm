@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012-2022 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012-2023 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2014, 2015, 2017, 2018, 2019 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2015 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2016 Alex Kost <alezost@gmail.com>
@@ -8,6 +8,8 @@
 ;;; Copyright © 2020, 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Chris Marusich <cmmarusich@gmail.com>
 ;;; Copyright © 2022 Maxime Devos <maximedevos@telenet.be>
+;;; Copyright © 2022 jgart <jgart@dismail.de>
+;;; Copyright © 2023 Simon Tournier <zimon.toutoune@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -41,16 +43,19 @@
   #:use-module (guix search-paths)
   #:use-module (guix sets)
   #:use-module (guix deprecation)
+  #:use-module ((guix diagnostics)
+                #:select (formatted-message define-with-syntax-properties))
+  #:autoload   (guix licenses) (license?)
   #:use-module (guix i18n)
   #:use-module (ice-9 match)
   #:use-module (ice-9 vlist)
   #:use-module (ice-9 regex)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9 gnu)
-  #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
+  #:use-module (srfi srfi-71)
   #:use-module (rnrs bytevectors)
   #:use-module (web uri)
   #:autoload   (texinfo) (texi-fragment->stexi)
@@ -86,6 +91,7 @@
             this-package
             package-name
             package-upstream-name
+            package-upstream-name*
             package-version
             package-full-name
             package-source
@@ -159,6 +165,8 @@
             &package-error
             package-error?
             package-error-package
+            package-license-error?
+            package-error-invalid-license
             &package-input-error
             package-input-error?
             package-error-invalid-input
@@ -418,7 +426,7 @@ from forcing GEXP-PROMISE."
 
 (define %hurd-systems
   ;; The GNU/Hurd systems for which support is being developed.
-  '("i586-gnu" "i686-gnu"))
+  '("i586-gnu"))
 
 (define %cuirass-supported-systems
   ;; This is the list of system types for which build machines are available.
@@ -533,6 +541,34 @@ Texinfo.  Otherwise, return the string."
         ((_ obj)
          #'obj)))))
 
+(define-syntax valid-license-value?
+  (syntax-rules (list package-license)
+    "Return #t if the given value is a valid license field, #f otherwise."
+    ;; Arrange so that the answer can be given at macro-expansion time in the
+    ;; most common cases.
+    ((_ (list x ...))
+     (and (license? x) ...))
+    ((_ (package-license _))
+     #t)
+    ((_ obj)
+     (or (license? obj)
+         ;; Note: Avoid 'not' below due to <https://bugs.gnu.org/58217>.
+         (eq? #f obj)                             ;#f is considered valid
+         (let ((x obj))
+           (and (pair? x) (every license? x)))))))
+
+(define-with-syntax-properties (validate-license (value properties))
+  (unless (valid-license-value? value)
+    (raise
+     (make-compound-condition
+      (condition
+       (&error-location
+        (location (source-properties->location properties))))
+      (condition
+       (&package-license-error (package #f) (license value)))
+      (formatted-message (G_ "~s: invalid package license~%") value))))
+  value)
+
 ;; A package.
 (define-record-type* <package>
   package make-package
@@ -574,8 +610,9 @@ Texinfo.  Otherwise, return the string."
             (sanitize validate-texinfo))          ; one-line description
   (description package-description
                (sanitize validate-texinfo))       ; one or two paragraphs
-  (license package-license)                       ; (list of) <license>
-  (home-page package-home-page)
+  (license package-license                        ; (list of) <license>
+           (sanitize validate-license))
+  (home-page package-home-page)                   ; string
   (supported-systems package-supported-systems    ; list of strings
                      (default %supported-systems))
 
@@ -657,6 +694,38 @@ it has in Guix."
   (or (assq-ref (package-properties package) 'upstream-name)
       (package-name package)))
 
+(define (package-upstream-name* package)
+  "Return the upstream name of PACKAGE, accounting for commonly-used
+package name prefixes in addition to the @code{upstream-name} property."
+  (let ((namespaces (list "cl-"
+                          "ecl-"
+                          "emacs-"
+                          "ghc-"
+                          "go-"
+                          "guile-"
+                          "java-"
+                          "julia-"
+                          "lua-"
+                          "minetest-"
+                          "node-"
+                          "ocaml-"
+                          "perl-"
+                          "python-"
+                          "r-"
+                          "ruby-"
+                          "rust-"
+                          "sbcl-"
+                          "texlive-"))
+        (name (package-name package)))
+    (or (assq-ref (package-properties package) 'upstream-name)
+        (let loop ((prefixes namespaces))
+          (match prefixes
+            (() name)
+            ((prefix rest ...)
+              (if (string-prefix? prefix name)
+                (substring name (string-length prefix))
+                (loop rest))))))))
+
 (define (hidden-package p)
   "Return a \"hidden\" version of P--i.e., one that 'fold-packages' and thus,
 user interfaces, ignores."
@@ -736,6 +805,10 @@ exist, return #f instead."
 (define-condition-type &package-error &error
   package-error?
   (package package-error-package))
+
+(define-condition-type &package-license-error &package-error
+  package-license-error?
+  (license package-error-invalid-license))
 
 (define-condition-type &package-input-error &package-error
   package-input-error?
@@ -1138,9 +1211,9 @@ inputs of Coreutils and adds libcap:
 
   (modify-inputs (package-inputs coreutils)
     (delete \"gmp\" \"acl\")
-    (append libcap))
+    (prepend libcap))
 
-Other types of clauses include 'prepend' and 'replace'.
+Other types of clauses include 'append' and 'replace'.
 
 The first argument must be a labeled input list; the result is also a labeled
 input list."
@@ -1167,8 +1240,13 @@ input list."
 
 (define (package-direct-sources package)
   "Return all source origins associated with PACKAGE; including origins in
-PACKAGE's inputs."
-  `(,@(or (and=> (package-source package) list) '())
+PACKAGE's inputs and patches."
+  (define (expand source)
+    (cons
+     source
+     (filter origin? (origin-patches source))))
+
+  `(,@(or (and=> (package-source package) expand) '())
     ,@(filter-map (match-lambda
                    ((_ (? origin? orig) _ ...)
                     orig)
@@ -1455,15 +1533,16 @@ package and returns its new name after rewrite."
 (define* (package-input-rewriting/spec replacements #:key (deep? #t))
   "Return a procedure that, given a package, applies the given REPLACEMENTS to
 all the package graph, including implicit inputs unless DEEP? is false.
+
 REPLACEMENTS is a list of spec/procedures pair; each spec is a package
 specification such as \"gcc\" or \"guile@2\", and each procedure takes a
-matching package and returns a replacement for that package."
+matching package and returns a replacement for that package.  Matching
+packages that have the 'hidden?' property set are not replaced."
   (define table
     (fold (lambda (replacement table)
             (match replacement
               ((spec . proc)
-               (let-values (((name version)
-                             (package-name->name+version spec)))
+               (let ((name version (package-name->name+version spec)))
                  (vhash-cons name (list version proc) table)))))
           vlist-null
           replacements))
@@ -1486,7 +1565,8 @@ matching package and returns a replacement for that package."
     (gensym " package-replacement"))
 
   (define (rewrite p)
-    (if (assq-ref (package-properties p) replacement-property)
+    (if (or (assq-ref (package-properties p) replacement-property)
+            (hidden-package? p))
         p
         (match (find-replacement p)
           (#f p)

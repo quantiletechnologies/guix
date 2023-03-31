@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
-;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2018, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2018, 2021, 2023 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013, 2014, 2015, 2016 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2014, 2015 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2014, 2017, 2019 Eric Bavier <bavier@member.fsf.org>
@@ -26,7 +26,7 @@
 ;;; Copyright © 2016, 2017 Nikita <nikita@n0.is>
 ;;; Copyright © 2016 Dylan Jeffers <sapientech@sapientech@openmailbox.org>
 ;;; Copyright © 2016 David Craven <david@craven.ch>
-;;; Copyright © 2016, 2017, 2018, 2019, 2020, 2021 Marius Bakke <marius@gnu.org>
+;;; Copyright © 2016-2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2016, 2017 Stefan Reichör <stefan@xsteve.at>
 ;;; Copyright © 2016, 2017 Alex Vong <alexvong1995@gmail.com>
 ;;; Copyright © 2016, 2017, 2018 Arun Isaac <arunisaac@systemreboot.net>
@@ -59,6 +59,8 @@
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2020, 2021 Greg Hogan <code@greghogan.com>
 ;;; Copyright © 2022 Philip McGrath <philip@philipmcgrath.com>
+;;; Copyright © 2022 jgart <jgart@dismail.de>
+;;; Copyright © 2021 Lars-Dominik Braun <lars@6xq.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -80,17 +82,14 @@
   #:use-module (gnu packages)
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
-  #:use-module (gnu packages certs)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages dbm)
   #:use-module (gnu packages hurd)
   #:use-module (gnu packages libffi)
-  #:use-module (gnu packages ncurses)
   #:use-module (gnu packages pkg-config)
-  #:use-module (gnu packages python-xyz)
+  #:use-module (gnu packages python-build)
   #:use-module (gnu packages readline)
-  #:use-module (gnu packages shells)
   #:use-module (gnu packages sqlite)
   #:use-module (gnu packages tcl)
   #:use-module (gnu packages tls)
@@ -388,7 +387,7 @@
            gdbm
            libffi ; for ctypes
            sqlite ; for sqlite extension
-           openssl
+           openssl-1.1
            readline
            zlib
            tcl
@@ -556,14 +555,17 @@ data types.")
                            (map cdr outputs)))))
            (replace 'install-sitecustomize.py
              ,(customize-site version))))))
+    (inputs
+     (modify-inputs (package-inputs python-2.7)
+       (replace "openssl" openssl)))
     (native-inputs
-     `(("tzdata" ,tzdata-for-tests)
-       ("unzip" ,unzip)
-       ("zip" ,(@ (gnu packages compression) zip))
-       ,@(if (%current-target-system)
-             `(("python3" ,this-package))
-             '())
-       ,@(package-native-inputs python-2)))
+     (let ((inputs (modify-inputs (package-native-inputs python-2)
+                     (prepend tzdata-for-tests
+                              unzip
+                              (@ (gnu packages compression) zip)))))
+       (if (%current-target-system)
+           (modify-inputs inputs (prepend this-package))
+           inputs)))
     (native-search-paths
      (list (guix-pythonpath-search-path version)
            ;; Used to locate tzdata by the zoneinfo module introduced in
@@ -590,9 +592,7 @@ data types.")
     ;; is invoked upon 'make install'.  'pip' also expects 'ctypes' and thus
     ;; libffi.  Expat is needed for XML support which is expected by a lot
     ;; of libraries out there.
-    (inputs `(("expat" ,expat)
-              ("libffi" ,libffi)
-              ("zlib" ,zlib)))))
+    (inputs (list expat libffi zlib))))
 
 (define-public python-minimal
   (package/inherit python
@@ -603,10 +603,7 @@ data types.")
     ;; OpenSSL is a mandatory dependency of Python 3.x, for urllib;
     ;; zlib is required by 'zipimport', used by pip.  Expat is needed
     ;; for XML support, which is generally expected to be available.
-    (inputs `(("expat" ,expat)
-              ("libffi" ,libffi)
-              ("openssl" ,openssl)
-              ("zlib" ,zlib)))))
+    (inputs (list expat libffi openssl zlib))))
 
 (define-public python-debug
   (package/inherit python
@@ -674,10 +671,41 @@ and the unversioned commands available.")))
 (define-public python-wrapper (wrap-python3 python))
 (define-public python-minimal-wrapper (wrap-python3 python-minimal))
 
+;; The Python used in pyproject-build-system.
+(define-public python-sans-pip
+  (hidden-package
+   (package/inherit python
+     (arguments
+      (substitute-keyword-arguments (package-arguments python)
+        ((#:configure-flags flags #~())
+         #~(append '("--with-ensurepip=no")
+                   (delete "--with-ensurepip=install" #$flags))))))))
+
+(define-public python-sans-pip-wrapper
+  (wrap-python3 python-sans-pip))
+
+(define-public python-toolchain
+  (let ((base (package/inherit python-sans-pip-wrapper)))
+    (package
+      (inherit base)
+      (properties '())
+      (name "python-toolchain")
+      (propagated-inputs
+       (modify-inputs (package-propagated-inputs base)
+         (append python-pip
+                 python-pypa-build
+                 python-setuptools
+                 python-wheel)))
+      (synopsis "Python toolchain")
+      (description
+       "Python toolchain including Python itself, setuptools and pip.
+Use this package if you need a minimal Python toolchain instead of just
+the interpreter."))))
+
 (define-public micropython
   (package
     (name "micropython")
-    (version "1.18")
+    (version "1.19")
     (source
       (origin
         (method url-fetch)
@@ -685,7 +713,7 @@ and the unversioned commands available.")))
                             "releases/download/v" version
                             "/micropython-" version ".tar.xz"))
         (sha256
-         (base32 "1d1yza02pwq3kh8531ryq9sjk7zjqh786nnw397cccfk5ss73z4n"))
+         (base32 "090bbls5vnicynjyjqqd5zqwx8d6zxp7wlnrxgh0b4s8cyf5i8zj"))
       (modules '((guix build utils)))
       (snippet
        '(begin
@@ -732,169 +760,3 @@ run within just 256k of code space and 16k of RAM.  MicroPython aims to be as
 compatible with normal Python as possible to allow you to transfer code with
 ease from the desktop to a microcontroller or embedded system.")
     (license license:expat)))
-
-(define-public pypy
-  (package
-    (name "pypy")
-    (version "7.3.5")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append "https://downloads.python.org/pypy/"
-                                  "pypy3.7-v" version "-src.tar.bz2"))
-              (sha256
-               (base32
-                "18lrdmpcczlbk3cfarkgwqdmilrybz56i1dafk8dkjlyk90gw86r"))))
-    (build-system gnu-build-system)
-    (arguments
-     (list
-      #:tests? #f                      ;FIXME: 43 out of 364 tests are failing
-      #:modules '((ice-9 ftw) (ice-9 match)
-                  (guix build utils) (guix build gnu-build-system))
-      #:disallowed-references (list nss-certs)
-      #:phases
-      #~(modify-phases %standard-phases
-          (delete 'configure)
-          (add-after 'unpack 'patch-source
-            (lambda* (#:key inputs #:allow-other-keys)
-              (substitute* '("rpython/rlib/clibffi.py")
-                ;; find_library does not work for libc
-                (("ctypes\\.util\\.find_library\\('c'\\)") "'libc.so'"))
-              (substitute* '("lib_pypy/cffi/_pycparser/ply/cpp.py")
-                ;; Make reproducible (XXX: unused?)
-                (("time\\.localtime\\(\\)") "time.gmtime(0)"))
-              (substitute* '("pypy/module/sys/version.py")
-                ;; Make reproducible
-                (("t\\.gmtime\\(\\)") "t.gmtime(0)"))
-              (substitute* '("lib_pypy/_tkinter/tklib_build.py")
-                ;; Link to versioned libtcl and libtk
-                (("linklibs = \\['tcl', 'tk'\\]")
-                 "linklibs = ['tcl8.6', 'tk8.6']")
-                (("incdirs = \\[\\]")
-                 (string-append
-                  "incdirs = ['"
-                  #$(this-package-input "tcl") "/include', '"
-                  #$(this-package-input "tk")  "/include']")))
-              (substitute* '("lib_pypy/_curses_build.py")
-                ;; Find curses
-                (("/usr/local")
-                 #$(this-package-input "ncurses")))
-              (substitute* '("lib_pypy/_dbm.py")
-                ;; Use gdbm compat library, so we don’t need to pull
-                ;; in bdb.
-                (("ctypes.util.find_library\\('db'\\)")
-                 (format #f "~s" (search-input-file
-                                  inputs "lib/libgdbm_compat.so"))))
-              (substitute* '("lib_pypy/_sqlite3_build.py")
-                ;; Always use search paths
-                (("sys\\.platform\\.startswith\\('freebsd'\\)") "True")
-                ;; Find sqlite3
-                (("/usr/local") (assoc-ref inputs "sqlite"))
-                (("libname = 'sqlite3'")
-                 (format #f "libname = ~s"
-                         (search-input-file inputs "lib/libsqlite3.so.0"))))
-              (substitute* '("lib-python/3/subprocess.py")
-                ;; Fix shell path
-                (("/bin/sh")
-                 (search-input-file inputs "/bin/sh")))
-              (substitute* '("lib-python/3/distutils/unixccompiler.py")
-                ;; gcc-toolchain does not provide symlink cc -> gcc
-                (("\"cc\"") "\"gcc\""))))
-          (add-after 'unpack 'set-source-file-times-to-1980
-            ;; copied from python package, required by zip testcase
-            (lambda _
-              (let ((circa-1980 (* 10 366 24 60 60)))
-                (ftw "." (lambda (file stat flag)
-                           (utime file circa-1980 circa-1980)
-                           #t)))))
-          (replace 'build
-            (lambda _
-              (with-directory-excursion "pypy/goal"
-                ;; Build with jit optimization.
-                (invoke "python2"
-                        "../../rpython/bin/rpython"
-                        (string-append "--make-jobs="
-                                       (number->string (parallel-job-count)))
-                        "-Ojit"
-                        "targetpypystandalone"
-                        "--allworkingmodules"))
-              ;; Build c modules and package everything, so tests work.
-              (with-directory-excursion "pypy/tool/release"
-                (invoke "python2" "package.py"
-                        "--archive-name" "pypy-dist"
-                        "--builddir" (getcwd)))))
-          (replace 'check
-            (lambda* (#:key tests? #:allow-other-keys)
-              (if tests?
-                  (begin
-                    (setenv "HOME" "/tmp") ; test_with_pip tries to
-                                        ; access ~/.cache/pip
-                    ;; Run library tests only (no interpreter unit tests).
-                    ;; This is what Gentoo does.
-                    (invoke "python" "pypy/test_all.py"
-                            "--pypy=pypy/tool/release/pypy-dist/bin/pypy3"
-                            "lib-python"))
-                  (format #t "test suite not run~%"))))
-          (replace 'install
-            (lambda* (#:key inputs outputs #:allow-other-keys)
-              (let* ((bin-pypy3 (string-append #$output "/bin/pypy3"))
-                     (shebang-match-python "#!.+/bin/python")
-                     (shebang-pypy3 (string-append "#!" bin-pypy3))
-                     (dist-dir "pypy/tool/release/pypy-dist"))
-                (with-directory-excursion dist-dir
-                  ;; Delete test data.
-                  (for-each
-                   (lambda (x)
-                     (delete-file-recursively (string-append
-                                               "lib-python/3/" x)))
-                   '("tkinter/test"
-                     "test"
-                     "sqlite3/test"
-                     "lib2to3/tests"
-                     "idlelib/idle_test"
-                     "distutils/tests"
-                     "ctypes/test"
-                     "unittest/test"))
-                  ;; Patch shebang referencing python.
-                  (substitute* '("lib-python/3/cgi.py"
-                                 "lib-python/3/encodings/rot_13.py")
-                    ((shebang-match-python) shebang-pypy3))
-                  (with-fluids ((%default-port-encoding "ISO-8859-1"))
-                    (substitute* '("lib_pypy/_md5.py"
-                                   "lib_pypy/_sha1.py")
-                      ((shebang-match-python) shebang-pypy3))))
-                (copy-recursively dist-dir out)))))))
-    (native-inputs
-     (list gzip
-           nss-certs                    ; For ssl tests
-           pkg-config
-           python-2
-           python2-pycparser
-           tar))                        ; Required for package.py
-    (inputs
-     (list bzip2
-           expat
-           gdbm
-           glibc
-           libffi
-           ncurses
-           openssl
-           sqlite
-           tcl
-           tk
-           xz
-           zlib))
-    (home-page "https://www.pypy.org/")
-    (synopsis "Python implementation with just-in-time compilation")
-    (description "PyPy is a faster, alternative implementation of the Python
-programming language employing a just-in-time compiler.  It supports most
-Python code natively, including C extensions.")
-    (license (list license:expat     ; pypy itself; _pytest/
-                   license:psfl      ; python standard library in lib-python/
-                   license:asl2.0    ; dotviewer/font/ and some of lib-python/
-                   license:gpl3+ ; ./rpython/rlib/rvmprof/src/shared/libbacktrace/dwarf2.*
-                   license:bsd-3 ; lib_pypy/cffi/_pycparser/ply/
-                   (license:non-copyleft
-                    "http://www.unicode.org/copyright.html")))))
-
-(define-public pypy3
-  (deprecated-package "pypy3" pypy))

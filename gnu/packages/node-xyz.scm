@@ -236,7 +236,7 @@ user-land JavaScript.")
           "034iaiq2pdqn342p2404cpz364g282d2hkp9375hysnh9i968wbb"))))
     (build-system node-build-system)
     (arguments '(#:tests? #f)) ; No tests.
-    (home-page "http://www.enchantedage.com/node-mersenne")
+    (home-page "https://www.enchantedage.com/node-mersenne")
     (synopsis "Node.js module for generating Mersenne Twister random numbers")
     (description "This package provides a node.js port of the Mersenne Twister
 random number generator.")
@@ -658,7 +658,7 @@ defaulting to Node's implementation otherwise.")
        #:tests? #f))
     (inputs (list node-safe-buffer node-inherits))
     (home-page "https://github.com/nodejs/string_decoder")
-    (synopsis "Decode buffers while preserving multi-byte sequences ")
+    (synopsis "Decode buffers while preserving multi-byte sequences")
     (description "This package provides a user-land implementation of
 Node-core's @code{string_decoder}, which serves to decode buffers to
 strings so that the decoded string does not contain incomplete multibyte

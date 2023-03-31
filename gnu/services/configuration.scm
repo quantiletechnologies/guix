@@ -34,6 +34,7 @@
   #:autoload   (texinfo) (texi-fragment->stexi)
   #:autoload   (texinfo serialize) (stexi->texi)
   #:use-module (ice-9 curried-definitions)
+  #:use-module (ice-9 format)
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-34)
@@ -242,17 +243,17 @@ does not have a default value" field kind)))
                stem
                #,(id #'stem #'make- #'stem)
                #,(id #'stem #'stem #'?)
-               (%location #,(id #'stem #'stem #'-location)
-                          (default (and=> (current-source-location)
-                                          source-properties->location))
-                          (innate))
                #,@(map (lambda (name getter def)
                          #`(#,name #,getter (default #,def)
                                    (sanitize
                                     #,(id #'stem #'validate- #'stem #'- name))))
                        #'(field ...)
                        #'(field-getter ...)
-                       #'(field-default ...)))
+                       #'(field-default ...))
+               (%location #,(id #'stem #'stem #'-source-location)
+                          (default (and=> (current-source-location)
+                                          source-properties->location))
+                          (innate)))
 
              (define #,(id #'stem #'stem #'-fields)
                (list (configuration-field
@@ -263,7 +264,6 @@ does not have a default value" field kind)))
                       (serializer field-serializer)
                       (default-value-thunk
                         (lambda ()
-                          (display '#,(id #'stem #'% #'stem))
                           (if (maybe-value-set? (syntax->datum field-default))
                               field-default
                               (configuration-missing-default-value
@@ -370,6 +370,8 @@ DEFAULT."
                      (cond
                       ((package? val)
                        (symbol->string (package->symbol val)))
+                      (((list-of package?) val)
+                       (format #f "(~{~a~^ ~})" (map package->symbol val)))
                       (else (str val))))
 
                    `(entry (% (heading
@@ -410,7 +412,7 @@ If NEGATE? is @code{#t}, retrieve all fields except FIELDS."
 
 
 (define* (interpose ls  #:optional (delimiter "\n") (grammar 'infix))
-  "Same as @code{string-join}, but without join and string, returns an
+  "Same as @code{string-join}, but without join and string, returns a
 DELIMITER interposed LS.  Support 'infix and 'suffix GRAMMAR values."
   (when (not (member grammar '(infix suffix)))
     (raise
@@ -436,12 +438,14 @@ the list result in @code{#t} when applying PRED? on them."
 (define list-of-strings?
   (list-of string?))
 
-(define alist? list?)
+(define alist?
+  (list-of pair?))
 
 (define serialize-file-like empty-serializer)
 
 (define (text-config? config)
   (list-of file-like?))
+
 (define (serialize-text-config field-name val)
   #~(string-append
      #$@(interpose
@@ -468,9 +472,6 @@ applied on the fields and values of FIELDS using the
 
 COMBINE is a procedure that takes one or more arguments and combines
 all the alist entries into one value, @code{string-append} or
-@code{append} are usually good candidates for this.
-
-See the @code{serialize-alist} procedure in `@code{(gnu home services
-version-control}' for an example usage.)}"
+@code{append} are usually good candidates for this."
   (apply combine
          (map (generic-serialize-alist-entry serialize-field) fields)))

@@ -1,9 +1,11 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2017 David Craven <david@craven.ch>
-;;; Copyright © 2017, 2020 Mathieu Othacehe <m.othacehe@gmail.com>
+;;; Copyright © 2017, 2020, 2022 Mathieu Othacehe <othacehe@gnu.org>
 ;;; Copyright © 2017 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2019, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
+;;; Copyright © 2022 Josselin Poiret <dev@jpoiret.xyz>
+;;; Copyright © 2022 Reza Alizadeh Majd <r.majd@pantherx.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -21,6 +23,8 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu bootloader)
+  #:use-module (gnu system file-systems)
+  #:use-module (gnu system uuid)
   #:use-module (guix discovery)
   #:use-module (guix gexp)
   #:use-module (guix profiles)
@@ -30,6 +34,8 @@
   #:use-module (guix diagnostics)
   #:use-module (guix i18n)
   #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-34)
+  #:use-module (srfi srfi-35)
   #:use-module (ice-9 match)
   #:export (menu-entry
             menu-entry?
@@ -42,6 +48,7 @@
             menu-entry-multiboot-kernel
             menu-entry-multiboot-arguments
             menu-entry-multiboot-modules
+            menu-entry-chain-loader
 
             menu-entry->sexp
             sexp->menu-entry
@@ -69,6 +76,7 @@
             bootloader-configuration-terminal-inputs
             bootloader-configuration-serial-unit
             bootloader-configuration-serial-speed
+            bootloader-configuration-device-tree-support?
 
             %bootloaders
             lookup-bootloader-by-name
@@ -99,34 +107,77 @@
   (multiboot-arguments menu-entry-multiboot-arguments
                        (default '()))      ; list of string-valued gexps
   (multiboot-modules menu-entry-multiboot-modules
-                     (default '())))       ; list of multiboot commands, where
+                     (default '()))        ; list of multiboot commands, where
                                            ; a command is a list of <string>
+  (chain-loader     menu-entry-chain-loader
+                    (default #f)))         ; string, path of efi file
+
+(define (report-menu-entry-error menu-entry)
+  (raise
+   (condition
+    (&message
+     (message
+      (format #f (G_ "invalid menu-entry: ~a") menu-entry)))
+    (&fix-hint
+     (hint
+      (G_ "Please chose only one of:
+@enumerate
+@item direct boot by specifying fields @code{linux},
+@code{linux-arguments} and @code{linux-modules},
+@item multiboot by specifying fields @code{multiboot-kernel},
+@code{multiboot-arguments} and @code{multiboot-modules},
+@item chain-loader by specifying field @code{chain-loader}.
+@end enumerate"))))))
 
 (define (menu-entry->sexp entry)
   "Return ENTRY serialized as an sexp."
+  (define (device->sexp device)
+    (match device
+      ((? uuid? uuid)
+       `(uuid ,(uuid-type uuid) ,(uuid->string uuid)))
+      ((? file-system-label? label)
+       `(label ,(file-system-label->string label)))
+      (_ device)))
   (match entry
-    (($ <menu-entry> label device mount-point linux linux-arguments initrd #f
-                     ())
+    (($ <menu-entry> label device mount-point
+                     (? identity linux) linux-arguments (? identity initrd)
+                     #f () () #f)
      `(menu-entry (version 0)
                   (label ,label)
-                  (device ,device)
+                  (device ,(device->sexp device))
                   (device-mount-point ,mount-point)
                   (linux ,linux)
                   (linux-arguments ,linux-arguments)
                   (initrd ,initrd)))
     (($ <menu-entry> label device mount-point #f () #f
-                     multiboot-kernel multiboot-arguments multiboot-modules)
+                     (? identity multiboot-kernel) multiboot-arguments
+                     multiboot-modules #f)
      `(menu-entry (version 0)
                   (label ,label)
-                  (device ,device)
+                  (device ,(device->sexp device))
                   (device-mount-point ,mount-point)
                   (multiboot-kernel ,multiboot-kernel)
                   (multiboot-arguments ,multiboot-arguments)
-                  (multiboot-modules ,multiboot-modules)))))
+                  (multiboot-modules ,multiboot-modules)))
+    (($ <menu-entry> label device mount-point #f () #f #f () ()
+                     (? identity chain-loader))
+     `(menu-entry (version 0)
+                  (label ,label)
+                  (device ,(device->sexp device))
+                  (device-mount-point ,mount-point)
+                  (chain-loader ,chain-loader)))
+    (_ (report-menu-entry-error entry))))
 
 (define (sexp->menu-entry sexp)
   "Turn SEXP, an sexp as returned by 'menu-entry->sexp', into a <menu-entry>
 record."
+  (define (sexp->device device-sexp)
+    (match device-sexp
+      (('uuid type uuid-string)
+       (uuid uuid-string type))
+      (('label label)
+       (file-system-label label))
+      (_ device-sexp)))
   (match sexp
     (('menu-entry ('version 0)
                   ('label label) ('device device)
@@ -135,7 +186,7 @@ record."
                   ('initrd initrd) _ ...)
      (menu-entry
       (label label)
-      (device device)
+      (device (sexp->device device))
       (device-mount-point mount-point)
       (linux linux)
       (linux-arguments linux-arguments)
@@ -148,11 +199,20 @@ record."
                   ('multiboot-modules multiboot-modules) _ ...)
      (menu-entry
       (label label)
-      (device device)
+      (device (sexp->device device))
       (device-mount-point mount-point)
       (multiboot-kernel multiboot-kernel)
       (multiboot-arguments multiboot-arguments)
-      (multiboot-modules multiboot-modules)))))
+      (multiboot-modules multiboot-modules)))
+    (('menu-entry ('version 0)
+                  ('label label) ('device device)
+                  ('device-mount-point mount-point)
+                  ('chain-loader chain-loader) _ ...)
+     (menu-entry
+      (label label)
+      (device (sexp->device device))
+      (device-mount-point mount-point)
+      (chain-loader chain-loader)))))
 
 
 ;;;
@@ -193,29 +253,33 @@ instead~%")))
 (define-record-type* <bootloader-configuration>
   bootloader-configuration make-bootloader-configuration
   bootloader-configuration?
-  (bootloader         bootloader-configuration-bootloader) ;<bootloader>
-  (targets            %bootloader-configuration-targets    ;list of strings
-                      (default #f))
-  (target             %bootloader-configuration-target ;deprecated
-                      (default #f) (sanitize warn-target-field-deprecation))
-  (menu-entries       bootloader-configuration-menu-entries ;list of <menu-entry>
-                      (default '()))
-  (default-entry      bootloader-configuration-default-entry ;integer
-                      (default 0))
-  (timeout            bootloader-configuration-timeout ;seconds as integer
-                      (default 5))
-  (keyboard-layout    bootloader-configuration-keyboard-layout ;<keyboard-layout> | #f
-                      (default #f))
-  (theme              bootloader-configuration-theme ;bootloader-specific theme
-                      (default #f))
-  (terminal-outputs   bootloader-configuration-terminal-outputs ;list of symbols
-                      (default '(gfxterm)))
-  (terminal-inputs    bootloader-configuration-terminal-inputs ;list of symbols
-                      (default '()))
-  (serial-unit        bootloader-configuration-serial-unit ;integer | #f
-                      (default #f))
-  (serial-speed       bootloader-configuration-serial-speed ;integer | #f
-                      (default #f)))
+  (bootloader
+   bootloader-configuration-bootloader) ;<bootloader>
+  (targets               %bootloader-configuration-targets
+                         (default #f))     ;list of strings
+  (target                %bootloader-configuration-target ;deprecated
+                         (default #f)
+                         (sanitize warn-target-field-deprecation))
+  (menu-entries          bootloader-configuration-menu-entries
+                         (default '()))   ;list of <menu-entry>
+  (default-entry         bootloader-configuration-default-entry
+                         (default 0))     ;integer
+  (timeout               bootloader-configuration-timeout
+                         (default 5))     ;seconds as integer
+  (keyboard-layout       bootloader-configuration-keyboard-layout
+                         (default #f))    ;<keyboard-layout> | #f
+  (theme                 bootloader-configuration-theme
+                         (default #f))    ;bootloader-specific theme
+  (terminal-outputs      bootloader-configuration-terminal-outputs
+                         (default '(gfxterm)))   ;list of symbols
+  (terminal-inputs       bootloader-configuration-terminal-inputs
+                         (default '()))   ;list of symbols
+  (serial-unit           bootloader-configuration-serial-unit
+                         (default #f))    ;integer | #f
+  (serial-speed          bootloader-configuration-serial-speed
+                         (default #f))    ;integer | #f
+  (device-tree-support?  bootloader-configuration-device-tree-support?
+                         (default #t)))   ;boolean
 
 (define-deprecated (bootloader-configuration-target config)
   bootloader-configuration-targets
@@ -258,26 +322,22 @@ instead~%")))
             (force %bootloaders))
       (leave (G_ "~a: no such bootloader~%") name)))
 
-(define (efi-bootloader-profile files bootloader-package hooks)
-  "Creates a profile with BOOTLOADER-PACKAGE and a directory collection/ with
-links to additional FILES from the store.  This collection is meant to be used
-by the bootloader installer.
+(define (efi-bootloader-profile packages files hooks)
+  "Creates a profile from the lists of PACKAGES and FILES from the store.
+This profile is meant to be used by the bootloader-installer.
 
 FILES is a list of file or directory names from the store, which will be
-symlinked into the collection/ directory.  If a directory name ends with '/',
-then the directory content instead of the directory itself will be symlinked
-into the collection/ directory.
+symlinked into the profile.  If a directory name ends with '/', then the
+directory content instead of the directory itself will be symlinked into the
+profile.
 
-FILES may contain file like objects produced by functions like plain-file,
+FILES may contain file like objects produced by procedures like plain-file,
 local-file, etc., or package contents produced with file-append.
 
 HOOKS lists additional hook functions to modify the profile."
-  (define (bootloader-collection manifest)
+  (define (efi-bootloader-profile-hook manifest)
     (define build
-        (with-imported-modules '((guix build utils)
-                                 (ice-9 ftw)
-                                 (srfi srfi-1)
-                                 (srfi srfi-26))
+        (with-imported-modules '((guix build utils))
           #~(begin
             (use-modules ((guix build utils)
                           #:select (mkdir-p strip-store-file-name))
@@ -301,8 +361,7 @@ HOOKS lists additional hook functions to modify the profile."
             (define (name-is-store-entry? name)
               "Return #t if NAME is a direct store entry and nothing inside."
               (not (string-index (strip-store-file-name name) #\/)))
-            (let* ((collection (string-append #$output "/collection"))
-                   (files '#$files)
+            (let* ((files '#$files)
                    (directories (filter name-ends-with-/? files))
                    (names-from-directories
                     (append-map (lambda (directory)
@@ -310,11 +369,11 @@ HOOKS lists additional hook functions to modify the profile."
                                 directories))
                    (names (append names-from-directories
                                   (remove name-ends-with-/? files))))
-              (mkdir-p collection)
+              (mkdir-p #$output)
               (if (every file-exists? names)
                   (begin
                     (for-each (lambda (name)
-                               (symlink-to name collection
+                               (symlink-to name #$output
                                             (if (name-is-store-entry? name)
                                                 strip-store-file-name
                                                 basename)))
@@ -322,57 +381,63 @@ HOOKS lists additional hook functions to modify the profile."
                     #t)
                   #f)))))
 
-    (gexp->derivation "bootloader-collection"
+    (gexp->derivation "efi-bootloader-profile"
                       build
                       #:local-build? #t
                       #:substitutable? #f
                       #:properties
                       `((type . profile-hook)
-                        (hook . bootloader-collection))))
+                        (hook . efi-bootloader-profile-hook))))
 
-  (profile (content (packages->manifest (list bootloader-package)))
-           (name "bootloader-profile")
-           (hooks (append (list bootloader-collection) hooks))
+  (profile (content (packages->manifest packages))
+           (name "efi-bootloader-profile")
+           (hooks (cons efi-bootloader-profile-hook hooks))
            (locales? #f)
            (allow-collisions? #f)
            (relative-symlinks? #f)))
 
-(define* (efi-bootloader-chain files
-                               final-bootloader
+(define* (efi-bootloader-chain final-bootloader
                                #:key
+                               (packages '())
+                               (files '())
                                (hooks '())
-                               installer)
-  "Define a bootloader chain with FINAL-BOOTLOADER as the final bootloader and
-certain directories and files from the store given in the list of FILES.
+                               installer
+                               disk-image-installer)
+  "Define a chain of bootloaders with the FINAL-BOOTLOADER, optional PACKAGES,
+and optional directories and files from the store given in the list of FILES.
 
-FILES may contain file like objects produced by functions like plain-file,
-local-file, etc., or package contents produced with file-append.  They will be
-collected inside a directory collection/ inside a generated bootloader profile,
-which will be passed to the INSTALLER.
+The package of the FINAL-BOOTLOADER and all PACKAGES and FILES will be placed
+in an efi-bootloader-profile, which will be passed to the INSTALLER.
+
+FILES may contain file-like objects produced by procedures like plain-file,
+local-file, etc., or package contents produced with file-append.
 
 If a directory name in FILES ends with '/', then the directory content instead
-of the directory itself will be symlinked into the collection/ directory.
+of the directory itself will be symlinked into the efi-bootloader-profile.
 
 The procedures in the HOOKS list can be used to further modify the bootloader
 profile.  It is possible to pass a single function instead of a list.
 
-If the INSTALLER argument is used, then this function will be called to install
-the bootloader.  Otherwise the installer of the FINAL-BOOTLOADER will be called."
-  (let* ((final-installer (or installer
-                              (bootloader-installer final-bootloader)))
-         (profile (efi-bootloader-profile files
-                                          (bootloader-package final-bootloader)
-                                          (if (list? hooks)
-                                              hooks
-                                              (list hooks)))))
-    (bootloader
-     (inherit final-bootloader)
-     (package profile)
-     (installer
-      #~(lambda (bootloader target mount-point)
-          (#$final-installer bootloader target mount-point)
-          (copy-recursively
-           (string-append bootloader "/collection")
-           (string-append mount-point target)
-           #:follow-symlinks? #t
-           #:log (%make-void-port "w")))))))
+If the INSTALLER argument is used, then this gexp procedure will be called to
+install the efi-bootloader-profile.  Otherwise the installer of the
+FINAL-BOOTLOADER will be called.
+
+If the DISK-IMAGE-INSTALLER is used, then this gexp procedure will be called
+to install the efi-bootloader-profile into a disk image.  Otherwise the
+disk-image-installer of the FINAL-BOOTLOADER will be called."
+  (bootloader
+    (inherit final-bootloader)
+    (name "efi-bootloader-chain")
+    (package
+     (efi-bootloader-profile (cons (bootloader-package final-bootloader)
+                                   packages)
+                             files
+                             (if (list? hooks)
+                                 hooks
+                                 (list hooks))))
+    (installer
+     (or installer
+         (bootloader-installer final-bootloader)))
+    (disk-image-installer
+     (or disk-image-installer
+         (bootloader-disk-image-installer final-bootloader)))))

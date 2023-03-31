@@ -25,7 +25,6 @@ gnu/packages/image.scm
 gnu/packages/image-viewers.scm
 gnu/packages/inkscape.scm
 gnu/packages/jemalloc.scm
-gnu/packages/key-mon.scm
 gnu/packages/less.scm
 gnu/packages/lesstif.scm
 gnu/packages/libreoffice.scm
@@ -57,8 +56,3 @@ gnu/packages/webkit.scm
 gnu/packages/web.scm
 gnu/packages/wordnet.scm
 gnu/packages/xiph.scm
-gnu/services/base.scm
-gnu/services/certbot.scm
-gnu/services/file-sharing.scm
-gnu/services/networking.scm
-gnu/services/version-control.scm

@@ -1,6 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2020-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
+;;; Copyright © 2023 Andreas Enge <andreas@enge.fr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,6 +27,7 @@
              ((guix platform) #:select (targets))
              ((gnu services xorg) #:select (%default-xorg-modules))
              (guix utils)
+             (guix gexp)
              (srfi srfi-1)
              (srfi srfi-26))
 
@@ -50,18 +52,17 @@ TARGET."
          "openssh" "emacs" "vim" "python" "guile" "guix")))
 
 (define %base-packages/armhf
-  ;; XXX: Relax requirements for armhf-linux for lack of enough build power.
-  (map (lambda (package)
-         (if (string=? (package-name package) "emacs")
-             (specification->package "emacs-no-x")
-             package))
-       %base-packages))
+  ;; The guix package doesn't build natively on armhf due to Guile memory
+  ;; issues compiling the package modules
+  (remove (lambda (package)
+            (string=? (package-name package) "guix"))
+          %base-packages))
 
 (define %base-packages/hurd
   ;; XXX: For now we are less demanding of "i586-gnu".
   (map specification->package
        '("coreutils" "grep" "findutils" "gawk" "make"
-         "gcc-toolchain" "tar" "xz")))
+         #;"gcc-toolchain" "tar" "xz")))
 
 (define %system-packages
   ;; Key packages proposed by the Guix System installer.
@@ -73,16 +74,14 @@ TARGET."
                  "connman" "network-manager" "network-manager-applet"
                  "openssh" "ntp" "tor"
                  "linux-libre" "grub-hybrid"
-                 ;; FIXME: Add IceCat when Rust is available on i686.
-                 ;;"icecat"
-                 ))
+                 "icecat"))
           %default-xorg-modules))
 
 (define %packages-to-cross-build
   ;; Packages that must be cross-buildable from x86_64-linux.
   ;; FIXME: Add (@ (gnu packages gcc) gcc) when <https://bugs.gnu.org/40463>
   ;; is fixed.
-  (append (list (@ (gnu packages guile) guile-3.0/fixed))
+  (append (list (@ (gnu packages guile) guile-3.0/pinned))
           (map specification->package
                '("coreutils" "grep" "sed" "findutils" "diffutils" "patch"
                  "gawk" "gettext" "gzip" "xz"
@@ -111,8 +110,6 @@ TARGET."
                       (cond ((string=? system "i586-gnu")
                              %base-packages/hurd)
                             ((string=? system "armhf-linux")
-                             ;; FIXME: Drop special case when ci.guix.gnu.org
-                             ;; has more ARMv7 build power.
                              %base-packages/armhf)
                             ((string=? system "powerpc64le-linux")
                              ;; FIXME: Drop 'bootstrap-tarballs' until
@@ -142,9 +139,16 @@ TARGET."
                       (if (target-mingw? target)
                           %packages-to-cross-build-for-mingw
                           %packages-to-cross-build)))
-               ;; XXX: Important bits like libsigsegv and libffi don't support
-               ;; RISCV at the moment, so don't require RISCV support.
-               (delete "riscv64-linux-gnu" (targets)))))
+               (fold delete (targets)
+                     '(;; Like in (gnu ci), dismiss cross-compilation to x86:
+                       ;; it's pointless.
+                       "x86_64-linux-gnu"
+                       "i686-linux-gnu"
+
+                       ;; XXX: Important bits like libsigsegv and libffi don't
+                       ;; support RISCV at the moment, so don't require RISCV
+                       ;; support.
+                       "riscv64-linux-gnu")))))
 
 (define %cross-bootstrap-manifest
   (manifest

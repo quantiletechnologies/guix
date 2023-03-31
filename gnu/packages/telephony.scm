@@ -15,13 +15,14 @@
 ;;; Copyright © 2019 Jan Wielkiewicz <tona_kosmicznego_smiecia@interia.pl>
 ;;; Copyright © 2019 Ivan Vilata i Balaguer <ivan@selidor.net>
 ;;; Copyright © 2020 Brett Gilio <brettg@gnu.org>
-;;; Copyright © 2020 Michael Rohleder <mike@rohleder.de>
+;;; Copyright © 2020, 2022 Michael Rohleder <mike@rohleder.de>
 ;;; Copyright © 2020 Raghav Gururajan <raghavgururajan@disroot.org>
-;;; Copyright © 2020, 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2020, 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2020 Vincent Legoll <vincent.legoll@gmail.com>
 ;;; Copyright © 2021 LibreMiami <packaging-guix@libremiami.org>
 ;;; Copyright © 2021 Sarah Morgensen <iskarian@mgsn.dev>
 ;;; Copyright © 2021 Demis Balbach <db@minikn.xyz>
+;;; Copyright © 2022 Thomas Albers Raviola <thomas@thomaslabs.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -53,6 +54,7 @@
   #:use-module (gnu packages cpp)
   #:use-module (gnu packages crypto)
   #:use-module (gnu packages databases)
+  #:use-module (gnu packages sqlite)
   #:use-module (gnu packages docbook)
   #:use-module (gnu packages documentation)
   #:use-module (gnu packages file)
@@ -65,6 +67,7 @@
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages image)
   #:use-module (gnu packages libcanberra)
+  #:use-module (gnu packages libusb)
   #:use-module (gnu packages linphone)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages multiprecision)
@@ -77,6 +80,8 @@
   #:use-module (gnu packages pulseaudio)
   #:use-module (gnu packages python)
   #:use-module (gnu packages qt)
+  #:use-module (gnu packages samba)
+  #:use-module (gnu packages security-token)
   #:use-module (gnu packages serialization)
   #:use-module (gnu packages speech)
   #:use-module (gnu packages tls)
@@ -89,6 +94,7 @@
   #:use-module (gnu packages readline)
   #:use-module (gnu packages bison)
   #:use-module (gnu packages flex)
+  #:use-module (gnu packages libevent)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix utils)
   #:use-module (guix packages)
@@ -555,7 +561,7 @@ address of one of the participants.")
 (define-public mumble
   (package
     (name "mumble")
-    (version "1.4.230")
+    (version "1.4.274")
     (source (origin
               (method url-fetch)
               (uri
@@ -564,7 +570,7 @@ address of one of the participants.")
                 version "/" name "-" version ".tar.gz"))
               (sha256
                (base32
-                "1c1lwj0cpyawr74adpdrsnxk8ra5kqrjbg65cnwk8n6cwss84zdn"))
+                "12rv61mmpgvcc1svq2y66r29sl47y9lfi9if0r09x4nqrkf7vj3y"))
               (modules '((guix build utils)
                          (ice-9 ftw)
                          (srfi srfi-1)))
@@ -723,7 +729,7 @@ your calls and messages.")
 (define-public pjproject
   (package
     (name "pjproject")
-    (version "2.11.1")
+    (version "2.12.1")
     (source
      (origin
        (method git-fetch)
@@ -733,7 +739,7 @@ your calls and messages.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "04s4bgr2d22ym2ajjk6q507hyqss1p59yp8avyyyf5f8032nbaws"))
+         "0xrj4sznbaip22y9hclff6y81l285bzkkj1smzifskpk3kiwp00w"))
        (modules '((guix build utils)))
        (snippet
         '(begin
@@ -742,99 +748,100 @@ your calls and messages.")
            (substitute* "aconfigure.ac"
              (("third_party/build/os-auto.mak") ""))
            (substitute* "Makefile"
-             (("third_party/build") ""))))
-       (patches (search-patches "pjproject-install-libpjsua2.patch"))))
+             (("third_party/build") ""))))))
     (build-system gnu-build-system)
     (outputs '("out" "debug" "static"))
     (arguments
-     `(#:test-target "selftest"
-       #:configure-flags
-       (list "--enable-shared"
-             "--with-external-speex"
-             "--with-external-gsm"
-             "--with-external-srtp"
-             "--with-external-pa"
-             ;; The following flag is Linux specific.
-             ,@(if (string-contains (or (%current-system)
-                                        (%current-target-system)) "linux")
-                   '("--enable-epoll")
-                   '())
-             "--with-gnutls"            ;disable OpenSSL checks
-             "--disable-libyuv"         ;TODO: add missing package
-             "--disable-silk"           ;TODO: add missing package
-             "--disable-libwebrtc"      ;TODO: add missing package
-             "--disable-ilbc-codec"     ;cannot be unbundled
-             "--disable-g7221-codec"    ;TODO: add missing package
-             "--enable-libsamplerate"
-             ;; -DNDEBUG is set to prevent pjproject from raising
-             ;; assertions that aren't critical, crashing
-             ;; applications as the result.
-             "CFLAGS=-DNDEBUG"
-             ;; Specify a runpath reference to itself, which is missing and
-             ;; causes the validate-runpath phase to fail.
-             (string-append "LDFLAGS=-Wl,-rpath=" (assoc-ref %outputs "out")
-                            "/lib"))
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'build-dep
-           (lambda _ (invoke "make" "dep")))
-         ;; The check phases is moved after the install phase so to
-         ;; use the installed shared libraries for the tests.
-         (delete 'check)
-         (add-after 'install 'move-static-libraries
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out"))
-                   (s (string-append (assoc-ref outputs "static") "/lib")))
-               (mkdir-p s)
-               (with-directory-excursion out
-                 (for-each (lambda (f)
-                             (rename-file f (string-append s "/" (basename f))))
-                           (find-files "." "\\.a$"))))))
-         (add-after 'install 'check
-           (assoc-ref %standard-phases 'check))
-         (add-before 'patch-source-shebangs 'autoconf
-           (lambda _
-             (invoke "autoconf" "-v" "-f" "-i" "-o"
-                     "aconfigure" "aconfigure.ac")))
-         (add-before 'autoconf 'disable-some-tests
-           (lambda _
-             (substitute* "pjlib/src/pjlib-test/test.h"
-               ;; Disable network tests which are slow and/or require an
-               ;; actual network.
-               (("#define GROUP_NETWORK.*")
-                "#define GROUP_NETWORK 0\n"))
-             (substitute* "self-test.mak"
-               ;; Fails with: pjlib-util-test-x86_64-unknown-linux-gnu:
-               ;; ../src/pjlib-util-test/resolver_test.c:1501: action2_1:
-               ;; Assertio n `pj_strcmp2(&pkt->q[0].name, "_sip._udp."
-               ;; "domain2.com")==0' failed.
-               ((" pjlib_util_test ") ""))
-             (substitute* "pjsip/src/test/test.h"
-               ;; Fails with: Error: unable to acquire TCP transport:
-               ;; [pj_status_t=120101] Network is unreachable.
-               (("#define INCLUDE_TCP_TEST.*")
-                "#define INCLUDE_TCP_TEST 0\n")
-               ;; The TSX tests takes a very long time to run; skip them.
-               (("#define INCLUDE_TSX_GROUP.*")
-                "#define INCLUDE_TSX_GROUP 0\n"))
-             (substitute* "pjsip/src/test/dns_test.c"
-               ;; The round_robin_test fails non-deterministically (depending
-               ;; on load); skip it (see:
-               ;; https://github.com/pjsip/pjproject/issues/2500).
-               (("round_robin_test(pool)") 0))
-             (substitute* "pjmedia/src/test/test.h"
-               ;; The following tests require a sound card.
-               (("#define HAS_MIPS_TEST.*")
-                "#define HAS_MIPS_TEST 0\n")
-               (("#define HAS_JBUF_TEST.*")
-                "#define HAS_JBUF_TEST 0\n"))
-             (substitute* "Makefile"
-               ;; Disable the pjnath and pjsua tests, which require an actual
-               ;; network and an actual sound card, respectively.
-               (("pjnath-test pjmedia-test pjsip-test pjsua-test")
-                "pjmedia-test pjsip-test")))))))
+     (list
+      #:test-target "selftest"
+      #:configure-flags
+      #~(list "--enable-shared"
+              "--with-external-speex"
+              "--with-external-gsm"
+              "--with-external-srtp"
+              "--with-external-pa"
+              ;; The following flag is Linux specific.
+              #$@(if (string-contains (or (%current-system)
+                                          (%current-target-system)) "linux")
+                     #~("--enable-epoll")
+                     #~())
+              "--with-gnutls"           ;disable OpenSSL checks
+              "--disable-libyuv"        ;TODO: add missing package
+              "--disable-silk"          ;TODO: add missing package
+              "--disable-libwebrtc"     ;TODO: add missing package
+              "--disable-ilbc-codec"    ;cannot be unbundled
+              "--disable-g7221-codec"   ;TODO: add missing package
+              "--enable-libsamplerate"
+              ;; -DNDEBUG is set to prevent pjproject from raising
+              ;; assertions that aren't critical, crashing
+              ;; applications as the result.
+              "CFLAGS=-DNDEBUG"
+              ;; Specify a runpath reference to itself, which is missing and
+              ;; causes the validate-runpath phase to fail.
+              (string-append "LDFLAGS=-Wl,-rpath=" #$output "/lib"))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-before 'build 'build-dep
+            (lambda _ (invoke "make" "dep")))
+          ;; The check phases is moved after the install phase so to
+          ;; use the installed shared libraries for the tests.
+          (delete 'check)
+          (add-after 'install 'move-static-libraries
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let ((s (string-append #$output:static "/lib")))
+                (mkdir-p s)
+                (with-directory-excursion #$output
+                  (for-each (lambda (f)
+                              (rename-file f (string-append s "/" (basename f))))
+                            (find-files "." "\\.a$"))))))
+          (add-after 'install 'check
+            (assoc-ref %standard-phases 'check))
+          (add-before 'patch-source-shebangs 'autoconf
+            (lambda _
+              (invoke "autoconf" "-v" "-f" "-i" "-o"
+                      "aconfigure" "aconfigure.ac")))
+          (add-before 'autoconf 'disable-some-tests
+            (lambda _
+              (substitute* "pjlib/src/pjlib-test/test.h"
+                ;; Disable network tests which are slow and/or require an
+                ;; actual network.
+                (("#define GROUP_NETWORK.*")
+                 "#define GROUP_NETWORK 0\n"))
+              (substitute* "self-test.mak"
+                ;; Fails with: pjlib-util-test-x86_64-unknown-linux-gnu:
+                ;; ../src/pjlib-util-test/resolver_test.c:1501: action2_1:
+                ;; Assertio n `pj_strcmp2(&pkt->q[0].name, "_sip._udp."
+                ;; "domain2.com")==0' failed.
+                ((" pjlib_util_test ") ""))
+              (substitute* "pjsip/src/test/test.h"
+                ;; Fails with: Error: unable to acquire TCP transport:
+                ;; [pj_status_t=120101] Network is unreachable.
+                (("#define INCLUDE_TCP_TEST.*")
+                 "#define INCLUDE_TCP_TEST 0\n")
+                ;; The TSX tests takes a very long time to run; skip them.
+                (("#define INCLUDE_TSX_GROUP.*")
+                 "#define INCLUDE_TSX_GROUP 0\n"))
+              (substitute* "pjsip/src/test/dns_test.c"
+                ;; The round_robin_test fails non-deterministically (depending
+                ;; on load); skip it (see:
+                ;; https://github.com/pjsip/pjproject/issues/2500).
+                (("round_robin_test(pool)") 0))
+              (substitute* "pjmedia/src/test/test.h"
+                ;; The following tests require a sound card.
+                (("#define HAS_MIPS_TEST.*")
+                 "#define HAS_MIPS_TEST 0\n")
+                (("#define HAS_JBUF_TEST.*")
+                 "#define HAS_JBUF_TEST 0\n"))
+              (substitute* "Makefile"
+                ;; Disable the pjnath and pjsua tests, which require an actual
+                ;; network and an actual sound card, respectively.
+                (("pjnath-test pjmedia-test pjsip-test pjsua-test")
+                 "pjmedia-test pjsip-test")))))))
     (native-inputs
-     (list autoconf automake libtool pkg-config))
+     (list autoconf
+           automake
+           libtool
+           pkg-config))
     (inputs
      (list bcg729
            gnutls
@@ -893,3 +900,133 @@ Initiation Protocol (SIP) and a multimedia framework.")
 telephony functionality into custom Telegram clients.")
     (home-page "https://github.com/zevlg/libtgvoip")
     (license license:unlicense)))
+
+(define-public coturn
+  (package
+    (name "coturn")
+    (version "4.6.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/coturn/coturn")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "04d3c2lxc496zxx3nzqr9fskm2w57kqijdfq3wsa0yp2dp28yjkj"))))
+    (inputs
+     (list openssl
+           sqlite
+           libevent-with-openssl
+           hiredis))
+    (native-inputs
+     (list pkg-config))
+    (build-system gnu-build-system)
+    (synopsis "Implementation of a TURN and STUN server for VoIP")
+    (description
+     "This package provides a VoIP media traffic NAT traversal server and
+gateway.  It implements the STUN (Session Traversal Utilities for NAT) and
+TURN (Traversal Using Relays around NAT) server protocols.")
+    (home-page "https://github.com/coturn/coturn")
+    (license license:bsd-3)))
+
+(define-public libosmocore
+  (package
+    (name "libosmocore")
+    (version "1.7.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitea.osmocom.org/osmocom/libosmocore.git")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "147ld3xwb9k6vb56hk8q8jkcb5ahxl66v87vdhazb6rxj3frsjqf"))))
+    (arguments
+     (list #:phases #~(modify-phases %standard-phases
+                        (add-after 'unpack 'patch-bin-sh
+                          (lambda _
+                            (substitute* '("git-version-gen" "src/exec.c")
+                              (("/bin/sh")
+                               (which "sh"))))))))
+    (inputs (list gnutls
+                  libmnl
+                  libusb
+                  lksctp-tools
+                  pcsc-lite
+                  talloc))
+    (native-inputs (list autoconf
+                         automake
+                         coreutils
+                         doxygen
+                         libtool
+                         pkg-config
+                         python))
+    (build-system gnu-build-system)
+    (synopsis "Libraries for sharing common code between osmocom projects")
+    (description
+     "Libosmocore includes several libraries:
+@itemize
+@item libosmocore: general-purpose functions
+@item libosmovty: interactive VTY command-line interface
+@item libosmogsm: definitions and helper code related to GSM protocols
+@item libosmoctrl: shared implementation of the Osmocom control interface
+@item libosmogb: implementation of the Gb interface with its NS/BSSGP protocols
+@item libosmocodec: implementation of GSM voice codecs
+@item libosmocoding: implementation of GSM 05.03 burst transcoding functions
+@item libosmosim: infrastructure to interface with SIM/UICC/USIM cards
+@end itemize")
+    (home-page "https://osmocom.org/projects/libosmocore/wiki/Libosmocore")
+    (license license:gpl2+)))
+
+(define-public xgoldmon
+  ;; There are no releases nor tags.
+  (let ((revision "1")
+        (commit "f2d5372acee4e492f31f6ba8b850cfb48fbbe478"))
+    (package
+      (name "xgoldmon")
+      (version (git-version "1.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/2b-as/xgoldmon")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0dvgagqsbwq1sd5qjzk0hd9rxnv2vnmhazvv5mz4pj7v467amgdz"))))
+      (arguments
+       (list #:tests? #f ;no tests
+             #:make-flags #~(list (string-append "CC="
+                                                 #$(cc-for-target)))
+             #:phases #~(modify-phases %standard-phases
+                          (delete 'configure)
+                          (replace 'install
+                            (lambda _
+                              (let ((bin (string-append #$output "/bin"))
+                                    (doc (string-append #$output "/share/doc")))
+                                (install-file "xgoldmon" bin)
+                                (install-file "README" doc)
+                                (install-file
+                                 "screenshot-mtsms-while-in-a-call.png" doc)))))))
+      (inputs (list libosmocore lksctp-tools talloc))
+      (native-inputs (list pkg-config))
+      (build-system gnu-build-system)
+      (synopsis "Displays cellular network protocol traces in Wireshark")
+      (description
+       "xgoldmon is an utility that converts the USB logging mode
+messages that various Intel/Infineon XGold modems send to the USB port to
+gsmtap.  It then then sends them to a given IP address to enable users
+to view cellular network protocol traces in Wireshark.
+
+It supports the following smartphones:
+@itemize
+@item Samsung Galaxy S4, GT-I9500 variant
+@item Samsung Galaxy SIII, GT-I9300 variant
+@item Samsung Galaxy Nexus, GT-I9250 variant
+@item Samsung Galaxy SII, GT-I9100 variant
+@item Samsung Galaxy Note II, GT-N7100 variant
+@end itemize")
+      (home-page "https://github.com/2b-as/xgoldmon")
+      (license license:gpl2+))))

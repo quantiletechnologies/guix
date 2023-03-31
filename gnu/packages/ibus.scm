@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2015 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2016 Chris Marusich <cmmarusich@gmail.com>
 ;;; Copyright © 2017, 2018 Efraim Flashner <efraim@flashner.co.il>
@@ -11,6 +11,7 @@
 ;;; Copyright © 2021 Songlin Jiang <hollowman@hollowman.ml>
 ;;; Copyright © 2021 Taiju HIGASHI <higashi@taiju.info>
 ;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2023 Luis Felipe López Acevedo <luis.felipe.la@protonmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -36,11 +37,13 @@
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system glib-or-gtk)
+  #:use-module (guix build-system meson)
   #:use-module (guix build-system python)
   #:use-module (guix utils)
   #:use-module (gnu packages)
   #:use-module (gnu packages anthy)
   #:use-module (gnu packages autotools)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages base)
   #:use-module (gnu packages boost)
   #:use-module (gnu packages check)
@@ -53,6 +56,7 @@
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gnome)
+  #:use-module (gnu packages gstreamer)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages iso-codes)
   #:use-module (gnu packages logging)
@@ -62,16 +66,19 @@
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages serialization)
+  #:use-module (gnu packages speech)
   #:use-module (gnu packages sqlite)
   #:use-module (gnu packages textutils)
   #:use-module (gnu packages unicode)
   #:use-module (gnu packages xorg)
-  #:use-module (gnu packages xdisorg))
+  #:use-module (gnu packages xdisorg)
+  #:use-module (gnu packages xml)
+  #:use-module (srfi srfi-1))
 
-(define-public ibus
+(define-public ibus-minimal
   (package
     (name "ibus")
-    (version "1.5.24")
+    (version "1.5.27")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://github.com/ibus/ibus/"
@@ -79,143 +86,149 @@
                                   version "/ibus-" version ".tar.gz"))
               (sha256
                (base32
-                "07s2ly75xv50bqg37mn37i9akqvcfd45k2mbplxrsqk3a2b3mwxb"))))
+                "1pwppcy0xpidxa7db9lykjjjj1rcjrqf5l88f77hgxlnvdddmyvf"))))
     (build-system glib-or-gtk-build-system)
     (outputs '("out" "doc"))
     (arguments
-     `(#:parallel-build? #f ; race condition discovered with emoji support
-       #:configure-flags (list "--enable-python-library"
-                               "--enable-gtk-doc"
-                               "--enable-memconf"
-                               (string-append
-                                "--with-unicode-emoji-dir="
-                                (assoc-ref %build-inputs "unicode-emoji")
-                                "/share/unicode/emoji")
-                               (string-append
-                                "--with-emoji-annotation-dir="
-                                (assoc-ref %build-inputs "unicode-cldr-common")
-                                "/share/unicode/cldr/common/annotations")
-                               (string-append "--with-ucd-dir="
-                                              (assoc-ref %build-inputs "ucd")
-                                              "/share/ucd")
-                               "--enable-wayland")
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'disable-failing-tests
-           (lambda _
-             ;; These tests require /etc/machine-id.
-             (with-directory-excursion "src/tests"
-               (substitute* '("ibus-share.c" "ibus-compose.c"
-                              "ibus-keypress.c")
-                 (("[ \t]*return g_test_run \\(\\);") "")))))
-         (add-after 'unpack 'patch-docbook-xml
-           (lambda* (#:key inputs #:allow-other-keys)
-             (with-directory-excursion "docs/reference/ibus"
-               (substitute* "ibus-docs.sgml.in"
-                 (("http://www.oasis-open.org/docbook/xml/4.1.2/")
-                  (string-append (assoc-ref inputs "docbook-xml")
-                                 "/xml/dtd/docbook/"))))))
-         (add-after 'unpack 'patch-python-target-directories
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((root (string-append (assoc-ref outputs "out")
-                                        "/lib/python"
-                                        ,(version-major+minor (package-version python))
-                                        "/site-packages")))
-               (substitute* "configure"
-                 (("(py2?overridesdir)=.*" _ var)
-                  (string-append var "=" root "/gi/overrides/"))
-                 (("(pkgpython2dir=).*" _ var)
-                  (string-append var root "/ibus"))))))
-         (add-before 'configure 'disable-dconf-update
-           (lambda _
-             (substitute* "data/dconf/Makefile.in"
-               (("dconf update") "echo dconf update"))))
-         (add-after 'unpack 'delete-generated-files
-           (lambda _
-             (for-each (lambda (file)
-                         (let ((c (string-append (string-drop-right file 4) "c")))
-                           (when (file-exists? c)
-                             (format #t "deleting ~a\n" c)
-                             (delete-file c))))
-                       (find-files "." "\\.vala"))))
-         (add-after 'unpack 'fix-paths
-           (lambda* (#:key inputs #:allow-other-keys)
-             (substitute* "src/ibusenginesimple.c"
-               (("/usr/share/X11/locale")
-                (search-input-directory inputs
-                                        "share/X11/locale")))
-             (substitute* "ui/gtk3/xkblayout.vala"
-               (("\"(setxkbmap|xmodmap)\"" _ prog)
-                (string-append "\""
-                               (search-input-file inputs
-                                                  (string-append "bin/" prog))
-                               "\"")))))
-         (add-before 'check 'pre-check
-           (lambda _
-             ;; Tests write to $HOME.
-             (setenv "HOME" (getcwd))
-             ;; Tests look for $XDG_RUNTIME_DIR.
-             (setenv "XDG_RUNTIME_DIR" (getcwd))
-             ;; For missing '/etc/machine-id'.
-             (setenv "DBUS_FATAL_WARNINGS" "0")
-             ;; Tests require a running X server.
-             (system "Xvfb :1 +extension GLX &")
-             (setenv "DISPLAY" ":1")
-             ;; Tests require running iBus daemon.
-             (system "./bus/ibus-daemon --daemonize")))
-         (add-after 'install 'move-doc
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (doc (assoc-ref outputs "doc")))
-               (mkdir-p (string-append doc "/share"))
-               (rename-file
-                (string-append out "/share/gtk-doc")
-                (string-append doc "/share/gtk-doc")))))
-         (add-after 'wrap-program 'wrap-with-additional-paths
-           (lambda* (#:key outputs #:allow-other-keys)
-             ;; Make sure 'ibus-setup' runs with the correct PYTHONPATH and
-             ;; GI_TYPELIB_PATH.
-             (let ((out (assoc-ref outputs "out")))
-               (wrap-program (string-append out "/bin/ibus-setup")
-                 `("GUIX_PYTHONPATH" ":" prefix (,(getenv "GUIX_PYTHONPATH")))
-                 `("GI_TYPELIB_PATH" ":" prefix
-                   (,(getenv "GI_TYPELIB_PATH")
-                    ,(string-append out "/lib/girepository-1.0"))))))))))
+     (list
+      #:configure-flags #~(list "--enable-python-library"
+                                "--enable-gtk-doc"
+                                "--enable-memconf"
+                                (string-append
+                                 "--with-unicode-emoji-dir="
+                                 (search-input-directory %build-inputs
+                                                         "share/unicode/emoji"))
+                                (string-append
+                                 "--with-emoji-annotation-dir="
+                                 (search-input-directory
+                                  %build-inputs
+                                  "share/unicode/cldr/common/annotations"))
+                                (string-append
+                                 "--with-ucd-dir="
+                                 (search-input-directory %build-inputs
+                                                         "share/ucd"))
+                                "--enable-wayland"
+                                "--disable-systemd-services")
+      #:make-flags
+      ;; The GUI tests not only require a DISPLAY, but also a window manager
+      ;; since IBus needs to receive focus-in/out events to test IBus with GTK
+      ;; applications (see: https://github.com/ibus/ibus/issues/2307).
+      #~(list (string-append "DISABLE_GUI_TESTS=ibus-compose "
+                             "ibus-inputcontext-create "
+                             "xkb-latin-layouts "))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'disable-failing-tests
+            (lambda _
+              ;; These tests require /etc/machine-id.
+              (with-directory-excursion "src/tests"
+                (substitute* '("ibus-share.c" "ibus-compose.c"
+                               "ibus-keypress.c")
+                  (("[ \t]*return g_test_run \\(\\);") "")))))
+          (add-after 'unpack 'patch-docbook-xml
+            (lambda* (#:key inputs #:allow-other-keys)
+              (with-directory-excursion "docs/reference/ibus"
+                (substitute* "ibus-docs.sgml.in"
+                  (("http://www.oasis-open.org/docbook/xml/4.1.2/")
+                   (string-append #$(this-package-native-input "docbook-xml")
+                                  "/xml/dtd/docbook/"))))))
+          (add-after 'unpack 'patch-python-target-directories
+            (lambda _
+              (let ((root (string-append #$output
+                                         "/lib/python"
+                                         #$(version-major+minor
+                                            (package-version python))
+                                         "/site-packages")))
+                (substitute* "configure"
+                  (("(py2?overridesdir)=.*" _ var)
+                   (string-append var "=" root "/gi/overrides/"))
+                  (("(pkgpython2dir=).*" _ var)
+                   (string-append var root "/ibus"))))))
+          (add-before 'configure 'disable-dconf-update
+            (lambda _
+              (substitute* "data/dconf/Makefile.in"
+                (("dconf update") "echo dconf update"))))
+          (add-after 'unpack 'delete-generated-files
+            (lambda _
+              (for-each (lambda (file)
+                          (let ((c (string-append (string-drop-right file 4) "c")))
+                            (when (file-exists? c)
+                              (format #t "deleting ~a\n" c)
+                              (delete-file c))))
+                        (find-files "." "\\.vala"))))
+          (add-after 'unpack 'fix-paths
+            (lambda* (#:key inputs #:allow-other-keys)
+              (substitute* "src/ibusenginesimple.c"
+                (("/usr/share/X11/locale")
+                 (search-input-directory inputs "share/X11/locale")))
+              (substitute* "ui/gtk3/xkblayout.vala"
+                (("\"(setxkbmap|xmodmap)\"" _ prog)
+                 (format #f "~s" (search-input-file
+                                  inputs (string-append "bin/" prog)))))))
+          (add-before 'check 'pre-check
+            (lambda _
+              ;; Tests write to $HOME.
+              (setenv "HOME" (getcwd))
+              ;; Tests look for $XDG_RUNTIME_DIR.
+              (setenv "XDG_RUNTIME_DIR" (getcwd))
+              ;; For missing '/etc/machine-id'.
+              (setenv "DBUS_FATAL_WARNINGS" "0")
+              ;; Tests require a running X server.
+              (system "Xvfb :1 +extension GLX &")
+              (setenv "DISPLAY" ":1")
+              ;; Tests require running iBus daemon.
+              (system "./bus/ibus-daemon --daemonize")))
+          (add-after 'install 'move-doc
+            (lambda _
+              (mkdir-p (string-append #$output:doc "/share"))
+              (rename-file
+               (string-append #$output "/share/gtk-doc")
+               (string-append #$output:doc "/share/gtk-doc"))))
+          (add-after 'wrap-program 'wrap-with-additional-paths
+            (lambda* (#:key outputs #:allow-other-keys)
+              ;; Make sure 'ibus-setup' runs with the correct PYTHONPATH and
+              ;; GI_TYPELIB_PATH.
+              (wrap-program (search-input-file outputs "bin/ibus-setup")
+                `("GUIX_PYTHONPATH" ":" prefix (,(getenv "GUIX_PYTHONPATH")))
+                `("GI_TYPELIB_PATH" ":" prefix
+                  (,(getenv "GI_TYPELIB_PATH")
+                   ,(string-append #$output "/lib/girepository-1.0")))))))))
     (inputs
-     `(("dbus" ,dbus)
-       ("dconf" ,dconf)
-       ("glib" ,glib)
-       ("gtk2" ,gtk+-2)
-       ("gtk+" ,gtk+)
-       ("iso-codes" ,iso-codes)
-       ("json-glib" ,json-glib)
-       ("libnotify" ,libnotify)
-       ("libx11" ,libx11)
-       ("libxkbcommon" ,libxkbcommon)
-       ("libxtst" ,libxtst)
-       ("pygobject" ,python-pygobject)
-       ("python" ,python)
-       ("python-dbus" ,python-dbus)
-       ("setxkbmap" ,setxkbmap)
-       ("ucd" ,ucd)
-       ("unicode-cldr-common" ,unicode-cldr-common)
-       ("unicode-emoji" ,unicode-emoji)
-       ("wayland" ,wayland)
-       ("xmodmap" ,xmodmap)))
+     (list bash-minimal
+           dbus
+           dconf
+           glib
+           gtk+-2
+           gtk+
+           iso-codes
+           json-glib
+           libnotify
+           libx11
+           libxkbcommon
+           libxtst
+           python-pygobject
+           python
+           python-dbus
+           setxkbmap
+           ucd
+           unicode-cldr-common
+           unicode-emoji
+           wayland
+           xmodmap))
     (native-inputs
-     `(("docbook-xml" ,docbook-xml-4.1.2)
-       ("glib" ,glib "bin")             ; for glib-genmarshal
-       ("gettext" ,gettext-minimal)
-       ("gnome-common" ,gnome-common)
-       ("gobject-introspection" ,gobject-introspection) ; for g-ir-compiler
-       ("gtk+:bin" ,gtk+ "bin")
-       ("gtk-doc" ,gtk-doc)
-       ("perl" ,perl)
-       ("pkg-config" ,pkg-config)
-       ("python-wrapper" ,python-wrapper)
-       ("vala" ,vala)
-       ("which" ,which)
-       ("xorg-server" ,xorg-server-for-tests)))
+     (list docbook-xml-4.1.2
+           `(,glib "bin")               ;for glib-genmarshal
+           gettext-minimal
+           gnome-common
+           gobject-introspection        ;for g-ir-compiler
+           `(,gtk+ "bin")
+           gtk-doc
+           perl
+           pkg-config
+           python-wrapper
+           vala
+           which
+           xorg-server-for-tests))
     (native-search-paths
      (list (search-path-specification
             (variable "IBUS_COMPONENT_PATH")
@@ -226,7 +239,17 @@
 input method user interface.  It comes with multilingual input support.  It
 may also simplify input method development.")
     (home-page "https://github.com/ibus/ibus/wiki")
-    (license lgpl2.1+)))
+    (license lgpl2.1+)
+    (properties '((hidden? . #t)))))
+
+(define-public ibus
+  (package/inherit ibus-minimal
+    (arguments (substitute-keyword-arguments (package-arguments ibus-minimal)
+                 ((#:configure-flags flags)
+                  #~(cons* "--enable-gtk4" #$flags))))
+    (inputs (modify-inputs (package-inputs ibus-minimal)
+              (prepend gtk pango-next)))
+    (properties (alist-delete 'hidden? (package-properties ibus-minimal)))))
 
 (define-public ibus-libpinyin
   (package
@@ -828,6 +851,78 @@ hanja dictionary and small hangul character classification.")
     (description
      "ibus-hangul is a Korean input method engine for IBus.")
     (license gpl2+)))
+
+(define-public ibus-speech-to-text
+  (package
+    (name "ibus-speech-to-text")
+    (version "0.4.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/PhilippeRo/IBus-Speech-To-Text")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "00p7jfv815dblg20hahch6151rdbxhkdhfj51i0yvvmg3irvf7nm"))))
+    (build-system meson-build-system)
+    (arguments
+     (list
+      #:glib-or-gtk? #true
+      #:phases
+      '(modify-phases %standard-phases
+         (add-after 'unpack 'skip-update-desktop-database
+           (lambda* (#:key inputs #:allow-other-keys)
+             (substitute* "meson.build"
+               (("update_desktop_database: true")
+                "update_desktop_database: false"))))
+         (add-after 'set-paths 'add-install-to-pythonpath
+           (lambda* (#:key outputs #:allow-other-keys)
+             (let* ((out (assoc-ref outputs "out"))
+                    (ibus-stt-dir (string-append out "/share/ibus-stt")))
+               (setenv "GUIX_PYTHONPATH"
+                       (string-append ibus-stt-dir ":"
+                                      (getenv "GUIX_PYTHONPATH"))))))
+         (add-after 'install 'wrap-with-additional-paths
+           (lambda* (#:key inputs outputs #:allow-other-keys)
+             ;; Make sure 'ibus-{setup,engine}-stt' find the gst-vosk plugin
+             ;; and run with the correct GUIX_PYTHONPATH and GI_TYPELIB_PATH.
+             (let ((out (assoc-ref outputs "out")))
+               (for-each (lambda (prog)
+                           (wrap-program prog
+                             `("GST_PLUGIN_PATH" ":" prefix
+                               (,(string-append (assoc-ref inputs "gst-vosk")
+                                                "/lib/gstreamer-1.0")
+                                ,(getenv "GST_PLUGIN_SYSTEM_PATH")))
+                             `("GUIX_PYTHONPATH" =
+                               (,(getenv "GUIX_PYTHONPATH")))
+                             `("GI_TYPELIB_PATH" =
+                               (,(getenv "GI_TYPELIB_PATH")))))
+                         (list (string-append out "/libexec/ibus-engine-stt")
+                               (string-append out "/libexec/ibus-setup-stt")))))))))
+    (inputs
+     (list bash-minimal
+           gst-vosk
+           gstreamer
+           gtk
+           ibus
+           libadwaita
+           python
+           python-babel
+           python-pygobject))
+    (native-inputs
+     (list desktop-file-utils
+           gettext-minimal
+           (list glib "bin")
+           gobject-introspection
+           libxml2 pkg-config))
+    (home-page "https://github.com/PhilippeRo/IBus-Speech-To-Text")
+    (synopsis "Speech to text IBus engine using VOSK")
+    (description "This Input Method uses VOSK for voice recognition and allows
+to dictate text in several languages in any application that supports IBus.
+One of the main adavantages is that VOSK performs voice recognition locally
+and does not rely on an online service.")
+    (license gpl3+)))
 
 (define-public ibus-theme-tools
   (package

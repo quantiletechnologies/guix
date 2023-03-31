@@ -24,7 +24,9 @@
 ;;; Copyright © 2021 Zheng Junjie <873216071@qq.com>
 ;;; Copyright © 2021 dissent <disseminatedissent@protonmail.com>
 ;;; Copyright © 2022 Michael Rohleder <mike@rohleder.de>
-;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022, 2023 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Tomasz Jeneralczyk <tj@schwi.pl>
+;;; Copyright © 2022 Cairn <cairn@pm.me>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -50,11 +52,13 @@
   #:use-module (guix utils)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system cmake)
+  #:use-module (guix build-system go)
   #:use-module (guix build-system meson)
   #:use-module (guix build-system python)
   #:use-module (guix build-system qt)
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages algebra)
+  #:use-module (gnu packages animation)
   #:use-module (gnu packages backup)
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
@@ -63,6 +67,7 @@
   #:use-module (gnu packages compression)
   #:use-module (gnu packages curl)
   #:use-module (gnu packages documentation)
+  #:use-module (gnu packages djvu)
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages gawk)
@@ -71,6 +76,7 @@
   #:use-module (gnu packages gl)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gnome)
+  #:use-module (gnu packages golang)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages graphics)
   #:use-module (gnu packages image)
@@ -85,21 +91,28 @@
   #:use-module (gnu packages photo)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-check)
+  #:use-module (gnu packages python-compression)
+  #:use-module (gnu packages python-crypto)
+  #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages qt)
   #:use-module (gnu packages suckless)
   #:use-module (gnu packages terminals)
+  #:use-module (gnu packages upnp)
   #:use-module (gnu packages version-control)
   #:use-module (gnu packages video)
+  #:use-module (gnu packages vim)
   #:use-module (gnu packages web)
   #:use-module (gnu packages xdisorg)
+  #:use-module (gnu packages xml)
   #:use-module (gnu packages xorg)
   #:use-module (gnu packages))
 
 (define-public ytfzf
   (package
     (name "ytfzf")
-    (version "2.3")
+    (version "2.5.2")
     (home-page "https://github.com/pystardust/ytfzf")
     (source
      (origin
@@ -110,7 +123,7 @@
          (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "01prcg6gfwy1r49v92pkzxay9iadqqhpaxvn8jmij2jm5l50iynd"))))
+        (base32 "138rqjjyh6ar951v0v5sl1v000ja8zznn141qqw8ymx5h2z44r6w"))))
     (build-system gnu-build-system)
     (arguments
      (list
@@ -151,6 +164,7 @@
            libnotify
            mpv
            ncurses
+           perl                         ;for convert-ascii-escape.pl
            python-ueberzug
            sed
            util-linux
@@ -219,7 +233,7 @@ actions.")
 (define-public geeqie
   (package
     (name "geeqie")
-    (version "1.6")
+    (version "2.0.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -227,44 +241,32 @@ actions.")
                     (commit (string-append "v" version))))
               (sha256
                (base32
-                "1i9yd8lddp6b9s9vjjjzbpqj4bvwidxc6kiba6vdrk7dda5akyky"))
-              (file-name (git-file-name name version))
-              (patches (search-patches "geeqie-clutter.patch"))))
-    (build-system gnu-build-system)
-    (arguments
-     ;; Enable support for a "map" pane using GPS data.
-     `(#:configure-flags '("CFLAGS=-O2 -g -fcommon"
-                           "--enable-map"
-                           "--enable-gtk3")
-       #:phases (modify-phases %standard-phases
-                  (add-after 'unpack 'correctly-locate-aux-scripts
-                    ;; The git checkout has symlinks under the auxdir
-                    ;; directory pointing to /usr/share/automake-1.16/depcomp
-                    ;; and /usr/share/automake-1.16/install-sh, which causes
-                    ;; the configure phase to fail (see:
-                    ;; https://github.com/BestImageViewer/geeqie/issues/936).
-                    (lambda* (#:key inputs #:allow-other-keys)
-                      (let ((automake (assoc-ref inputs "automake")))
-                        (delete-file "auxdir/depcomp")
-                        (symlink (car (find-files automake "depcomp"))
-                                 "auxdir/depcomp")
-                        (delete-file "auxdir/install-sh")
-                        (symlink (car (find-files automake "install-sh"))
-                                 "auxdir/install-sh")))))))
+                "199s0f3khnycr5vhk2ww3xnnasz7dzwxdl89pxjadq6rpgprfqyh"))
+              (file-name (git-file-name name version))))
+    (build-system meson-build-system)
     (inputs
-     (list clutter
-           libchamplain
-           lcms
+     (list djvulibre
            exiv2
+           ffmpegthumbnailer
+           gtk+
+           gspell
+           lcms
+           libarchive
+           libchamplain
+           libheif
+           libjpeg-turbo
            libpng
-           gtk+))
+           libraw
+           libtiff
+           poppler
+           libwebp))
     (native-inputs
-     (list autoconf
-           automake
-           `(,glib "bin") ; glib-gettextize
+     (list `(,glib "bin") ; glib-gettextize
            intltool
-           pkg-config))
-    (home-page "http://www.geeqie.org/")
+           pkg-config
+           xxd
+           yelp-tools))
+    (home-page "https://www.geeqie.org/")
     (synopsis "Lightweight GTK+ based image viewer")
     (description
      "Geeqie is a lightweight GTK+ based image viewer for Unix like operating
@@ -294,7 +296,7 @@ collection.  Geeqie was initially based on GQview.")
     (synopsis "Simple and fast image viewer for X")
     (description "gpicview is a lightweight GTK+ 2.x based image viewer.
 It is the default image viewer on LXDE desktop environment.")
-    (home-page "http://lxde.sourceforge.net/gpicview/")
+    (home-page "https://lxde.sourceforge.net/gpicview/")
     (license license:gpl2+)))
 
 (define-public sxiv
@@ -502,6 +504,35 @@ your images.  Among its features are:
 It supports JPEG, PNG and GIF formats.")
     (license license:expat)))
 
+(define-public pixterm
+  (package
+    (name "pixterm")
+    (version "1.3.1")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/eliukblau/pixterm")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0fm6c0mjz6zillqjirnjjf7mkrax1gyfcv6777i07ms3bnv0pcii"))))
+    (build-system go-build-system)
+    (arguments
+     '(#:import-path "github.com/eliukblau/pixterm/cmd/pixterm"
+       #:unpack-path "github.com/eliukblau/pixterm"))
+    (inputs (list go-github-com-disintegration-imaging
+                  go-github-com-lucasb-eyer-go-colorful
+                  go-golang-org-x-crypto
+                  go-golang-org-x-image))
+    (home-page "https://github.com/eliukblau/pixterm")
+    (synopsis "Draw images in your ANSI terminal with true color")
+    (description "PIXterm shows images directly in your terminal, recreating
+the pixels through a combination of ANSI character background color and the
+unicode lower half block element.  It supports JPEG, PNG, GIF, BMP, TIFF
+and WebP.")
+    (license license:mpl2.0)))
+
 (define-public luminance-hdr
   (package
     (name "luminance-hdr")
@@ -551,7 +582,7 @@ It supports JPEG, PNG and GIF formats.")
                       (dirname
                        (search-input-file inputs "include/OpenEXR/ImathInt64.h"))
                       ":" (or (getenv "CPLUS_INCLUDE_PATH") ""))))))))
-    (home-page "http://qtpfsgui.sourceforge.net")
+    (home-page "https://qtpfsgui.sourceforge.net")
     (synopsis "High dynamic range (HDR) imaging application")
     (description
      "Luminance HDR (formerly QtPFSGui) is a graphical user interface
@@ -572,7 +603,7 @@ imaging.  It supports several HDR and LDR image formats, and it can:
 (define-public mcomix
   (package
     (name "mcomix")
-    (version "2.0.1")
+    (version "2.0.2")
     (source
      (origin
        (method url-fetch)
@@ -580,7 +611,7 @@ imaging.  It supports several HDR and LDR image formats, and it can:
                            "mcomix-" version ".tar.gz"))
        (sha256
         (base32
-         "187ca815vxb2in1ryvfiaf1zapi0bc9jxdac3c1bky0kr6x7xyap"))))
+         "0n0akk3njsm0paqxfbxqycwhwy6smjg0rhlcz5r7r82n7rqx0f7g"))))
     (build-system python-build-system)
     (inputs
      (list p7zip python python-pillow python-pygobject python-pycairo gtk+))
@@ -685,14 +716,14 @@ preloading.")
 (define-public chafa
   (package
     (name "chafa")
-    (version "1.8.0")
+    (version "1.12.4")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://hpjansson.org/chafa/releases/chafa-"
                                   version ".tar.xz"))
               (sha256
                (base32
-                "0sr86bnrqcf6wxigrgsglv4fc79g5djmki20ih4hg8kbhcnnbzr1"))))
+                "0gsp39xnra331lk0db5pfqpdmqfhf7ii3a7yywj33sknf0dbsx4p"))))
     (build-system gnu-build-system)
     (native-inputs
      (list pkg-config))
@@ -709,7 +740,7 @@ displayed in a terminal.")
 (define-public imv
   (package
     (name "imv")
-    (version "4.3.1")
+    (version "4.4.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -717,21 +748,21 @@ displayed in a terminal.")
                     (commit (string-append "v" version))))
               (sha256
                (base32
-                "01x6qg7nhikqh68gnzrdvq0rxma5v9z19il89y8bvdrcr7r1vh40"))
+                "1zlds43z17jrnsrfz3rf3sb3pa5gkmxaibq87509ikc7p1p09c9c"))
               (file-name (git-file-name name version))))
     (build-system meson-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-after 'install 'record-absolute-file-names
-           (lambda* (#:key outputs #:allow-other-keys)
-             ;; 'imv' is a script that execs 'imv-x11' or 'imv-wayland'.
-             ;; Record their absolute file name.
-             (let* ((out (assoc-ref outputs "out"))
-                    (bin (string-append out "/bin")))
-               (substitute* (string-append bin "/imv")
-                 (("imv-")
-                  (string-append bin "/imv-")))))))))
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'install 'record-absolute-file-names
+                 (lambda _
+                   ;; 'imv' is a script that execs 'imv-x11' or 'imv-wayland'.
+                   ;; 'imv-dir' execs 'imv'. Record their absolute file names.
+                   (let ((bin (string-append #$output "/bin")))
+                     (substitute* (string-append bin "/imv")
+                       (("imv-") (string-append bin "/imv-")))
+                     (substitute* (string-append bin "/imv-dir")
+                       (("imv") (string-append bin "/imv")))))))))
     (native-inputs
      (list asciidoc
            pkg-config))
@@ -822,7 +853,7 @@ with tiling window managers.  Features include:
        #:make-flags
        (list
         (string-append "PREFIX=" (assoc-ref %outputs "out")))))
-    (home-page "http://spiegl.de/qiv/")
+    (home-page "https://spiegl.de/qiv/")
     (synopsis "Graphical image viewer for X")
     (description
      "Quick Image Viewer is a small and fast GDK/Imlib2 image viewer.
@@ -973,3 +1004,131 @@ synchronization of multiple instances.")
     (description
      "xzgv is a fast image viewer that provides extensive keyboard support.")
     (license license:gpl2+)))
+
+(define-public hydrus-network
+  (package
+    (name "hydrus-network")
+    (version "495")                       ;upstream has a weekly release cycle
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/hydrusnetwork/hydrus")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "03zhrcmjzbk37sl9nwjahfmr8aflss84c4xhg5ci5b8jvbbqmr1j"))
+       (modules '((guix build utils)))
+       (snippet
+        ;; Remove pre-built binaries from bin/.
+        #~(for-each delete-file (find-files "bin" "^swfrender")))))
+    (build-system python-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(let ((static-dir "/share/hydrus/static"))
+          (modify-phases %standard-phases
+            ;; Hydrus is a python program but does not uses setup.py or any
+            ;; other build system to build itself - it's delivered ready to
+            ;; run from the source.
+            (replace 'check
+              (lambda _
+                (setenv "DISPLAY" ":0")
+                (setenv "XDG_CACHE_HOME" (getcwd))
+                (setenv "HOME" (getcwd))
+                (invoke "xvfb-run" "python" "test.py")))
+            ;; XXX: program help files are not built.  Updating
+            ;; python-pymdown-extensions to its latest version might be the
+            ;; solution, but this would require also packaging its new build
+            ;; system that is not present in guix yet.
+            (delete 'build)
+            (add-before 'install 'patch-variables
+              (lambda* (#:key outputs inputs #:allow-other-keys)
+                (let ((ffmpeg    (search-input-file inputs "/bin/ffmpeg"))
+                      (swfrender (search-input-file inputs "/bin/swfrender"))
+                      (upnpc     (search-input-file inputs "/bin/upnpc"))
+                      (out       (assoc-ref outputs "out")))
+                  (with-directory-excursion "hydrus"
+                    ;; Without this the program would incorrectly assume
+                    ;; that it uses user's ffmpeg binary when it isn't.
+                    (substitute* "client/ClientController.py"
+                      (("if (HydrusVideoHandling\\.FFMPEG_PATH).*" _ var)
+                       (string-append "if " var " == \"" ffmpeg "\":\n")))
+                    (with-directory-excursion "core"
+                      (substitute* "HydrusConstants.py"
+                        (("STATIC_DIR = .*")
+                         (string-append "STATIC_DIR = \"" out static-dir "\"\n")))
+                      (substitute* "HydrusFlashHandling.py"
+                        (("SWFRENDER_PATH = .*\n")
+                         (string-append "SWFRENDER_PATH = \"" swfrender "\"\n")))
+                      (substitute* "HydrusVideoHandling.py"
+                        (("FFMPEG_PATH = .*\n")
+                         (string-append "FFMPEG_PATH = \"" ffmpeg "\"\n")))
+                      (substitute* "networking/HydrusNATPunch.py"
+                        (("UPNPC_PATH = .*\n")
+                         (string-append "UPNPC_PATH = \"" upnpc "\"\n"))))))))
+            ;; Since everything lives in hydrus's root directory, it needs to
+            ;; be spread out to comply with guix's expectations.
+            (replace 'install
+              (lambda* (#:key outputs #:allow-other-keys)
+                (let* ((out (assoc-ref outputs "out"))
+                       (client (string-append out "/bin/hydrus"))
+                       (server (string-append out "/bin/hydrus-server")))
+                  (copy-recursively "static"
+                                    (string-append out static-dir))
+                  (copy-recursively "hydrus"
+                                    (string-append out
+                                                   "/lib/python"
+                                                   (python-version
+                                                    #$(this-package-input "python"))
+                                                   "/site-packages/hydrus"))
+                  (mkdir (string-append out "/bin"))
+                  (copy-file "client.py" client)
+                  (chmod client #o0555)
+                  (copy-file "server.py" server)
+                  (chmod server #o0555))))))))
+    ;; All native-inputs are only needed for the the check phase
+    (native-inputs
+     (list xvfb-run
+           python-nose
+           python-mock
+           python-httmock))
+    ;; All python packages were taken from static/build_files/linux/requirements.txt
+    (propagated-inputs
+     (list python-beautifulsoup4
+           python-cbor2
+           python-chardet
+           python-cloudscraper
+           python-html5lib
+           python-lxml
+           python-lz4
+           python-numpy
+           opencv ; its python bindings are a drop-in replacement for opencv-python-headless
+           python-pillow
+           python-psutil
+           python-pylzma
+           python-pyopenssl
+           ;; Since hydrus' version 494 it supports python-pyside-6 but it's not yet
+           ;; in guix. pyside-2 is still supported as a fallback.
+           python-pyside-2
+           python-pysocks
+           python-mpv
+           python-pyyaml
+           python-qtpy
+           python-requests
+           python-send2trash
+           python-service-identity
+           python-six
+           python-twisted))
+    (inputs
+     (list swftools ffmpeg miniupnpc python))
+    (synopsis "Organize your media with tags like a dektop booru")
+    (description
+     "The hydrus network client is an application written for
+internet-fluent media nerds who have large image/swf/webm collections.
+It browses with tags instead of folders, a little like a booru on your desktop.
+Advanced users can share tags and files anonymously through custom servers that
+any user may run.  Everything is free and privacy is the first concern.")
+    (home-page "https://hydrusnetwork.github.io/hydrus/")
+    (license license:wtfpl2)))

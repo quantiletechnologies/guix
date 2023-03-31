@@ -2,7 +2,7 @@
 ;;; Copyright © 2017 Arun Isaac <arunisaac@systemreboot.net>
 ;;; Copyright © 2017, 2019, 2020, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2017, 2018, 2020, 2021 Tobias Geerinckx-Rice <me@tobias.gr>
-;;; Copyright © 2017, 2018, 2019, 2020, 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2017-2020, 2022, 2023 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2018 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2021 Pierre Neidhardt <mail@ambrevar.xyz>
 ;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
@@ -736,10 +736,33 @@ or for saving sensitive information that shouldn't be sent to an
 external server.")
     (license license:expat)))
 
+(define-public js-scianimator
+  (package
+    (name "js-scianimator")
+    (version "1.4")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/brentertz/scianimator.git")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0b4r6z85gnsjagdchvf1pvrhylfiaidh701hna8jrm0l4kbb735x"))))
+    (build-system minify-build-system)
+    (arguments
+     '(#:javascript-files
+       (list "assets/js/jquery.scianimator.js")))
+    (home-page "https://github.com/brentertz/scianimator")
+    (synopsis "Scientific image animator plugin for jQuery")
+    (description "SciAnimator provides a simple yet powerful interface for
+animating a series of images.")
+    (license license:expat)))
+
 (define-public mujs
   (package
     (name "mujs")
-    (version "1.2.0")
+    (version "1.3.2")
     (source
      (origin
        (method git-fetch)
@@ -748,7 +771,7 @@ external server.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0kqw3xhjk4l2jar14a1f9b3m0xq0h2g3nc9m6hsdv7kf8jhfm83l"))
+        (base32 "1kfp2246pzmrb65c0gfcy130zd7sbniclpjx2jv6jbkmpkjs8kb1"))
        (snippet
         #~(begin
             (use-modules (guix build utils))

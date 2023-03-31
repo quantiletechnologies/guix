@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2022 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2013, 2015, 2017, 2018, 2021 Ludovic Courtès <ludo@gnu.org>
-;;; Copyright © 2016-2022 Nicolas Goaziou <mail@nicolasgoaziou.fr>
+;;; Copyright © 2016-2023 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2014, 2018 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2016, 2018, 2019, 2021 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2017, 2020-2022 Efraim Flashner <efraim@flashner.co.il>
@@ -14,6 +14,7 @@
 ;;; Copyright © 2020 Vincent Legoll <vincent.legoll@gmail.com>
 ;;; Copyright © 2020, 2021 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2021 Lars-Dominik Braun <ldb@leibniz-psychology.org>
+;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -33,6 +34,7 @@
 (define-module (gnu packages algebra)
   #:use-module (gnu packages)
   #:use-module (gnu packages autotools)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages bison)
   #:use-module (gnu packages boost)
   #:use-module (gnu packages check)
@@ -57,6 +59,7 @@
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages readline)
+  #:use-module (gnu packages ruby)
   #:use-module (gnu packages shells)
   #:use-module (gnu packages tex)
   #:use-module (gnu packages texinfo)
@@ -74,7 +77,8 @@
   #:use-module (guix hg-download)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
-  #:use-module (guix utils))
+  #:use-module (guix utils)
+  #:use-module (ice-9 match))
 
 
 (define-public mpfrcx
@@ -101,33 +105,35 @@ implement the floating point approach to complex multiplication are
 implemented.  On the other hand, these comprise asymptotically fast
 multiplication routines such as Toom–Cook and the FFT.")
    (license license:lgpl3+)
-   (home-page "http://www.multiprecision.org/mpfrcx/")))
+   (home-page "https://www.multiprecision.org/mpfrcx/")))
 
 (define-public gf2x
   (package
-   (name "gf2x")
-   (version "1.2")
-   (source (origin
-            (method url-fetch)
-            (uri (string-append
-                  "https://gforge.inria.fr/frs/download.php/file/36934/gf2x-"
-                  version ".tar.gz"))
-            (sha256
-             (base32
-              "0d6vh1mxskvv3bxl6byp7gxxw3zzpkldrxnyajhnl05m0gx7yhk1"))))
-   (build-system gnu-build-system)
-   (synopsis "Arithmetic of polynomials over binary finite fields")
-   (description
-    "The gf2x library provides arithmetic of polynomials over finite fields
+    (name "gf2x")
+    (version "1.3.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitlab.inria.fr/gf2x/gf2x")
+                    (commit (string-append name "-" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "04g5jg0i4vz46b4w2dvbmahwzi3k6b8g515mfw7im1inc78s14id"))))
+    (build-system gnu-build-system)
+    (native-inputs (list autoconf automake libtool))
+    (synopsis "Arithmetic of polynomials over binary finite fields")
+    (description
+     "The gf2x library provides arithmetic of polynomials over finite fields
 of characteristic 2.  It implements the multiplication, squaring and
 greatest common divisor operations.")
-   (license license:gpl3+)
-   (home-page "https://gforge.inria.fr/projects/gf2x/")))
+    (home-page "https://gitlab.inria.fr/gf2x/gf2x")
+    (license license:gpl3+)))
 
 (define-public cm
   (package
    (name "cm")
-   (version "0.4.0")
+   (version "0.4.1")
    (source (origin
             (method url-fetch)
             (uri (string-append
@@ -135,7 +141,7 @@ greatest common divisor operations.")
                   version ".tar.gz"))
             (sha256
              (base32
-              "04l3inafql40n0r5rq8rmp21zplgdrzblil2kgkpx5s0jbs9i8rr"))))
+              "1avaw6a7lyc2833gr9b7zpk4blvrrrkz8r62sv1grh9xc9i4zg07"))))
    (build-system gnu-build-system)
    (propagated-inputs
      (list mpfrcx zlib)) ; Header files included from cm_common.h.
@@ -149,7 +155,7 @@ multiplication via floating point approximations.  It consists of libraries
 that can be called from within a C program and of executable command
 line applications.")
    (license license:gpl3+)
-   (home-page "http://www.multiprecision.org/cm/")))
+   (home-page "https://www.multiprecision.org/cm/")))
 
 (define-public fplll
   (package
@@ -220,7 +226,7 @@ the real span of the lattice.")
 (define-public pari-gp
   (package
     (name "pari-gp")
-    (version "2.13.4")
+    (version "2.15.3")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -228,11 +234,10 @@ the real span of the lattice.")
                     version ".tar.gz"))
               (sha256
                (base32
-                "11g1pkrj12dmggj1n6r00ijpnmk3f3dpqsf1h51q34hmmv79xpmw"))))
+                "0s4jasvb3ghvxp9s2ifmr0lk7ckj9529zg28icmdgbyd723abxdd"))))
     (build-system gnu-build-system)
-    (native-inputs
-     `(("texlive" ,(texlive-updmap.cfg
-                    (list texlive-amsfonts)))))
+    (native-inputs (list (texlive-updmap.cfg
+                          (list texlive-amsfonts))))
     (inputs (list gmp libx11 perl readline))
     (arguments
      '(#:make-flags '("all")
@@ -260,7 +265,7 @@ PARI is also available as a C library to allow for faster computations.")
 (define-public gp2c
   (package
    (name "gp2c")
-   (version "0.0.12")
+   (version "0.0.13")
    (source (origin
             (method url-fetch)
             (uri (string-append
@@ -268,7 +273,7 @@ PARI is also available as a C library to allow for faster computations.")
                   version ".tar.gz"))
             (sha256
               (base32
-                "039ip7qkwwv46wrcdrz7y12m30kazzkjr44kqbc0h137g4wzd7zf"))))
+                "0dlxlrwwvhmjljjzsq95fsm14j5n5353snd92b0pdg9ylzn784r6"))))
    (build-system gnu-build-system)
    (native-inputs (list perl))
    (inputs (list pari-gp))
@@ -293,39 +298,38 @@ GP2C, the GP to C compiler, translates GP scripts to PARI programs.")
 
 (define-public cmh
   (package
-   (name "cmh")
-   (version "1.1.0")
-   (source (origin
-            (method url-fetch)
-            ;; Git repo at <https://gitlab.inria.fr/cmh/cmh>.
-            (uri (string-append "http://www.multiprecision.org/downloads/cmh-"
-                                version ".tar.gz"))
-            (sha256
-             (base32
-              "1ws2yhzxmm2l5xqqqcjcimmg40f9qq5l9i6d4i5434an9v9s8531"))
-             (patches (search-patches "cmh-support-fplll.patch"))))
-   (build-system gnu-build-system)
-   (inputs
-     (list gmp
-           mpfr
-           mpc
-           mpfrcx
-           fplll
-           pari-gp))
-   (synopsis "Igusa class polynomial computations")
-   (description
-    "The CMH software computes Igusa (genus 2) class polynomials, which
+    (name "cmh")
+    (version "1.1.1")
+    (source (origin
+              (method url-fetch)
+              ;; Git repo at <https://gitlab.inria.fr/cmh/cmh>.
+              (uri (string-append
+                    "https://www.multiprecision.org/downloads/cmh-" version
+                    ".tar.gz"))
+              (sha256
+               (base32
+                "0nadvqfmidgks1s7aljsf8dp32pz7vjaxyaym36m9bx4zr8msk91"))))
+    (build-system gnu-build-system)
+    (inputs (list gmp
+                  mpfr
+                  mpc
+                  mpfrcx
+                  fplll
+                  pari-gp))
+    (synopsis "Igusa class polynomial computations")
+    (description
+     "The CMH software computes Igusa (genus 2) class polynomials, which
 parameterize the CM points in the moduli space of 2-dimensional abelian
 varieties, i.e. Jacobians of hyperelliptic curves.
 It can also be used to compute theta constants at arbitrary
 precision.")
-   (license license:gpl3+)
-   (home-page "http://www.multiprecision.org/cmh/home.html")))
+    (license license:gpl3+)
+    (home-page "https://www.multiprecision.org/cmh/home.html")))
 
 (define-public giac
   (package
     (name "giac")
-    (version "1.9.0-19")
+    (version "1.9.0-37")
     (source
      (origin
        (method url-fetch)
@@ -337,7 +341,7 @@ precision.")
                            "~parisse/debian/dists/stable/main/source/"
                            "giac_" version ".tar.gz"))
        (sha256
-        (base32 "1zl3wpw4mwsc2zm2mnxnajxql0df68mlfyivbkk4i300wjfqkdvb"))))
+        (base32 "0ch18wp6b3nr0zg31961rxng2mbw5mj76s00jf5qz7jdxl65s27n"))))
     (build-system gnu-build-system)
     (arguments
      (list
@@ -353,9 +357,10 @@ precision.")
                                  (find-files "doc" "^Makefile"))
                 (("/bin/cp") (which "cp")))))
           (add-after 'unpack 'disable-failing-test
-            ;; FIXME: Test failing.  Not sure why.
+            ;; FIXME: Tests failing.  Not sure why.
             (lambda _
               (substitute* "check/Makefile.in"
+                (("chk_fhan4") "")
                 (("chk_fhan11") ""))))
           (add-after 'install 'fix-doc
             (lambda _
@@ -461,7 +466,9 @@ GCDs, factoring, solving linear systems, and evaluating special
 functions.  In addition, FLINT provides various low-level routines for
 fast arithmetic.")
    (license license:lgpl2.1+)
-   (home-page "http://flintlib.org/")))
+   (home-page "https://flintlib.org/")
+   (properties
+    '((release-monitoring-url . "http://flintlib.org/downloads.html")))))
 
 (define-public arb
   (package
@@ -630,35 +637,42 @@ geometry and singularity theory.")
 
 (define-public gmp-ecm
   (package
-   (name "gmp-ecm")
-   (version "7.0.4")
-   (source (origin
-             (method url-fetch)
-             (uri
-               (let ((hash "00c4c691a1ef8605b65bdf794a71539d"))
-                    (string-append "https://gitlab.inria.fr/zimmerma/ecm/"
-                                   "uploads/" hash "/ecm-" version
-                                   ".tar.gz")))
-             (sha256 (base32
-                      "0hxs24c2m3mh0nq1zz63z3sb7dhy1rilg2s1igwwcb26x3pb7xqc"))))
-   (build-system gnu-build-system)
-   (inputs
-    (list gmp))
-   (arguments
-    `(#:configure-flags '("--enable-shared"
-                          ;; Disable specific assembly routines, which depend
-                          ;; on the subarchitecture of the build machine,
-                          ;; and use gmp instead.
-                          "--disable-asm-redc")))
-   (synopsis "Integer factorization library using the elliptic curve method")
-   (description
-    "GMP-ECM factors integers using the elliptic curve method (ECM) as well
+    (name "gmp-ecm")
+    (version "7.0.5")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitlab.inria.fr/zimmerma/ecm")
+                    (commit (string-append "git-" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "013sfsd5kyh7phhf4namcdndpcp2jnibzxf10f4g89qabr8av63m"))))
+    (build-system gnu-build-system)
+    (inputs
+     (list gmp))
+    (arguments
+     (list
+      #:configure-flags #~(list "--enable-shared"
+                                ;; Disable specific assembly routines, which
+                                ;; depend on the subarchitecture of the build
+                                ;; machine, and use gmp instead.
+                                "--disable-asm-redc")
+      #:phases #~(modify-phases %standard-phases
+                   (add-after 'unpack 'patch-paths
+                     (lambda _
+                       (substitute* "test.ecm"
+                         (("/bin/rm") (which "rm"))))))))
+    (native-inputs (list autoconf automake libtool))
+    (synopsis "Integer factorization library using the elliptic curve method")
+    (description
+     "GMP-ECM factors integers using the elliptic curve method (ECM) as well
 as the P-1 and P+1 algorithms.  It provides a library and a stand-alone
 binary.")
-   ;; Most files are under lgpl3+, but some are under gpl3+ or gpl2+,
-   ;; so the combined work is under gpl3+.
-   (license license:gpl3+)
-   (home-page "http://ecm.gforge.inria.fr/")))
+    (home-page "https://gitlab.inria.fr/zimmerma/ecm")
+    ;; Most files are under lgpl3+, but some are under gpl3+ or gpl2+, so the
+    ;; combined work is under gpl3+.
+    (license license:gpl3+)))
 
 (define-public bc
   (package
@@ -756,7 +770,7 @@ a C program.")
          ;; different machine.
          "ax_cv_c_flags__mtune_native=no")))
     (native-inputs (list perl))
-    (home-page "http://fftw.org")
+    (home-page "https://fftw.org")
     (synopsis "Computing the discrete Fourier transform")
     (description
      "FFTW is a C subroutine library for computing the discrete Fourier
@@ -1009,10 +1023,39 @@ extends it by a set of algebraic capabilities.")
                   #t))))
     (build-system cmake-build-system)
     (arguments
-     '(;; Turn off debugging symbols to save space.
+     `(;; Turn off debugging symbols to save space.
        #:build-type "Release"
 
+       #:modules ((ice-9 match)
+                  (guix build utils)
+                  (guix build cmake-build-system))
+
        #:phases (modify-phases %standard-phases
+                  (add-after 'unpack 'disable-some-tests
+                    ;; Not all platforms are well supported by the test suite.
+                    (lambda _
+                      ,@(match (%current-system)
+                          ("i686-linux"
+                           `((substitute* "test/CMakeLists.txt"
+                               ((".*packetmath.*") ""))))
+                          ("aarch64-linux"
+                           `((substitute* "test/CMakeLists.txt"
+                               ((".*array_cwise.*") "")
+                               ((".*vectorization_logic.*") ""))))
+                          ("armhf-linux"
+                           `((substitute* "test/CMakeLists.txt"
+                               ((".*geo_quaternion.*") "")
+                               ((".*jacobisvd.*") "")
+                               ((".*packetmath.*") "")
+                               ((".*prec_inverse.*") "")
+                               ((".*qr_colpivoting.*") "")
+                               ((".*vectorization_logic.*") ""))))
+                          ("riscv64-linux"
+                           `((substitute* "test/CMakeLists.txt"
+                               ((".*array_cwise.*") "")
+                               ((".*geo_quaternion.*") ""))))
+                          (_
+                            '((display "No tests to disable on this architecture.\n"))))))
                   (replace 'check
                     (lambda* (#:key tests? #:allow-other-keys)
                       (let* ((cores  (parallel-job-count))
@@ -1101,6 +1144,11 @@ features, and more.")
                     (substitute* "unsupported/CMakeLists.txt"
                       (("add_subdirectory\\(test.*")
                        "# Do not build the tests for unsupported features.\n"))))))
+      (arguments
+       (substitute-keyword-arguments (package-arguments eigen)
+         ((#:phases phases)
+          `(modify-phases ,phases
+             (delete 'disable-some-tests)))))
       (native-inputs
        (list gcc-7)))))
 
@@ -1129,7 +1177,12 @@ features, and more.")
                  '(begin
                     (substitute* "unsupported/CMakeLists.txt"
                       (("add_subdirectory\\(test.*")
-                       "# Do not build the tests for unsupported features.\n")))))))))
+                       "# Do not build the tests for unsupported features.\n"))))))
+      (arguments
+       (substitute-keyword-arguments (package-arguments eigen)
+         ((#:phases phases)
+          `(modify-phases ,phases
+             (delete 'disable-some-tests))))))))
 
 (define-public xtensor
   (package
@@ -1206,7 +1259,7 @@ xtensor provides:
 (define-public gap
   (package
     (name "gap")
-    (version "4.11.1")
+    (version "4.12.2")
     (source
      (origin
        (method url-fetch)
@@ -1216,14 +1269,13 @@ xtensor provides:
                            version
                            ".tar.gz"))
        (sha256
-        (base32 "01535s81h254zcs84zi95xqmhvvn6fn9qss8761myxc2gpdcadb6"))
+        (base32 "1a47slldnjq6mib69k3g8lqw6nyxdrwdd3gfjhj252mpbrs0h8v7"))
        (modules '((guix build utils) (ice-9 ftw) (srfi srfi-1)))
        (snippet
         '(begin
-           ;; Delete the external gmp and zlib libraries
-           ;; and a subdirectory not needed for our build.
+           ;; Delete bundled external libraries.
            (for-each delete-file-recursively
-                     '("extern" "hpcgap"))
+                     '("extern" "hpcgap/extern"))
            ;; Delete a failing test.
            ;; FIXME: This might be fixed in the next release, see
            ;; https://github.com/gap-system/gap/issues/3292
@@ -1237,47 +1289,69 @@ xtensor provides:
                  (scandir ".")
                  '("." ".."
                    ;; Necessary packages.
-                   "GAPDoc-"
-                   "primgrp-"
-                   "SmallGrp-"   ; artistic2.0
-                   "transgrp"    ; artistic2.0 for data,
-                                 ; gpl2 or gpl3 for code
+                   "gapdoc"
+                   "primgrp"
+                   "smallgrp"   ; artistic2.0
+                   "transgrp"   ; artistic2.0 for data,
+                                ; gpl2 or gpl3 for code
                    ;; Optional packages.
-                   "alnuth-"
-                   "AutoDoc-"
-                   "automata-"
-                   "autpgrp-"
-                   "crime-"
-                   "crisp-"      ; bsd-2
-                   "ctbllib"     ; gpl3+
+                   "4ti2interface"
+                   "alnuth"
+                   "autodoc"
+                   "automata"
+                   "autpgrp"
+                   "cap"
+                   "crime"
+                   "crisp"      ; bsd-2
+                   "ctbllib"    ; gpl3+
                    "datastructures"
-                   "FactInt-"
+                   "examplesforhomalg"
+                   "factint"
                    "fga"
                    "format"
-                   "groupoids-"
+                   "gauss"
+                   "gaussforhomalg"
+                   "generalizedmorphismsforcap"
+                   "gradedmodules"
+                   "gradedringforhomalg"
+                   "groupoids"
                    "guarana"
-                   "idrel-"
-                   "images-"     ; mpl2.0
-                   "IntPic-"
-                   "io-"         ; gpl3+
-                   "irredsol-"   ; bsd-2
-                   "laguna-"
-                   "liering-"
-                   "MapClass-"
-                   "nilmat-"
-                   "NumericalSgps-"
-                   "OpenMath-"
-                   "orb-"        ; gpl3+
-                   "polenta-"
-                   "polycyclic-"
-                   "radiroot-"
-                   "repsn-"
-                   "resclasses-"
+                   "homalg"
+                   "homalgtocas"
+                   "idrel"
+                   "images"     ; mpl2.0
+                   "intpic"
+                   "io"         ; gpl3+
+                   "ioforhomalg"
+                   "irredsol"   ; bsd-2
+                   "laguna"
+                   "liering"
+                   "linearalgebraforcap"
+                   "localizeringforhomalg"
+                   "mapclass"
+                   "matricesforhomalg"
+                   "modulepresentationsforcap"
+                   "modules"
+                   "monoidalcategories"
+                   "nconvex"
+                   "nilmat"
+                   "numericalsgps"
+                   "openmath"
+                   "orb"        ; gpl3+
+                   "polenta"
+                   "polycyclic"
+                   "radiroot"
+                   "recog"      ; gpl3+
+                   "repsn"
+                   "resclasses"
+                   "ringsforhomalg"
+                   "sco"
                    "simpcomp"
-                   "sophus-"
-                   "tomlib-"
-                   "unipot-"
-                   "utils-"))))))))
+                   "sophus"
+                   "tomlib"
+                   "toolsforhomalg"
+                   "unipot"
+                   "utils"))))))))
     (build-system gnu-build-system)
     (inputs
      (list gmp readline zlib))
@@ -1300,41 +1374,10 @@ xtensor provides:
            (lambda _
              (with-directory-excursion "doc"
                (invoke "./make_doc"))))
-         (replace 'install
+         (add-after 'install 'install-packages
            (lambda* (#:key outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
-                    (bin (string-append out "/bin"))
-                    (prog (string-append bin "/gap"))
-                    (prog-real (string-append bin "/.gap-real"))
                     (share (string-append out "/share/gap")))
-               ;; Install only the gap binary; the gac compiler is left
-               ;; for maybe later. "Wrap" it in a shell script that calls
-               ;; the binary with the correct parameter.
-               ;; The make target install-bin is supposed to do that, but
-               ;; is not currently working.
-               (mkdir-p bin)
-               (copy-file "gap" prog-real)
-               (call-with-output-file prog
-                 (lambda (port)
-                   (format port
-                           "#!~a~%exec ~a -l ~a \"$@\"~%"
-                           (which "bash")
-                           prog-real
-                           share)))
-               (chmod prog #o755)
-               ;; Install the headers and library, which are needed by Sage.
-               (invoke "make" "install-headers")
-               (install-file "gen/config.h"
-                             (string-append out "/include/gap"))
-               (invoke "make" "install-libgap")
-               ;; Remove information on the build directory from sysinfo.gap.
-               (substitute* "sysinfo.gap"
-                 (("GAP_BIN_DIR=\".*\"") "GAP_BIN_DIR=\"\"")
-                 (("GAP_LIB_DIR=\".*\"") "GAP_LIB_DIR=\"\"")
-                 (("GAP_CPPFLAGS=\".*\"") "GAP_CPPFLAGS=\"\""))
-               (invoke "make" "install-gaproot")
-               ;; Copy the directory of compiled packages; the make target
-               ;; install-pkg is currently empty.
                (copy-recursively "pkg" (string-append share "/pkg"))))))))
     (home-page "https://www.gap-system.org/")
     (synopsis
@@ -1355,42 +1398,45 @@ objects.")
 
 (define-public gappa
   (package
-   (name "gappa")
-   (version "1.4.0")
-   (source (origin
-            (method url-fetch)
-            (uri (string-append "https://gappa.gitlabpages.inria.fr/releases/"
-                                "gappa-" version ".tar.gz"))
-            (sha256
-             (base32
-              "12x42z901pr05ldmparqdi8sq9s7fxbavhzk2dbq3l6hy247dwbb"))))
-   (build-system gnu-build-system)
-   (inputs
-    (list boost gmp mpfr))
-   (arguments
-    `(#:phases
-      (modify-phases %standard-phases
-        (add-after 'unpack 'patch-remake-shell
-          (lambda _
-            (substitute* "remake.cpp"
-             (("/bin/sh") (which "sh")))
-            #t))
-        (replace 'build
-          (lambda _ (invoke "./remake" "-s" "-d")))
-        (replace 'install
-          (lambda _ (invoke "./remake" "-s" "-d" "install")))
-        (replace 'check
-          (lambda _ (invoke "./remake" "check"))))))
-   (home-page "http://gappa.gforge.inria.fr/")
-   (synopsis "Proof generator for arithmetic properties")
-   (description "Gappa is a tool intended to help verifying and formally
+    (name "gappa")
+    (version "1.4.1")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitlab.inria.fr/gappa/gappa")
+                    (commit (string-append name "-" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0vfggzilc0gicrhqypmlx30ccrdkmyg22zzn46988c28xi9rcicj"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'patch-remake-shell
+                 (lambda _
+                   (substitute* "remake.cpp"
+                     (("/bin/sh") (which "sh")))))
+               (replace 'build
+                 (lambda _ (invoke "./remake" "-s" "-d")))
+               (replace 'install
+                 (lambda _ (invoke "./remake" "-s" "-d" "install")))
+               (replace 'check
+                 (lambda* (#:key tests? #:allow-other-keys)
+                   (when tests?
+                     (invoke "./remake" "check")))))))
+    (native-inputs (list autoconf automake bison flex libtool))
+    (inputs (list boost gmp mpfr))
+    (home-page "https://gitlab.inria.fr/gappa/gappa")
+    (synopsis "Proof generator for arithmetic properties")
+    (description "Gappa is a tool intended to help verifying and formally
 proving properties on numerical programs dealing with floating-point or
 fixed-point arithmetic.  It has been used to write robust floating-point
 filters for CGAL and it is used to certify elementary functions in CRlibm.
 While Gappa is intended to be used directly, it can also act as a backend
 prover for the Why3 software verification platform or as an automatic tactic
 for the Coq proof assistant.")
-   (license (list license:gpl3+ license:cecill)))) ; either/or
+    (license (list license:gpl3+ license:cecill)))) ; either/or
 
 (define-public givaro
   (package
@@ -1722,7 +1768,7 @@ no more than about 20 bits long).")
             "0n8gj5iylfagdbaqirpykb01a9difsy4zl6qq55f0ghvazxqdvmn"))))
     (properties `((upstream-name . "dtt")))
     (build-system r-build-system)
-    (home-page "http://www.r-project.org")
+    (home-page "https://www.r-project.org")
     (synopsis "Discrete Trigonometric Transforms")
     (description
       "This package provides functions for 1D and 2D Discrete Cosine Transform
@@ -1774,3 +1820,81 @@ mathematical floating-point libraries (libm).  Amongst other features,
 it offers a certified infinity norm, an automatic polynomial
 implementer, and a fast Remez algorithm.")
    (license license:cecill-c)))
+
+(define-public form
+  ;; using this commit as it removes some invalid/ambiguous license info
+  (let ((commit "e7c52d3b07abe21f21718f5e70ee138e856f15ac")
+        (revision "0"))
+    (package
+      (name "form")
+      (version (git-version "4.3.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/vermaseren/form")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "15pjpn5s8d3sva18syhyymh5v1dijchk0xkf6d0m7cl2sj3qxxxq"))))
+      (build-system gnu-build-system)
+      (arguments
+       (list #:configure-flags #~'("--enable-native=no")
+             #:phases #~(modify-phases %standard-phases
+                          (add-after 'unpack 'patch-src
+                            (lambda _
+                              (substitute* "check/examples.frm"
+                                ;; skip test that causes memory leak and fails
+                                (("#pend_if valgrind\\?")
+                                 "#pend_if 0"))
+                              (substitute* "sources/extcmd.c"
+                                (("/bin/sh")
+                                 (string-append
+                                  #$(this-package-input "bash-minimal")
+                                  "/bin/sh")))))
+                          (add-after 'build 'build-doxygen
+                            (lambda _
+                              (with-directory-excursion "doc/doxygen"
+                                (invoke "make" "html"))))
+                          (add-after 'install 'install-docs
+                            (lambda _
+                              (let ((doc (string-append
+                                          #$output "/share/doc/" #$name "-"
+                                          #$version "/html")))
+                                (mkdir-p doc)
+                                (copy-recursively "doc/doxygen/html" doc)))))))
+      (native-inputs (list autoconf automake doxygen ruby))
+      (inputs (list bash-minimal))
+      (home-page "https://www.nikhef.nl/~form/")
+      (synopsis "Symbolic manipulation system for very big expressions")
+      (description
+       "FORM is a symbolic manipulation system.  It reads symbolic expressions
+from files and executes symbolic/algebraic transformations upon them.  The
+answers are returned in a textual mathematical representation.  The size of
+the considered expressions in FORM is only limited by the available disk space
+and not by the available RAM.")
+      ;; XXX: Ignore this CVE to work around a name clash with the unrelated
+      ;; "neos/forms" package.
+      (properties '((lint-hidden-cve . ("CVE-2021-32697"))))
+      ;; x86_64 only due to test failures on other platforms.
+      ;; Developers say other platforms are not "tier 1" supported:
+      ;; https://github.com/vermaseren/form/issues/426
+      (supported-systems '("x86_64-linux"))
+      (license license:gpl3+))))
+
+(define-public parform
+  (package
+    (inherit form)
+    (name "parform")
+    (arguments
+     (substitute-keyword-arguments (package-arguments form)
+       ((#:configure-flags flags)
+        #~(cons* "--enable-parform=yes" #$flags))
+       ((#:phases phases)
+        #~(modify-phases #$phases
+            (add-before 'check 'mpi-setup
+              #$%openmpi-setup)))))
+    (inputs (list bash-minimal openmpi))
+    (description (string-append (package-description form)
+                                "  This package also includes
+@code{parform}, a version of FORM parallelized using OpenMPI."))))

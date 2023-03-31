@@ -103,7 +103,6 @@
                     (guix build clojure-utils)
                     (guix build java-utils)
                     (guix build utils)
-                    (guix build syscalls)
                     (ice-9 match)
                     (ice-9 regex)
                     (srfi srfi-26))
@@ -204,14 +203,14 @@ designs.")
 (define-public clojure-tools
   (package
     (name "clojure-tools")
-    (version "1.11.1.1149")
+    (version "1.11.1.1165")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://download.clojure.org/install/clojure-tools-"
                            version
                            ".tar.gz"))
-       (sha256 (base32 "196wl87br8zg3npfwpr5c1q0knxd1810vzgb0b6h195hyjf6i210"))
+       (sha256 (base32 "1lg97waqfcgzr3dz5426fbc4kqcsavpbqil2iyjm1dw3zrfa8ysi"))
        ;; Remove AOT compiled JAR.  The other JAR only contains uncompiled
        ;; Clojure source code.
        (snippet
@@ -371,6 +370,31 @@ base64 has been implemented.  Implements the standard base64 encoding
 character set, but does not yet support automatic fixed line-length encoding.
 All operations work on either byte arrays or Input/OutputStreams.  Performance
 is on par with Java implementations, e.g., Apache commons-codec.")
+    (license license:epl1.0)))
+
+(define-public clojure-data-csv
+  (package
+    (name "clojure-data-csv")
+    (version "1.0.1")
+    (home-page "https://github.com/clojure/data.csv")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url home-page)
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1mh1qli6xrw4s3yj9cxxh50z4m7z08indj3ya30znkhi4xsphii2"))))
+    (build-system clojure-build-system)
+    (arguments
+     '(#:source-dirs '("src/main/clojure")
+       #:test-dirs '("src/test/clojure")
+       #:doc-dirs '()))
+    (synopsis "Clojure library for reading and writing CSV data")
+    (description "@code{data.csv} is a Clojure library for reading and writing
+CSV data.  @code{data.csv} follows the RFC4180 specification but is more
+relaxed.")
     (license license:epl1.0)))
 
 (define-public clojure-data-xml

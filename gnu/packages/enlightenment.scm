@@ -1,10 +1,11 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2015 Tomáš Čech <sleep_walker@suse.cz>
 ;;; Copyright © 2015 Daniel Pimentel <d4n1@member.fsf.org>
-;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2015-2023 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2017 Nikita <nikita@n0.is>
 ;;; Copyright © 2018, 2019, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018 Timo Eisenmann <eisenmann@fn.de>
+;;; Copyright © 2023 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,7 +27,6 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix utils)
-  #:use-module (guix build-system gnu)
   #:use-module (guix build-system meson)
   #:use-module (guix build-system python)
   #:use-module (gnu packages)
@@ -71,7 +71,7 @@
 (define-public efl
   (package
     (name "efl")
-    (version "1.26.2")
+    (version "1.26.3")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -79,66 +79,70 @@
                     version ".tar.xz"))
               (sha256
                (base32
-                "071h0pscbd8g341yy5rz9mk1xn8yhryldhl6mmr1y6lafaycyy99"))))
+                "05bxc58hj0z6pkp6yy5cmy1lc575q0nrbr5lxr6z8d4kznh3my6r"))))
     (build-system meson-build-system)
     (native-inputs
-     `(("check" ,check)
-       ("gettext" ,gettext-minimal)
-       ("pkg-config" ,pkg-config)
-       ("python" ,python)))
+     (list check
+           gettext-minimal
+           pkg-config
+           python))
     (inputs
-     `(("curl" ,curl)
-       ("giflib" ,giflib)
-       ("gstreamer" ,gstreamer)
-       ("gst-plugins-base" ,gst-plugins-base)
-       ("ibus" ,ibus)
-       ("mesa" ,mesa)
-       ("libraw" ,libraw)
-       ("librsvg" ,(librsvg-for-system))
-       ("libspectre" ,libspectre)
-       ("libtiff" ,libtiff)
-       ("libxau" ,libxau)
-       ("libxcomposite" ,libxcomposite)
-       ("libxcursor" ,libxcursor)
-       ("libxdamage" ,libxdamage)
-       ("libxdmcp" ,libxdmcp)
-       ("libxext" ,libxext)
-       ("libxi" ,libxi)
-       ("libxfixes" ,libxfixes)
-       ("libxinerama" ,libxinerama)
-       ("libxrandr" ,libxrandr)
-       ("libxrender" ,libxrender)
-       ("libxss" ,libxscrnsaver)
-       ("libxtst" ,libxtst)
-       ("libwebp" ,libwebp)
-       ("openjpeg" ,openjpeg)
-       ("poppler" ,poppler)
-       ("util-linux" ,util-linux "lib")
-       ("wayland-protocols" ,wayland-protocols)))
+     (list curl
+           giflib
+           gstreamer
+           gst-plugins-base
+           ibus-minimal
+           mesa
+           libraw
+           (librsvg-for-system)
+           libspectre
+           libtiff
+           libxau
+           libxcomposite
+           libxcursor
+           libxdamage
+           libxdmcp
+           libxext
+           libxi
+           libxfixes
+           libxinerama
+           libxrandr
+           libxrender
+           libxscrnsaver
+           libxtst
+           libwebp
+           openjpeg
+           poppler
+           `(,util-linux "lib")
+           wayland-protocols))
     (propagated-inputs
      ;; All these inputs are in package config files in section
      ;; Requires.private.
-     `(("dbus" ,dbus)
-       ("elogind" ,elogind)
-       ("eudev" ,eudev)
-       ("fontconfig" ,fontconfig)
-       ("freetype" ,freetype)
-       ("fribidi" ,fribidi)
-       ("glib" ,glib)
-       ("harfbuzz" ,harfbuzz)
-       ("libinput" ,libinput-minimal)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libsndfile" ,libsndfile)
-       ("libpng" ,libpng)
-       ("libunwind" ,libunwind)
-       ("libx11" ,libx11)
-       ("libxkbcommon" ,libxkbcommon)
-       ("luajit" ,luajit)
-       ("lz4" ,lz4)
-       ("openssl" ,openssl)
-       ("pulseaudio" ,pulseaudio)
-       ("wayland" ,wayland)
-       ("zlib" ,zlib)))
+     (append
+       (list dbus
+             elogind
+             eudev
+             fontconfig
+             freetype
+             fribidi
+             glib
+             harfbuzz
+             libinput-minimal
+             libjpeg-turbo
+             libsndfile
+             libpng
+             libunwind
+             libx11
+             libxkbcommon)
+       (if (member (%current-system)
+                   (package-transitive-supported-systems luajit))
+         (list luajit)
+         (list lua-5.2))
+       (list lz4
+             openssl
+             pulseaudio
+             wayland
+             zlib)))
     (arguments
      `(#:configure-flags
        `("-Dembedded-lz4=false"
@@ -148,6 +152,10 @@
          "-Dmount-path=/run/setuid-programs/mount"
          "-Dunmount-path=/run/setuid-programs/umount"
          "-Dnetwork-backend=connman"
+         ,,@(if (member (%current-system)
+                        (package-transitive-supported-systems luajit))
+              `("-Dlua-interpreter=luajit")
+              `("-Dlua-interpreter=lua"))
          ;; For Wayland.
          "-Dwl=true"
          "-Ddrm=true")
@@ -158,22 +166,17 @@
          ;; have to wrap the outputs of efl's dependencies in those libraries.
          (add-after 'unpack 'hardcode-dynamic-libraries
            (lambda* (#:key inputs #:allow-other-keys)
-             (let ((curl    (assoc-ref inputs "curl"))
-                   (pulse   (assoc-ref inputs "pulseaudio"))
-                   (sndfile (assoc-ref inputs "libsndfile"))
-                   (elogind (assoc-ref inputs "elogind"))
-                   (lib     "/lib/"))
-               (substitute* "src/lib/ecore_con/ecore_con_url_curl.c"
-                 (("libcurl.so.?" libcurl) ; libcurl.so.[45]
-                  (string-append curl lib libcurl)))
-               (substitute* "src/lib/ecore_audio/ecore_audio.c"
-                 (("libpulse.so.0" libpulse)
-                  (string-append pulse lib libpulse))
-                 (("libsndfile.so.1" libsnd)
-                  (string-append sndfile lib libsnd)))
-               (substitute* "src/lib/elput/elput_logind.c"
-                 (("libelogind.so.0" libelogind)
-                  (string-append elogind "/lib/" libelogind))))))
+             (substitute* "src/lib/ecore_con/ecore_con_url_curl.c"
+               (("libcurl.so.4")
+                (search-input-file inputs "lib/libcurl.so.4")))
+             (substitute* "src/lib/ecore_audio/ecore_audio.c"
+               (("libpulse.so.0")
+                (search-input-file inputs "lib/libpulse.so.0"))
+               (("libsndfile.so.1")
+                (search-input-file inputs "lib/libsndfile.so.1")))
+             (substitute* "src/lib/elput/elput_logind.c"
+               (("libelogind.so.0")
+                (search-input-file inputs "lib/libelogind.so.0")))))
          (add-after 'unpack 'fix-install-paths
            (lambda _
              (substitute* "dbus-services/meson.build"
@@ -199,7 +202,7 @@ removable devices or support for multimedia.")
 (define-public terminology
   (package
     (name "terminology")
-    (version "1.12.1")
+    (version "1.13.0")
     (source (origin
               (method url-fetch)
               (uri
@@ -207,7 +210,7 @@ removable devices or support for multimedia.")
                               "terminology/terminology-" version ".tar.xz"))
               (sha256
                (base32
-                "1aasddf2343qj798b5s8qwif3lxj4pyjax6fa9sfi6if9icdkkpq"))
+                "19ad8ycg5mkk2ldqm0ysvzb7gvhw6fpw1iiyvv4kxmmvszn7z8qn"))
               (modules '((guix build utils)))
               ;; Remove the bundled fonts.
               (snippet
@@ -289,7 +292,7 @@ Libraries with some extra bells and whistles.")
 (define-public enlightenment
   (package
     (name "enlightenment")
-    (version "0.25.3")
+    (version "0.25.4")
     (source (origin
               (method url-fetch)
               (uri
@@ -297,7 +300,7 @@ Libraries with some extra bells and whistles.")
                               "enlightenment/enlightenment-" version ".tar.xz"))
               (sha256
                (base32
-                "1xngwixp0cckfq3jhrdmmk6zj67125amr7g6xwc6l89pnpmlkz9p"))
+                "18mp4ggfy7n0yz6kzx56ali0piqa84z72vnj6649l6w2dch5vnsn"))
               (patches (search-patches "enlightenment-fix-setuid-path.patch"))))
     (build-system meson-build-system)
     (arguments
@@ -385,7 +388,7 @@ embedded systems.")
 (define-public python-efl
   (package
     (name "python-efl")
-    (version "1.25.0")
+    (version "1.26.0")
     (source
       (origin
         (method url-fetch)
@@ -393,7 +396,7 @@ embedded systems.")
                             "python/python-efl-" version ".tar.xz"))
         (sha256
          (base32
-          "0bk161xwlz4dlv56r68xwkm8snzfifaxd1j7w2wcyyk4fgvnvq4r"))
+          "0dj6f24n33hkpy0bkdclnzpxhvs8vpaxqaf7hkw0di19pjwrq25h"))
         (modules '((guix build utils)))
         ;; Remove files generated by Cython
         (snippet
@@ -404,8 +407,7 @@ embedded systems.")
                           (when (file-exists? generated-file)
                             (delete-file generated-file))))
                       (find-files "efl" "\\.pyx$"))
-            (delete-file "efl/eo/efl.eo_api.h")
-            #t))))
+            (delete-file "efl/eo/efl.eo_api.h")))))
     (build-system python-build-system)
     (arguments
      '(#:phases
@@ -418,20 +420,18 @@ embedded systems.")
           (lambda _
             (setenv "CFLAGS"
                     (string-append "-I" (assoc-ref %build-inputs "python-dbus")
-                                   "/include/dbus-1.0"))
-            #t))
+                                   "/include/dbus-1.0"))))
         (add-before 'check 'set-environment
           (lambda _
             ;; Some tests require write access to HOME.
             (setenv "HOME" "/tmp")
             ;; These tests try to connect to the internet.
             (delete-file "tests/ecore/test_09_file_download.py")
-            (delete-file "tests/ecore/test_11_con.py")
-            #t)))))
+            (delete-file "tests/ecore/test_11_con.py"))))))
     (native-inputs
      (list pkg-config python-cython))
     (inputs
-     (list efl python-dbus))
+     (list efl python-dbus python-packaging))
     (home-page "https://www.enlightenment.org/")
     (synopsis "Python bindings for EFL")
     (description

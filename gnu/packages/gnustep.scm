@@ -36,6 +36,7 @@
   #:use-module (gnu packages gcc)
   #:use-module (gnu packages gnome)
   #:use-module (gnu packages gtk)
+  #:use-module (gnu packages linux)
   #:use-module (gnu packages llvm)
   #:use-module (gnu packages texinfo)
   #:use-module (gnu packages autotools)
@@ -247,7 +248,7 @@ graph), and battery status (high - green, low - yellow, or critical - red).")
      (list libx11 libxext libxpm))
     (native-inputs
      (list pkg-config))
-    (home-page "http://www.thregr.org/~wavexx/software/wmnd/")
+    (home-page "https://www.thregr.org/~wavexx/software/wmnd/")
     (synopsis "Network interface monitor")
     (description
      "WMND is a dockapp for monitoring network interfaces under WindowMaker and
@@ -313,7 +314,7 @@ display, and can run a user-specified program on mouse click.")
     (version "1.2.4")
     (source (origin
               (method url-fetch)
-              (uri (string-append "http://www.improbability.net/"
+              (uri (string-append "https://www.improbability.net/"
                                   name "/" name "-" version ".tar.gz"))
               (sha256
                (base32
@@ -325,7 +326,7 @@ display, and can run a user-specified program on mouse click.")
      (list gtk+-2 libgtop))
     (native-inputs
      (list pkg-config))
-    (home-page "http://www.improbability.net/")
+    (home-page "https://www.improbability.net/")
     (synopsis "Display flames to represent resource usage")
     (description
      "wmfire is an applet for Window Maker that can monitor the average cpu
@@ -335,3 +336,37 @@ entering the dock a burning spot replaces the cursor, and after two seconds
 symbols to represent the current monitor are \"burnt\" onscreen.  The flame
 colour can also be changed.")
     (license license:gpl2+)))
+
+(define-public wmamixer
+  (package
+    (name "wmamixer")
+    (version "1.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/gryf/wmamixer")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "04vv4kr4mj1nwri6zqgdg4yzbbmmng73qd4h0azliril75m7sldf"))))
+    (inputs (list libx11 libxpm libxext alsa-lib))
+    (build-system gnu-build-system)
+    (arguments
+     (list #:phases #~(modify-phases %standard-phases
+                        (delete 'configure)
+                        (delete 'check)
+                        (replace 'install
+                          (lambda* (#:key inputs outputs #:allow-other-keys)
+                            (let* ((out (assoc-ref outputs "out"))
+                                   (bin (string-append out "/bin")))
+                              (install-file "wmamixer" bin)))))))
+    (synopsis "Window maker applet to display the current volume")
+    (description
+     "wmamixer is an applet for window maker which displays the
+current volume level both numerically and visiaully with a volume bar.  It
+includes the ability to toggle through different outputs to show their
+respective volume level.")
+    (home-page "https://github.com/gryf/wmamixer")
+    (license license:gpl2+)))
+

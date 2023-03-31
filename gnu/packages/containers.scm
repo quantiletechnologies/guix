@@ -1,6 +1,8 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2021 Timmy Douglas <mail@timmydouglas.com>
 ;;; Copyright © 2022 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2022 Zhu Zihao <all_but_last@163.com>
+;;; Copyright © 2022 Michael Rohleder <mike@rohleder.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -24,6 +26,7 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
+  #:use-module (guix build-system copy)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system go)
   #:use-module (guix build-system meson)
@@ -44,7 +47,8 @@
   #:use-module (gnu packages selinux)
   #:use-module (gnu packages version-control)
   #:use-module (gnu packages virtualization)
-  #:use-module (gnu packages web))
+  #:use-module (gnu packages web)
+  #:use-module (gnu packages wget))
 
 (define-public crun
   (let ((commit "c381048530aa750495cf502ddb7181f2ded5b400"))
@@ -89,7 +93,7 @@
       (inputs
        (list libcap
              libseccomp
-             libyajl))
+             yajl))
       (native-inputs
        (list automake
              autoconf
@@ -151,10 +155,45 @@ manager (like Podman or CRI-O) and an Open Container Initiative (OCI)
 runtime (like runc or crun) for a single container.")
     (license license:asl2.0)))
 
+(define-public distrobox
+  (package
+    (name "distrobox")
+    (version "1.4.2.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/89luca89/distrobox")
+             (commit version)))
+       (sha256
+        (base32 "0gs81m1bvlyq6ad22zsdsw1q6s3agy79vx94kdf6zjzngbanlydk"))
+       (file-name (git-file-name name version))))
+    (build-system copy-build-system)
+    (inputs
+     (list podman wget))
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-before 'install 'refer-to-inputs
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (substitute* (find-files "." "^distrobox.*[^1]$")
+                     (("podman") (search-input-file inputs "/bin/podman"))
+                     (("wget") (search-input-file inputs "/bin/wget"))
+                     (("command -v") "test -x"))))
+               (replace 'install
+                 (lambda _
+                   (invoke "./install" "--prefix" #$output))))))
+    (home-page "https://distrobox.privatedns.org/")
+    (synopsis "Create and start containers highly integrated with the hosts")
+    (description
+     "Distrobox is a fancy wrapper around Podman or Docker to create and start
+containers highly integrated with the hosts.")
+    (license license:gpl3)))
+
 (define-public libslirp
   (package
     (name "libslirp")
-    (version "4.6.1")
+    (version "4.7.0")
     (source
      (origin
        (method git-fetch)
@@ -162,10 +201,11 @@ runtime (like runc or crun) for a single container.")
              (url "https://gitlab.freedesktop.org/slirp/libslirp")
              (commit (string-append "v" version))))
        (sha256
-        (base32 "1b4cn51xvzbrxd63g6w1033prvbxfxsnsn1l0fa5i311xv28vkh0"))
+        (base32 "0dny8187a8qh6akaa37aa9b5pjxx88f02wh6achp4mygff0ipxba"))
        (file-name (git-file-name name version))))
     (build-system meson-build-system)
-    (inputs
+    (propagated-inputs
+     ;; In Requires of slirp.pc.
      (list glib))
     (native-inputs
      (list pkg-config))
@@ -179,7 +219,7 @@ containers or various tools.")
 (define-public slirp4netns
   (package
     (name "slirp4netns")
-    (version "1.1.12")
+    (version "1.2.0")
     (source
      (origin
        (method git-fetch)
@@ -187,7 +227,7 @@ containers or various tools.")
              (url "https://github.com/rootless-containers/slirp4netns")
              (commit (string-append "v" version))))
        (sha256
-        (base32 "03llv4dlf7qqxwz4zdyk926g4bigfj2gb50glm70ciflpvzs8081"))
+        (base32 "1rlzwp5fx1x3q179j9s2jp02imjag5pgj333z110nrvi7azl22l8"))
        (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     (arguments
@@ -271,54 +311,65 @@ configure network interfaces in Linux containers.")
 (define-public podman
   (package
     (name "podman")
-    (version "3.4.4")
+    (version "4.4.1")
     (source
      (origin
        (method git-fetch)
        (uri (git-reference
              (url "https://github.com/containers/podman")
              (commit (string-append "v" version))))
+       (modules '((guix build utils)))
+       ;; FIXME: Btrfs libraries not detected by these scripts.
+       (snippet '(substitute* "Makefile"
+                   ((".*hack/btrfs.*") "")))
        (sha256
-        (base32 "1q09qsl1wwiiy5njvb97n1j5f5jin4ckmzj5xbdfs28czb2kx3g5"))
+        (base32 "0qbr6rbyig3c2hvdvmd94jjkg820hpdz6j7dgyv62dl6wfwvj5jj"))
        (file-name (git-file-name name version))))
 
     (build-system gnu-build-system)
     (arguments
-     `(#:make-flags (list ,(string-append "CC=" (cc-for-target))
-                          (string-append "PREFIX=" %output))
-       #:tests? #f ; /sys/fs/cgroup not set up in guix sandbox
-       #:test-target "test"
-       #:phases (modify-phases %standard-phases
-                  (delete 'configure)
-                  (add-after 'unpack 'set-env
-                    (lambda* (#:key inputs #:allow-other-keys)
-                      ;; when running go, things fail because
-                      ;; HOME=/homeless-shelter.
-                      (setenv "HOME" "/tmp")))
-                  (replace 'check
-                    (lambda* (#:key tests? #:allow-other-keys)
-                      (when tests?
-                        ;; (invoke "strace" "-f" "bin/podman" "version")
-                        (invoke "make" "localsystem")
-                        (invoke "make" "remotesystem"))))
-                  (add-after 'unpack 'fix-hardcoded-paths
-                    (lambda _
-                      (substitute* (find-files "libpod" "\\.go")
-                        (("exec.LookPath[(][\"]slirp4netns[\"][)]")
-                         (string-append "exec.LookPath(\""
-                                        (which "slirp4netns") "\")")))
-                      (substitute* "hack/install_catatonit.sh"
-                        (("CATATONIT_PATH=\"[^\"]+\"")
-                         (string-append "CATATONIT_PATH=" (which "true"))))
-                      (substitute* "vendor/github.com/containers/common/pkg/config/config_linux.go"
-                        (("/usr/local/libexec/podman")
-                         (string-append (assoc-ref %outputs "out") "/bin")))
-                      (substitute* "vendor/github.com/containers/common/pkg/config/default.go"
-                        (("/usr/libexec/podman/conmon") (which "conmon"))
-                        (("/usr/local/libexec/cni")
-                         (string-append (assoc-ref %build-inputs "cni-plugins")
-                                        "/bin"))
-                        (("/usr/bin/crun") (which "crun"))))))))
+     (list
+      #:make-flags
+      #~(list #$(string-append "CC=" (cc-for-target))
+              (string-append "PREFIX=" #$output))
+      #:tests? #f                  ; /sys/fs/cgroup not set up in guix sandbox
+      #:test-target "test"
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)
+          (add-after 'unpack 'set-env
+            (lambda* (#:key inputs #:allow-other-keys)
+              ;; when running go, things fail because
+              ;; HOME=/homeless-shelter.
+              (setenv "HOME" "/tmp")))
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                ;; (invoke "strace" "-f" "bin/podman" "version")
+                (invoke "make" "localsystem")
+                (invoke "make" "remotesystem"))))
+          (add-after 'unpack 'fix-hardcoded-paths
+            (lambda _
+              (substitute* (find-files "libpod" "\\.go")
+                (("exec.LookPath[(][\"]slirp4netns[\"][)]")
+                 (string-append "exec.LookPath(\""
+                                (which "slirp4netns") "\")")))
+              (substitute* "hack/install_catatonit.sh"
+                (("CATATONIT_PATH=\"[^\"]+\"")
+                 (string-append "CATATONIT_PATH=" (which "true"))))
+              (substitute* "vendor/github.com/containers/common/pkg/config/config_linux.go"
+                (("/usr/local/libexec/podman")
+                 (string-append #$output "/bin")))
+              (substitute* "vendor/github.com/containers/common/pkg/config/default.go"
+                (("/usr/libexec/podman/conmon") (which "conmon"))
+                (("/usr/local/libexec/cni")
+                 (string-append #$(this-package-input "cni-plugins")
+                                "/bin"))
+                (("/usr/bin/crun") (which "crun")))))
+          (add-after 'install 'install-completions
+            (lambda _
+              (invoke "make" "install.completions"
+                      (string-append "PREFIX=" #$output)))))))
     (inputs
      (list btrfs-progs
            cni-plugins
@@ -334,9 +385,10 @@ configure network interfaces in Linux containers.")
     (native-inputs
      (list bats
            git
-           go
+           go-1.19
            ; strace ; XXX debug
-           pkg-config))
+           pkg-config
+           python))
     (home-page "https://podman.io")
     (synopsis "Manage containers, images, pods, and their volumes")
     (description

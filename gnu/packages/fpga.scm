@@ -6,6 +6,7 @@
 ;;; Copyright © 2020 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2021 Andrew Miloradovsky <andrew@interpretmath.pw>
 ;;; Copyright © 2022 Christian Gelinek <cgelinek@radlogic.com.au>
+;;; Copyright © 2022 jgart <jgart@dismail.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -24,6 +25,7 @@
 
 (define-module (gnu packages fpga)
   #:use-module ((guix licenses) #:prefix license:)
+  #:use-module (guix gexp)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
@@ -35,6 +37,7 @@
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages base)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages elf)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages tcl)
   #:use-module (gnu packages readline)
@@ -58,43 +61,43 @@
   #:use-module (gnu packages qt)
   #:use-module (gnu packages boost)
   #:use-module (gnu packages algebra)
-  #:use-module (gnu packages libftdi))
+  #:use-module (gnu packages libftdi)
+  #:use-module (gnu packages libusb))
 
 (define-public abc
- (let ((commit "5ae4b975c49c")
-       (revision "1"))
+ (let ((commit "70cb339f869e")
+       (revision "2"))
   (package
     (name "abc")
     (version (git-version "0.0" revision commit))
     (source (origin
-              (method url-fetch)
-              (uri
-               (string-append "https://bitbucket.org/alanmi/abc/get/" commit ".zip"))
-              (file-name (string-append name "-" version "-checkout.zip"))
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/berkeley-abc/abc")
+                    (commit commit)))
+              (file-name (git-file-name name version))
               (sha256
                (base32
-                "1syygi1x40rdryih3galr4q8yg1w5bvdzl75hd27v1xq0l5bz3d0"))))
+                "1ngxg4jvz8vwm74sbidysgz3v5lrzjcabkqj4nhcksi6hnhyc9m8"))))
     (build-system gnu-build-system)
-    (native-inputs
-     (list unzip))
     (inputs
      (list readline))
     (arguments
-     `(#:tests? #f ; no check target
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)
-         (replace 'install
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (out-bin (string-append out "/bin")))
-               (install-file "abc" out-bin)))))))
+     (list #:license-file-regexp "copyright.txt"
+           #:tests? #f ; no tests
+           #:phases
+           #~(modify-phases %standard-phases
+               (delete 'configure)
+               (replace 'install
+                 (lambda _
+                   (install-file "abc" (string-append #$output "/bin")))))))
     (home-page "https://people.eecs.berkeley.edu/~alanmi/abc/")
     (synopsis "Sequential logic synthesis and formal verification")
     (description "ABC is a program for sequential logic synthesis and
 formal verification.")
     (license
-      (license:non-copyleft "https://fedoraproject.org/wiki/Licensing:MIT#Modern_Variants")))))
+     (license:non-copyleft
+      "https://people.eecs.berkeley.edu/~alanmi/abc/copyright.htm")))))
 
 (define-public iverilog
   (package
@@ -134,93 +137,85 @@ For synthesis, the compiler generates netlists in the desired format.")
 (define-public yosys
   (package
     (name "yosys")
-    (version "0.9")
+    (version "0.26")
     (source (origin
               (method git-fetch)
               (uri (git-reference
-                    (url "https://github.com/cliffordwolf/yosys")
-                    (commit (string-append "yosys-" version))
-                    (recursive? #t))) ; for the ‘iverilog’ submodule
+                    (url "https://github.com/YosysHQ/yosys")
+                    (commit (string-append "yosys-" version))))
               (sha256
-                (base32
-                   "0lb9r055h8y1vj2z8gm4ip0v06j5mk7f9zx9gi67kkqb7g4rhjli"))
-              (file-name (git-file-name name version))
-              (modules '((guix build utils)))
-              (snippet
-               '(begin
-                  (substitute* "Makefile"
-                    (("ABCREV = .*") "ABCREV = default\n"))
-                  #t))))
+               (base32
+                "0s79ljgbcfkm7l9km7dcvlz4mnx38nbyxppscvh5il5lw07n45gx"))
+              (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     (arguments
-     `(#:test-target "test"
-       #:make-flags (list "CC=gcc"
-                          "CXX=g++"
-                          (string-append "PREFIX=" %output))
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'configure 'fix-paths
-           (lambda _
-             (substitute* "./passes/cmds/show.cc"
-               (("exec xdot") (string-append "exec " (which "xdot")))
-               (("dot -") (string-append (which "dot") " -"))
-               (("fuser") (which "fuser")))
-             #t))
-         (replace 'configure
-           (lambda* (#:key inputs (make-flags '()) #:allow-other-keys)
-             (apply invoke "make" "config-gcc" make-flags)))
-         (add-after 'configure 'prepare-abc
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let* ((sourceabc (assoc-ref inputs "abc"))
-                    (sourcebin (string-append sourceabc "/bin"))
-                    (source (string-append sourcebin "/abc")))
-                   (mkdir-p "abc")
-                   (call-with-output-file "abc/Makefile"
-                     (lambda (port)
-                       (format port ".PHONY: all\nall:\n\tcp -f abc abc-default\n")))
-                   (copy-file source "abc/abc")
-                   (invoke "chmod" "+w" "abc/abc"))))
-          (add-before 'check 'fix-iverilog-references
-             (lambda* (#:key inputs native-inputs #:allow-other-keys)
-               (let* ((xinputs (or native-inputs inputs))
-                      (xdirname (assoc-ref xinputs "iverilog"))
-                      (iverilog (string-append xdirname "/bin/iverilog")))
-                     (substitute* '("./manual/CHAPTER_StateOfTheArt/synth.sh"
-                                    "./manual/CHAPTER_StateOfTheArt/validate_tb.sh"
-                                    "./techlibs/ice40/tests/test_bram.sh"
-                                    "./techlibs/ice40/tests/test_ffs.sh"
-                                    "./techlibs/xilinx/tests/bram1.sh"
-                                    "./techlibs/xilinx/tests/bram2.sh"
-                                    "./tests/bram/run-single.sh"
-                                    "./tests/realmath/run-test.sh"
-                                    "./tests/simple/run-test.sh"
-                                    "./tests/techmap/mem_simple_4x1_runtest.sh"
-                                    "./tests/tools/autotest.sh"
-                                    "./tests/vloghtb/common.sh")
-                        (("if ! which iverilog") "if ! true")
-                        (("iverilog ") (string-append iverilog " "))
-                        (("iverilog_bin=\".*\"") (string-append "iverilog_bin=\""
-                                                                iverilog "\"")))
-                     #t))))))
+     (list
+      #:test-target "test"
+      #:make-flags #~(list "CC=gcc"
+                           "CXX=g++"
+                           (string-append "PREFIX=" #$output))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-before 'configure 'fix-paths
+            (lambda* (#:key inputs #:allow-other-keys)
+              (substitute* "./backends/smt2/smtio.py"
+                (("\\['z3")
+                 (string-append "['" (search-input-file inputs "/bin/z3"))))
+              (substitute* "./kernel/fstdata.cc"
+                (("vcd2fst")
+                 (search-input-file inputs "/bin/vcd2fst")))
+              (substitute* '("./passes/cmds/show.cc"
+                             "./passes/cmds/viz.cc")
+                (("exec xdot")
+                 (string-append "exec " (search-input-file inputs
+                                                           "/bin/xdot")))
+                (("dot -")
+                 (string-append (search-input-file inputs "/bin/dot") " -"))
+                (("fuser")
+                 (search-input-file inputs "/bin/fuser")))))
+          (replace 'configure
+            (lambda* (#:key make-flags #:allow-other-keys)
+              (apply invoke "make" "config-gcc" make-flags)))
+          (add-after 'configure 'use-external-abc
+            (lambda* (#:key inputs #:allow-other-keys)
+              (substitute* '("./Makefile")
+                (("ABCEXTERNAL \\?=")
+                 (string-append "ABCEXTERNAL = "
+                                (search-input-file inputs "/bin/abc"))))))
+          (add-after 'install 'add-symbolic-link
+            (lambda* (#:key inputs #:allow-other-keys)
+              ;; Previously this package provided a copy of the "abc"
+              ;; executable in its output, named "yosys-abc".  Create a
+              ;; symbolic link so any external uses of that name continue to
+              ;; work.
+              (symlink (search-input-file inputs "/bin/abc")
+                       (string-append #$output "/bin/yosys-abc"))))
+          (add-after 'install 'wrap
+            (lambda* (#:key inputs #:allow-other-keys)
+              (wrap-program (string-append #$output "/bin/yosys-witness")
+                `("GUIX_PYTHONPATH" ":" prefix (,(getenv "GUIX_PYTHONPATH")))))))))
     (native-inputs
-     (list pkg-config
-           python
-           bison
+     (list bison
            flex
            gawk ; for the tests and "make" progress pretty-printing
-           tcl ; tclsh for the tests
-           iverilog)) ; for the tests
+           iverilog ; for the tests
+           pkg-config
+           python
+           tcl)) ; tclsh for the tests
     (inputs
-     (list tcl
-           readline
-           libffi
+     (list abc
            graphviz
+           gtkwave
+           libffi
            psmisc
+           readline
+           tcl
            xdot
-           abc))
-    (propagated-inputs
-     (list z3)) ; should be in path for yosys-smtbmc
-    (home-page "http://www.clifford.at/yosys/")
+           z3
+           zlib
+           python
+           python-click))
+    (home-page "https://yosyshq.net/yosys/")
     (synopsis "FPGA Verilog RTL synthesizer")
     (description "Yosys synthesizes Verilog-2005.")
     (license license:isc)))
@@ -264,7 +259,7 @@ For synthesis, the compiler generates netlists in the desired format.")
     (native-inputs
      `(("python-3" ,python)
        ("pkg-config" ,pkg-config)))
-    (home-page "http://www.clifford.at/icestorm/")
+    (home-page "https://www.clifford.at/icestorm/")
     (synopsis "Project IceStorm - Lattice iCE40 FPGAs bitstream tools")
     (description "Project IceStorm - Lattice iCE40 FPGAs Bitstream Tools.
 Includes the actual FTDI connector.")
@@ -351,37 +346,34 @@ FOSS FPGA place and route tool.")
 (define-public gtkwave
   (package
     (name "gtkwave")
-    (version "3.3.111")
+    (version "3.3.113")
     (source
      (origin
        (method url-fetch)
        (uri (list (string-append "mirror://sourceforge/gtkwave/"
                                  "gtkwave-" version "/"
                                  "gtkwave-" version ".tar.gz")
-                  (string-append "http://gtkwave.sourceforge.net/"
+                  (string-append "https://gtkwave.sourceforge.net/"
                                  "gtkwave-" version ".tar.gz")))
        (sha256
-        (base32 "15n2gv2hd7h23cci95ij7yr71fkxppb209sfdsmmngh3fik09rpn"))))
+        (base32 "1zqkfchmns5x90qxa8kg39bfhax3vxf1mrdz3lhyb9fz1gp4difn"))))
     (build-system gnu-build-system)
     (native-inputs
      (list gperf pkg-config))
     (inputs
-     `(("tcl" ,tcl)
-       ("tk" ,tk)
-       ("gtk+-2" ,gtk+-2)))
+     (list tcl tk gtk+-2))
     (arguments
-     `(#:configure-flags
-       (list (string-append "--with-tcl="
-                            (assoc-ref %build-inputs "tcl")
-                            "/lib")
-             (string-append "--with-tk="
-                            (assoc-ref %build-inputs "tk")
-                            "/lib"))))
-
+     (list #:configure-flags
+           #~(list (string-append "--with-tcl="
+                                  (assoc-ref %build-inputs "tcl")
+                                  "/lib")
+                   (string-append "--with-tk="
+                                  (assoc-ref %build-inputs "tk")
+                                  "/lib"))))
     (synopsis "Waveform viewer for FPGA simulator trace files")
     (description "This package is a waveform viewer for FPGA
 simulator trace files (@dfn{FST}).")
-    (home-page "http://gtkwave.sourceforge.net/")
+    (home-page "https://gtkwave.sourceforge.net/")
     ;; Exception against free government use in tcl_np.c and tcl_np.h.
     (license (list license:gpl2+ license:expat license:tcl/tk))))
 
@@ -424,7 +416,7 @@ constructed by a Python program.")
           (base32
             "04fi59cyn5dsci0ai7djg74ybkqfcjzhj1jfmac2xanbcrw9j3yk"))))
     (build-system python-build-system)
-    (home-page "http://www.myhdl.org/")
+    (home-page "https://www.myhdl.org/")
     (synopsis "Python as a Hardware Description Language")
     (description "This package provides a library to turn Python into
 a hardware description and verification language.")
@@ -433,7 +425,7 @@ a hardware description and verification language.")
 (define-public nvc
   (package
     (name "nvc")
-    (version "1.5.3")
+    (version "1.8.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -442,10 +434,11 @@ a hardware description and verification language.")
               (file-name (string-append name "-" version "-checkout"))
               (sha256
                (base32
-                "1gjpwblp8isplyad3b6fl7cb5qv1rn3lf9qgf4l139y97cp2mm4s"))))
+                "03dnn77n50b5n06gd81hh36gh0h2nc266yzwl70qjlb00qs8cf7p"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:configure-flags
+     `(#:out-of-source? #t
+       #:configure-flags
        '("--enable-vhpi")
        #:phases
        (modify-phases %standard-phases
@@ -462,10 +455,12 @@ a hardware description and verification language.")
            which
            check)) ; for the tests
     (inputs
-     (list llvm-9))
+     (list elfutils
+           llvm-9
+           libffi))
     (synopsis "VHDL compiler and simulator")
     (description "This package provides a VHDL compiler and simulator.")
-    (home-page "https://github.com/nickg/nvc")
+    (home-page "https://www.nickg.me.uk/nvc/")
     (license license:gpl3+)))
 
 (define-public systemc
@@ -552,3 +547,61 @@ then compiled by a C++ compiler (GCC/Clang/etc.).  The resulting executable
 performs the design simulation.  Verilator also supports linking its generated
 libraries, optionally encrypted, into other simulators.")
     (license license:lgpl3)))
+
+(define-public fftgen
+  (let ((commit "1d75a992efd0528edea128a903aafdabe133cb08") ;no releases
+        (revision "0"))
+    (package
+      (name "fftgen")
+      (version (git-version "0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/ZipCPU/dblclockfft")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0qq874yalzpjdwnxhc5df8a0ifywv29wcncb09945x56xplvkcmd"))))
+      (build-system gnu-build-system)
+      (arguments
+       `(#:tests? #f                              ;no tests
+         #:make-flags '("CFLAGS=-g -O2")          ;default flags lack -O2
+         #:phases (modify-phases %standard-phases
+                    (delete 'configure)
+                    (replace 'install
+                      (lambda* (#:key outputs #:allow-other-keys)
+                        (let ((bin (string-append (assoc-ref outputs "out")
+                                                  "/bin")))
+                          (install-file "sw/fftgen" bin)))))))
+      (synopsis "Generic pipelined FFT core generator")
+      (description "fftgen produces @acronym{FFT, fast-Fourier transforms}
+hardware designs in Verilog.")
+      (home-page "https://zipcpu.com/")
+      (license license:lgpl3+))))
+
+(define-public openfpgaloader
+  (package
+    (name "openfpgaloader")
+    (version "0.9.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                     (url "https://github.com/trabucayre/openFPGALoader.git")
+                     (commit (string-append "v" version))))
+              (file-name (string-append name "-" version "-checkout"))
+              (sha256
+               (base32
+                "1v3bwzhsrnsn304cqhd5azn68cl847qv8w8cb8bl7372jiqz5wqq"))))
+    (build-system cmake-build-system)
+    (native-inputs
+     (list pkg-config))
+    (inputs
+     (list libftdi libusb hidapi zlib))
+    (arguments
+     `(#:tests? #f)) ; No tests exist
+    (synopsis "Utility for programming FPGA")
+    (description "This package provides a program to transfer a bitstream
+to an FPGA.")
+    (home-page "https://f4pga.org/")
+    (license license:asl2.0)))

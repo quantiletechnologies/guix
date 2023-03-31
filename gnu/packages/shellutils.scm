@@ -6,7 +6,7 @@
 ;;; Copyright © 2018, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018 Benjamin Slade <slade@jnanam.net>
 ;;; Copyright © 2019 Collin J. Doering <collin@rekahsoft.ca>
-;;; Copyright © 2020 Michael Rohleder <mike@rohleder.de>
+;;; Copyright © 2020, 2022 Michael Rohleder <mike@rohleder.de>
 ;;; Copyright © 2020 aecepoglu <aecepoglu@fastmail.fm>
 ;;; Copyright © 2020 Dion Mendel <guix@dm9.info>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
@@ -15,6 +15,7 @@
 ;;; Copyright © 2021 Foo Chuan Wei <chuanwei.foo@hotmail.com>
 ;;; Copyright © 2021 Wiktor Żelazny <wzelazny@vurv.cz>
 ;;; Copyright © 2022 Jose G Perez Taveras <josegpt27@gmail.com>
+;;; Copyright © 2023 Timo Wilken <guix@twilken.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -38,6 +39,7 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
+  #:use-module (guix build-system copy)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system go)
   #:use-module (guix build-system python)
@@ -56,6 +58,7 @@
   #:use-module (gnu packages readline)
   #:use-module (gnu packages ruby)
   #:use-module (gnu packages shells)
+  #:use-module (gnu packages textutils)
   #:use-module (gnu packages tmux)
   #:use-module (gnu packages vim))
 
@@ -100,7 +103,7 @@ chart.")
 (define-public boxes
   (package
     (name "boxes")
-    (version "2.1.1")
+    (version "2.2.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -109,7 +112,7 @@ chart.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1bf5rnfiw04ffs1l17zhbg4wvq2vfn2qbz1xmd250xqj15lysw88"))))
+                "0vv2gaav1m4z2xdk0k3ragmv4kcnzv7p3v97lkjl1wbfmk5nhz07"))))
     (build-system gnu-build-system)
     (arguments
      `(#:test-target "test"
@@ -144,6 +147,30 @@ chart.")
      "This command-line filter program draws ASCII-art boxes around your input
 text.")
     (license license:gpl2)))
+
+(define-public zsh-autopair
+  (package
+    (name "zsh-autopair")
+    (version "1.0")
+    (home-page "https://github.com/hlissner/zsh-autopair")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/hlissner/zsh-autopair.git")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1h0vm2dgrmb8i2pvsgis3lshc5b0ad846836m62y8h3rdb3zmpy1"))))
+    (build-system copy-build-system)
+    (arguments
+     '(#:install-plan '(("autopair.zsh"
+                         "/share/zsh/plugins/zsh-autopair/zsh-autopair.zsh"))))
+    (synopsis "Auto-close and delete matching delimiters in Zsh")
+    (description
+     "This Zsh plugin auto-closes, deletes, and skips over matching delimiters
+in Zsh intelligently.")
+    (license license:expat)))
 
 (define-public zsh-autosuggestions
   (package
@@ -195,6 +222,60 @@ text.")
 as you type.")
     (license license:expat)))
 
+(define-public zsh-completions
+  (package
+    (name "zsh-completions")
+    (version "0.34.0")
+    (home-page "https://github.com/zsh-users/zsh-completions")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url home-page)
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0jjgvzj3v31yibjmq50s80s3sqi4d91yin45pvn3fpnihcrinam9"))))
+    (build-system copy-build-system)
+    (arguments
+     '(#:install-plan '(("src/" "share/zsh/site-functions/")
+                        ("README.md" "share/doc/zsh-completions/"))))
+    (synopsis "Additional completion definitions for Zsh")
+    (description
+     "This projects aims at gathering/developing new completion scripts that
+are not available in Zsh yet.  The scripts may be contributed to the Zsh
+project when stable enough.")
+    (license (license:non-copyleft "file://LICENSE"
+              "Custom BSD-like, permissive, non-copyleft license."))))
+
+(define-public zsh-history-substring-search
+  (package
+    (name "zsh-history-substring-search")
+    (version "1.0.2")
+    (home-page "https://github.com/zsh-users/zsh-history-substring-search")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url home-page)
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0y8va5kc2ram38hbk2cibkk64ffrabfv1sh4xm7pjspsba9n5p1y"))))
+    (build-system copy-build-system)
+    (arguments
+     '(#:install-plan '(("zsh-history-substring-search.plugin.zsh"
+                         "share/zsh/plugins/zsh-history-substring-search/")
+                        ("zsh-history-substring-search.zsh"
+                         "share/zsh/plugins/zsh-history-substring-search/")
+                        ("README.md" "share/doc/zsh-history-substring-search/"))))
+    (synopsis "ZSH port of Fish history search (up arrow)")
+    (description
+     "This is a clean-room implementation of the Fish shell's history search
+feature, where you can type in any part of any command from history and then
+press chosen keys, such as the UP and DOWN arrows, to cycle through matches.")
+    (license license:bsd-3)))
+
 (define-public zsh-syntax-highlighting
   (package
     (name "zsh-syntax-highlighting")
@@ -245,6 +326,38 @@ highlighting of commands whilst they are typed at a Zsh prompt into an
 interactive terminal.  This helps in reviewing commands before running them,
 particularly in catching syntax errors.")
     (license license:bsd-3)))
+
+(define-public grml-zsh-config
+  (package
+    (name "grml-zsh-config")
+    (version "0.19.5")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "https://deb.grml.org/pool/main/g/grml-etc-core/grml-etc-core_"
+                    version ".tar.gz"))
+              (sha256
+               (base32
+                "0ifw490z3v9ljccbmm04adz39fj2dmx8mjgayxqj0a9ln90yfdc4"))))
+    (build-system copy-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases
+            %standard-phases
+          (add-before 'install 'make-doc
+            (lambda _ (with-directory-excursion "doc" (invoke "make")))))
+      #:install-plan
+      #~'(("etc/skel/.zshrc"  "etc/skel/.zshrc")
+          ("etc/zsh/keephack" "etc/zsh/keephack")
+          ("etc/zsh/zshrc"    "etc/zsh/zshrc")
+          ("doc/grmlzshrc.5"  "share/man/man5/grmlzshrc.5"))))
+    (native-inputs (list txt2tags))
+    (home-page "https://grml.org/zsh/")
+    (synopsis "Grml's zsh configuration")
+    (description "This package provides an interactive setup for zsh
+preconfigured by the Grml project.")
+    (license license:gpl2)))
 
 (define-public sh-z
   (package
@@ -311,7 +424,7 @@ between various shells or commands.")
 (define-public trash-cli
   (package
     (name "trash-cli")
-    (version "0.21.10.24")
+    (version "0.22.10.20")
     (source
      (origin
        (method git-fetch)
@@ -321,37 +434,38 @@ between various shells or commands.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "01is32lk6prwhajvlmgn3xs4fcpmiqivizcqkj9k80jx6mqjifzs"))))
+         "0hkn0hmwrag56g447ddqapib0s399a6b4a9wlliif6zmirxlww9n"))))
     (build-system python-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'patch-path-constants
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let ((libc (assoc-ref inputs "libc"))
-                   (coreutils (assoc-ref inputs "coreutils")))
-               (substitute* "trashcli/list_mount_points.py"
-                 (("\"/lib/libc.so.6\".*")
-                  (string-append "\"" libc "/lib/libc.so.6\"\n"))
-                 (("\"df\"")
-                  (string-append "\"" coreutils "/bin/df\""))))))
-         (add-before 'build 'fix-setup.py
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (bin (string-append out "/bin")))
-               (mkdir-p bin)
-               (substitute* "setup.py"
-                 (("add_script\\('")
-                  (string-append "add_script('" bin "/" ))))))
-         ;; Whenever setup.py is invoked, scripts in out/bin/ are
-         ;; replaced. Thus we cannot invoke setup.py for testing.
-         ;; Upstream also uses pytest.
-         (replace 'check
-           (lambda* (#:key tests? #:allow-other-keys)
-             (when tests?
-               (invoke "pytest")))))))
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-before 'build 'patch-path-constants
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (let ((libc (search-input-file inputs "lib/libc.so.6"))
+                         (df #$(file-append coreutils "/bin/df")))
+                     (substitute* "trashcli/list_mount_points.py"
+                       (("\"/lib/libc.so.6\".*")
+                        (string-append "\"" libc "\"\n"))
+                       (("\"df\"")
+                        (string-append "\"" df "\""))))))
+               (add-before 'build 'fix-setup.py
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   (let ((bin (string-append #$output "/bin")))
+                     (mkdir-p bin)
+                     (substitute* "setup.py"
+                       (("add_script\\('")
+                        (string-append "add_script('" bin "/" ))))))
+               ;; Whenever setup.py is invoked, scripts in out/bin/ are
+               ;; replaced. Thus we cannot invoke setup.py for testing.
+               ;; Upstream also uses pytest.
+               (replace 'check
+                 (lambda* (#:key tests? #:allow-other-keys)
+                   (when tests?
+                     (invoke "pytest")))))))
     (native-inputs
      (list python-pytest
+           python-parameterized
+           python-flexmock
            python-mock
            python-six))
     (inputs (list coreutils))
@@ -369,7 +483,7 @@ are already there.")
 (define-public direnv
   (package
     (name "direnv")
-    (version "2.32.1")
+    (version "2.32.2")
     (source
      (origin (method git-fetch)
              (uri (git-reference
@@ -378,7 +492,7 @@ are already there.")
              (file-name (git-file-name name version))
              (sha256
               (base32
-               "1i473j7j4sx8p83zqlnakskqk0jyd3byajp7jmv2gym9s4k841y7"))))
+               "17nn4qg1fj4i9rh1gdpbddn2nky71h9dkxyz5a4jsdq25bsx0ps2"))))
     (build-system go-build-system)
     (arguments
      '(#:import-path "github.com/direnv/direnv"
@@ -460,7 +574,7 @@ below the current cursor position, scrolling the screen if necessary.")
 (define-public hstr
   (package
     (name "hstr")
-    (version "2.5")
+    (version "2.6")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -469,7 +583,7 @@ below the current cursor position, scrolling the screen if necessary.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0xg10jyiq12bcygi6aa9qq9pki7bipdsvsza037p2iqix19jg0x8"))))
+                "1iqvqm4mirx7imwwmz4blxbsr215lcgbw3h31ssbs3fk54hq7xn9"))))
     (build-system gnu-build-system)
     (arguments
      `(#:phases
@@ -494,7 +608,7 @@ easily view, navigate, and search your command history with suggestion boxes.
 HSTR can also manage your command history (for instance you can remove
 commands that are obsolete or contain a piece of sensitive information) or
 bookmark your favourite commands.")
-    (home-page "http://me.mindforger.com/projects/hh.html")
+    (home-page "https://me.mindforger.com/projects/hh.html")
     (license license:asl2.0)))
 
 (define-public shell-functools
@@ -558,7 +672,7 @@ install -m 644 rig.6 $(DESTDIR)$(MANDIR)/man6/rig.6")
                          (("install -g 0 -m 644 -o 0 data/\\*.idx \\$\\(DATADIR\\)")
                           "install -m 644 data/*.idx $(DESTDIR)$(DATADIR)")))))
                  #:tests? #f))
-    (home-page "http://rig.sourceforge.net")
+    (home-page "https://rig.sourceforge.net")
     (synopsis "Random identity generator")
     (description
       "RIG (Random Identity Generator) generates random, yet real-looking,

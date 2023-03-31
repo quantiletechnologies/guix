@@ -23,19 +23,16 @@
   #:use-module (guix gnu-maintenance)
   #:use-module (guix import utils)
   #:use-module (guix i18n)
-  #:use-module (guix utils)
   #:use-module (guix store)
   #:use-module (gcrypt hash)
   #:use-module (guix base32)
   #:use-module (guix upstream)
   #:use-module (srfi srfi-1)
-  #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
   #:use-module (web uri)
   #:use-module (ice-9 match)
-  #:use-module (ice-9 regex)
   #:export (gnu->guix-package))
 
 ;;; Commentary:
@@ -109,7 +106,8 @@ download policy (see 'download-tarball' for details.)"
        #f))))
 
 (define* (gnu->guix-package name
-                            #:key (key-download 'interactive))
+                            #:key (key-download 'interactive)
+                            #:allow-other-keys)
   "Return the package declaration for NAME as an s-expression.  Use
 KEY-DOWNLOAD as the OpenPGP key download policy (see 'download-tarball' for
 details.)"
@@ -117,7 +115,7 @@ details.)"
     (unless package
       (raise (formatted-message (G_ "no GNU package found for ~a") name)))
 
-    (match (latest-release name)
+    (match (import-release name)
       ((? upstream-source? release)
        (let ((version (upstream-source-version release)))
          (gnu-package->sexp package release #:key-download key-download)))

@@ -46,19 +46,8 @@
               (base32
                "1q6x9c5x4x0x4q11iygldsmxdyzhz1mb4n8im76glwsgqsqyjs80"))))
     (build-system gnu-build-system)
-    ;; TODO(staging): Unconditionally move inputs to native-inputs.
     (native-inputs
-     (if (%current-target-system)
-         `(("python" ,python-wrapper)
-           ("perl" ,perl)
-           ("gettext" ,gettext-minimal))
-         '()))
-    (inputs
-     `(,@(if (%current-target-system)
-             '()
-             `(("gettext" ,gettext-minimal)
-               ("perl" ,perl)
-               ("python" ,python-wrapper)))))
+     (list gettext-minimal perl python-wrapper))
     (synopsis "Various ISO standards")
     (description
      "This package provides lists of various ISO standards (e.g. country,
@@ -120,14 +109,14 @@ groups.")
 (define-public python-iso3166
   (package
     (name "python-iso3166")
-    (version "0.9")
+    (version "2.1.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "iso3166" version))
        (sha256
         (base32
-         "0hm0xm30sprk1jssmn4cqks0x3nx5fp8r5ypvahcysmmayzrsnjl"))))
+         "068p94gavc8gbmp5a2kw8hi5l551wfzbpmp6z7ll8sx6vnw53mgw"))))
     (build-system python-build-system)
     (home-page "https://github.com/deactivated/python-iso3166")
     (synopsis "Self-contained ISO 3166-1 country definitions")

@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013-2017, 2021-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;; Copyright © 2021 Lars-Dominik Braun <lars@6xq.net>
@@ -24,7 +24,6 @@
   #:use-module (guix gexp)
   #:use-module (guix store)
   #:use-module (guix utils)
-  #:use-module (guix memoization)
   #:use-module (guix gexp)
   #:use-module (guix monads)
   #:use-module (guix packages)
@@ -32,9 +31,7 @@
   #:use-module (guix search-paths)
   #:use-module (guix build-system)
   #:use-module (guix build-system gnu)
-  #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
-  #:use-module (srfi srfi-26)
   #:export (%python-build-system-modules
             package-with-python2
             strip-python2-variant
@@ -212,6 +209,7 @@ provides a 'setup.py' file as its build system."
                                                   system #:graft? #f)))
     (gexp->derivation name build
                       #:system system
+                      #:graft? #f                 ;consistent with 'gnu-build'
                       #:target #f
                       #:guile-for-build guile)))
 

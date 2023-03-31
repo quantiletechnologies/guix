@@ -19,13 +19,16 @@
 
 (define-module (guix import print)
   #:use-module (guix base32)
-  #:use-module (guix utils)
   #:use-module (guix licenses)
   #:use-module (guix packages)
+  #:use-module ((guix diagnostics) #:select (location-file))
   #:use-module (guix search-paths)
   #:use-module (guix build-system)
+<<<<<<< HEAD
   #:use-module (guix git)
   #:use-module (gnu packages)
+=======
+>>>>>>> origin/master
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-26)
   #:use-module (guix import utils)
@@ -216,7 +219,8 @@ when evaluated."
          (source ,(source->code source version))
          ,@(match properties
              (() '())
-             (_  `((properties ,properties))))
+             (_  `((properties
+                    ,(list 'quasiquote (object->code properties #t))))))
          ,@(if replacement
                `((replacement ,replacement))
                '())

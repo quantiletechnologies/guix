@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2021-2022 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2021-2023 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -22,6 +22,7 @@
   #:use-module (ice-9 rdelim)
   #:use-module (ice-9 vlist)
   #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
   #:use-module (guix i18n)
@@ -218,6 +219,27 @@ BLANK-LINE? is true, assume PORT is at the beginning of a new line."
               (list 'quote (loop #f return)))
              ((eq? chr #\`)
               (list 'quasiquote (loop #f return)))
+             ((eq? chr #\#)
+              (match (read-char port)
+                (#\~ (list 'gexp (loop #f return)))
+                (#\$ (list (match (peek-char port)
+                             (#\@
+                              (read-char port)    ;consume
+                              'ungexp-splicing)
+                             (_
+                              'ungexp))
+                           (loop #f return)))
+                (#\+ (list (match (peek-char port)
+                             (#\@
+                              (read-char port)    ;consume
+                              'ungexp-native-splicing)
+                             (_
+                              'ungexp-native))
+                           (loop #f return)))
+                (chr
+                 (unread-char chr port)
+                 (unread-char #\# port)
+                 (read port))))
              ((eq? chr #\,)
               (list (match (peek-char port)
                       (#\@
@@ -276,7 +298,7 @@ expressions and blanks that were read."
    ('lambda 2)
    ('lambda* 2)
    ('match-lambda 1)
-   ('match-lambda* 2)
+   ('match-lambda* 1)
    ('define 2)
    ('define* 2)
    ('define-public 2)
@@ -285,15 +307,20 @@ expressions and blanks that were read."
    ('define-syntax-rule 2)
    ('define-module 2)
    ('define-gexp-compiler 2)
+   ('define-record-type 2)
+   ('define-record-type* 4)
+   ('define-configuration 2)
    ('let 2)
    ('let* 2)
    ('letrec 2)
    ('letrec* 2)
    ('match 2)
+   ('match-record 3)
    ('when 2)
    ('unless 2)
    ('package 1)
    ('origin 1)
+   ('channel 1)
    ('modify-inputs 2)
    ('modify-phases 2)
    ('add-after '(((modify-phases) . 3)))
@@ -336,7 +363,9 @@ expressions and blanks that were read."
 
    ('services '(operating-system))
    ('set-xorg-configuration '())
-   ('services '(home-environment))))
+   ('services '(home-environment))
+   ('home-bash-configuration '(service))
+   ('introduction '(channel))))
 
 (define (prefix? candidate lst)
   "Return true if CANDIDATE is a prefix of LST."
@@ -366,10 +395,9 @@ surrounding SYMBOL."
 (define (newline-form? symbol context)
   "Return true if parenthesized expressions starting with SYMBOL must be
 followed by a newline."
-  (match (vhash-assq symbol %newline-forms)
-    (#f #f)
-    ((_ . prefix)
-     (prefix? prefix context))))
+  (let ((matches (vhash-foldq* cons '() symbol %newline-forms)))
+    (find (cut prefix? <> context)
+          matches)))
 
 (define (escaped-string str)
   "Return STR with backslashes and double quotes escaped.  Everything else, in
@@ -384,6 +412,21 @@ particular newlines, is left as is."
                           '()
                           str)
      #\")))
+
+(define %natural-whitespace-string-forms
+  ;; When a string has one of these forms as its parent, only double quotes
+  ;; and backslashes are escaped; newlines, tabs, etc. are left as-is.
+  '(synopsis description G_ N_))
+
+(define (printed-string str context)
+  "Return the read syntax for STR depending on CONTEXT."
+  (match context
+    (()
+     (object->string str))
+    ((head . _)
+     (if (memq head %natural-whitespace-string-forms)
+         (escaped-string str)
+         (object->string str)))))
 
 (define (string-width str)
   "Return the \"width\" of STR--i.e., the width of the longest line of STR."
@@ -426,6 +469,61 @@ each line except the first one (they're assumed to be already there)."
        (display (make-string indent #\space) port)
        (loop tail)))))
 
+(define %integer-forms
+  ;; Forms that take an integer as their argument, where said integer should
+  ;; be printed in base other than decimal base.
+  (letrec-syntax ((vhashq (syntax-rules ()
+                            ((_) vlist-null)
+                            ((_ (key value) rest ...)
+                             (vhash-consq key value (vhashq rest ...))))))
+    (vhashq
+     ('chmod 8)
+     ('umask 8)
+     ('mkdir 8)
+     ('mkstemp 8)
+     ('logand 16)
+     ('logior 16)
+     ('logxor 16)
+     ('lognot 16))))
+
+(define (integer->string integer context)
+  "Render INTEGER as a string using a base suitable based on CONTEXT."
+  (define (form-base form)
+    (match (vhash-assq form %integer-forms)
+      (#f 10)
+      ((_ . base) base)))
+
+  (define (octal? form)
+    (= 8 (form-base form)))
+
+  (define base
+    (match context
+      ((head . tail)
+       (match (form-base head)
+         (8 8)
+         (16 (if (any octal? tail) 8 16))
+         (10 10)))
+      (_ 10)))
+
+  (string-append (match base
+                   (10 "")
+                   (16 "#x")
+                   (8  "#o"))
+                 (number->string integer base)))
+
+(define %special-non-extended-symbols
+  ;; Special symbols that can be written without the #{...}# notation for
+  ;; extended symbols: 1+, 1-, 123/, etc.
+  (make-regexp "^[0-9]+[[:graph:]]+$" regexp/icase))
+
+(define (symbol->display-string symbol context)
+  "Return the most appropriate representation of SYMBOL, resorting to extended
+symbol notation only when strictly necessary."
+  (let ((str (symbol->string symbol)))
+    (if (regexp-exec %special-non-extended-symbols str)
+        str                                  ;no need for the #{...}# notation
+        (object->string symbol))))
+
 (define* (pretty-print-with-comments port obj
                                      #:key
                                      (format-comment
@@ -450,6 +548,12 @@ FORMAT-VERTICAL-SPACE; a useful value of 'canonicalize-vertical-space'."
        (and (not (memq thing
                        '(quote quasiquote unquote unquote-splicing)))
             (pair? tail)))
+      (_ #f)))
+
+  (define (starts-with-line-comment? lst)
+    ;; Return true if LST starts with a line comment.
+    (match lst
+      ((x . _) (and (comment? x) (not (comment-margin? x))))
       (_ #f)))
 
   (let loop ((indent indent)
@@ -499,7 +603,8 @@ FORMAT-VERTICAL-SPACE; a useful value of 'canonicalize-vertical-space'."
               ((? string? str)
                (>= (+ (string-width str) 2 indent) max-width))
               ((? symbol? symbol)
-               (>= (+ (string-width (symbol->string symbol)) indent)
+               (>= (+ (string-width (symbol->display-string symbol context))
+                      indent)
                    max-width))
               ((? boolean?)
                (>= (+ 2 indent) max-width))
@@ -585,7 +690,7 @@ FORMAT-VERTICAL-SPACE; a useful value of 'canonicalize-vertical-space'."
        ;; and following arguments are less indented.
        (let* ((lead    (special-form-lead head context))
               (context (cons head context))
-              (head    (symbol->string head))
+              (head    (symbol->display-string head (cdr context)))
               (total   (length arguments)))
          (unless delimited? (display " " port))
          (display "(" port)
@@ -632,7 +737,8 @@ FORMAT-VERTICAL-SPACE; a useful value of 'canonicalize-vertical-space'."
                              (+ indent 1)
                              (+ column (if delimited? 1 2))))
               (newline?  (or (newline-form? head context)
-                             (list-of-lists? head tail))) ;'let' bindings
+                             (list-of-lists? head tail) ;'let' bindings
+                             (starts-with-line-comment? tail)))
               (context   (cons head context)))
          (if overflow?
              (begin
@@ -661,9 +767,14 @@ FORMAT-VERTICAL-SPACE; a useful value of 'canonicalize-vertical-space'."
              (display ")" port)
              (+ column 1)))))
       (_
-       (let* ((str (if (string? obj)
-                       (escaped-string obj)
-                       (object->string obj)))
+       (let* ((str (cond ((string? obj)
+                          (printed-string obj context))
+                         ((integer? obj)
+                          (integer->string obj context))
+                         ((symbol? obj)
+                          (symbol->display-string obj context))
+                         (else
+                          (object->string obj))))
               (len (string-width str)))
          (if (and (> (+ column 1 len) max-width)
                   (not delimited?))

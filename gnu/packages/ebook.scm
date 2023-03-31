@@ -10,6 +10,7 @@
 ;;; Copyright © 2020 Zheng Junjie <873216071@qq.com>
 ;;; Copyright © 2021 la snesne <lasnesne@lagunposprasihopre.org>
 ;;; Copyright © 2021 Petr Hodina <phodina@protonmail.com>
+;;; Copyright © 2021 Mathieu Laparie <mlaparie@disr.it>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -55,12 +56,13 @@
   #:use-module (gnu packages gnome)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gstreamer)
+  #:use-module (gnu packages hunspell)
   #:use-module (gnu packages icu4c)
   #:use-module (gnu packages image)
   #:use-module (gnu packages javascript)
   #:use-module (gnu packages language)
-  #:use-module (gnu packages libusb)
   #:use-module (gnu packages libreoffice)
+  #:use-module (gnu packages libusb)
   #:use-module (gnu packages music)
   #:use-module (gnu packages pantheon)
   #:use-module (gnu packages pdf)
@@ -196,8 +198,9 @@ with Microsoft Compiled HTML (CHM) files")
            python-psutil
            python-py7zr
            python-pychm
+           python-pycryptodome
            python-pygments
-           python-pyqt-without-qtwebkit
+           python-pyqt
            python-pyqtwebengine
            python-regex
            speech-dispatcher
@@ -243,7 +246,7 @@ tags = [\"WS_X11\"]")
                  (string-append "[tool.sip.project]
 sip-include-dirs = [\""
                                 #$(this-package-input
-                                   "python-pyqt-without-qtwebkit")
+                                   "python-pyqt")
                                 "/share/sip\"]")))
               (substitute* "src/calibre/ebooks/pdf/pdftohtml.py"
                 (("PDFTOHTML = 'pdftohtml'")
@@ -385,34 +388,35 @@ accessing and converting various ebook file formats.")
   (package
     (name "inkbox")
     (version "1.7")
+    (home-page "https://github.com/Kobo-InkBox/inkbox")
     (source
      (origin
        (method git-fetch)
        (uri
         (git-reference
-         (url "https://alpinekobox.ddns.net/InkBox/inkbox/")
+         (url home-page)
          (commit version)))
        (file-name (git-file-name name version))
        (sha256
         (base32 "126cqn0ixcn608lv2hd9f7zmzj4g448bnpxc7wv9cvg83qqajh5n"))))
     (build-system qt-build-system)
     (arguments
-     '(#:tests? #f                      ; no test suite
-       #:make-flags
-       (list (string-append "PREFIX="
-                            (assoc-ref %outputs "out")))
-       #:phases
-       (modify-phases %standard-phases
+     (list
+      #:tests? #f                      ; no test suite
+      #:make-flags
+      #~(list (string-append "PREFIX=" #$output))
+      #:phases
+      #~(modify-phases %standard-phases
          (add-after 'unpack 'prefix-opt
-           (lambda* (#:key outputs #:allow-other-keys)
+           (lambda _
              (substitute* "inkbox.pro"
-               (("/opt/\\$\\$\\{TARGET\\}") (string-append (assoc-ref outputs "out"))))))
+               (("/opt/\\$\\$\\{TARGET\\}")
+                #$output))))
          (replace 'configure
            (lambda* (#:key make-flags #:allow-other-keys)
              (apply invoke (cons "qmake" make-flags)))))))
     (native-inputs
      (list qtbase-5))
-    (home-page "https://alpinekobox.ddns.net/InkBox/inkbox/")
     (synopsis "EBook reader")
     (description "This package provides InkBox eBook reader.")
     (license license:gpl3)))
@@ -430,7 +434,7 @@ accessing and converting various ebook file formats.")
                (base32
                 "1f36dbq7nc77lln1by2n1yl050g9dc63viawhs3gc3169mavm36x"))))
     (build-system gnu-build-system)
-    (home-page "http://vimgadgets.sourceforge.net/liblinebreak/")
+    (home-page "https://vimgadgets.sourceforge.net/liblinebreak/")
     (synopsis "Library for detecting where linebreaks are allowed in text")
     (description "@code{liblinebreak} is an implementation of the line
 breaking algorithm as described in Unicode 6.0.0 Standard Annex 14,
@@ -678,3 +682,43 @@ format documents, with the following features:
 @item handling encrypted documents
 @end itemize\n")
     (license license:lgpl3+)))
+
+(define-public python-ebooklib
+  (package
+    (name "python-ebooklib")
+    (version "0.17.1")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "EbookLib" version))
+              (sha256
+               (base32
+                "1w972g0kmh9cdxf3kjr7v4k99wvv4lxv3rxkip39c08550nf48zy"))))
+    (build-system python-build-system)
+    (propagated-inputs (list python-lxml python-six))
+    (home-page "https://github.com/aerkalov/ebooklib")
+    (synopsis "Ebook library which can handle EPUB2/EPUB3 and Kindle format")
+    (description
+     "Ebook library which can handle EPUB2/EPUB3 and Kindle format.")
+    (license license:agpl3+)))
+
+(define-public shirah
+  (package
+    (name "shirah")
+    (version "1.0.0")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "shirah_reader" version))
+              (sha256
+               (base32
+                "0j15v435lz68c1mj5clfx5dmfyjc6jvvz2q8hqvv799mb2faj42y"))))
+    (build-system python-build-system)
+    (propagated-inputs (list python-beautifulsoup4 python-ebooklib
+                             python-syllables python-termcolor))
+    (home-page "https://github.com/hallicopter/shirah-reader")
+    (synopsis "Terminal ebook reader with an optional RSVP mode")
+    (description
+     "@command{shirah} is a curses based terminal ebook reader that can
+display ebooks in the usual way or with Rapid Serial Visual Presentation, a
+method to enable speedreading by showing the text word by word at configurable
+speeds.")
+  (license license:gpl2+)))

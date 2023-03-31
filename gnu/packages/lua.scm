@@ -3,7 +3,7 @@
 ;;; Copyright © 2014 Raimon Grau <raimonster@gmail.com>
 ;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2014 Andreas Enge <andreas@enge.fr>
-;;; Copyright © 2016, 2017, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016, 2017, 2020-2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016, 2019 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2016 doncatnip <gnopap@gmail.com>
 ;;; Copyright © 2016, 2017, 2019 Clément Lassieur <clement@lassieur.org>
@@ -17,6 +17,8 @@
 ;;; Copyright © 2021 Greg Hogan <code@greghogan.com>
 ;;; Copyright © 2022 Brandon Lucas <br@ndon.dk>
 ;;; Copyright © 2022 Luis Henrique Gomes Higino <luishenriquegh2701@gmail.com>
+;;; Copyright © 2022 Leo Nikkilä <hello@lnikki.la>
+;;; Copyright © 2023 Yovan Naumovski <yovan@gorski.stream>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -61,7 +63,8 @@
   #:use-module (gnu packages tls)
   #:use-module (gnu packages vim)
   #:use-module (gnu packages xml)
-  #:use-module (gnu packages xorg))
+  #:use-module (gnu packages xorg)
+  #:use-module (srfi srfi-1))
 
 (define-public lua
   (package
@@ -148,42 +151,48 @@ for configuration, scripting, and rapid prototyping.")
                                       "lua51-pkgconfig.patch"))))))
 
 (define-public luajit
-  (package
-    (name "luajit")
-    (version "2.1.0-beta3")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append "http://luajit.org/download/LuaJIT-"
-                                  version ".tar.gz"))
-              (sha256
-               (base32 "1hyrhpkwjqsv54hnnx4cl8vk44h9d6c9w0fz1jfjz00w255y7lhs"))
-              (patches (search-patches "luajit-no_ldconfig.patch"))))
-    (build-system gnu-build-system)
-    (arguments
-     `(#:tests? #f                      ; luajit is distributed without tests
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)            ; no configure script
-         (add-after 'install 'create-luajit-symlink
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (bin (string-append out "/bin")))
-               (with-directory-excursion bin
-                 (symlink ,(string-append name "-" version)
-                          ,name)
-                 #t)))))
-         #:make-flags (list (string-append "PREFIX=" (assoc-ref %outputs "out")))))
-    (home-page "https://www.luajit.org/")
-    (synopsis "Just in time compiler for Lua programming language version 5.1")
-    ;; On powerpc64le-linux, the build fails with an error: "No support for
-    ;; PowerPC 64 bit mode (yet)".  See: https://issues.guix.gnu.org/49220
-    (supported-systems (delete "powerpc64le-linux" %supported-systems))
-    (description
-     "LuaJIT is a Just-In-Time Compiler (JIT) for the Lua
+  (let ((branch "2.1.0-beta3")
+        (commit "6c4826f12c4d33b8b978004bc681eb1eef2be977"))
+    (package
+      (name "luajit")
+      (version (git-version branch "0" commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://luajit.org/git/luajit.git")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "1a002yh8v1i1q9w09494q0b8vsbmw3amn9jgfs5qnz7ba54jij0q"))))
+      (build-system gnu-build-system)
+      (arguments
+       `(#:tests? #f                    ; luajit is distributed without tests
+         #:phases
+         (modify-phases %standard-phases
+           (delete 'configure)          ; no configure script
+           (add-after 'install 'create-luajit-symlink
+             (lambda* (#:key outputs #:allow-other-keys)
+               (let* ((out (assoc-ref outputs "out"))
+                      (bin (string-append out "/bin")))
+                 (with-directory-excursion bin
+                   (symlink ,(string-append name "-" branch)
+                            ,name))))))
+         #:make-flags (list (string-append "PREFIX="
+                                           (assoc-ref %outputs "out")))))
+      (home-page "https://www.luajit.org/")
+      (synopsis
+       "Just in time compiler for Lua programming language version 5.1")
+      ;; On powerpc64le-linux, the build fails with an error: "No support for
+      ;; PowerPC 64 bit mode (yet)".  See: https://issues.guix.gnu.org/49220
+      (supported-systems (fold delete %supported-systems
+                               (list "powerpc64le-linux" "riscv64-linux")))
+      (description
+       "LuaJIT is a Just-In-Time Compiler (JIT) for the Lua
 programming language.  Lua is a powerful, dynamic and light-weight programming
 language.  It may be embedded or used as a general-purpose, stand-alone
 language.")
-    (license license:x11)))
+      (license license:x11))))
 
 (define-public luajit-lua52-openresty
   (package
@@ -647,7 +656,7 @@ standard libraries.")
            (lambda* (#:key outputs #:allow-other-keys)
              (mkdir-p (string-append (assoc-ref outputs "out") "/bin"))
              #t)))))
-    (home-page "http://stevedonovan.github.io/ldoc/")
+    (home-page "https://stevedonovan.github.io/ldoc/")
     (synopsis "Lua documentation generator")
     (description
      "LDoc is a LuaDoc-compatible documentation generation system for
@@ -771,7 +780,7 @@ Notable examples are GTK+, GStreamer and Webkit.")
     (description
      "LPeg is a pattern-matching library for Lua, based on Parsing Expression
 Grammars (PEGs).")
-    (home-page "http://www.inf.puc-rio.br/~roberto/lpeg")
+    (home-page "https://www.inf.puc-rio.br/~roberto/lpeg")
     (license license:expat)))
 
 (define-public lua-lpeg
@@ -1179,53 +1188,48 @@ enabled.")
    (license license:boost1.0)))
 
 (define-public fennel
-  ;; The 1.0.0 release had a bug where fennel installed under 5.4 no matter
-  ;; what lua was used to compile it. There has since been an update that
-  ;; corrects this issue, so we can rely on the version of the lua input to
-  ;; determine where the fennel.lua file got installed to.
-  (let ((commit "03c1c95f2a79e45a9baf607f96a74c693b8b70f4")
-        (revision "0"))
-    (package
-      (name "fennel")
-      (version (git-version "1.0.0" revision commit))
-      (source (origin
-                (method git-fetch)
-                (uri (git-reference
-                      (url "https://git.sr.ht/~technomancy/fennel")
-                      (commit commit)))
-                (file-name (git-file-name name version))
-                (sha256
-                 (base32
-                  "1znp38h5q819gvcyl248zwvjsljfxdxdk8n82fnj6lyibiiqzgvx"))))
-      (build-system gnu-build-system)
-      (arguments
-       '(#:make-flags (list (string-append "PREFIX=" (assoc-ref %outputs "out")))
-         #:tests? #t      ; even on cross-build
-         #:test-target "test"
-         #:phases
-         (modify-phases %standard-phases
-          (delete 'configure)
-          (add-after 'build 'patch-fennel
-           (lambda* (#:key inputs #:allow-other-keys)
-            (substitute* "fennel"
-             (("/usr/bin/env .*lua")
-              (search-input-file inputs "/bin/lua")))))
-          (delete 'check)
-          (add-after 'install 'check
-           (assoc-ref %standard-phases 'check)))))
-      (inputs (list lua))
-      (home-page "https://fennel-lang.org/")
-      (synopsis "Lisp that compiles to Lua")
-      (description
-       "Fennel is a programming language that brings together the speed,
+  (package
+    (name "fennel")
+    (version "1.3.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://git.sr.ht/~technomancy/fennel")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1g22y0bpw1ads6bmsr946fw1m5xxvlvb1hdym3f3k3fziislwwhd"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list #:make-flags #~(list (string-append "PREFIX="
+                                               (assoc-ref %outputs "out")))
+           #:tests? #t ;even on cross-build
+           #:test-target "test"
+           #:phases #~(modify-phases %standard-phases
+                        (delete 'configure)
+                        (add-after 'build 'patch-fennel
+                          (lambda* (#:key inputs #:allow-other-keys)
+                            (substitute* "fennel"
+                              (("/usr/bin/env .*lua")
+                               (search-input-file inputs "/bin/lua")))))
+                        (delete 'check)
+                        (add-after 'install 'check
+                          (assoc-ref %standard-phases
+                                     'check)))))
+    (inputs (list lua))
+    (home-page "https://fennel-lang.org/")
+    (synopsis "Lisp that compiles to Lua")
+    (description
+     "Fennel is a programming language that brings together the speed,
 simplicity, and reach of Lua with the flexibility of a Lisp syntax and macro
 system.")
-      (license license:expat))))
+    (license license:expat)))
 
 (define-public fnlfmt
   (package
     (name "fnlfmt")
-    (version "0.2.2")
+    (version "0.3.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1234,7 +1238,7 @@ system.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1rv0amqhy5ypi3pvxfaadn3k1cy4mjlc49wdzl2psz3i11w9gr36"))
+                "06gzw7f20yw4192kymr4karxw3ia3apjnjqpm6vxph87c67d1fa3"))
               (modules '((guix build utils)))
               (snippet
                #~(begin

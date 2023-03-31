@@ -27,7 +27,6 @@
   #:use-module (guix build-system)
   #:use-module (guix build-system gnu)
   #:use-module (ice-9 match)
-  #:use-module (srfi srfi-26)
   #:export (%r-build-system-modules
             r-build
             r-build-system
@@ -61,7 +60,7 @@ release corresponding to NAME and VERSION."
                          "/src/contrib/"
                          name "_" version ".tar.gz")
           ;; TODO: use %bioconductor-version from (guix import cran)
-          (string-append "https://bioconductor.org/packages/3.15"
+          (string-append "https://bioconductor.org/packages/3.16"
                          type-url-part
                          "/src/contrib/"
                          name "_" version ".tar.gz"))))

@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012-2022 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -22,7 +22,6 @@
   #:use-module (guix memoization)
   #:use-module (guix gexp)
   #:use-module (guix monads)
-  #:use-module (guix derivations)
   #:use-module (guix search-paths)
   #:use-module (guix build-system)
   #:use-module (guix packages)
@@ -539,7 +538,9 @@ platform."
                                              (map
                                               search-path-specification->sexp
                                               native-search-paths))
-                   #:phases #$phases
+                   #:phases #$(if (pair? phases)
+                                  (sexp->gexp phases)
+                                  phases)
                    #:locale #$locale
                    #:bootstrap-scripts #$bootstrap-scripts
                    #:configure-flags #$configure-flags

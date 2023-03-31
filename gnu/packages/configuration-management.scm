@@ -76,7 +76,7 @@
            go-github-com-muesli-reflow-padding
            go-github-com-muesli-termenv
            go-github-com-google-goterm
-           go-golang-org-colorful
+           go-github-com-lucasb-eyer-go-colorful
            go-github-com-mattn-go-isatty
            go-github.com-mattn-go-runewidth
            go-github-com-olekukonko-tablewriter
@@ -97,7 +97,7 @@
            go-golang-org-x-net
            go-golang-org-x-oauth2
            go-github-com-rogpeppe-go-internal
-           gopkg-in-errgo-fmt-errors))
+           go-gopkg-in-errgo-fmt-errors))
     (home-page "https://www.chezmoi.io/")
     (synopsis "Personal configuration files manager")
     (description "This package helps to manage personal configuration files

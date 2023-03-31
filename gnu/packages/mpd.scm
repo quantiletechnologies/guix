@@ -9,7 +9,7 @@
 ;;; Copyright © 2019 Evan Straw <evan.straw99@gmail.com>
 ;;; Copyright © 2020, 2021 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2020 Lars-Dominik Braun <lars@6xq.net>
-;;; Copyright © 2020, 2021 Simon Streit <simon@netpanic.org>
+;;; Copyright © 2020–2023 Simon Streit <simon@netpanic.org>
 ;;; Copyright © 2021 Noah Evans <noah@nevans.me>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -43,10 +43,13 @@
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages avahi)
   #:use-module (gnu packages base)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages build-tools) ;meson-next
   #:use-module (gnu packages boost)
   #:use-module (gnu packages cdrom)
   #:use-module (gnu packages cmake) ;for MPD
+  #:use-module (gnu packages cpp)
+  #:use-module (gnu packages file-systems)
   #:use-module (gnu packages freedesktop) ;elogind
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages gnome)
@@ -54,6 +57,7 @@
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages icu4c)
   #:use-module (gnu packages libusb)
+  #:use-module (gnu packages lua)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
@@ -62,18 +66,24 @@
   #:use-module (gnu packages glib)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages mp3)
+  #:use-module (gnu packages music)
   #:use-module (gnu packages ncurses)
   #:use-module (gnu packages pcre)
+  #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages pretty-print)
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages pulseaudio)
   #:use-module (gnu packages qt)
+  #:use-module (gnu packages serialization)
   #:use-module (gnu packages sphinx)
   #:use-module (gnu packages sqlite)
+  #:use-module (gnu packages tls)
   #:use-module (gnu packages video)
-  #:use-module (gnu packages xiph))
+  #:use-module (gnu packages web)
+  #:use-module (gnu packages xiph)
+  #:use-module (gnu packages xml))
 
 (define-public libmpdclient
   (package
@@ -108,7 +118,7 @@ interfacing MPD in the C, C++ & Objective C languages.")
 (define-public mpd
   (package
     (name "mpd")
-    (version "0.23.8")
+    (version "0.23.12")
     (source (origin
               (method url-fetch)
               (uri
@@ -117,7 +127,7 @@ interfacing MPD in the C, C++ & Objective C languages.")
                               "/mpd-" version ".tar.xz"))
               (sha256
                (base32
-                "1kvq9shd6b7y02r386s1chjmvs44wij5bfzn6qgq46dmyfdmdfw6"))))
+                "1rq2hyfvwwri3sivab747csza2i096y7m8563rl5mhpchhiadz5p"))))
     (build-system meson-build-system)
     (arguments
      (list
@@ -136,40 +146,50 @@ interfacing MPD in the C, C++ & Objective C languages.")
                  (string-append "_" all)))
               (substitute* "meson.build"
                 (("systemd_dep,") "systemd_dep, _systemd_dep,")))))))
-    (inputs (list ao
-                  alsa-lib
-                  avahi
-                  boost
-                  curl
-                  elogind
-                  ffmpeg
-                  flac
-                  fmt
-                  glib
-                  icu4c
-                  ;; The LAME decoder comes from FFmpeg, but is added here so that
-                  ;; configure picks up the LAME encoder.
-                  lame
-                  libid3tag
-                  libmpdclient
-                  libsamplerate
-                  libsndfile
-                  libvorbis
-                  opus
-                  pulseaudio
-                  sqlite
-                  zlib))
+    (inputs (append
+             (if (target-linux?) (list liburing) '())
+             (list ao
+                   alsa-lib
+                   avahi
+                   boost
+                   chromaprint
+                   curl
+                   elogind
+                   expat
+                   ffmpeg
+                   flac
+                   fmt
+                   glib
+                   icu4c
+                   ;; The LAME decoder comes from FFmpeg, but is added here so that
+                   ;; configure picks up the LAME encoder.
+                   lame
+                   libgme
+                   libid3tag
+                   libmpdclient
+                   libnfs
+                   libopenmpt
+                   libsamplerate
+                   libshout
+                   libsndfile
+                   libvorbis
+                   opus
+                   pcre2
+                   pipewire
+                   pulseaudio
+                   soxr
+                   sqlite
+                   yajl
+                   zlib
+                   zziplib)))
     (native-inputs (list cmake pkg-config python-sphinx))
     ;; Missing optional inputs:
-    ;;   libyajl
     ;;   libcdio_paranoia
     ;;   libmms
     ;;   libadplug
     ;;   libaudiofile
     ;;   faad2
     ;;   fluidsynth
-    ;;   libgme
-    ;;   libshout
     ;;   libmpg123
     ;;   libmodplug
     ;;   libmpcdec
@@ -377,7 +397,7 @@ MPD servers, search and multimedia key support.")
 (define-public ashuffle
   (package
     (name "ashuffle")
-    (version "2.0.2")
+    (version "3.13.4")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -386,10 +406,20 @@ MPD servers, search and multimedia key support.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "11aa95cg0yca2m2d00sar6wr14g3lc7cfm9bin1h7lk7asdm8azp"))))
+                "09dvar0aglyy2h9y115ymgryd8l6npc2y2ccdzij0b70f47ncqmf"))))
     (native-inputs (list pkg-config))
-    (inputs (list libmpdclient))
+    (inputs
+     (list abseil-cpp-cxxstd17
+           googletest
+           libmpdclient
+           yaml-cpp))
     (build-system meson-build-system)
+    (arguments
+     (list #:configure-flags
+           #~'("-Dtests=enabled"
+               "-Dunsupported_use_system_absl=true"
+               "-Dunsupported_use_system_gtest=true"
+               "-Dunsupported_use_system_yamlcpp=true")))
     (home-page "https://github.com/joshkunz/ashuffle")
     (synopsis "Automatic library-wide shuffle for mpd")
     (description "ashuffle is an application for automatically shuffling your
@@ -414,34 +444,37 @@ other MPD frontends.")
     (build-system gnu-build-system)
     ;; Manually wrap the binary, because we’re not using python-build-system.
     (arguments
-     '(#:phases
-       (modify-phases %standard-phases
-         (add-after 'install 'wrap-program
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let ((out         (assoc-ref outputs "out"))
-                   (python-path (getenv "GUIX_PYTHONPATH")))
-               (wrap-program (string-append out "/bin/mpDris2")
-                 `("GUIX_PYTHONPATH" ":" prefix (,python-path)))
-               #t))))))
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'install 'wrap-program
+            (lambda* (#:key inputs #:allow-other-keys)
+              (let ((python-path (getenv "GUIX_PYTHONPATH")))
+                (wrap-program (string-append #$output "/bin/mpDris2")
+                  `("GUIX_PYTHONPATH" ":" prefix (,python-path)))))))))
     (inputs
-     (list python-mpd2 python-dbus python-pygobject python))             ; Sets GUIX_PYTHONPATH.
-    ;; For bootstrapping.
+     (list bash-minimal
+           python
+           python-dbus
+           python-mpd2
+           python-mutagen
+           python-pygobject))
     (native-inputs
-     `(("autoconf" ,autoconf)
-       ("automake" ,automake)
-       ("gettext" ,gettext-minimal)
-       ("which" ,which)
-       ("intltool" ,intltool)))
+     (list autoconf
+           automake
+           gettext-minimal
+           intltool
+           which))
     (synopsis "MPRIS V2.1 support for MPD")
-    (description "Client for the Music Player Daemon providing MPRIS 2
-support")
+    (description "mpDris2 is a client for the Music Player Daemon providing
+MPRIS 2 support.")
     (home-page "https://github.com/eonpatapon/mpDris2")
     (license license:gpl3+)))
 
 (define-public cantata
   (package
     (name "cantata")
-    (version "2.4.2")
+    (version "2.5.0")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://github.com/CDrummond/"
@@ -449,16 +482,18 @@ support")
                                   "cantata-" version ".tar.bz2"))
               (sha256
                (base32
-                "10pcrpmb4n1mkgr21xd580nrbmh57q7s72cbs1zay847hc65vliy"))))
+                "090ph8kb2vicjaajn64kmfppb90ix0pnxj525shglyjn7ymh0zpb"))))
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #f)) ; No test suite
     (native-inputs
      (list pkg-config))
     (inputs
-     (list eudev
+     (list avahi
+           eudev
            ffmpeg
            libcdio-paranoia
+           libmusicbrainz
            libebur128
            libmtp
            mpg123
@@ -479,42 +514,41 @@ artists along with albumart.")
 (define-public mcg
   (package
     (name "mcg")
-    (version "2.1.2")
-    (source
-     (origin
-       (method git-fetch)
-       (uri
-        (git-reference
-         (url "https://gitlab.com/coderkun/mcg")
-         (commit (string-append "v" version))))
-       (file-name (git-file-name name version))
-       (sha256
-        (base32
-         "01iqxydssxyi4s644dwl64vm7xhn0szd99hdpywbipvb7kwp5196"))))
-    (build-system python-build-system)
-    (native-inputs
-     `(("glib:bin" ,glib "bin")
-       ("gobject-introspection" ,gobject-introspection)
-       ("pkg-config" ,pkg-config)))
-    (inputs
-     (list avahi dconf gsettings-desktop-schemas gtk+ python-pygobject))
+    (version "3.1")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitlab.com/coderkun/mcg")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "087d3gvx8z1yj7rg9d9h1x02vkw57h4v6xf5pxqyhqyk2435kk17"))))
+    (build-system meson-build-system)
     (arguments
-     `(#:imported-modules ((guix build glib-or-gtk-build-system)
-                           ,@%python-build-system-modules)
-       #:modules ((guix build python-build-system)
-                  ((guix build glib-or-gtk-build-system) #:prefix glib-or-gtk:)
-                  (guix build utils))
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'install 'wrap-program
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((prog (string-append (assoc-ref outputs "out")
-                                        "/bin/mcg")))
-               (wrap-program prog
-                 `("GUIX_PYTHONPATH" = (,(getenv "GUIX_PYTHONPATH")))
-                 `("GI_TYPELIB_PATH" = (,(getenv "GI_TYPELIB_PATH")))))))
-         (add-after 'wrap-program 'glib-or-gtk-wrap
-           (assoc-ref glib-or-gtk:%standard-phases 'glib-or-gtk-wrap)))))
+     (list
+      #:glib-or-gtk? #t
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'install 'wrap-program
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let ((prog (string-append (assoc-ref outputs "out")
+                                         "/bin/mcg")))
+                (wrap-program prog
+                  `("GUIX_PYTHONPATH" = (,(getenv "GUIX_PYTHONPATH")))
+                  `("GI_TYPELIB_PATH" = (,(getenv "GI_TYPELIB_PATH"))))))))))
+    (inputs (list avahi
+                  dconf
+                  gsettings-desktop-schemas
+                  gtk+
+                  python
+                  python-pygobject))
+    (native-inputs (list desktop-file-utils
+                         gettext-minimal
+                         `(,glib "bin")
+                         gobject-introspection
+                         `(,gtk+ "bin")
+                         pkg-config))
     (synopsis "Covergrid for the MPD")
     (description
      "mcg (CoverGrid) is a client for the Music Player Daemon (MPD), focusing
@@ -522,4 +556,67 @@ on albums instead of single tracks.  It is not intended to be a replacement
 for your favorite MPD client but an addition to get a better
 album-experience.")
     (home-page "https://gitlab.com/coderkun/mcg")
+    (license license:gpl3+)))
+
+(define-public mpdevil
+  (package
+    (name "mpdevil")
+    (version "1.10.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/SoongNoonien/mpdevil")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32 "04dzxyv176w5sm4j85j7fbh42nk9wsyz5s005kj9cjwsrzrnxlbk"))))
+    (build-system meson-build-system)
+    (arguments
+     (list
+      #:glib-or-gtk? #t
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'glib-or-gtk-wrap 'python-and-gi-wrap
+            (lambda _
+              (let ((prog (string-append #$output "/bin/mpdevil")))
+                (wrap-program prog
+                  `("GUIX_PYTHONPATH" = (,(getenv "GUIX_PYTHONPATH")))
+                  `("GI_TYPELIB_PATH" = (,(getenv "GI_TYPELIB_PATH"))))))))))
+    (inputs (list bash-minimal
+                  gtk+
+                  python
+                  python-mpd2
+                  python-pycairo
+                  python-pygobject))
+    (native-inputs (list `(,glib "bin")))
+    (home-page "https://github.com/SoongNoonien/mpdevil")
+    (synopsis "Music browser for the MPD")
+    (description "mpdevil is a music browser for the Music Player Daemon (MPD),
+which is focused on playing local music without the need of managing playlists.
+Instead of maintaining a client side database of your music library,
+mpdevil loads all tags and covers on demand.")
+    (license license:gpl3+)))
+
+(define-public mympd
+  (package
+    (name "mympd")
+    (version "10.2.6")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/jcorporation/myMPD")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1adi1pdygj7wlfi6k3978b6ny2cziai4f761a61j9vxa2ywf7wbb"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list #:tests? #f)) ; no test target
+    (native-inputs (list jq perl))
+    (inputs (list flac libid3tag lua openssl pcre2))
+    (home-page "https://jcorporation.github.io/")
+    (synopsis "Web-based MPD client")
+    (description "MyMPD is a mobile-friendly web client for the MPD music
+player daemon.")
     (license license:gpl3+)))

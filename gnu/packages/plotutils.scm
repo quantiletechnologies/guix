@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015 Eric Bavier <bavier@member.fsf.org>
-;;; Copyright © 2016-2022 Nicolas Goaziou <mail@nicolasgoaziou.fr>
+;;; Copyright © 2016-2023 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2018 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2020 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;;
@@ -30,10 +30,13 @@
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages algebra)
   #:use-module (gnu packages autotools)
+  #:use-module (gnu packages bash)
+  #:use-module (gnu packages bison)
   #:use-module (gnu packages bdw-gc)
   #:use-module (gnu packages boost)
   #:use-module (gnu packages cmake)
   #:use-module (gnu packages emacs)
+  #:use-module (gnu packages flex)
   #:use-module (gnu packages xorg)
   #:use-module (gnu packages image)
   #:use-module (gnu packages ghostscript)
@@ -191,7 +194,7 @@ went to university in the 1990s, this is the library for you.")
        (list autoconf automake texinfo pkg-config))
       (inputs (list guile-3.0))
       (propagated-inputs (list guile-cairo))
-      (home-page "http://wingolog.org/projects/guile-charting/")
+      (home-page "https://wingolog.org/projects/guile-charting/")
       (synopsis "Create charts and graphs in Guile")
       (description
        "Guile-Charting is a Guile Scheme library to create bar charts and graphs
@@ -256,7 +259,7 @@ using the Cairo drawing library.")
                           `("PLOTICUS_PREFABS" ":" = (,dir)))))))))
     (inputs
      (list libpng libx11 zlib))
-    (home-page "http://ploticus.sourceforge.net/")
+    (home-page "https://ploticus.sourceforge.net/")
     (synopsis "Command-line tool for producing plots and charts")
     (description
      "Ploticus is a non-interactive software package for producing plots,
@@ -269,14 +272,14 @@ colors, styles, options and details.")
 (define-public asymptote
   (package
     (name "asymptote")
-    (version "2.82")
+    (version "2.85")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://sourceforge/asymptote/"
                            version "/asymptote-" version ".src.tgz"))
        (sha256
-        (base32 "13blmsapbai4hqynyj1r1sjpypdv6frfassl2f2x7j2ql1dbqvsg"))
+        (base32 "11zcfnc80sbh10w53j4rwnmz0g5xj78b8i7hzfslgya15jv5j1ac"))
        (modules '((guix build utils)))
        (snippet
         ;; Remove bundled RapidJSON.
@@ -289,11 +292,14 @@ colors, styles, options and details.")
     (native-inputs
      (list autoconf
            automake
+           bison
            boost
            cmake
            emacs-minimal
+           flex
            ghostscript                  ;for tests
            perl
+           pkg-config
            rapidjson
            texinfo                      ;for generating documentation
            (texlive-updmap.cfg
@@ -317,7 +323,9 @@ colors, styles, options and details.")
                   texlive-latex-parskip
                   texlive-tex-texinfo))))
     (inputs
-     (list fftw
+     (list bash-minimal
+           eigen
+           fftw
            freeglut
            glew
            glm
@@ -393,7 +401,7 @@ colors, styles, options and details.")
             (lambda _
               (setenv "HOME" "/tmp")))
           (add-after 'install 'install-Emacs-data
-            (lambda* (#:key outputs #:allow-other-keys)
+            (lambda _
               ;; Install related Emacs libraries into an appropriate location.
               (let ((lisp-dir
                      (string-append #$output "/share/emacs/site-lisp")))
@@ -407,7 +415,7 @@ colors, styles, options and details.")
                 (wrap-program
                     (string-append #$output "/share/asymptote/GUI/xasy.py")
                   `("GUIX_PYTHONPATH" ":" prefix (,path)))))))))
-    (home-page "http://asymptote.sourceforge.net")
+    (home-page "https://asymptote.sourceforge.io")
     (synopsis "Script-based vector graphics language")
     (description
      "Asymptote is a powerful descriptive vector graphics language for

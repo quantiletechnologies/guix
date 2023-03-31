@@ -44,6 +44,7 @@
   #:use-module (gnu packages openldap)
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-build)
+  #:use-module (gnu packages python-check)
   #:use-module (gnu packages python-crypto)
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
@@ -459,7 +460,7 @@ useful tools for testing Django applications and projects.")
            python-setuptools-scm
            python-pysolr
            python-whoosh))
-    (home-page "http://haystacksearch.org/")
+    (home-page "https://haystacksearch.org/")
     (synopsis "Pluggable search for Django")
     (description "Haystack provides modular search for Django.  It features a
 unified, familiar API that allows you to plug in different search backends
@@ -869,13 +870,13 @@ support, and optional data-URI image and font embedding.")
 (define-public python-django-rq
   (package
     (name "python-django-rq")
-    (version "2.3.2")
+    (version "2.7.0")
     (source (origin
               (method url-fetch)
               (uri (pypi-uri "django-rq" version))
               (sha256
                (base32
-                "0lksnjn3q3f7y72bj2yr8870w28a5b6x0vjnd9nhpq2ah6xfz6pf"))))
+                "0aw0fi0lg80qgdp9fhjbnlhvfh2p09rgy1nj6hxpyhi37kihni2h"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
@@ -883,7 +884,7 @@ support, and optional data-URI image and font embedding.")
          (replace 'check
            (lambda _
              (invoke "redis-server" "--daemonize" "yes")
-             (invoke "django-admin.py" "test" "django_rq"
+             (invoke "django-admin" "test" "django_rq"
                      "--settings=django_rq.tests.settings"
                      "--pythonpath=."))))))
     (native-inputs
@@ -1360,4 +1361,55 @@ Django's filtering system in ORM).")
     (description "This form field allows users to provide SVG images for
 models that use Django's standard @code{ImageField}, in addition to the
 image files already supported by it.")
+    (license license:expat)))
+
+(define-public python-django-cleanup
+  (package
+    (name "python-django-cleanup")
+    (version "6.0.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/un1t/django-cleanup")
+             (commit (string-append version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "0c1nghn1bnlq0a4d3sy3s363ksqsnxksixbimdy3cc6a0vk4sjps"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'patch-tests-settings
+           (lambda* (#:key inputs #:allow-other-keys)
+             ;; django-cleanup optionally integrates with
+             ;; sorl-thumbnail, which is not available in Guix yet, so
+             ;; this patch comments it out to avoid import failures in
+             ;; test settings.
+             (substitute* "django_cleanup/testapp/settings.py"
+               (("'sorl\\.thumbnail',") "# 'sorl.thumbnail',"))))
+         (replace 'check
+           (lambda* (#:key tests? inputs outputs #:allow-other-keys)
+             (when tests?
+               (add-installed-pythonpath inputs outputs)
+               ;; Add CWD to PYTHONPATH so that the tests can find the
+               ;; testapp package in the source.
+               (setenv "PYTHONPATH" (getcwd))
+               (invoke "pytest")))))))
+    (native-inputs
+     (list ;; python-django-sorl-thumbnail  ; TODO: Add to Guix.
+           python-easy-thumbnails
+           python-pillow
+           python-pytest
+           python-pytest-cov
+           python-pytest-django
+           python-pytest-xdist))
+    (propagated-inputs
+     (list python-django))
+    (home-page "https://github.com/un1t/django-cleanup")
+    (synopsis "Automatically deletes unused media files")
+    (description "This application automatically deletes user-uploaded
+files when a model is modified or deleted.  It works for FileField,
+ImageField and their subclasses.  Files set as default values for any
+FileField are not deleted.")
     (license license:expat)))

@@ -11,6 +11,8 @@
 ;;; Copyright © 2020 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2020 Christopher Howard <christopher@librehacker.com>
 ;;; Copyright © 2021 Guillaume Le Vaillant <glv@posteo.net>
+;;; Copyright © 2022 Jacob Hrbek <kreyren@rixotstudio.cz>
+;;; Copyright © 2023 Sharlatan Hellseher <sharlatanus@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -39,8 +41,11 @@
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system glib-or-gtk)
+  #:use-module (guix build-system pyproject)
   #:use-module (guix build-system python)
   #:use-module (gnu packages autotools)
+  #:use-module (gnu packages compression)
+  #:use-module (gnu packages curl)
   #:use-module (gnu packages gnupg)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages java)
@@ -48,7 +53,9 @@
   #:use-module (gnu packages mp3)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-xyz)
+  #:use-module (gnu packages readline)
   #:use-module (gnu packages tls)
   #:use-module (gnu packages xiph))
 
@@ -81,7 +88,7 @@ devices on various operating systems.")
 (define-public libusb-compat
   (package
     (name "libusb-compat")
-    (version "0.1.5")
+    (version "0.1.8")
     (source
      (origin
       (method url-fetch)
@@ -90,11 +97,13 @@ devices on various operating systems.")
                           "libusb-compat-" version "/"
                           "libusb-compat-" version ".tar.bz2"))
       (sha256
-       (base32
-        "0nn5icrfm9lkhzw1xjvaks9bq3w6mjg86ggv3fn7kgi4nfvg8kj0"))))
+       (base32 "09q8w00djrkaxbiklcgjwya1w0n3aqavsz06fl0ixv1x9x47d339"))))
     (build-system gnu-build-system)
+    (arguments
+     (list #:configure-flags
+           #~(list "--disable-static")))
     (native-inputs
-     (list pkg-config))
+     (list autoconf automake libtool pkg-config))
     (inputs
      (list libusb))
     (home-page "https://libusb.info")
@@ -304,18 +313,28 @@ wrapper for accessing libusb-1.0.")
 (define-public python-capablerobot-usbhub
   (package
     (name "python-capablerobot-usbhub")
-    (version "0.2.7")
+    (version "0.5.0")
     (source
      (origin
-       (method url-fetch)
-       (uri (pypi-uri "capablerobot_usbhub" version))
+       ;; PyPI tarball fails to build.
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/CapableRobot/CapableRobot_USBHub_Driver")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
        (sha256
-        (base32
-         "1priic4iq2vn1rc711kzxwhxrwa508rkxrr193qdz2lw26kdhvix"))))
-    (build-system python-build-system)
+        (base32 "1nfd12612z9a9hby5dxg7lfqw5jcv3wcyqqagbg5izragni646mc"))))
+    (build-system pyproject-build-system)
     (arguments
-     `(#:phases
+     `(#:tests? #f ; No tests provided.
+       #:phases
        (modify-phases %standard-phases
+         (add-after 'unpack 'use-poetry-core
+           (lambda _
+             ;; Patch to use the core poetry API.
+             (substitute* "pyproject.toml"
+               (("poetry.masonry.api")
+                "poetry.core.masonry.api"))))
          (add-after 'install 'install-udev-rules
            (lambda* (#:key outputs #:allow-other-keys)
              (let ((out (assoc-ref outputs "out")))
@@ -323,10 +342,11 @@ wrapper for accessing libusb-1.0.")
                (copy-file "50-capablerobot-usbhub.rules"
                           (string-append out
                                          "/lib/udev/rules.d/"
-                                         "50-capablerobot-usbhub.rules"))
-               #t))))))
+                                         "50-capablerobot-usbhub.rules"))))))))
+    (native-inputs
+     (list python-poetry-core))
     (propagated-inputs
-     (list python-click python-construct python-pyusb python-pyyaml))
+     (list python-click-7 python-construct python-pyusb python-pyyaml-5))
     (home-page
      "https://github.com/CapableRobot/CapableRobot_USBHub_Driver")
     (synopsis
@@ -338,6 +358,72 @@ computer.  It also creates a transparent CircuitPython Bridge, allowing
 unmodified CircuitPython code to run on the host computer and interact with
 I2C and SPI devices attached to the USB Hub.")
     (license license:expat)))
+
+(define-public ideviceinstaller
+  (package
+    (name "ideviceinstaller")
+    (version "1.1.1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+              (url "https://github.com/libimobiledevice/ideviceinstaller")
+              (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1xp0sjgfx2z19x9mxihn18ybsmrnrcfc55zbh5a44g3vrmagmlzz"))))
+    (build-system gnu-build-system)
+    (native-inputs (list autoconf automake libtool pkg-config))
+    (inputs (list libimobiledevice libzip))
+    (home-page "https://libimobiledevice.org/")
+    (synopsis "CLI Tool to manage apps and app archives on iOS devices")
+    (description "This package provides an interface to manage IPA format
+files and applications for iOS devices, it's written in C")
+    (license license:gpl2)))
+
+(define-public libirecovery
+  (package
+    (name "libirecovery")
+    (version "1.0.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                     (url "https://github.com/libimobiledevice/libirecovery")
+                     (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0p9ncqnz5kb7qisw00ynvasw1hax5qx241h9nwppi2g544i9lbnr"))))
+    (build-system gnu-build-system)
+    (inputs (list readline libusb))
+    (native-inputs (list autoconf automake libtool pkg-config))
+    (home-page "https://libimobiledevice.org/")
+    (synopsis "Communication library with iBoot/iBSS of iOS devices via USB")
+    (description "Libirecovery is a cross-platform library which implements
+communication to iBoot/iBSS found on Apple's iOS devices via USB.")
+    (license license:lgpl2.1)))
+
+(define-public idevicerestore
+  (package
+    (name "idevicerestore")
+    (version "1.0.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                     (url "https://github.com/libimobiledevice/idevicerestore")
+                     (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1w7ywp77xc6v4hifi3j9ywrj447vv7fkwg2w26w0lq95f3bkblqr"))))
+    (build-system gnu-build-system)
+    (inputs (list libusb libirecovery libimobiledevice libzip curl zlib))
+    (native-inputs (list autoconf automake libtool pkg-config))
+    (home-page "https://libimobiledevice.org/")
+    (synopsis "CLI tool to restore firmware files to iOS devices")
+    (description "This utility is used to restore bricked or otherwise
+broken iOS devices.")
+    (license license:lgpl3+)))
 
 (define-public libplist
   (package
@@ -492,7 +578,7 @@ over USB.")
      (list #:configure-flags
            #~(list "--disable-static"
                    (string-append "--with-udev=" #$output "/lib/udev"))))
-    (home-page "http://libmtp.sourceforge.net/")
+    (home-page "https://libmtp.sourceforge.net/")
     (synopsis "Library implementing the Media Transfer Protocol")
     (description "Libmtp implements an MTP (Media Transfer Protocol)
 initiator, which means that it initiates MTP sessions with devices.  The
@@ -529,7 +615,7 @@ proposed for standardization.")
      (list gtk+ flac libvorbis libid3tag libmtp))
     (native-inputs
      (list pkg-config))
-    (home-page "http://gmtp.sourceforge.net/")
+    (home-page "https://gmtp.sourceforge.net/")
     (synopsis "Simple graphical MTP client")
     (description "gMTP is a simple graphical client for the Media Transfer Protocol
   (MTP), which allows media files to be transferred to and from many portable

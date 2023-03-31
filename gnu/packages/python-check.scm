@@ -9,12 +9,14 @@
 ;;; Copyright © 2020 Edouard Klein <edk@beaver-labs.com>
 ;;; Copyright © 2020, 2021 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2020 Tanguy Le Carrour <tanguy@bioneland.org>
-;;; Copyright © 2021 Sharlatan Hellseher <sharlatanus@gmail.com>
+;;; Copyright © 2021-2023 Sharlatan Hellseher <sharlatanus@gmail.com>
 ;;; Copyright © 2021 Brendan Tildesley <mail@brendan.scot>
 ;;; Copyright © 2021, 2022 Guillaume Le Vaillant <glv@posteo.net>
 ;;; Copyright © 2021 Bonface Munyoki Kilyungi <me@bonfacemunyoki.com>
 ;;; Copyright © 2022 Malte Frank Gerdes <malte.f.gerdes@gmail.com>
 ;;; Copyright © 2022 Felix Gruber <felgru@posteo.net>
+;;; Copyright © 2022 Tomasz Jeneralczyk <tj@schwi.pl>
+;;; Copyright © 2022 jgart <jgart@dismail.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -37,8 +39,8 @@
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages check)
-  #:use-module (gnu packages docker)
   #:use-module (gnu packages django)
+  #:use-module (gnu packages docker)
   #:use-module (gnu packages openstack)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages python-build)
@@ -48,13 +50,14 @@
   #:use-module (gnu packages web)
   #:use-module (gnu packages xml)
   #:use-module (gnu packages xorg)
-  #:use-module (guix utils)
   #:use-module ((guix licenses) #:prefix license:)
-  #:use-module (guix packages)
+  #:use-module (guix build-system pyproject)
+  #:use-module (guix build-system python)
+  #:use-module (guix download)
   #:use-module (guix gexp)
   #:use-module (guix git-download)
-  #:use-module (guix download)
-  #:use-module (guix build-system python))
+  #:use-module (guix packages)
+  #:use-module (guix utils))
 
 (define-public python-tappy
   (package
@@ -140,7 +143,7 @@ interfaces with pytest.")
     (build-system python-build-system)
     (propagated-inputs (list python-cram python-pytest))
     (home-page "https://github.com/tbekolay/pytest-cram")
-    (synopsis "Run cram tests with pytest.")
+    (synopsis "Run cram tests with pytest")
     (description "Cram tests command line applications; Pytest tests Python
 applications.  @code{pytest-cram} tests Python command line applications by
 letting you write your Python API tests with pytest, and your command line
@@ -394,6 +397,55 @@ detect the absence of a cassette file and once again record all HTTP
 interactions, which will update them to correspond to the new API.")
     (license license:expat)))
 
+(define-public python-pytest-socket
+  (package
+    (name "python-pytest-socket")
+    (version "0.5.1")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "pytest-socket" version))
+              (sha256
+               (base32
+                "1dkr86nxkxc0ka3rdnpmk335m8gl1zh1sy8i7w4w1jsidbf82jvw"))))
+    (build-system python-build-system)
+    (arguments
+     ;; FIXME: Tests fail a lot, probably requiring Internet access.
+     (list #:tests? #f
+           #:phases #~(modify-phases %standard-phases
+                        (replace 'build
+                          (lambda _
+                            (setenv "SETUPTOOLS_SCM_PRETEND_VERSION"
+                                    #$version)
+                            (setenv "SOURCE_DATE_EPOCH" "315532800")
+                            (invoke "python"
+                                    "-m"
+                                    "build"
+                                    "--wheel"
+                                    "--no-isolation"
+                                    ".")))
+                        (add-before 'check 'disable-unsupported-test
+                          (lambda _
+                            (substitute* "tests/test_async.py"
+                              (("def test_asynctest")
+                               "def __off_test_asynctest"))))
+                        (replace 'check
+                          (lambda* (#:key tests? #:allow-other-keys)
+                            (when tests?
+                              (invoke "python" "-m" "pytest" "-vvv")))))))
+    (native-inputs (list python-httpx
+                         python-poetry-core
+                         python-pypa-build
+                         python-pytest
+                         python-pytest-httpbin
+                         python-pytest-randomly
+                         python-starlette))
+    (home-page "https://pypi.org/project/pytest-socket/")
+    (synopsis "Pytest plugin to disable socket calls during tests")
+    (description
+     "This package provides Pytest extension which disables all network calls flowing
+through Python's socket interface")
+    (license license:expat)))
+
 (define-public python-pytest-ordering
   (package
     (name "python-pytest-ordering")
@@ -431,13 +483,13 @@ of tests run in a specific order.")
 (define-public python-pytest-astropy-header
 (package
   (name "python-pytest-astropy-header")
-  (version "0.1.2")
+  (version "0.2.2")
   (source
     (origin
       (method url-fetch)
       (uri (pypi-uri "pytest-astropy-header" version))
       (sha256
-        (base32 "1y87agr324p6x5gvhziymxjlw54pyn4gqnd49papbl941djpkp5g"))))
+        (base32 "046v4arinv8b5jz05pvhnc0n1aqqndwvhlsl635ahxabr40i32bp"))))
   (build-system python-build-system)
   (native-inputs
    (list python-pytest python-setuptools-scm))
@@ -454,13 +506,13 @@ Astropy project, but is optimized for use with astropy-related projects.")
 (define-public python-pytest-astropy
   (package
     (name "python-pytest-astropy")
-    (version "0.8.0")
+    (version "0.10.0")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "pytest-astropy" version))
        (sha256
-        (base32 "18j6z6y2fvykmcs5z0mldhhaxxn6wzpnhlm2ps7m8r5z5kmh1631"))))
+        (base32 "04g2rh261s3s6ym8mwi4iv2a6anbgwvwzcvkyilfck6yxrncdqw5"))))
     (build-system python-build-system)
     (arguments
      `(#:tests? #f ; there are no tests
@@ -1248,19 +1300,21 @@ for the @code{pytest} framework.")
 (define-public python-pytest-benchmark
   (package
     (name "python-pytest-benchmark")
-    (version "3.2.3")
+    (version "3.4.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "pytest-benchmark" version))
        (sha256
         (base32
-         "0a4mpb4j73dsyk47hd1prrjpfk4r458s102cn80rf253jg818hxd"))))
+         "0ivvrnhax2xr62grlgw4hlyjmmjp6nc35431j7c82nny2bwn7qj0"))))
     (build-system python-build-system)
+    (arguments
+     '(#:test-target "check"))
     (propagated-inputs
      (list python-py-cpuinfo))
     (native-inputs
-     (list python-pathlib2 python-pytest))
+     (list python-pytest))
     (home-page "https://github.com/ionelmc/pytest-benchmark")
     (synopsis "Pytest fixture for benchmarking code")
     (description
@@ -1624,7 +1678,7 @@ libraries.")
              (setenv "QT_QPA_PLATFORM" "offscreen")
              #t)))))
     (propagated-inputs
-     (list python-pyqt-without-qtwebkit))
+     (list python-pyqt))
     (native-inputs
      (list python-pytest python-pytest-runner python-setuptools-scm))
     (home-page "https://github.com/pytest-dev/pytest-qt")
@@ -1810,7 +1864,7 @@ supported by the MyPy typechecker.")
            python-virtualenv))
     (propagated-inputs
      (list python-mypy-extensions python-tomli python-typing-extensions))
-    (home-page "http://www.mypy-lang.org/")
+    (home-page "https://www.mypy-lang.org/")
     (synopsis "Static type checker for Python")
     (description "Mypy is an optional static type checker for Python that aims
 to combine the benefits of dynamic typing and static typing.  Mypy combines
@@ -2215,7 +2269,7 @@ Avocado machine readable outputs this one is streamlined (per test results).
        (sha256
         (base32 "0zhjmsd16xacg4vd7zb75kw8q9khn52wvad634v1bvz7swaivk2c"))))
     (build-system python-build-system)
-    (native-inputs (list python-setuptools)) ;for use_2to3
+    (native-inputs (list python-setuptools-57)) ;for use_2to3
     (home-page
      "https://github.com/msabramo/python_unittest_parameterized_test_case")
     (synopsis "Parameterized tests for Python's unittest module")
@@ -2286,6 +2340,129 @@ Python objects.  It tries to use the objects available in the standard
 which make writing and running functional and integration tests easier.")
     (license license:asl2.0)))
 
+(define-public python-nox
+  (package
+    (name "python-nox")
+    (version "2022.11.21")
+    (source
+     (origin
+       ;; No tests in the PyPI tarball.
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/wntrblm/nox")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1xfd63h75wiiyri4f7qyvy50f2ny0v4r4wx2h4px9ddbkh2k5g9p"))))
+    (build-system pyproject-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               ;; NOTE: This manipulation looks not clear as upstream package
+               ;; contains "nox/tox_to_nox.jinja2" file which is not copied
+               ;; during install phase and causes check and sanity-check
+               ;; phases fail due to missing file. Try to find more simple
+               ;; solution.
+               (add-after 'unpack 'rename-tox-to-nox-jinja2
+                 (lambda _
+                   (rename-file "nox/tox_to_nox.jinja2" "nox/tox_to_nox.jinja2.py")))
+               (add-after 'install 'rename-tox-to-nox-jinja2-back
+                 (lambda _
+                   (let* ((src-file (car (find-files (string-append #$output "/lib")
+                                                     "tox_to_nox\\.jinja2\\.py$")))
+                          (dst-file (string-drop-right src-file 3)))
+                     (rename-file src-file dst-file)))))))
+    (propagated-inputs
+     (list python-argcomplete
+           python-colorlog
+           python-packaging
+           python-py
+           python-virtualenv))
+    (native-inputs
+     (list python-jinja2
+           python-pytest
+           python-tox))
+    (home-page "https://nox.thea.codes/")
+    (synopsis "Flexible test automation")
+    (description
+     "@code{nox} is a command-line tool that automates testing in multiple
+Python environments, similar to @code{tox}.  Unlike tox, Nox uses a standard
+Python file for configuration.")
+    (license license:asl2.0)))
+
+(define-public python-tox
+  (package
+    (name "python-tox")
+    (version "3.20.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "tox" version))
+       (sha256
+        (base32
+         "0nk0nyzhzamcrvn0qqzzy54isxxqwdi28swml7a2ym78c3f9sqpb"))))
+    (build-system python-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                (invoke "pytest" "-vv" "-k"
+                        (string-join
+                         (map (lambda (test)
+                                (string-append "not test_" test))
+                              '("invocation_error"
+                                "create_KeyboadInterrupt"
+                                "exit_code"
+                                "tox_get_python_executable"
+                                "find_alias_on_path"
+                                "get_executable"
+                                "get_executable_no_exist"
+                                "get_sitepackagesdir_error"
+                                "spinner_stdout_not_unicode"
+                                "provision_non_canonical_dep"
+                                "package_setuptools"
+                                "package_poetry"
+                                "parallel_interrupt"
+                                "provision_missing"
+                                "provision_from_pyvenv"
+                                "provision_interrupt_child"
+                                "create"
+                                "run_custom_install_command"
+                                "toxuone_env"
+                                "different_config_cwd"
+                                "test_usedevelop"
+                                "build_backend_without_submodule"
+                                "parallel"
+                                "parallel_live"
+                                "tox_env_var_flags_inserted_isolated"))
+                         " and "))))))))
+    (propagated-inputs
+     (list python-filelock
+           python-packaging
+           python-pluggy
+           python-py
+           python-six
+           python-toml
+           python-virtualenv))
+    (native-inputs
+     (list python-flaky
+           python-pathlib2
+           python-pytest                ; >= 2.3.5
+           python-pytest-freezegun
+           python-pytest-timeout
+           python-setuptools-scm))
+    (home-page "https://tox.readthedocs.io")
+    (synopsis "Virtualenv-based automation of test activities")
+    (description "Tox is a generic virtualenv management and test command line
+tool.  It can be used to check that a package installs correctly with
+different Python versions and interpreters, or run tests in each type of
+supported environment, or act as a frontend to continuous integration
+servers.")
+    (license license:expat)))
+
 (define-public python-sybil
   (package
     (name "python-sybil")
@@ -2312,6 +2489,34 @@ which make writing and running functional and integration tests easier.")
 documentation by parsing them from their source and evaluating the
 parsed examples as part of your normal test run.  Integration is
 provided for the main Python test runners.")
+    (license license:expat)))
+
+(define-public python-pytest-parawtf
+  (package
+    (name "python-pytest-parawtf")
+    (version "1.0.2")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "pytest-parawtf" version))
+              (sha256
+               (base32
+                "08s86hy58lvrd90cnayzydvac4slaflj0ph9yknakcc42anrm023"))))
+    (build-system python-build-system)
+    (arguments
+     (list
+       #:phases
+       #~(modify-phases %standard-phases
+           (replace 'check
+             (lambda* (#:key tests? #:allow-other-keys)
+               (when tests?
+                 ;; https://github.com/flub/pytest-parawtf/issues/1
+                 (invoke "pytest" "-k" "not test_mark")))))))
+    (propagated-inputs (list python-pytest))
+    (home-page "https://github.com/flub/pytest-parawtf/")
+    (synopsis "Finally spell paramete?ri[sz]e correctly")
+    (description
+"@code{python-pytest} uses one of four different spellings of
+parametrize.  This plugin allows you to use all four.")
     (license license:expat)))
 
 (define-public python-pytest-httpx
@@ -2372,4 +2577,25 @@ is configurable: you can choose how you want the test output and test result
 diagnostics to end up in your TAP output (as TAP diagnostics, YAML blocks, or
 attachments).
 @end itemize")
+    (license license:expat)))
+
+(define-public python-xvfbwrapper
+  (package
+    (name "python-xvfbwrapper")
+    (version "0.2.9")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "xvfbwrapper" version))
+              (sha256
+               (base32
+                "097wxhvp01ikqpg1z3v8rqhss6f1vwr399zpz9a05d2135bsxx5w"))))
+    (build-system python-build-system)
+    (propagated-inputs (list xorg-server-for-tests))
+    (home-page "https://github.com/cgoldberg/xvfbwrapper")
+    (synopsis "Python module for controlling virtual displays with Xvfb")
+    (description
+     "Xvfb (X virtual framebuffer) is a display server implementing
+the X11 display server protocol.  It runs in memory and does not require a
+physical display.  Only a network layer is necessary.  Xvfb is useful for
+running acceptance tests on headless servers.")
     (license license:expat)))

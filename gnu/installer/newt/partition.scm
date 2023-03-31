@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2018, 2019 Mathieu Othacehe <m.othacehe@gmail.com>
+;;; Copyright © 2018, 2019, 2022 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2019, 2020 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;;
@@ -92,17 +92,31 @@ disk.  The installation device as well as the small devices are filtered.")
          (device (car result)))
     device))
 
+(define (run-label-confirmation-page callback)
+  (lambda (item)
+    (match (current-clients)
+      (()
+       (and (run-confirmation-page
+             (format #f (G_ "This will create a new ~a partition table, \
+all data on disk will be lost, are you sure you want to proceed?") item)
+             (G_ "Format disk?")
+             #:exit-button-procedure callback)
+            item))
+      (_ item))))
+
 (define (run-label-page button-text button-callback)
   "Run a page asking the user to select a partition table label."
   ;; Force the GPT label if UEFI is supported.
   (if (efi-installation?)
-      "gpt"
+      ((run-label-confirmation-page button-callback) "gpt")
       (run-listbox-selection-page
        #:info-text (G_ "Select a new partition table type. \
 Be careful, all data on the disk will be lost.")
        #:title (G_ "Partition table")
        #:listbox-items '("msdos" "gpt")
        #:listbox-item->text identity
+       #:listbox-callback-procedure
+       (run-label-confirmation-page button-callback)
        #:button-text button-text
        #:button-callback-procedure button-callback)))
 
@@ -188,7 +202,7 @@ encryption of partition ~a (label: ~a).") file-name crypt-label)
                    (if (string=? password confirmation)
                        (user-partition
                         (inherit user-part)
-                        (crypt-password password))
+                        (crypt-password (make-secret password)))
                        (begin
                          (run-error-page
                           (G_ "Password mismatch, please try again.")
@@ -795,13 +809,13 @@ by pressing the Exit button.~%~%")))
          (user-partitions (run-page eligible-devices))
          (user-partitions-with-pass (prompt-luks-passwords
                                      user-partitions))
-         (form (draw-formatting-page user-partitions)))
+         (form (draw-formatting-page user-partitions-with-pass)))
     ;; Make sure the disks are not in use before proceeding to formatting.
     (free-parted eligible-devices)
     (format-user-partitions user-partitions-with-pass)
     (installer-log-line "formatted ~a user partitions"
             (length user-partitions-with-pass))
-    (installer-log-line "user-partitions: ~a" user-partitions)
+    (installer-log-line "user-partitions: ~a" user-partitions-with-pass)
 
     (destroy-form-and-pop form)
-    user-partitions))
+    user-partitions-with-pass))

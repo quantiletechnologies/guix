@@ -209,7 +209,7 @@ files with a system-specific shebang."
     (inputs `(("guile"
                ;; XXX: Kludge to hide the circular dependency.
                ,(module-ref (resolve-interface '(gnu packages guile))
-                            'guile-3.0/fixed))
+                            'guile-3.0/pinned))
               ("autoconf" ,autoconf)
               ("bash" ,bash-minimal)))
     (arguments
@@ -518,6 +518,18 @@ presenting a single consistent, portable interface that hides the usual
 complexity of working with shared libraries across platforms.")
     (license gpl3+)
     (home-page "https://www.gnu.org/software/libtool/")))
+
+(define-public libtool-2.4.7
+  (package
+    (inherit libtool)
+    (version "2.4.7")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://gnu/libtool/libtool-"
+                                  version ".tar.xz"))
+              (sha256
+               (base32
+                "0pb3l4x37k6fj1lwnpzws55gi3pxl0hx56jm4bzmbrkw0mzj2zsg"))))))
 
 (define-public config
   (let ((revision "1")

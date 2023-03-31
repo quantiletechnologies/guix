@@ -1,5 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2017, 2019, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Hartmut Goebel <h.goebel@crazy-compilers.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -23,10 +25,10 @@
   #:use-module (guix http-client)
   #:use-module (json)
   #:use-module (srfi srfi-1)
-  #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-34)
   #:use-module (web uri)
   #:use-module (ice-9 match)
+  #:use-module (ice-9 regex)
   #:export (%gnome-updater))
 
 ;;; Commentary:
@@ -54,23 +56,59 @@ source for metadata."
                                             name "/" relative-url))))
                         '("tar.lz" "tar.xz" "tar.bz2" "tar.gz")))))))
 
-(define (latest-gnome-release package)
+(define* (import-gnome-release package #:key (version #f))
   "Return the latest release of PACKAGE, a GNOME package, or #f if it could
-not be determined."
+not be determined. Optionally include a VERSION string to fetch a specific
+version."
   (define %not-dot
     (char-set-complement (char-set #\.)))
 
-  (define (even-minor-version? version)
-    (match (string-tokenize version %not-dot)
-      (((= string->number major) (= string->number minor) . rest)
-       (and minor (even? minor)))
-      (((= string->number major) . _)
-       ;; It should at last start with a digit.
-       major)))
+  (define (pre-release-text? text)
+    (string-match "^(alpha|beta|rc)" text))
+
+  (define (release-version? version)
+    "Predicate to check if VERSION matches the format of a GNOME release
+version.  A release version can have more than one form, depending on the
+GNOME component, but typically it takes the form of a major-minor tuple, where
+minor can also be prefixed wih \"alpha\", \"beta\" or \"rc\".  For more
+information about the GNOME versioning scheme, see:
+https://discourse.gnome.org/t/new-gnome-versioning-scheme/4235"
+    (define components (string-tokenize version %not-dot))
+    (if (any pre-release-text? components)
+        #f                              ;ignore pre-releases
+        (match components
+          (((= string->number major) (= string->number minor) . _)
+           ;; Any other 3+ components versions such as "2.72.2".
+           (and major minor))
+          (((= string->number major) . _)
+           ;; A GNOME version strings like "42.1".
+           major))))
 
   (define upstream-name
     ;; Some packages like "NetworkManager" have camel-case names.
     (package-upstream-name package))
+
+  (define (find-latest-release releases)
+    (fold (match-lambda*
+           (((key . value) result)
+            (cond ((release-version? key)
+                   (match result
+                     (#f
+                      (cons key value))
+                     ((newest . _)
+                      (if (version>? key newest)
+                          (cons key value)
+                          result))))
+                  (else
+                   result))))
+          #f
+          releases))
+
+  (define (find-version-release releases version)
+    (find (match-lambda
+            ((key . value)
+             (string=? key version)))
+          releases))
 
   (guard (c ((http-get-error? c)
              (if (= 404 (http-get-error-code c))
@@ -92,20 +130,9 @@ not be determined."
       (match json
         (#(4 releases _ ...)
          (let* ((releases (assoc-ref releases upstream-name))
-                (latest   (fold (match-lambda*
-                                  (((key . value) result)
-                                   (cond ((even-minor-version? key)
-                                          (match result
-                                            (#f
-                                             (cons key value))
-                                            ((newest . _)
-                                             (if (version>? key newest)
-                                                 (cons key value)
-                                                 result))))
-                                         (else
-                                          result))))
-                                #f
-                                releases)))
+                (latest (if version
+                            (find-version-release releases version)
+                            (find-latest-release releases))))
            (and latest
                 (jsonish->upstream-source upstream-name latest))))))))
 
@@ -114,4 +141,4 @@ not be determined."
    (name 'gnome)
    (description "Updater for GNOME packages")
    (pred (url-prefix-predicate "mirror://gnome/"))
-   (latest latest-gnome-release)))
+   (import import-gnome-release)))

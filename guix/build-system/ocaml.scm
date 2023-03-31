@@ -25,13 +25,14 @@
   #:use-module (guix build-system)
   #:use-module (guix build-system gnu)
   #:use-module (guix packages)
-  #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
   #:export (%ocaml-build-system-modules
             package-with-ocaml4.07
             strip-ocaml4.07-variant
             package-with-ocaml4.09
             strip-ocaml4.09-variant
+            package-with-ocaml5.0
+            strip-ocaml5.0-variant
             default-findlib
             default-ocaml
             lower
@@ -110,6 +111,18 @@
 (define (default-ocaml4.09-dune)
   (let ((module (resolve-interface '(gnu packages ocaml))))
     (module-ref module 'ocaml4.09-dune)))
+
+(define (default-ocaml5.0)
+  (let ((ocaml (resolve-interface '(gnu packages ocaml))))
+    (module-ref ocaml 'ocaml-5.0)))
+
+(define (default-ocaml5.0-findlib)
+  (let ((module (resolve-interface '(gnu packages ocaml))))
+    (module-ref module 'ocaml5.0-findlib)))
+
+(define (default-ocaml5.0-dune)
+  (let ((module (resolve-interface '(gnu packages ocaml))))
+    (module-ref module 'ocaml5.0-dune)))
 
 (define* (package-with-explicit-ocaml ocaml findlib dune old-prefix new-prefix
                                        #:key variant-property)
@@ -199,6 +212,19 @@ pre-defined variants."
     (inherit p)
     (properties (alist-delete 'ocaml4.09-variant (package-properties p)))))
 
+(define package-with-ocaml5.0
+  (package-with-explicit-ocaml (delay (default-ocaml5.0))
+                               (delay (default-ocaml5.0-findlib))
+                               (delay (default-ocaml5.0-dune))
+                               "ocaml-" "ocaml5.0-"
+                               #:variant-property 'ocaml5.0-variant))
+
+(define (strip-ocaml5.0-variant p)
+  "Remove the 'ocaml5.0-variant' property from P."
+  (package
+    (inherit p)
+    (properties (alist-delete 'ocaml5.0-variant (package-properties p)))))
+
 (define* (lower name
                 #:key source inputs native-inputs outputs system target
                 (ocaml (default-ocaml))
@@ -283,6 +309,7 @@ provides a 'setup.ml' file as its build system."
   (gexp->derivation name builder
                     #:system system
                     #:target #f
+                    #:graft? #f
                     #:guile-for-build guile))
 
 (define ocaml-build-system

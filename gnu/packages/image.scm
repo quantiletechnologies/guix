@@ -8,7 +8,7 @@
 ;;; Copyright © 2015 Amirouche Boubekki <amirouche@hypermove.net>
 ;;; Copyright © 2014, 2017 John Darrington <jmd@gnu.org>
 ;;; Copyright © 2016, 2017, 2018, 2020 Leo Famulari <leo@famulari.name>
-;;; Copyright © 2016, 2017, 2018, 2019, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016-2023 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016–2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2016 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2016, 2017, 2020, 2021, 2022 Arun Isaac <arunisaac@systemreboot.net>
@@ -25,15 +25,16 @@
 ;;; Copyright © 2018 Rutger Helling <rhelling@mykolab.com>
 ;;; Copyright © 2020 Giacomo Leidi <goodoldpaul@autistici.org>
 ;;; Copyright © 2020 R Veera Kumar <vkor@vkten.in>
-;;; Copyright © 2020 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2020, 2023 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2020 Zhu Zihao <all_but_last@163.com>
-;;; Copyright © 2020, 2021 Vinicius Monego <monego@posteo.net>
+;;; Copyright © 2020, 2021, 2022 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2021 Sharlatan Hellseher <sharlatanus@gmail.com>
 ;;; Copyright © 2021 Nicolò Balzarotti <nicolo@nixo.xyz>
 ;;; Copyright © 2021 Alexandr Vityazev <avityazev@posteo.org>
 ;;; Copyright © 2022 Jai Vetrivelan <jaivetrivelan@gmail.com>
 ;;; Copyright © 2022 ( <paren@disroot.org>
+;;; Copyright © 2022-2023 Bruno Victal <mirai@makinata.eu>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -58,6 +59,7 @@
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages boost)
+  #:use-module (gnu packages build-tools)
   #:use-module (gnu packages check)
   #:use-module (gnu packages cmake)
   #:use-module (gnu packages cpp)
@@ -176,12 +178,11 @@ library.  It supports almost all PNG features and is extensible.")
    (license license:zlib)
    (home-page "http://www.libpng.org/pub/png/libpng.html")))
 
-;; libpng-apng should be updated when the APNG patch is released:
-;; <https://bugs.gnu.org/27556>
 (define-public libpng-apng
+  ;; The APNG patch is maintained separately and may lag behind upstream libpng.
   (package
     (name "libpng-apng")
-    (version "1.6.37")
+    (version "1.6.39")
     (source
      (origin
        (method url-fetch)
@@ -194,8 +195,7 @@ library.  It supports almost all PNG features and is extensible.")
                    "ftp://ftp.simplesystems.org/pub/libpng/png/src/history"
                    "/libpng16/libpng-" version ".tar.xz")))
        (sha256
-        (base32
-         "1jl8in381z0128vgxnvn33nln6hzckl7l7j9nqvkaf1m9n1p0pjh"))))
+        (base32 "0dv90dxvmqpk7mbywyjbz8lh08cv4b0ksqp1y62mzvmlf379cihz"))))
     (build-system gnu-build-system)
     (arguments
      `(#:modules ((guix build gnu-build-system)
@@ -213,14 +213,12 @@ library.  It supports almost all PNG features and is extensible.")
                        apng.gz)
                (invoke "sh" "-c"
                        (string-append "gunzip < " apng.gz " > the-patch"))
-               (apply-patch "the-patch")
-               #t)))
+               (apply-patch "the-patch"))))
          (add-before 'configure 'no-checks
            (lambda _
              (substitute* "Makefile.in"
                (("^scripts/symbols.chk") "")
-               (("check: scripts/symbols.chk") ""))
-             #t)))))
+               (("check: scripts/symbols.chk") "")))))))
     (inputs
      `(("apng" ,(origin
                   (method url-fetch)
@@ -229,7 +227,7 @@ library.  It supports almost all PNG features and is extensible.")
                                   version "/libpng-" version "-apng.patch.gz"))
                   (sha256
                    (base32
-                    "1dh0250mw9b2hx7cdmnb2blk7ddl49n6vx8zz7jdmiwxy38v4fw2"))))))
+                    "1z8cx011a2c7vagwgi92rbmky1wi8awmrdldqh9f5k80pbmbdi2a"))))))
     (native-inputs
      (list libtool))
     ;; libpng.la says "-lz", so propagate it.
@@ -603,7 +601,7 @@ collection of tools for doing simple manipulations of TIFF images.")
 (define-public leptonica
   (package
     (name "leptonica")
-    (version "1.80.0")
+    (version "1.83.1")
     (source
      (origin
        (method git-fetch)
@@ -612,7 +610,7 @@ collection of tools for doing simple manipulations of TIFF images.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "12ddln72z5l3icz0i9rpsfkg5xik8fcwcn8lb0cp3jigjxi8gvkg"))))
+        (base32 "1j7qf9flb48q0aymf0yx9rypy3bs6hfjcln08zmy8qn2qcjzrmvi"))))
     (build-system gnu-build-system)
     (native-inputs
      (list gnuplot ;needed for test suite
@@ -621,33 +619,31 @@ collection of tools for doing simple manipulations of TIFF images.")
            libtool
            pkg-config))
     (inputs
-     `(("giflib" ,giflib)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libtiff" ,libtiff)
-       ("libwebp" ,libwebp)
-       ("openjpeg" ,openjpeg)
-       ("zlib" ,zlib)))
+     (list giflib
+           libjpeg-turbo
+           libpng
+           libtiff
+           libwebp
+           openjpeg
+           zlib))
     (arguments
-     '(#:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'patch-reg-wrapper
-           (lambda _
-             (substitute* "prog/reg_wrapper.sh"
-               ((" /bin/sh ")
-                (string-append " " (which "sh") " "))
-               (("which gnuplot")
-                "true"))
-             #t))
-         (add-after 'install 'provide-absolute-giflib-reference
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out"))
-                   (giflib (assoc-ref inputs "giflib")))
-               ;; Add an absolute reference to giflib to avoid propagation.
-               (with-directory-excursion (string-append out "/lib")
-                 (substitute* '("liblept.la" "pkgconfig/lept.pc")
-                   (("-lgif") (string-append "-L" giflib "/lib -lgif"))))
-               #t))))))
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'patch-reg-wrapper
+            (lambda _
+              (substitute* "prog/reg_wrapper.sh"
+                ((" /bin/sh ")
+                 (string-append " " (which "sh") " "))
+                (("which gnuplot")
+                 "true"))))
+          (add-after 'install 'provide-absolute-giflib-reference
+            (lambda _
+              (let ((giflib #$(this-package-input "giflib")))
+                ;; Add an absolute reference to giflib to avoid propagation.
+                (with-directory-excursion (string-append #$output "/lib")
+                  (substitute* '("libleptonica.la" "pkgconfig/lept.pc")
+                    (("-lgif") (string-append "-L" giflib "/lib -lgif"))))))))))
     (home-page "http://www.leptonica.com/")
     (synopsis "Library and tools for image processing and analysis")
     (description
@@ -658,6 +654,39 @@ seedfill and connected components, image transformations combining changes in
 scale and pixel depth, and pixelwise masking, blending, enhancement, and
 arithmetic ops.")
     (license license:bsd-2)))
+
+(define-public leptonica-1.80
+  (package
+    (inherit leptonica)
+    (name "leptonica")
+    (version "1.80.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/DanBloomberg/leptonica")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "12ddln72z5l3icz0i9rpsfkg5xik8fcwcn8lb0cp3jigjxi8gvkg"))))
+    (arguments
+     (substitute-keyword-arguments (package-arguments leptonica)
+       ((#:tests? _ #t)
+        ;; The pngio_reg test fails, probably because the libpng used is
+        ;; newer.
+        #f)
+       ((#:phases phases '%standard-phases)
+        #~(modify-phases #$phases
+            (replace 'provide-absolute-giflib-reference
+              (lambda _
+                (let ((giflib #$(this-package-input "giflib")))
+                  ;; Add an absolute reference to giflib to avoid propagation.
+                  ;; This is the same as for the parent package, but at that
+                  ;; time the file name was 'liblept.la, not libleptonica.la.
+                  (with-directory-excursion (string-append #$output "/lib")
+                    (substitute* '("liblept.la" "pkgconfig/lept.pc")
+                      (("-lgif")
+                       (string-append "-L" giflib "/lib -lgif")))))))))))))
 
 (define-public jbig2dec
   (package
@@ -948,7 +977,7 @@ compose, and analyze GIF images.")
                     (format #f "EXECINPUT=~a~%" execinput)))
                  (invoke "sh" "testit.sh"))))))))
     (native-inputs (list drm-tools)) ;for tests
-    (home-page "http://libuemf.sourceforge.net/")
+    (home-page "https://libuemf.sourceforge.net/")
     (synopsis "Library for working with WFM, EMF and EMF+ images")
     (description "The libUEMF library is a portable C99 implementation for
 reading and writing @acronym{WFM, Windows Metafile}, @acronym{EMF, Enhanced
@@ -978,7 +1007,7 @@ Metafile}, and @acronym{EMF+, Enhanced Metafile Plus} files.")
 (define-public imlib2
   (package
     (name "imlib2")
-    (version "1.9.0")
+    (version "1.9.1")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -986,7 +1015,7 @@ Metafile}, and @acronym{EMF+, Enhanced Metafile Plus} files.")
                     "/imlib2-" version ".tar.xz"))
               (sha256
                (base32
-                "0l662h74i3mzl5ligj1352rf8bf48drasj97wygr2037gk5fijas"))))
+                "0hsdfs7wa5f7fwb5nfgqzvf29bp59rgy0i0c4m6mvgpzpww408ja"))))
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags (list "--disable-static")))
@@ -1273,7 +1302,7 @@ language bindings to VIGRA.")
 (define-public libwebp
   (package
     (name "libwebp")
-    (version "1.2.0")
+    (version "1.2.2")
     (source
      (origin
        ;; No tarballs are provided for >0.6.1.
@@ -1284,14 +1313,14 @@ language bindings to VIGRA.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "1rgblphsd56033w7lpkrzl7m5w0fi7wavxri1ayzlg8fhpmmqp4k"))))
+         "1khqkm5j9aiii9jfsbxzzyz3x33sifzcx537cyjyb3a2g2rl969k"))))
     (build-system gnu-build-system)
     (inputs
-     `(("freeglut" ,freeglut)
-       ("giflib" ,giflib)
-       ("libjpeg" ,libjpeg-turbo)
-       ("libpng" ,libpng)
-       ("libtiff" ,libtiff)))
+     (list freeglut
+           giflib
+           libjpeg-turbo
+           libpng
+           libtiff))
     (native-inputs
      (list autoconf automake libtool))
     (arguments
@@ -1326,9 +1355,7 @@ channels.")
     (build-system gnu-build-system)
     (propagated-inputs
      ;; These are all in the 'Libs.private' field of libmng.pc.
-     `(("lcms" ,lcms)
-       ("libjpeg" ,libjpeg-turbo)
-       ("zlib" ,zlib)))
+     (list lcms libjpeg-turbo zlib))
     (home-page "https://www.libmng.com/")
     (synopsis "Library for handling MNG files")
     (description
@@ -1423,7 +1450,7 @@ and XMP metadata of images in various formats.")
     (description "Developer's Image Library (DevIL) is a library to develop
 applications with support for many types of images.  DevIL can load, save,
 convert, manipulate, filter and display a wide variety of image formats.")
-    (home-page "http://openil.sourceforge.net")
+    (home-page "https://openil.sourceforge.net")
     (license license:lgpl2.1+)))
 
 (define-public jasper
@@ -1520,32 +1547,32 @@ differences in file encoding, image quality, and other small variations.")
                 "18bxlhbdc3zsmxj84i417xjh0q28kv26q449k23n0a72ldwziix2"))
               (patches (list (search-patch "steghide-fixes.patch")))))
     (build-system gnu-build-system)
-    (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("libtool" ,libtool)
-       ("perl" ,perl)))                 ;for tests
-    (inputs
-     `(("libmhash" ,libmhash)
-       ("libmcrypt" ,libmcrypt)
-       ("libjpeg" ,libjpeg-turbo)
-       ("zlib" ,zlib)))
     (arguments
-     `(#:make-flags '("CXXFLAGS=-fpermissive")    ;required for MHashPP.cc
-
-       #:phases (modify-phases %standard-phases
-                  (add-before 'configure 'set-perl-search-path
-                    (lambda _
-                      ;; Work around "dotless @INC" build failure.
-                      (setenv "PERL5LIB"
-                              (string-append (getcwd) "/tests:"
-                                             (getenv "PERL5LIB")))
-                      #t)))))
-    (home-page "http://steghide.sourceforge.net")
-    (synopsis "Image and audio steganography")
+     (list #:make-flags
+           #~(list "CXXFLAGS=-fpermissive")  ; required for MHashPP.cc
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-before 'configure 'set-perl-search-path
+                 (lambda _
+                   ;; Work around "dotless @INC" build failure.
+                   (setenv "PERL5LIB"
+                           (string-append (getcwd) "/tests:"
+                                          (getenv "PERL5LIB"))))))))
+    (native-inputs
+     (list gettext-minimal libtool perl))
+    (inputs
+     (list libjpeg-turbo libmhash libmcrypt zlib))
+    (home-page "https://steghide.sourceforge.net")
+    (synopsis "`Hide' (nonconfidential) data in image or audio files")
     (description
-     "Steghide is a program to hide data in various kinds of image and audio
-files (known as @dfn{steganography}).  Neither color nor sample frequencies are
-changed, making the embedding resistant against first-order statistical tests.")
+     "Steghide is a program to `hide' data in various kinds of image and audio
+files.  This practice is known as @dfn{steganography}, but the method used by
+steghide is not very secure and should not be used where security is at stake.
+Even if a password is used, steghide offers little plausible deniability.
+
+Nonetheless, neither color nor sample frequencies are changed, making the
+embedding resistant against first-order statistical tests not aimed
+specifically at this tool.")
     (license license:gpl2+)))
 
 (define-public optipng
@@ -1584,7 +1611,7 @@ changed, making the embedding resistant against first-order statistical tests.")
 files to a smaller size, without losing any information.  This program
 also converts external formats (BMP, GIF, PNM and TIFF) to optimized
 PNG, and performs PNG integrity checks and corrections.")
-    (home-page "http://optipng.sourceforge.net/")
+    (home-page "https://optipng.sourceforge.net/")
     (license license:zlib)))
 
 (define-public imgp
@@ -1760,7 +1787,7 @@ and decompress to 32-bit and big-endian pixel buffers (RGBX, XBGR, etc.).")
 files in the nifti-1 data format - a binary file format for storing
 medical image data, e.g. magnetic resonance image (MRI) and functional MRI
 (fMRI) brain images.")
-    (home-page "http://niftilib.sourceforge.net")
+    (home-page "https://niftilib.sourceforge.net")
     (license license:public-domain)))
 
 (define-public gpick
@@ -1938,22 +1965,23 @@ lightweight animated-GIF viewer, and @command{gifdiff} compares two GIFs for
 identical visual appearance.")
    (license license:gpl2+)))
 
-;; 1.0.7 is buggy and reverted in git repository.
 (define-public jp2a
   (package
     (name "jp2a")
-    (version "1.0.6")
+    (version "1.1.1")
     (source
      (origin
        (method url-fetch)
-       (uri (string-append "mirror://debian/pool/main/j/jp2a/jp2a_"
-                           version ".orig.tar.gz"))
+       (uri (string-append "https://github.com/Talinx/jp2a/releases/download/v"
+                           version "/jp2a-" version ".tar.gz"))
         (sha256
          (base32
-          "076frk3pa16s4r1b10zgy81vdlz0385zh3ykbnkaij25jn5aqc09"))))
+          "10kwhh1a0ivrzagl2vcxrbqmlr2q8x29ymqwzchpiriy6xqxck8l"))))
     (build-system gnu-build-system)
     (inputs
-     (list curl libjpeg-turbo ncurses))
+     (list curl libpng libjpeg-turbo ncurses))
+    (native-inputs
+     (list doxygen))
     (home-page "https://csl.name/jp2a/")
     (synopsis "Convert JPEG images to ASCII")
     (description
@@ -2032,7 +2060,7 @@ to the standard output.  It works well together with grim.")
                             "/share/X11/rgb.txt"))))
     (inputs (list xorg-rgb libpng))
     (native-inputs (list pngsuite))
-    (home-page "http://sng.sourceforge.net")
+    (home-page "https://sng.sourceforge.net")
     (synopsis "Markup language for representing PNG contents")
     (description "SNG (Scriptable Network Graphics) is a minilanguage designed
 specifically to represent the entire contents of a PNG (Portable Network
@@ -2156,7 +2184,7 @@ This package can be used to create @code{favicon.ico} files for web sites.")
 (define-public libavif
   (package
     (name "libavif")
-    (version "0.9.2")
+    (version "0.11.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -2165,42 +2193,82 @@ This package can be used to create @code{favicon.ico} files for web sites.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1yxmgjlxm1srm98zyj79bj8r8vmg67daqnq0ggcvxknq54plkznk"))))
+                "02zmb62g0yx6rfz4w1isyzfrckv5i7dzyz26rp2mspbx9w6v8j4r"))))
     (build-system cmake-build-system)
     (arguments
-     `(#:configure-flags '("-DAVIF_CODEC_AOM=ON" "-DAVIF_CODEC_DAV1D=ON"
-                           ,@(if (string-prefix? "x86_64"
-                                                 (or (%current-target-system)
-                                                     (%current-system)))
-                                 '("-DAVIF_CODEC_RAV1E=ON")
-                                 '())
-                           "-DAVIF_BUILD_TESTS=ON")
-       #:phases
-       (modify-phases %standard-phases
-         (replace 'check
-           (lambda _
-             (invoke "./aviftest" "../source/tests/data")))
-         (add-after 'install 'install-readme
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (doc (string-append out "/share/doc/libavif-" ,version)))
-               (install-file "../source/README.md" doc)))))))
+     (list
+      #:modules '((guix build cmake-build-system)
+                  (guix build utils)
+                  (srfi srfi-26))
+      #:configure-flags
+      #~(list "-DAVIF_CODEC_AOM=ON" "-DAVIF_CODEC_DAV1D=ON"
+              #$@(if (this-package-input "rav1e")
+                   '("-DAVIF_CODEC_RAV1E=ON")
+                   '())
+              "-DAVIF_BUILD_TESTS=ON" "-DAVIF_ENABLE_GTEST=ON"
+              "-DAVIF_BUILD_APPS=ON" "-DAVIF_BUILD_GDK_PIXBUF=ON")
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-before 'configure 'patch-thumbnailer
+            (lambda _
+              (substitute* "contrib/gdk-pixbuf/avif.thumbnailer.in"
+                (("@CMAKE_INSTALL_FULL_BINDIR@/gdk-pixbuf-thumbnailer")
+                 (string-append #$gdk-pixbuf "/bin/gdk-pixbuf-thumbnailer")))))
+          (add-after 'install 'install-readme
+            (lambda _
+              (let ((doc (string-append #$output "/share/doc/libavif-" #$version)))
+                (install-file "../source/README.md" doc))))
+          (add-after 'install 'split
+            (lambda _
+              (let* ((avifenc  (string-append #$output       "/bin/avifenc"))
+                     (avifenc* (string-append #$output:tools "/bin/avifenc"))
+                     (avifdec  (string-append #$output       "/bin/avifdec"))
+                     (avifdec* (string-append #$output:tools "/bin/avifdec"))
+
+                     (thumbnailer    (string-append
+                                      #$output
+                                      "/share/thumbnailers/avif.thumbnailer"))
+                     (thumbnailer*   (string-append
+                                      #$output:pixbuf-loader
+                                      "/share/thumbnailers/avif.thumbnailer"))
+                     (pixbuf-loader  (string-append
+                                      #$output
+                                      "/lib/gdk-pixbuf-2.0/2.10.0/loaders/"
+                                      "libpixbufloader-avif.so"))
+                     (pixbuf-loader* (string-append
+                                      #$output:pixbuf-loader
+                                      "/lib/gdk-pixbuf-2.0/2.10.0/loaders/"
+                                      "libpixbufloader-avif.so")))
+                (mkdir-p (string-append #$output:tools "/bin"))
+                (for-each (compose mkdir-p
+                                   (cut string-append
+                                        #$output:pixbuf-loader <>))
+                          '("/share/thumbnailers"
+                            "/lib/gdk-pixbuf-2.0/2.10.0/loaders/"))
+
+                (for-each (lambda (old new)
+                            (copy-file old new)
+                            (delete-file old)
+                            (chmod new #o555))
+                          (list avifenc avifdec
+                                thumbnailer pixbuf-loader)
+                          (list avifenc* avifdec*
+                                thumbnailer* pixbuf-loader*))))))))
+    (native-inputs (list googletest pkg-config))
     (inputs
-     `(("dav1d" ,dav1d)
-       ("libaom" ,libaom)
-       ;; XXX: rav1e depends on rust, which currently only works on x86_64.
-       ;; See also the related configure flag when changing this.
-       ,@(if (string-prefix? "x86_64" (or (%current-target-system)
-                                          (%current-system)))
-             `(("rav1e" ,rav1e))
-             '())))
+     (append
+      (if (member (%current-system) (package-transitive-supported-systems rav1e))
+        (list rav1e) '())
+      (list dav1d libaom zlib libpng libjpeg-turbo gdk-pixbuf)))
+    (outputs (list "out"
+                   "tools"  ; avifenc & avifdec
+                   "pixbuf-loader"))
     (synopsis "Encode and decode AVIF files")
     (description "Libavif is a C implementation of @acronym{AVIF, the AV1 Image
 File Format}.  It can encode and decode all YUV formats and bit depths supported
 by AOM, including with alpha.")
     (home-page "https://github.com/AOMediaCodec/libavif")
-    (license (list license:bsd-2    ; libavif itself
-                   license:expat)))) ; cJSON in the test suite
+    (license (list license:bsd-2))))
 
 (define-public libheif
   (package
@@ -2235,57 +2303,56 @@ Format) file format decoder and encoder.")
     (license license:lgpl3+)))
 
 (define-public libjxl
-  (let ((commit "b7076f1869914eee47b3eae107750f3a3ce43a76")
-        (revision "0"))
-    (package
-      (name "libjxl")
-      (version (git-version "0.6.1" revision commit))
-      (source
-       (origin
-         (method git-fetch)
-         (uri (git-reference
-               (url "https://github.com/libjxl/libjxl")
-               (commit commit)
-               (recursive? #t)))
-         (file-name (git-file-name name version))
-         (sha256
-          (base32 "0jx0hkd2nk15mmnzlk7y7fp644w336il7nsnp5yhf14j8zfaiqz8"))
-         (modules '((guix build utils)))
-         (snippet
-          ;; Delete the bundles that will not be used. libjxl bundles LCMS,
-          ;; which is in Guix, but a newer version is required.
-          '(begin
-             (for-each (lambda (directory)
-                         (delete-file-recursively
-                          (string-append "third_party/" directory)))
-                       '("brotli" "googletest" "highway"))))))
-      (build-system cmake-build-system)
-      (arguments
-       `(#:configure-flags
-         (list "-DJPEGXL_FORCE_SYSTEM_GTEST=true"
-               "-DJPEGXL_FORCE_SYSTEM_BROTLI=true"
-               ;; "-DJPEGXL_FORCE_SYSTEM_LCMS2=true" ; requires lcms@2.13
-               "-DJPEGXL_FORCE_SYSTEM_HWY=true")))
-      (native-inputs
-       (list asciidoc doxygen googletest pkg-config python))
-      (inputs
-       (list freeglut
-             gflags
-             giflib
-             google-brotli
-             google-highway
-             imath
-             ;; lcms ; requires lcms@2.13
-             libavif
-             libjpeg-turbo
-             libpng
-             libwebp
-             openexr))
-      (home-page "https://github.com/libjxl/libjxl")
-      (synopsis "JPEG XL image format reference implementation")
-      (description "This package contains a reference implementation of JPEG XL
+  (package
+    (name "libjxl")
+    (version "0.7.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/libjxl/libjxl")
+             (commit (string-append "v" version))
+             (recursive? #t)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1ysh7kd30wwnq0gc1l8c0j9b6wzd15k0kkvfaacjvjqcz11lnc7l"))
+       (modules '((guix build utils)))
+       (snippet
+        ;; Delete the bundles that will not be used. libjxl bundles LCMS,
+        ;; which is in Guix, but a newer version is required.
+        '(begin
+           (for-each (lambda (directory)
+                       (delete-file-recursively
+                        (string-append "third_party/" directory)))
+                     '("brotli" "googletest" "highway"))))))
+    (build-system cmake-build-system)
+    (arguments
+     `(#:configure-flags
+       (list "-DJPEGXL_FORCE_SYSTEM_GTEST=true"
+             "-DJPEGXL_FORCE_SYSTEM_BROTLI=true"
+             ;; "-DJPEGXL_FORCE_SYSTEM_LCMS2=true" ; requires lcms@2.13
+             "-DJPEGXL_FORCE_SYSTEM_HWY=true")))
+    (native-inputs
+     (list asciidoc doxygen googletest pkg-config python))
+    (inputs
+     (list freeglut
+           gflags
+           giflib
+           imath
+           ;; lcms ; requires lcms@2.13
+           libavif
+           libjpeg-turbo
+           libpng
+           libwebp
+           openexr))
+    ;; These are in Requires.private of libjxl.pc.
+    (propagated-inputs
+     (list brotli google-highway))
+    (home-page "https://github.com/libjxl/libjxl")
+    (synopsis "JPEG XL image format reference implementation")
+    (description "This package contains a reference implementation of JPEG XL
 (encoder and decoder).")
-      (license license:bsd-3))))
+    (license license:bsd-3)))
 
 (define-public mtpaint
   (package
@@ -2325,7 +2392,7 @@ Format) file format decoder and encoder.")
        (list "intl"                     ; build internationalized version
              "man")                     ; build the man page
        #:tests? #f))                    ; no test suite
-    (home-page "http://mtpaint.sourceforge.net/")
+    (home-page "https://mtpaint.sourceforge.net/")
     (synopsis "Create pixel art and manipulate digital images")
     (description
      "Mtpaint is a graphic editing program which uses the GTK+ toolkit.
@@ -2397,7 +2464,7 @@ Wacom-style graphics tablets.")
 (define-public phockup
   (package
     (name "phockup")
-    (version "1.9.0")
+    (version "1.9.2")
     (source
      (origin
        (method git-fetch)
@@ -2406,8 +2473,7 @@ Wacom-style graphics tablets.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32
-         "1xs2h3nj19wsfffl87akinx14drk5nn2svjwyj0csv10apk0q4pp"))))
+        (base32 "0j4mnsy12bhsmd80vgqknv004xbqd165y8gpalw87gp8i8xv172r"))))
     (build-system copy-build-system)
     (arguments
      `(#:install-plan '(("src" "share/phockup/")
@@ -2416,12 +2482,18 @@ Wacom-style graphics tablets.")
        (modify-phases %standard-phases
          (add-after 'unpack 'configure
            (lambda* (#:key inputs #:allow-other-keys)
-             (substitute* (list "src/dependency.py" "src/exif.py")
-               (("'exiftool'")
-                (string-append "'" (search-input-file inputs "/bin/exiftool") "'")))))
+             (substitute* (list "src/dependency.py"
+                                "src/exif.py")
+               (("'exiftool")
+                (string-append "'" (search-input-file inputs "bin/exiftool"))))))
          (add-before 'install 'check
            (lambda _
-             (invoke "pytest")))
+             ;; Test without PATH to make sure ‘exiftool’ is properly found.
+             (let ((path (getenv "PATH"))
+                   (pytest (which "pytest")))
+               (setenv "PATH" "")
+               (invoke pytest)
+               (setenv "PATH" path))))
          (add-after 'install 'install-bin
            (lambda* (#:key outputs #:allow-other-keys)
              (let ((out (assoc-ref outputs "out")))

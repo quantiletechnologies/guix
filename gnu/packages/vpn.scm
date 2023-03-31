@@ -50,6 +50,7 @@
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system go)
   #:use-module (guix build-system linux-module)
+  #:use-module (guix build-system pyproject)
   #:use-module (guix build-system python)
   #:use-module (guix build-system qt)
   #:use-module (guix utils)
@@ -709,17 +710,19 @@ and probably others.")
 (define-public openconnect-sso
   (package
     (name "openconnect-sso")
-    (version "0.7.3")
+    (version "0.8.0")
     (source
       (origin
-        (method url-fetch)
-        (uri (pypi-uri "openconnect-sso" version))
+        (method git-fetch)
+        (uri (git-reference
+               (url "https://github.com/vlaci/openconnect-sso")
+               (commit (string-append "v" version))))
+        (file-name (git-file-name name version))
         (sha256
-         (base32 "065s5c8q80jh0psdw7694nlabwpra7aw6yc4jlgsc9vxx8rx2na1"))))
-    (build-system python-build-system)
+         (base32 "0l214qxhxx214628mcg6rmbzbzna7mxj5l7rah9q4vvcd88ymp39"))))
+    (build-system pyproject-build-system)
     (arguments
-     `(#:tests? #f  ; Tests not included, building from git requires poetry.
-       #:phases
+     `(#:phases
        (modify-phases %standard-phases
          (add-after 'unpack 'patch-openconnect
            (lambda* (#:key inputs #:allow-other-keys)
@@ -728,11 +731,7 @@ and probably others.")
                 (string-append "\""
                                (search-input-file inputs "/sbin/openconnect")
                                "\"")))))
-         (replace 'check
-           (lambda* (#:key tests? #:allow-other-keys)
-             (when tests?
-               (invoke "pytest" "-v"))))
-         (add-after 'install 'wrap-qt-process-path
+         (add-after 'check 'wrap-qt-process-path
            (lambda* (#:key inputs outputs #:allow-other-keys)
              (let* ((out (assoc-ref outputs "out"))
                     (bin (string-append out "/bin/openconnect-sso"))
@@ -744,13 +743,14 @@ and probably others.")
                  `("QTWEBENGINEPROCESS_PATH" = (,qt-process-path)))))))))
     (inputs
      (list openconnect
+           poetry
            python-attrs
            python-colorama
            python-keyring
            python-lxml
            python-prompt-toolkit
            python-requests
-           python-pyqt-without-qtwebkit
+           python-pyqt
            python-pyqtwebengine
            python-pysocks
            python-pyxdg
@@ -758,7 +758,9 @@ and probably others.")
            python-toml
            qtwebengine-5))
     (native-inputs
-     (list python-pytest python-setuptools-scm))
+     (list python-pytest
+           python-pytest-asyncio
+           python-pytest-httpserver))
     (home-page "https://github.com/vlaci/openconnect-sso")
     (synopsis "OpenConnect wrapper script supporting Azure AD (SAMLv2)")
     (description
@@ -794,7 +796,7 @@ this process.  It is compatible with Fortinet VPNs.")
 (define-public openvpn
   (package
     (name "openvpn")
-    (version "2.5.7")
+    (version "2.5.8")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -802,7 +804,7 @@ this process.  It is compatible with Fortinet VPNs.")
                     version ".tar.gz"))
               (sha256
                (base32
-                "0s1yq530j4i4kicgvsxgl532vyn03gfhlxfdnsb43j05k4w0ld08"))))
+                "1cixqm4gn2d1v8qkbww75j30fzvxz13gc7whcmz54i0x4fvibwx6"))))
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags '("--enable-iproute2=yes")))
@@ -1197,3 +1199,31 @@ public keys and can roam across IP addresses.")
      "xl2tpd is an implementation of the Layer 2 Tunnelling Protocol (RFC 2661).
 L2TP allows you to tunnel PPP over UDP.")
     (license license:gpl2)))
+
+(define-public vpn-slice
+  (package
+    (name "vpn-slice")
+    (version "0.16.1")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "vpn-slice" version))
+              (sha256
+               (base32
+                "1anfx4hn2ggm6sbwqmqx68s3l2rjcy4z4l038xqb440jnk8jvl18"))))
+    (build-system python-build-system)
+    (inputs (list python-dnspython python-setproctitle))
+    (home-page "https://github.com/dlenski/vpn-slice")
+    (synopsis "Split tunneling replacement for vpnc-script")
+    (description "vpn-slice is a replacement for @command{vpnc-script} used by
+@code{openconnect} and @code{vpnc}.  Instead of trying to copy the behavior of
+standard corporate VPN clients, which normally reroute all your network
+traffic through the VPN, vpn-slice tries to minimize your contact with an
+intrusive VPN.  This is also known as a split-tunnel VPN, since it splits your
+traffic between the VPN tunnel and your normal network interfaces.
+
+By default, vpn-slice only routes traffic for specific hosts or subnets
+through the VPN.  It automatically looks up named hosts, using the VPN's DNS
+servers, and adds entries for them to your @file{/etc/hosts} (which it cleans
+up after VPN disconnection), however it does not otherwise alter your
+@file{/etc/resolv.conf} at all.")
+    (license license:gpl3+)))

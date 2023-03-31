@@ -2,7 +2,7 @@
 ;;; Copyright © 2019 Pierre Neidhardt <mail@ambrevar.xyz>
 ;;; Copyright © 2020 Vincent Legoll <vincent.legoll@gmail.com>
 ;;; Copyright © 2019, 2020 Jan Wielkiewicz <tona_kosmicznego_smiecia@interia.pl>
-;;; Copyright © 2020, 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2020, 2021, 2022, 2023 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -45,8 +45,10 @@
   #:use-module (gnu packages python)
   #:use-module (gnu packages qt)
   #:use-module (gnu packages serialization)
+  #:use-module (gnu packages sphinx)
   #:use-module (gnu packages sqlite)
   #:use-module (gnu packages telephony)
+  #:use-module (gnu packages texinfo)
   #:use-module (gnu packages tls)
   #:use-module (gnu packages upnp)
   #:use-module (gnu packages version-control)
@@ -57,7 +59,7 @@
   #:use-module (gnu packages xiph)
   #:use-module (gnu packages xorg)
   #:use-module (gnu packages)
-  #:use-module (guix build-system cmake)
+  #:use-module (guix build-system copy)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system qt)
   #:use-module (guix download)
@@ -66,32 +68,26 @@
   #:use-module (guix packages)
   #:use-module (guix utils))
 
-(define %jami-version "20220726.1515.da8d1da")
+(define %jami-version "20230206.0")
 
 (define %jami-sources
   ;; Return an origin object of the tarball release sources archive of the
   ;; Jami project.
   (origin
     (method url-fetch)
-    (uri (string-append "https://dl.jami.net/release/tarballs/jami_"
-                        %jami-version
-                        ".tar.gz"))
+    (uri (string-append "https://dl.jami.net/release/tarballs/jami-"
+                        %jami-version ".tar.gz"))
     (modules '((guix build utils)))
     (snippet
-     `(begin
-        ;; Delete multiple MiBs of bundled tarballs.  The contrib directory
-        ;; contains the custom patches for pjproject and other libraries used
-        ;; by Jami.
-        (delete-file-recursively "daemon/contrib/tarballs")
-        ;; Remove the git submodule directories of unused Jami clients.
-        (for-each delete-file-recursively '("client-android"
-                                            "client-ios"
-                                            "client-macosx"
-                                            "plugins"))))
+     ;; Delete multiple MiBs of bundled tarballs.  The daemon/contrib
+     ;; directory contains the custom patches for pjproject and other
+     ;; libraries used by Jami.
+     '(delete-file-recursively "daemon/contrib/tarballs"))
     (sha256
      (base32
-      "1zx0i9aw8jsba3bjc5r4pkkybm8c0lyz420ciq89vsswd48gfdhg"))
-    (patches (search-patches "jami-fix-esc-bug.patch"))))
+      "1fx7c6q8j0x3q8cgzzd4kpsw3npqggsi1n493cv1jg7v5d01d3jz"))
+    (patches (search-patches "jami-disable-integration-tests.patch"
+                             "jami-libjami-headers-search.patch"))))
 
 ;; Jami maintains a set of patches for some key dependencies (currently
 ;; pjproject and ffmpeg) of Jami that haven't yet been integrated upstream.
@@ -103,22 +99,20 @@
         (invoke "tar" "-xvf" #$%jami-sources
                 "-C" patches-directory
                 "--strip-components=5"
-                (string-append "jami-project/daemon/contrib/src/"
-                               dep-name))
-        (for-each
-         (lambda (file)
-           (invoke "patch" "--force" "--ignore-whitespace" "-p1" "-i"
-                   (string-append patches-directory "/"
-                                  file ".patch")))
-         patches))))
+                "--wildcards"
+                (string-append "jami-*/daemon/contrib/src/" dep-name))
+        (for-each (lambda (f)
+                    (invoke "patch" "--force" "--ignore-whitespace" "-p1" "-i"
+                            (string-append patches-directory "/" f ".patch")))
+                  patches))))
 
 (define-public pjproject-jami
-  (let ((commit "e1f389d0b905011e0cb62cbdf7a8b37fc1bcde1a")
-        (revision "0"))
+  (let ((commit "20e00fcdd16459444bae2bae9c0611b63cf87297")
+        (revision "2"))
     (package
       (inherit pjproject)
       (name "pjproject-jami")
-      (version (git-version "2.11" revision commit))
+      (version (git-version "2.12" revision commit))
       (source (origin
                 (inherit (package-source pjproject))
                 ;; The Jami development team regularly issues patches to
@@ -133,7 +127,7 @@
                 (file-name (git-file-name name version))
                 (sha256
                  (base32
-                  "0inpmyb6mhrzr0g309d6clkc99lddqdvyf9xajz0igvgp9pvgpza"))))
+                  "1g8nkb5ln5y208k2hhmlcddv2dzf6plfrsvi4x8sa7iwgb4prgb8"))))
       (arguments
        (substitute-keyword-arguments (package-arguments pjproject)
          ((#:phases phases '%standard-phases)
@@ -149,10 +143,12 @@
                    '("0009-add-config-site")))))))))))
 
 ;; The following variables are configure flags used by ffmpeg-jami.  They're
-;; from the jami-project/daemon/contrib/src/ffmpeg/rules.mak file.  We try to
-;; keep it as close to the official Jami package as possible, to provide all
-;; the codecs and extra features that are expected (see:
-;; https://review.jami.net/plugins/gitiles/ring-daemon/+/refs/heads/master/contrib/src/ffmpeg/rules.mak)
+;; from the jami/daemon/contrib/src/ffmpeg/rules.mak file.  We try to keep it
+;; as close to the official Jami package as possible, to provide all the
+;; codecs and extra features that are expected (see:
+;; https://review.jami.net/plugins/gitiles/jami-daemon/+/refs/heads/master/contrib/src/ffmpeg/rules.mak).
+;; An exception are the ffnvcodec-related switches, which is not packaged in
+;; Guix and would not work with Mesa.
 (define %ffmpeg-default-configure-flags
   '("--disable-everything"
     "--enable-zlib"
@@ -344,48 +340,35 @@
     "--enable-encoder=mjpeg_vaapi"
     "--enable-encoder=hevc_vaapi"))
 
-;; ffnvcodec is not supported on ARM; enable it only for the i386 and x86_64
-;; architectures.
-(define %ffmpeg-linux-x86-configure-flags
-  '("--arch=x86"
-    "--enable-cuvid"
-    "--enable-ffnvcodec"
-    "--enable-nvdec"
-    "--enable-nvenc"
-    "--enable-hwaccel=h264_nvdec"
-    "--enable-hwaccel=hevc_nvdec"
-    "--enable-hwaccel=vp8_nvdec"
-    "--enable-hwaccel=mjpeg_nvdec"
-    "--enable-encoder=h264_nvenc"
-    "--enable-encoder=hevc_nvenc"))
-
-;; This procedure composes the configure flags list for ffmpeg-jami.
 (define (ffmpeg-compose-configure-flags)
-  (define (system=? s)
-    (string-prefix? s (%current-system)))
-
-  `(,@%ffmpeg-default-configure-flags
-    ,@(if (string-contains (%current-system) "linux")
-          (if (or (system=? "i686")
-                  (system=? "x86_64"))
-              (append %ffmpeg-linux-configure-flags
-                      %ffmpeg-linux-x86-configure-flags)
-              %ffmpeg-linux-configure-flags)
-          '())))
+  "Compose the configure flag lists of ffmpeg-jami."
+  #~(append '#$%ffmpeg-default-configure-flags
+            (if (string-contains #$(%current-system) "linux")
+                '#$%ffmpeg-linux-configure-flags
+                '())))
 
 (define-public ffmpeg-jami
-  (package/inherit ffmpeg
+  (package
+    (inherit ffmpeg-5)
     (name "ffmpeg-jami")
+    ;; XXX: Use a slightly older version, otherwise the
+    ;; 'libopusdec-enable-FEC' patch doesn't apply.
+    (version "5.0.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "https://ffmpeg.org/releases/ffmpeg-"
+                                  version ".tar.xz"))
+              (sha256
+               (base32
+                "0yq0jcdc4qm5znrzylj3dsicrkk2n3n8bv28vr0a506fb7iglbpg"))))
+    (outputs '("out" "debug"))
     (arguments
-     (substitute-keyword-arguments (package-arguments ffmpeg)
-       ((#:tests? _ #f)
-        ;; The "rtp_ext_abs_send_time" patch causes the 'lavf-mov_rtphint'
-        ;; test to fail (see:
-        ;; https://git.jami.net/savoirfairelinux/jami-daemon/-/issues/685).
-        ;; TODO: Try to disable just this test.
-        #f)
-       ((#:configure-flags '())
-        (ffmpeg-compose-configure-flags))
+     (substitute-keyword-arguments (package-arguments ffmpeg-5)
+       ((#:configure-flags _ '())
+        #~(cons* "--disable-static"
+                 "--enable-shared"
+                 "--disable-stripping"
+                 #$(ffmpeg-compose-configure-flags)))
        ((#:phases phases)
         #~(modify-phases #$phases
             (add-after 'unpack 'apply-patches
@@ -399,39 +382,62 @@
                              "rtp_ext_abs_send_time"
                              "libopusdec-enable-FEC"
                              "libopusenc-reload-packet-loss-at-encode"
-                             "screen-sharing-x11-fix"))))))))))
+                             "screen-sharing-x11-fix"))))
+            (add-after 'apply-patches 'disable-problematic-tests
+              (lambda _
+                ;; The "rtp_ext_abs_send_time" patch causes the 'lavf-mov_rtphint'
+                ;; test to fail (see:
+                ;; https://git.jami.net/savoirfairelinux/jami-daemon/-/issues/685).
+                (substitute* "tests/fate/lavf-container.mak"
+                  (("mov mov_rtphint ismv")
+                   "mov ismv")
+                  (("fate-lavf-mov_rtphint:.*") ""))))))))
+    (inputs (modify-inputs (package-inputs ffmpeg-5)
+              (replace "libvpx" libvpx-next)
+              (replace "libx264" libx264-next)))))
 
 (define-public libjami
   (package
     (name "libjami")
     (version %jami-version)
     (source %jami-sources)
-    (outputs '("out" "debug"))
+    (outputs '("out" "bin" "debug"))    ;"bin' contains jamid
     (build-system gnu-build-system)
     (arguments
      (list
-      ;; The test suite fails to link when building libjami as a shared
-      ;; library: "sip_account/sip_empty_offer.cpp:228:1: error: no
-      ;; declaration matches ‘void
-      ;; jami::test::SipEmptyOfferTest::onCallStateChange(const string&, const
-      ;; string&, jami::test::CallData&)’".
-      #:tests? #f
       ;; The agent links the daemon binary with libguile, which enables the
       ;; execution of test plans described in Scheme.  It may be useful in
       ;; user scripts too, until more general purpose Scheme bindings are made
       ;; available (see: test/agent/README.md).
-      #:configure-flags #~(list "--enable-agent"
-                                "--enable-debug"
-                                ;; Disable static libraries to avoid
-                                ;; installing a 98 MiB archive.
-                                "--disable-static")
+      #:configure-flags #~(list "--enable-agent" "--enable-debug")
       #:make-flags #~(list "V=1")       ;build verbosely
       #:phases
       #~(modify-phases %standard-phases
           (add-after 'unpack 'change-directory/maybe
             (lambda _
               ;; Allow building from the tarball or a git checkout.
-              (false-if-exception (chdir "daemon")))))))
+              (false-if-exception (chdir "daemon"))))
+          (add-after 'install 'delete-static-libraries
+            ;; Remove 100+ MiB of static libraries.  "--disable-static" cannot
+            ;; be used as the test suite requires access to private symbols
+            ;; not included in the shared library.
+            (lambda _
+              (for-each delete-file
+                        (find-files (string-append #$output "/lib")
+                                    "\\.a$"))))
+          (add-after 'install 'move-jamid
+            ;; This nearly halves the size of the main output (from 1566.2 MiB
+            ;; to 833.6 MiB), due to not depending on dbus-c++ and its large
+            ;; dependencies.
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let ((libexec (string-append #$output:bin "/libexec"))
+                    (share (string-append #$output:bin "/share")))
+                (mkdir-p libexec)
+                (rename-file (search-input-file outputs "libexec/jamid")
+                             (string-append libexec "/jamid"))
+                (mkdir-p share)
+                (rename-file (search-input-directory outputs "share/dbus-1")
+                             (string-append share "/dbus-1"))))))))
     (inputs
      (list alsa-lib
            asio
@@ -467,13 +473,11 @@
 Jami core functionality.  Jami is a secure and distributed voice, video and
 chat communication platform that requires no centralized server and leaves the
 power of privacy in the hands of the user.  It supports the SIP and IAX
-protocols, as well as decentralized calling using P2P-DHT.")
+protocols, as well as decentralized calling using P2P-DHT.  The @samp{\"bin\"}
+output contains the D-Bus daemon (@command{jamid}) as well as the Jami D-Bus
+service definitions.")
     (home-page "https://jami.net/")
     (license license:gpl3+)))
-
-;;; Remove when 2023 comes.
-(define-public libring
-  (deprecated-package "libring" libjami))
 
 (define-public jami
   (package
@@ -485,21 +489,14 @@ protocols, as well as decentralized calling using P2P-DHT.")
     (arguments
      (list
       #:qtbase qtbase
-      #:tests? #f                       ;see comment below
       #:configure-flags
-      ;; The test suite fails to build with:
-      ;; "../../../client-qt/src/app/utils.h:29:10: fatal error: QLabel: No
-      ;; such file or directory".
-      #~(list "-DENABLE_TESTS=OFF"
-              "-DWITH_WEBENGINE=OFF" ;reduce transitive closure size by 450 MiB
+      #~(list "-DENABLE_TESTS=ON"
+              ;; Disable the webengine since it grows the closure size by
+              ;; about 450 MiB and requires more resources.
+              "-DWITH_WEBENGINE=OFF"
               ;; Use libwrap to link directly to libjami instead of
               ;; communicating via D-Bus to jamid, the Jami daemon.
-              "-DENABLE_LIBWRAP=ON"
-              (string-append "-DLIBJAMI_XML_INTERFACES_DIR="
-                             #$(this-package-input "libjami")
-                             "/share/dbus-1/interfaces")
-              (string-append "-DLIBJAMI_INCLUDE_DIR="
-                             #$(this-package-input "libjami") "/include/jami"))
+              "-DENABLE_LIBWRAP=ON")
       #:phases
       #~(modify-phases %standard-phases
           (add-after 'unpack 'change-directory/maybe
@@ -515,26 +512,43 @@ protocols, as well as decentralized calling using P2P-DHT.")
                  (string-append "const char VERSION_STRING[] = \""
                                 #$version "\";\n"
                                 anchor)))))
-          (add-after 'change-directory/maybe 'patch-source
-            (lambda _
-              (substitute* "src/libclient/CMakeLists.txt"
-                ;; Fix submitted upstream (see:
-                ;; https://review.jami.net/c/jami-client-qt/+/21830).
-                (("target_link_libraries\\(\\$\\{LIBCLIENT_NAME} qtwrapper.*" all)
-                 (string-append
-                  all "  target_link_libraries(${LIBCLIENT_NAME} avutil)\n"))))))))
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                (setenv "QT_QPA_PLATFORM" "offscreen")
+                (setenv "QT_QUICK_BACKEND" "software")
+                ;; The tests require a writable HOME.
+                (setenv "HOME" "/tmp")
+
+                (display "Running unittests...\n")
+                (invoke "tests/unittests" "-mutejamid")
+
+                ;; XXX: There are currently multiple failures with the
+                ;; functional tests (see:
+                ;; https://git.jami.net/savoirfairelinux/jami-client-qt/-/issues/883),
+                ;; so the code below is disabled for now.
+                ;;
+                ;; (display "Running functional tests...\n")
+                ;; ;; This is to allow building from the source tarball or
+                ;; ;; directly from the git repository.
+                ;; (let  ((tests-qml (if (file-exists? "../client-qt/tests")
+                ;;                       "../client-qt/tests/qml"
+                ;;                       "../tests/qml")))
+                ;;   (invoke "tests/qml_tests" "-mutejamid"
+                ;;           "-input" tests-qml))
+                ))))))
     (native-inputs
      (list googletest
            pkg-config
            python
            qttools
-           doxygen
-           graphviz
            vulkan-headers))
     (inputs
      (list ffmpeg-jami
+           glib                         ;for integration with GNOME
            libjami
            libnotify
+           libxcb
            libxkbcommon
            network-manager
            qrencode
@@ -554,10 +568,48 @@ It supports the SIP and IAX protocols, as well as decentralized calling using
 P2P-DHT.")
     (license license:gpl3+)))
 
-;;; Remove when 2023 comes.
-(define-public jami-gnome
-  (deprecated-package "jami-gnome" jami))
-
-;;; Remove when 2023 comes.
-(define-public jami-qt
-  (deprecated-package "jami-qt" jami))
+(define-public jami-docs
+  ;; There aren't any tags, so use the latest commit.
+  (let ((revision "0")
+        (commit "b00574bcc46538c4b405b5edb3b43bf5404ff511"))
+    (package
+      (name "jami-docs")
+      (version (git-version "0.0.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://git.jami.net/savoirfairelinux/jami-docs")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0iayi6yrb6djk0l2dwdxzlsga9c18ra8adplh8dad3zjdi75wnsq"))))
+      (build-system copy-build-system)
+      (arguments
+       (list
+        #:phases
+        #~(modify-phases %standard-phases
+            (add-after 'unpack 'build
+              (lambda _
+                (invoke "make" "info" "html" "man" "LANGS="
+                        "-j" (number->string
+                              (parallel-job-count))))))
+        #:install-plan
+        ;; TODO: Install localized info manuals and HTML.
+        ''(("_build/out/texinfo/jami.info" "share/info/")
+           ("_build/out/html" "share/doc/jami/")
+           ("_build/out/man/jami.1" "share/man/man1/"))))
+      (native-inputs
+       (list python
+             python-myst-parser
+             python-sphinx
+             python-sphinx-rtd-theme
+             texinfo))
+      (home-page "https://git.jami.net/")
+      (synopsis "Documentation for Jami")
+      (description "This package contains the documentation of Jami.  Jami is
+a secure and distributed voice, video and chat communication platform that
+requires no centralized server and leaves the power of privacy in the hands of
+the user.  It supports the SIP and IAX protocols, as well as decentralized
+calling using P2P-DHT.")
+      (license license:fdl1.3+))))

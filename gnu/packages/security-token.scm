@@ -17,6 +17,7 @@
 ;;; Copyright © 2022 John Kehayias <john.kehayias@protonmail.com>
 ;;; Copyright © 2022 Petr Hodina <phodina@protonmail.com>
 ;;; Copyright © 2022 Denis 'GNUtoo' Carikli <GNUtoo@cyberdimension.org>
+;;; Copyright © 2023 Jake Leporte <jakeleporte@outlook.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -48,6 +49,7 @@
   #:use-module (guix build-system python)
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages base)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages curl)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
@@ -121,7 +123,7 @@ readers and is needed to communicate with such devices through the
 (define-public eid-mw
   (package
     (name "eid-mw")
-    (version "5.1.6")
+    (version "5.1.8")
     (source
      (origin
        (method git-fetch)
@@ -130,7 +132,7 @@ readers and is needed to communicate with such devices through the
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "19sq9bs1580zrjw0cxykdvrm1rwfw8n0vbvy9kdjnykjjnb7g6g1"))))
+        (base32 "11jf828ag8y5iykcfjmjc3n8g5mchpl3fxkr110civ3qqbdiw882"))))
     (build-system glib-or-gtk-build-system)
     (native-inputs
      (list autoconf
@@ -253,6 +255,62 @@ from a client application and provide access to the desired reader.")
                    license:isc                  ; src/strlcat.c src/strlcpy.c
                    license:gpl3+))))            ; src/spy/*
 
+(define-public pcsc-tools
+  (package
+    (name "pcsc-tools")
+    (version "1.6.2")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://salsa.debian.org/rousseau/pcsc-tools.git/")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "16kvw8y5289fp6y3z8l5w61gfrk872kd500a27sgr5k5dpr9vfbk"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'patch-data-paths
+                 (lambda _
+                   (substitute* "ATR_analysis"
+                     (((string-append
+                        "\"/usr/local/pcsc/smartcard_list.txt\", "
+                        "\"/usr/share/pcsc/smartcard_list.txt\", "
+                        "\"/usr/local/share/pcsc/smartcard_list.txt\""))
+                      (string-append "\"" #$output
+                                     "/share/pcsc/smartcard_list.txt\"")))
+                   (substitute* "ATR_analysis.1p"
+                     (("^(\\.IR \\./) ,\n$" _ cwd)
+                      (string-append cwd "\n"))
+                     (("^\\.I /usr/local/pcsc/\n$")
+                      "")
+                     (("/usr/share/pcsc/\n$")
+                      (string-append #$output "/share/pcsc/\n")))))
+               (add-after 'patch-shebangs 'wrap-programs
+                 (lambda _
+                   (for-each
+                    (lambda (prog)
+                      (wrap-program (string-append #$output "/bin/" prog)
+                        `("PERL5LIB" = (,(getenv "PERL5LIB")))))
+                    '("ATR_analysis" "gscriptor" "scriptor"))
+                   (wrap-program (string-append #$output "/bin/gscriptor")
+                     `("GI_TYPELIB_PATH" = (,(getenv "GI_TYPELIB_PATH")))))))))
+    (native-inputs (list autoconf automake libtool gnu-gettext pkg-config))
+    (inputs (list bash-minimal          ;for wrap-program
+                  perl
+                  perl-gtk3
+                  pcsc-lite
+                  perl-pcsc))
+    (synopsis "Smart cards and PC/SC tools")
+    (description "This package provides the @command{pcsc_scan},
+@command{ATR_analysis}, @command{scriptor}, and @command{gscriptor} commands,
+which are useful tools to test a PC/SC driver, card or reader or send commands
+in a friendly environment (text or graphical user interface).")
+    (home-page "https://pcsc-tools.apdu.fr/")
+    (license license:gpl2+)))
+
 (define-public ykclient
   (package
     (name "ykclient")
@@ -310,7 +368,7 @@ website for more information about Yubico and the YubiKey.")
                   (string-append
                    "DEFAULT_PCSC_PROVIDER=\"" libpcsclite "\"")))))))))
     (inputs
-     (list readline openssl pcsc-lite ccid))
+     (list readline openssl-1.1 pcsc-lite ccid))
     (native-inputs
      (list libxslt docbook-xsl pkg-config))
     (home-page "https://github.com/OpenSC/OpenSC/wiki")
@@ -725,7 +783,7 @@ an unprivileged user.")
 (define-public libnitrokey
   (package
     (name "libnitrokey")
-    (version "3.6")
+    (version "3.8")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -734,16 +792,16 @@ an unprivileged user.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0ngrvv61d36vvfwrfg0qxmp2wg18v4aaldwvwzgxvwaysjswhn9r"))))
+                "1b95l979y353rli54a79z18iya9bza83cymcjpndr01q1pb134zm"))))
     (build-system cmake-build-system)
     (arguments
      ;; These tests do not require any device to be connected
      '(#:configure-flags (list "-DCOMPILE_OFFLINE_TESTS=ON")))
-    (native-inputs (list catch-framework2 doxygen graphviz pkg-config))
+    (native-inputs (list catch2 doxygen graphviz pkg-config))
     (inputs (list hidapi libusb))
     (home-page "https://github.com/Nitrokey/libnitrokey")
     (synopsis "Communication library for Nitrokey")
-    (description "This packate provides communication library for Nitrokey.")
+    (description "This package provides a communication library for Nitrokey.")
     (license license:lgpl3+)))
 
 (define-public cppcodec
@@ -763,7 +821,7 @@ an unprivileged user.")
     (arguments
      '(#:configure-flags (list "-DBUILD_TESTING=on")))
     (native-inputs (list pkg-config qttools-5))
-    (inputs (list catch-framework2))
+    (inputs (list catch2))
     (home-page "https://github.com/tplgy/cppcodec")
     (synopsis "Header library to encode/decode base64, base64url, etc.")
     (description "This package provides library to encode/decode base64,
@@ -891,7 +949,7 @@ phone is required.")
 (define-public libfido2
   (package
     (name "libfido2")
-    (version "1.11.0")
+    (version "1.12.0")
     (source
      (origin
        (method git-fetch)
@@ -899,21 +957,21 @@ phone is required.")
              (url "https://github.com/Yubico/libfido2")
              (commit version)))
        (file-name (git-file-name name version))
-       (sha256 (base32 "1nk4irmdg36930lgc892qmlmd4whz4fq37wknkdx5ap57i5x18i6"))))
+       (sha256 (base32 "123rysl21bmgk6rmpgg5s21a5ksmxnn1hc32ws88h7z0q4icvj87"))))
     (native-inputs (list pkg-config))
     (inputs (list eudev libcbor openssl zlib))
     (build-system cmake-build-system)
     (arguments
-     `(#:configure-flags
-       (list (string-append
+     (list
+      #:configure-flags
+      #~(list (string-append
                "-DPKG_CONFIG_EXECUTABLE="
                (search-input-file %build-inputs
                                   (string-append
-                                    "/bin/" ,(pkg-config-for-target)))))
-       #:phases
-       (modify-phases %standard-phases
-         ;; regress tests enabled only for debug builds
-         (delete 'check))))
+                                   "/bin/" #$(pkg-config-for-target))))
+              (string-append "-DUDEV_RULES_DIR=" #$output "/lib/udev/rules.d"))
+      ;; regress tests enabled only for debug builds
+      #:tests? #f))
     (synopsis "Library functionality and command-line tools for FIDO devices")
     (description "libfido2 provides library functionality and command-line
 tools to communicate with a FIDO device over USB, and to verify attestation

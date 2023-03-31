@@ -2,9 +2,10 @@
 #+TITLE: Guix NEWS – history of user-visible changes
 #+STARTUP: content hidestars
 
-Copyright © 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+Copyright © 2013-2022 Ludovic Courtès <ludo@gnu.org>
 Copyright © 2016, 2017, 2018 Ricardo Wurmus <rekado@elephly.net>
-Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+Copyright © 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+Copyright © 2022 Mathieu Othacehe <othacehe@gnu.org>
 
   Copying and distribution of this file, with or without modification,
   are permitted in any medium without royalty provided the copyright
@@ -16,22 +17,120 @@ Please send Guix bug reports to bug-guix@gnu.org.
 ** Package management
 *** New ‘guix home’ command, for home environment management
 *** New ‘guix shell’ command, the successor to ‘guix environment’
+*** New ‘guix system edit’ command, to edit services
 *** New ‘deb’ format for the ‘guix pack’ command
 *** New ‘guix import minetest’ command, to import Minetest extensions
+*** New ‘guix import elm’ command, to import Elm packages
+*** New ‘guix import egg’ command, to import CHICKEN egg packages
+*** New ‘guix import hexpm’ command, to import Erlang and Elixir packages
+*** New 'guix style' command, to auto-format package definitions
 *** ‘guix import texlive’ rewritten to use the TLPDB as its source
 *** ‘guix import elpa’ now supports the non-GNU ELPA repository
 *** ‘guix import pypi’ can now import a specific version
 *** ‘guix import cran’ can now import a specific version
 *** New updater (see ‘guix refresh’): ‘generic-git’
 *** ‘guix graph’ has a new ‘--max-depth’ option
+*** ‘guix deploy’ has a new ‘--execute’ option
+*** ‘guix shell’ has a new ‘--emulate-fhs’ option
+*** ‘guix shell’ has a new ‘--symlink’ option
 *** ‘--with-commit’ option now accepts strings returned by ‘git describe’
+*** ‘--with-source’ option now applied recursively
+*** Align tabular data output by commands like ‘guix package --list-available’
+*** Improved ‘guix import go’ importer via a new PEG parser
+*** Improved Software Heritage downloader
+*** New 'web.archive.org’ download fall-back
+*** Various performance enhancements
+*** New ‘--tune’ package transformation option
+*** ‘guix refresh’ ‘-L’ option is repurposed to ‘load-path’ modification
+*** ‘guix system image’ supersedes the ‘docker-image’ sub-command
+
 ** Distribution
 *** The installation script can now enable local substitute servers discovery
+*** The installation script can now customize the Bash prompt for Guix
 *** More control over boot-time file system checks and repairs
 *** XFS file systems can be created by the installer and mounted by label/UUID
 *** New interface for declaring swap space
+*** GNOME is now at version 42
+*** TeX Live is now at version 2021
+*** Multiple TeX Live trees can now be used via GUIX_TEXMF
+*** Python modules are searched in GUIX_PYTHONPATH instead of PYTHONPATH
+*** Python is now faster thanks to being built with optimizations
+*** The Rust bootstrap now starts from 1.54 instead of 1.19
+*** Most Python 2 packages have been removed
+*** Guix now makes use of parallel xz compression
+*** Faster shared libraries discovery via a per-package dynamic linker cache
+*** Package inputs can now be plain package lists
+*** A package origin can now be a single file rather than an archive
+*** New sanity-check phase to detect Python packaging problems at build time
+*** Fetching sources can now fall-back to use Disarchive
+*** Improved CI and infrastructure
+*** Multiple cross-compilation tooling addition and fixes
+*** Many Qt 6 modules are now packaged
+*** Configuring setuid programs is now more flexible
+*** Add support for the XFS file system
+*** Add partial support for LUKS2 headers when using GRUB
+*** GDM now supports Wayland
+*** Guix System static networking support is improved
+*** The installer final configuration is prettified
+*** The installer external command handling is improved
+*** The installer now has a crash dump upload mechanism
+*** Emacs now supports native compilation
+*** GRUB bootloader now supports chain-loading
+*** The GNU Shepherd was upgraded to 0.9.3
+*** The init RAM disk honors more arguments—e.g. ‘root’ and ‘rootflags’
+*** ‘guix system image’ can now generate WSL images
+*** The mcron task scheduler logs now contain the jobs exit statuses
+*** Chromium extensions are now built in a deterministic fashion
+*** The ‘rsync’ service lets you specify individual “modules”
+*** New services
+
+anonip, bitmask, fail2ban, gitile, greetd, jami, lightdm, log-cleanup,
+nar-herder, opendht, rasdaemon, samba, seatd, strongswan, wsdd
+
+*** 5311 new packages
+
+*** 6573 package updates
+
+Noteworthy updates:
+bash 5.1.8, binutils 2.37, clojure 1.11.1, cups 2.3.3op2, emacs 28.2,
+enlightenment 0.25.4, gcc-toolchain 12.2.0, gdb 12.1, ghc 8.10.7,
+gimp 2.10.32, glibc 2.33, gnome 42.4, gnupg 2.2.32, go 1.19.1, guile 3.0.8,
+icecat 102.5.0-guix0-preview1, icedtea 3.19.0, inkscape 1.2.1, julia 1.6.7,
+libreoffice 7.4.3.2, linux-libre 6.0.10, ocaml 4.14.0, octave 7.2.0,
+openjdk 18, perl 5.34.0, python2 2.7.18, python 3.9.9, racket 8.7,
+rust 1.60.0, r 4.2.2, sbcl 2.2.10, shepherd 0.9.3, xorg-server 21.1.4
+
 ** Programming interfaces
+*** Package input fields can now be plain package lists
+*** G-expressions can now be used in build phases
+*** New ‘modify-inputs’ macro to ease customizing a list of package inputs
+*** New ‘this-package-input’ and ‘this-package-native-input’ macros
+*** Build phases are no longer required to return a boolean
 *** (guix records) now supports “field sanitizers”
+*** Various improvements to the helpers in (gnu service configuration)
+*** ‘texlive-union’ is now deprecated in favor of ‘texlive-updmap.cfg’
+*** New (guix cpu) module
+*** New (guix least-authority) module
+*** New (guix platform) module
+*** New (guix read-print) module
+
+It provides a comment-preserving reader and a comment-preserving
+pretty-printer smarter than (ice-9 pretty-print).
+
+*** New ‘channel-build-system’
+
+This build system lets you build Guix instances from channel specifications,
+similar to how 'guix time-machine' would do it, as regular packages.
+
+*** New ‘pyproject-build-system’
+
+This is an extension of ‘python-build-system’ with support for PEP-517 and
+‘pyproject.toml’ files.  It may eventually get merged back into
+‘python-build-system’.
+
+*** New ‘elm-build-system’
+*** New ‘rebar-build-system’
+
 ** Noteworthy bug fixes
 *** Fall back to Software Heritage when cloning a channel
     (<https://issues.guix.gnu.org/44187>)
@@ -43,6 +142,42 @@ Please send Guix bug reports to bug-guix@gnu.org.
     (<https://issues.guix.gnu.org/24937>)
 *** File system flags are validated before system instantiation
     (<https://issues.guix.gnu.org/51425>)
+*** Fonts can now be discovered in any profile via XDG_DATA_DIRS
+    (<https://issues.guix.gnu.org/31403>)
+*** Various Python reproducibility fixes
+*** The installer now supports MSDOS disk labels on UEFI systems
+    (<https://issues.guix.gnu.org/47889>)
+*** The installer can now properly mount FAT16 partitions
+    (<https://issues.guix.gnu.org/48419>)
+*** The installer no longer crashes when deleting a free space partition
+*** Emacs handles major upgrades better without a re-login
+    (<https://issues.guix.gnu.org/47458>)
+*** The bootloader configuration now accepts multiple targets
+    (<https://issues.guix.gnu.org/40997>)
+*** File system mount point is always created when ‘create?’ is true
+    (<https://issues.guix.gnu.org/40158>)
+*** Build the man database only if ‘man-db’ is in the profile
+*** gdk-pixbuf now discovers pixbuf loaders via a search path
+    (<https://issues.guix.gnu.org/50957>)
+*** Gitolite home directory permissions are fixed
+    (https://issues.guix.gnu.org/56444)
+*** The man-db database is indexed via man pages names
+    (https://issues.guix.gnu.org/38838)
+*** ‘chfn’ can now change the user's full name
+    (https://issues.guix.gnu.org/52539)
+*** GNOME Settings Bluetooth panel is now working
+    (https://issues.guix.gnu.org/32166)
+*** Inferiors are now caching store connections
+    (https://issues.guix.gnu.org/48007)
+*** Retry downloads when a substitute has become unavailable
+    (https://issues.guix.gnu.org/57978)
+*** The installer doesn't segfault when removing an extended partition
+*** The installer doesn't ship an older Guix revision
+    (https://issues.guix.gnu.org/53210)
+*** The installer cannot proceed without any non-root user accounts
+    (https://issues.guix.gnu.org/54666)
+*** <operating-system> compiler truly honors the 'system' argument
+    (https://issues.guix.gnu.org/55951)
 
 * Changes in 1.3.0 (since 1.2.0)
 ** Package management
