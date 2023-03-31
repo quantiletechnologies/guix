@@ -335,22 +335,39 @@ rm "$tmpdir/search"
 
 # Verify that the examples can be built.
 for example in gnu/system/examples/*.tmpl; do
-    if echo "$example" | grep hurd; then
-        options="--target=i586-pc-gnu"
-    elif echo "$example" | grep asus; then
-	# 'asus-c201.tmpl' uses 'linux-libre-arm-generic', which is an
-	# ARM-only package.
-        options="--system=armhf-linux"
-    else
-	options=""
-    fi
+    case "$example" in
+	*hurd*)
+            options="--target=i586-pc-gnu";;
+	*asus*)
+	    # 'asus-c201.tmpl' uses 'linux-libre-arm-generic', which is an
+	    # ARM-only package.
+            options="--system=armhf-linux";;
+        *raspberry*)
+	    # The Raspberry Pi templates 'linux-libre-arm64-generic', which is
+	    # an ARM-only package.
+            options="--system=aarch64-linux";;
+	*vm-image*)
+	    # The VM image tries to build 'current-guix' as per 'guix pull'.
+	    # Skip it.
+	    continue
+	    ;;
+	*)
+	    options=""
+	    ;;
+    esac
     guix system -n disk-image $options "$example"
 done
 
+# Make sure the desktop image can be built on major architectures.
+for system in x86_64-linux i686-linux aarch64-linux
+do
+    guix system -n image -s "$system" gnu/system/examples/desktop.tmpl
+done
+
 # Verify that the images can be built.
-guix system -n vm gnu/system/examples/vm-image.tmpl
+guix system -n vm gnu/system/examples/bare-bones.tmpl
 guix system -n image gnu/system/images/pinebook-pro.scm
-guix system -n image -t qcow2 gnu/system/examples/vm-image.tmpl
+guix system -n image -t qcow2 gnu/system/examples/bare-bones.tmpl
 guix system -n image -t iso9660 gnu/system/examples/bare-bones.tmpl
 guix system -n docker-image gnu/system/examples/docker-image.tmpl
 

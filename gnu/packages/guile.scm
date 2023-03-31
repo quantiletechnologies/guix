@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012-2022 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012-2023 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2014 Cyril Roelandt <tipecaml@gmail.com>
 ;;; Copyright © 2014, 2016, 2018 David Thompson <davet@gnu.org>
 ;;; Copyright © 2014, 2017, 2018 Mark H Weaver <mhw@netris.org>
@@ -391,18 +391,19 @@ without requiring the source code to be rewritten.")
 (define-public guile-3.0-latest
   (package
     (inherit guile-3.0)
-    (version "3.0.8")
+    (version "3.0.9")
     (source (origin
               (inherit (package-source guile-3.0))
               (uri (string-append "mirror://gnu/guile/guile-"
                                   version ".tar.xz"))
               (sha256
                (base32
-                "04wagg0zr0sib0w9ly5jm91jplgfigzfgmy8fjdlx07jaq50d9ys"))
-              (patches (search-patches "guile-cross-compilation.patch"))))
+                "03bm1mnfc9kkg2ls942a0js7bxrdzmcffgrgg6anwdmjfan2a9hs"))
+              (patches (search-patches
+                        "guile-fix-invalid-unicode-handling.patch"))))
     (arguments
      (substitute-keyword-arguments (package-arguments guile-3.0)
-       ;; Guile 3.0.8 is bit-reproducible when built in parallel, thanks to
+       ;; Guile 3.0.9 is bit-reproducible when built in parallel, thanks to
        ;; its multi-stage build process for cross-module inlining, except when
        ;; cross-compiling.
        ((#:parallel-build? _ #f)
@@ -420,7 +421,11 @@ without requiring the source code to be rewritten.")
                         "GUILE_OPTIMIZATIONS = -O1 -Oresolve-primitives -Ocps\n")))))
                '())))))))
 
-(define-public guile-3.0/fixed
+;;; The symbol guile-3.0/fixed should be used when guile-3.0 needs fixes
+;;; (security or else) and this deprecation could be removed.
+(define-deprecated/public-alias guile-3.0/fixed guile-3.0/pinned)
+
+(define-public guile-3.0/pinned
   ;; A package of Guile that's rarely changed.  It is the one used in the
   ;; `base' module, and thus changing it entails a full rebuild.
   (package
@@ -431,9 +436,9 @@ without requiring the source code to be rewritten.")
                                                 ;  when heavily loaded)
 
 (define-public guile-next
-  (let ((version "3.0.7")
+  (let ((version "3.0.8")
         (revision "0")
-        (commit "d70c1dbebf9ac0fd45af4578c23983ec4a7da535"))
+        (commit "a1a85581f17dade76a598b48eac7d3d308e3a0a5"))
     (package
       (inherit guile-3.0)
       (name "guile-next")
@@ -447,11 +452,21 @@ without requiring the source code to be rewritten.")
                 (file-name (git-file-name name version))
                 (sha256
                  (base32
-                  "05rsk9lh5kchbav3lwfwgvgybrykqqjmkkc6689fhb3mjr5m3dqj"))))
+                  "1l5zkg0wpchyizq8s4615hkj0n0i029l72k3pq2hha89r3bcn8al"))))
       (arguments
        (substitute-keyword-arguments (package-arguments guile-3.0)
          ((#:phases phases '%standard-phases)
           `(modify-phases ,phases
+             (add-before 'bootstrap 'set-version
+               (lambda _
+                 ;; Tell 'git-version-gen' what version this is, or it will
+                 ;; just pick "UNKNOWN", making it unusable as a replacement
+                 ;; for 'guile-3.0'.  XXX: This is inaccurate when using
+                 ;; '--with-branch' but using (package-version this-package)
+                 ;; wouldn't give us a valid version string.
+                 (call-with-output-file ".tarball-version"
+                   (lambda (port)
+                     (display ,version port)))))
              (add-before 'check 'skip-failing-tests
                (lambda _
                  (substitute* "test-suite/standalone/test-out-of-memory"
@@ -466,7 +481,8 @@ without requiring the source code to be rewritten.")
                   flex
                   gnu-gettext
                   texinfo
-                  gperf)))
+                  gperf)
+         (replace "self" this-package)))
       (synopsis "Development version of GNU Guile"))))
 
 (define* (make-guile-readline guile #:optional (name "guile-readline"))
@@ -665,14 +681,14 @@ specification.  These are the main features:
   (package
     (inherit guile-json-3)
     (name "guile-json")
-    (version "4.7.1")
+    (version "4.7.3")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://savannah/guile-json/guile-json-"
                                   version ".tar.gz"))
               (sha256
                (base32
-                "0hv8jjb6wdhvfrprwdi36125sci1ip4zfflv79hqlz7nh0irld65"))))))
+                "127k2xc07w1gnyqs40z4865l8p3ra5xgpcn569dz04lxsa709fiq"))))))
 
 (define-public guile2.2-json
   (package-for-guile-2.2 guile-json-4))

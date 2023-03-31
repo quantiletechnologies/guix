@@ -1,8 +1,9 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012-2022 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012-2023 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2018 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Maxime Devos <maximedevos@telenet.be>
+;;; Copyright © 2023 Simon Tournier <zimon.toutoune@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -23,7 +24,6 @@
   #:use-module (guix tests)
   #:use-module (guix store)
   #:use-module (guix monads)
-  #:use-module (guix grafts)
   #:use-module (guix gexp)
   #:use-module (guix utils)
   #:use-module ((guix build utils) #:select (tarball?))
@@ -76,6 +76,9 @@
 ;; can trigger builds early.)
 (%graft? #f)
 
+;; When grafting, do not add dependency on 'glibc-utf8-locales'.
+(%graft-with-utf8-locale? #f)
+
 
 (test-begin "packages")
 
@@ -93,6 +96,13 @@
                   (lambda ()
                     (write
                      (dummy-package "foo" (location #f)))))))
+
+(test-equal "license type checking"
+  'bad-license
+  (guard (c ((package-license-error? c)
+             (package-error-invalid-license c)))
+    (dummy-package "foo"
+      (license 'bad-license))))
 
 (test-assert "hidden-package"
   (and (hidden-package? (hidden-package (dummy-package "foo")))
@@ -409,12 +419,15 @@
 (let* ((o (dummy-origin))
        (u (dummy-origin))
        (i (dummy-origin))
+       (j (dummy-origin (patches (list o))))
        (a (dummy-package "a"))
        (b (dummy-package "b" (inputs (list a i))))
        (c (package (inherit b) (source o)))
        (d (dummy-package "d"
             (build-system trivial-build-system)
-            (source u) (inputs (list c)))))
+            (source u) (inputs (list c))))
+       (e (dummy-package "e" (source j)))
+       (f (package (inherit e) (inputs (list u)))))
   (test-assert "package-direct-sources, no source"
     (null? (package-direct-sources a)))
   (test-equal "package-direct-sources, #f source"
@@ -428,6 +441,17 @@
       (and (= (length (pk 's-sources s)) 2)
            (member o s)
            (member i s))))
+  (test-assert "package-direct-sources, with patches"
+    (let ((s (package-direct-sources e)))
+      (and (= (length (pk 's-sources s)) 2)
+           (member o s)
+           (member j s))))
+  (test-assert "package-direct-sources, with patches and inputs"
+    (let ((s (package-direct-sources f)))
+      (and (= (length (pk 's-sources s)) 3)
+           (member o s)
+           (member j s)
+           (member u s))))
   (test-assert "package-transitive-sources"
     (let ((s (package-transitive-sources d)))
       (and (= (length (pk 'd-sources s)) 3)
@@ -616,6 +640,10 @@
          (output (derivation->output-path drv)))
     (build-derivations %store (list drv))
     (call-with-input-file output get-string-all)))
+
+(test-equal "package-upstream-name*"
+  (package-upstream-name* (specification->package "guile-gcrypt"))
+  "gcrypt")
 
 
 ;;;
@@ -1563,6 +1591,24 @@
                               (bag-transitive-inputs bag1))))
     (match (delete-duplicates pythons eq?)
       ((p) (eq? p (rewrite python))))))
+
+(test-assert "package-input-rewriting/spec, hidden package"
+  ;; Hidden packages are not subject to rewriting.
+  (let* ((python  (hidden-package python))
+         (p0      (dummy-package "chbouib"
+                    (build-system trivial-build-system)
+                    (inputs (list python))))
+         (rewrite (package-input-rewriting/spec
+                   `(("python" . ,(const sed)))
+                   #:deep? #t))
+         (p1      (rewrite p0))
+         (bag1    (package->bag p1))
+         (pythons (filter-map (match-lambda
+                                (("python" python) python)
+                                (_ #f))
+                              (bag-transitive-inputs bag1))))
+    (match (delete-duplicates pythons eq?)
+      ((p) (eq? p python)))))
 
 (test-equal "package-input-rewriting/spec, graft"
   (derivation-file-name (package-derivation %store sed))

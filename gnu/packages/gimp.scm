@@ -3,7 +3,7 @@
 ;;; Copyright © 2016, 2018 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2016, 2017, 2018, 2020 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2018, 2019, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
-;;; Copyright © 2018, 2020 Leo Famulari <leo@famulari.name>
+;;; Copyright © 2018 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2018 Thorsten Wilms <t_w_@freenet.de>
 ;;; Copyright © 2020 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2020 Michael Rohleder <mike@rohleder.de>
@@ -175,7 +175,7 @@ of a larger interface.")
 (define-public babl
   (package
     (name "babl")
-    (version "0.1.92")
+    (version "0.1.96")
     (source (origin
               (method url-fetch)
               (uri (list (string-append "https://download.gimp.org/pub/babl/"
@@ -189,7 +189,7 @@ of a larger interface.")
                                         "/babl-" version ".tar.xz")))
               (sha256
                (base32
-                "1hd2i1s7fng33msxiafavk3zb4zb9jk61w8qmmsn6jwl51876rzn"))))
+                "1xj5hlmm834lb84rpjlfxbqnm5piswgzhjas4h8z90x9b7j3yrrk"))))
     (build-system meson-build-system)
     (arguments
      `(#:configure-flags
@@ -215,7 +215,7 @@ provided, as well as a framework to add new color models and data types.")
 (define-public gegl
   (package
     (name "gegl")
-    (version "0.4.36")
+    (version "0.4.42")
     (source
      (origin
        (method url-fetch)
@@ -229,7 +229,7 @@ provided, as well as a framework to add new color models and data types.")
                                  (version-major+minor version)
                                  "/gegl-" version ".tar.xz")))
        (sha256
-        (base32 "19ic3fv0j8ysxxw7bx7gy3l8l8l9ldrvbzxfmmc24w67vh68mmbg"))))
+        (base32 "0bg0vlmj4n9x1291b9fsjqxsal192zlg48pa57f6xid6p863ma5b"))))
     (build-system meson-build-system)
     (arguments
      `(#:configure-flags
@@ -302,6 +302,19 @@ buffers.")
                "doc"))                  ; 9 MiB of gtk-doc HTML
     (arguments
      (list
+      #:modules `((ice-9 popen)
+                  (ice-9 rdelim)
+                  ,@%gnu-build-system-modules)
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'remove-gcc-reference
+            ;; Avoid reference to GCC.
+            (lambda _
+              (let* ((port (open-input-pipe "gcc -v 2>&1 | tail -n 1"))
+                     (cc-version (read-line port)))
+                (close-pipe port)
+                (substitute* "app/gimp-version.c"
+                  (("CC_VERSION") (string-append "\"" cc-version "\"")))))))
       #:configure-flags
       #~(list (string-append "--with-html-dir=" #$output "/share/gtk-doc/html")
 
@@ -549,98 +562,4 @@ MyPaint.")
 tools for healing selections (content-aware fill), enlarging the canvas and
 healing the border, increasing the resolution while adding detail, and
 transferring the style of an image.")
-    (license license:gpl3+)))
-
-(define gegl-for-glimpse
-  ;; Remove this when GIMP commit 2cae9b9acf9da98c4c9990819ffbd5aabe23017e
-  ;; makes it into Glimpse.
-  (package
-    (inherit gegl)
-    (arguments
-     (substitute-keyword-arguments (package-arguments gegl)
-       ((#:phases phases)
-        `(modify-phases ,phases
-           (add-after 'unpack 'refer-to-dot
-             ;; XXX Without ‘dot’ in $PATH, Glimpse would fail to start with an
-             ;; extremely obtuse ‘GEGL operation missing!’ error.
-             (lambda _
-               (substitute* "gegl/gegl-dot.c"
-                 (("\"dot ")
-                  (format #f "\"~a " (which "dot"))))
-               (substitute* "operations/common/introspect.c"
-                 (("g_find_program_in_path \\(\"dot\"\\)")
-                  (format #f "g_strdup (\"~a\")" (which "dot"))))))))))
-    (inputs
-     `(,@(package-inputs gegl)
-       ("graphviz" ,graphviz)))))
-
-(define-public glimpse
-  (package
-    (name "glimpse")
-    (version "0.2.0")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url "https://github.com/glimpse-editor/Glimpse")
-                    (commit (string-append "v" version))))
-              (file-name (git-file-name name version))
-              (sha256
-               (base32
-                "0drngj2xqzxfaag6pc4xjffiw003n4y43x5rb5bf4ziv1ac51dm9"))))
-    (build-system gnu-build-system)
-    (outputs '("out"
-               "doc"))                  ; 9 MiB of gtk-doc HTML
-    (arguments
-     (list
-      #:configure-flags
-      #~(list
-         (string-append "--with-html-dir=" #$output "/share/gtk-doc/html")
-         "--enable-gtk-doc"
-
-         ;; Prevent the build system from running 'gtk-update-icon-cache'
-         ;; which is not needed during the build because Guix runs it at
-         ;; profile creation time.
-         "ac_cv_path_GTK_UPDATE_ICON_CACHE=true"
-
-         ;; Disable automatic network request on startup to check for
-         ;; version updates.
-         "--disable-check-update"
-
-         ;; ./configure requests not to annoy upstream with packaging bugs.
-         "--with-bug-report-url=https://bugs.gnu.org/guix")))
-    (native-inputs
-     (list autoconf
-           automake
-           gtk-doc
-           intltool
-           libtool
-           libxslt                      ;for xsltproc
-           pkg-config
-           `(,glib "bin")))             ;for gdbus-codegen
-    (inputs
-     (list babl
-           glib
-           glib-networking
-           libtiff
-           libwebp
-           libjpeg-turbo
-           atk
-           gexiv2
-           gtk+-2
-           libmypaint
-           mypaint-brushes-1.3
-           libexif                      ;optional, EXIF + XMP support
-           lcms                         ;optional, color management
-           librsvg                      ;optional, SVG support
-           libxcursor                   ;optional, Mouse Cursor support
-           poppler                      ;optional, PDF support
-           poppler-data
-           gegl-for-glimpse))           ;XXX see comment in gegl-for-glimpse
-    (home-page "https://glimpse-editor.github.io/")
-    (synopsis "Glimpse Image Editor")
-    (description "The Glimpse Image Editor is an application for image
-manipulation tasks such as photo retouching, composition and authoring.
-It supports all common image formats as well as specialized ones.  It
-features a highly customizable interface that is extensible via a plugin
-system.  It was forked from the GNU Image Manipulation Program.")
     (license license:gpl3+)))

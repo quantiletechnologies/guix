@@ -1,8 +1,9 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2018, 2019, 2020, 2021, 2023 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2018 Oleg Pykhalov <go.wigust@gmail.com>
 ;;; Copyright © 2020 Ekaitz Zarraga <ekaitz@elenq.tech>
 ;;; Copyright © 2021 Simon Tournier <zimon.toutoune@gmail.com>
+;;; Copyright © 2022 jgart <jgart@dismail.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -119,6 +120,7 @@ Display information about the channels currently in use.\n"))
    (let ((intro (channel-introduction channel)))
      `((name . ,(channel-name channel))
        (url . ,(channel-url channel))
+       (branch . ,(channel-branch channel))
        (commit . ,(channel-commit channel))
        ,@(if intro
              `((introduction
@@ -135,6 +137,7 @@ Display information about the channels currently in use.\n"))
 
   (format port "name: ~a~%" (channel-name channel))
   (format port "url: ~a~%" (channel-url channel))
+  (format port "branch: ~a~%" (channel-branch channel))
   (format port "commit: ~a~%" (channel-commit channel))
   (when intro
     (format port "introductioncommit: ~a~%"
@@ -151,10 +154,10 @@ within a Git checkout."
          (channel (repository->guix-channel (dirname program))))
     (unless channel
       (report-error (G_ "failed to determine origin~%"))
-      (display-hint (format #f (G_ "Perhaps this
+      (display-hint (G_ "Perhaps this
 @command{guix} command was not obtained with @command{guix pull}?  Its version
 string is ~a.~%")
-                            %guix-version))
+                    %guix-version)
       (exit 1))
 
     (match fmt

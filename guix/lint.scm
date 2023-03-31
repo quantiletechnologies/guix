@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2014 Cyril Roelandt <tipecaml@gmail.com>
 ;;; Copyright © 2014, 2015 Eric Bavier <bavier@member.fsf.org>
-;;; Copyright © 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013-2023 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015, 2016 Mathieu Lirzin <mthl@gnu.org>
 ;;; Copyright © 2016 Danny Milosavljevic <dannym+a@scratchpost.org>
 ;;; Copyright © 2016 Hartmut Goebel <h.goebel@crazy-compilers.com>
@@ -12,7 +12,7 @@
 ;;; Copyright © 2020 Chris Marusich <cmmarusich@gmail.com>
 ;;; Copyright © 2020 Timothy Sample <samplet@ngyro.com>
 ;;; Copyright © 2021 Xinglu Chen <public@yoctocell.xyz>
-;;; Copyright © 2021 Maxime Devos <maximedevos@telenet.be>
+;;; Copyright © 2021, 2022 Maxime Devos <maximedevos@telenet.be>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -33,7 +33,7 @@
 (define-module (guix lint)
   #:use-module (guix store)
   #:autoload   (guix base16) (bytevector->base16-string)
-  #:use-module (guix base32)
+  #:autoload   (guix base64) (base64-encode)
   #:use-module (guix build-system)
   #:use-module (guix diagnostics)
   #:use-module (guix download)
@@ -46,7 +46,6 @@
                                 gexp->approximate-sexp))
   #:use-module (guix licenses)
   #:use-module (guix records)
-  #:use-module (guix grafts)
   #:use-module (guix upstream)
   #:use-module (guix utils)
   #:use-module (guix memoization)
@@ -59,10 +58,20 @@
   #:use-module ((guix swh) #:hide (origin?))
   #:autoload   (guix git-download) (git-reference?
                                     git-reference-url git-reference-commit)
+  #:autoload   (guix svn-download) (svn-reference?
+                                    svn-reference-url
+                                    svn-reference-user-name
+                                    svn-reference-password
+
+                                    svn-multi-reference?
+                                    svn-multi-reference-url
+                                    svn-multi-reference-user-name
+                                    svn-multi-reference-password)
   #:use-module (guix import stackage)
   #:use-module (ice-9 match)
   #:use-module (ice-9 regex)
   #:use-module (ice-9 format)
+  #:autoload   (rnrs bytevectors) (string->utf8)
   #:use-module (web client)
   #:use-module (web uri)
   #:use-module ((guix build download)
@@ -523,7 +532,8 @@ of a package, and INPUT-NAMES, a list of package specifications such as
   ;; Emit a warning if some inputs of PACKAGE are likely to should not be
   ;; an input at all.
   (let ((input-names '("python-setuptools"
-                       "python-pip")))
+                       "python-pip"
+                       "python-pre-commit")))
     (map (lambda (input)
            (make-warning
             package
@@ -721,8 +731,14 @@ response from URI, and additional details, such as the actual HTTP response.
 TIMEOUT is the maximum number of seconds (possibly an inexact number) to wait
 for connections to complete; when TIMEOUT is #f, wait as long as needed."
   (define headers
-    '((User-Agent . "GNU Guile")
-      (Accept . "*/*")))
+    `((User-Agent . "GNU Guile")
+      (Accept . "*/*")
+      ,@(match (uri-userinfo uri)
+          ((? string? str)                        ;"basic authentication"
+           `((Authorization . ,(string-append "Basic "
+                                              (base64-encode
+                                               (string->utf8 str))))))
+          (_ '()))))
 
   (let loop ((uri     uri)
              (visited '()))
@@ -1130,6 +1146,40 @@ descriptions maintained upstream."
     ((uris ...)
      uris)))
 
+(define (svn-reference-uri-with-userinfo ref)
+  "Return the URI of REF, an <svn-reference> or <svn-multi-reference> object,
+but with an additional 'userinfo' part corresponding to REF's user name and
+password, provided REF's URI is HTTP or HTTPS."
+  ;; XXX: For lack of record type inheritance.
+  (define ->url
+    (if (svn-reference? ref)
+        svn-reference-url
+        svn-multi-reference-url))
+  (define ->user-name
+    (if (svn-reference? ref)
+        svn-reference-user-name
+        svn-multi-reference-user-name))
+  (define ->password
+    (if (svn-reference? ref)
+        svn-reference-password
+        svn-multi-reference-password))
+
+  (let ((uri (string->uri (->url ref))))
+    (if (and (->user-name ref)
+             (memq (uri-scheme uri) '(http https)))
+        (build-uri (uri-scheme uri)
+                   #:userinfo
+                   (string-append (->user-name ref)
+                                  (if (->password ref)
+                                      (string-append
+                                       ":" (->password ref))
+                                      ""))
+                   #:host (uri-host uri)
+                   #:port (uri-port uri)
+                   #:query (uri-query uri)
+                   #:fragment (uri-fragment uri))
+        uri)))
+
 (define (check-source package)
   "Emit a warning if PACKAGE has an invalid 'source' field, or if that
 'source' is not reachable."
@@ -1175,6 +1225,12 @@ descriptions maintained upstream."
          ((git-reference? (origin-uri origin))
           (warnings-for-uris
            (list (string->uri (git-reference-url (origin-uri origin))))))
+         ((or (svn-reference? (origin-uri origin))
+              (svn-multi-reference? (origin-uri origin)))
+          (let ((uri (svn-reference-uri-with-userinfo (origin-uri origin))))
+            (if (memq (uri-scheme uri) '(http https))
+                (warnings-for-uris (list uri))
+                '())))                            ;TODO: handle svn:// URLs
          (else
           '()))
         '())))
@@ -1222,22 +1278,14 @@ descriptions maintained upstream."
 
 (define (check-mirror-url package)
   "Check whether PACKAGE uses source URLs that should be 'mirror://'."
-  (define (check-mirror-uri uri)                  ;XXX: could be optimized
-    (let loop ((mirrors %mirrors))
-      (match mirrors
-        (()
-         #f)
-        (((mirror-id mirror-urls ...) rest ...)
-         (match (find (cut string-prefix? <> uri) mirror-urls)
-           (#f
-            (loop rest))
-           (prefix
-            (make-warning package
-                          (G_ "URL should be \
-'mirror://~a/~a'")
-                          (list mirror-id
-                                (string-drop uri (string-length prefix)))
-                          #:field 'source)))))))
+  (define (check-mirror-uri uri)
+    (define rewritten-uri
+      (uri-mirror-rewrite uri))
+
+    (and (not (string=? uri rewritten-uri))
+         (make-warning package (G_ "URL should be '~a'")
+                       (list rewritten-uri)
+                       #:field 'source)))
 
   (let ((origin (package-source package)))
     (if (and (origin? origin)
@@ -1436,6 +1484,9 @@ the NIST server non-fatal."
                                     'cpe-version)
                          (package-version package))))
         ((force lookup) name version)))))
+
+;; Prevent Guile 3 from inlining this procedure so we can mock it in tests.
+(set! package-vulnerabilities package-vulnerabilities)
 
 (define* (check-vulnerabilities package
                                 #:optional (package-vulnerabilities
@@ -1815,6 +1866,10 @@ them for PACKAGE."
      (description "Validate package descriptions")
      (check       check-description-style))
    (lint-checker
+     (name        'synopsis)
+     (description "Validate package synopses")
+     (check       check-synopsis-style))
+   (lint-checker
      (name        'inputs-should-be-native)
      (description "Identify inputs that should be native inputs")
      (check       check-inputs-should-be-native))
@@ -1878,10 +1933,7 @@ or a list thereof")
 
 (define %network-dependent-checkers
   (list
-   (lint-checker
-     (name        'synopsis)
-     (description "Validate package synopses")
-     (check       check-synopsis-style))
+
    (lint-checker
      (name        'gnu-description)
      (description "Validate synopsis & description of GNU packages")

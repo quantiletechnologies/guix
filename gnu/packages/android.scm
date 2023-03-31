@@ -872,7 +872,7 @@ algorithm.")
        ("libpng" ,libpng)))
     (home-page "https://developer.android.com/studio/command-line/etc1tool.html")
     (synopsis "Encode and decode PNG images to resp. from the ETC1 compression
-standard.")
+standard")
     (description
      "@command{etc1} is a command line utility that lets you encode PNG images
 to the ETC1 compression standard and decode ETC1 compressed images back to
@@ -1195,25 +1195,22 @@ main repository.")
 (define-public fdroidcl
   (package
     (name "fdroidcl")
-    (version "0.5.0")
+    (version "0.7.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
-                     (url "https://github.com/mvdan/fdroidcl")
-                     (commit (string-append "v" version))))
+                    (url "https://github.com/mvdan/fdroidcl")
+                    (commit (string-append "v" version))))
               (file-name (git-file-name name version))
               (sha256
-               (base32 "1rxcdyy2j34z0ql9d62w7ivsch9xihjnpb1z9kgy9q46vl8zhhy0"))))
+               (base32
+                "1s3fszlyyab9gbdrg52zcbafsb1mgb770skg7b3gj7f3pzfnra5n"))))
     (build-system go-build-system)
     (arguments
      `(#:import-path "mvdan.cc/fdroidcl"
-       #:tests? #f  ; TODO: Inputs missing.
+       #:tests? #f                      ;requires internet access
        #:install-source? #f))
-    (inputs
-     (list go-github-com-kr-pretty))
-    ;(native-inputs
-    ; `(("go-github-com-rogpeppe-go-internal-testscript"
-    ;    ,go-github-com-rogpeppe-go-internal-testscript)))
+    (inputs (list go-github-com-kr-pretty go-github-com-schollz-progressbar-v3))
     (synopsis "F-Droid desktop client")
     (description
      "While the Android client integrates with the system with regular update

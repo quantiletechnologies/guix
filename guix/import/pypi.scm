@@ -13,6 +13,7 @@
 ;;; Copyright © 2021 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2022 Vivien Kraus <vivien@planete-kraus.eu>
 ;;; Copyright © 2021 Simon Tournier <zimon.toutoune@gmail.com>
+;;; Copyright © 2022 Hartmut Goebel <h.goebel@crazy-compilers.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -35,7 +36,6 @@
   #:use-module (ice-9 receive)
   #:use-module ((ice-9 rdelim) #:select (read-line))
   #:use-module (srfi srfi-1)
-  #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
@@ -50,13 +50,11 @@
                           find-files
                           invoke))
   #:use-module (guix import utils)
-  #:use-module ((guix download) #:prefix download:)
   #:use-module (guix import json)
   #:use-module (json)
   #:use-module (guix packages)
   #:use-module (guix upstream)
   #:use-module ((guix licenses) #:prefix license:)
-  #:use-module (guix build-system python)
   #:export (parse-requires.txt
             parse-wheel-metadata
             specification->requirement-name
@@ -491,7 +489,7 @@ VERSION, SOURCE-URL, HOME-PAGE, SYNOPSIS, DESCRIPTION, and LICENSE."
 
 (define pypi->guix-package
   (memoize
-   (lambda* (package-name #:key repo version)
+   (lambda* (package-name #:key version #:allow-other-keys)
      "Fetch the metadata for PACKAGE-NAME from pypi.org, and return the
 `package' s-expression corresponding to that package, or #f on failure."
      (let* ((project (pypi-fetch package-name))
@@ -556,15 +554,16 @@ source.  To build it from source, refer to the upstream repository at
          (string-prefix? "https://pypi.org/packages" url)
          (string-prefix? "https://files.pythonhosted.org/packages" url)))))
 
-(define (latest-release package)
-  "Return an <upstream-source> for the latest release of PACKAGE."
+(define* (import-release package #:key (version #f))
+  "Return an <upstream-source> for the latest release of PACKAGE. Optionally
+include a VERSION string to fetch a specific version."
   (let* ((pypi-name    (guix-package->pypi-name package))
          (pypi-package (pypi-fetch pypi-name)))
     (and pypi-package
          (guard (c ((missing-source-error? c) #f))
            (let* ((info    (pypi-project-info pypi-package))
-                  (version (project-info-version info))
-                  (dist    (source-release pypi-package))
+                  (version (or version (project-info-version info)))
+                  (dist    (source-release pypi-package version))
                   (url     (distribution-url dist)))
              (upstream-source
               (urls (list url))
@@ -574,7 +573,7 @@ source.  To build it from source, refer to the upstream repository at
                    #f))
               (input-changes
                (changed-inputs package
-                               (pypi->guix-package pypi-name)))
+                               (pypi->guix-package pypi-name #:version version)))
               (package (package-name package))
               (version version)))))))
 
@@ -583,4 +582,4 @@ source.  To build it from source, refer to the upstream repository at
    (name 'pypi)
    (description "Updater for PyPI packages")
    (pred pypi-package?)
-   (latest latest-release)))
+   (import import-release)))

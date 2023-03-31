@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2015 David Thompson <davet@gnu.org>
-;;; Copyright © 2017, 2018, 2019 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2017-2019, 2022, 2023 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -233,7 +233,7 @@ that host UIDs (respectively GIDs) map to in the namespace."
   ;; The parent process must initialize the user namespace for the child
   ;; before it can boot.  To negotiate this, a pipe is used such that the
   ;; child process blocks until the parent writes to it.
-  (match (socketpair PF_UNIX SOCK_STREAM 0)
+  (match (socketpair PF_UNIX (logior SOCK_CLOEXEC SOCK_STREAM) 0)
     ((child . parent)
      (let ((flags (namespaces->bit-mask namespaces)))
        (match (clone flags)
@@ -404,7 +404,7 @@ load path must be adjusted as needed."
 
 (define (container-excursion pid thunk)
   "Run THUNK as a child process within the namespaces of process PID and
-return the exit status."
+return the exit status, an integer as returned by 'waitpid'."
   (define (namespace-file pid namespace)
     (string-append "/proc/" (number->string pid) "/ns/" namespace))
 
@@ -432,16 +432,29 @@ return the exit status."
                   '("user" "ipc" "uts" "net" "pid" "mnt"))
         (purify-environment)
         (chdir "/")
-        (thunk))))
+
+        ;; Per setns(2), changing the PID namespace only applies to child
+        ;; processes, not to the process itself.  Thus fork so that THUNK runs
+        ;; in the right PID namespace, which also gives it access to /proc.
+        (match (primitive-fork)
+          (0 (call-with-clean-exit thunk))
+          (pid (primitive-exit
+                (match (waitpid pid)
+                  ((_ . status)
+                   (or (status:exit-val status) 127)))))))))
     (pid
      (match (waitpid pid)
        ((_ . status)
-        (status:exit-val status))))))
+        status)))))
 
 (define (container-excursion* pid thunk)
   "Like 'container-excursion', but return the return value of THUNK."
   (match (pipe)
     ((in . out)
+     ;; Make sure IN and OUT are not inherited if THUNK forks + execs.
+     (fcntl in F_SETFD FD_CLOEXEC)
+     (fcntl out F_SETFD FD_CLOEXEC)
+
      (match (container-excursion pid
               (lambda ()
                 (close-port in)

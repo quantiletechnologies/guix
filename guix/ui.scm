@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012-2022 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012-2023 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013, 2018 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;; Copyright © 2014 Cyril Roelandt <tipecaml@gmail.com>
@@ -296,9 +296,22 @@ VARIABLE and return it, or #f if none was found."
 
 (define %hint-color (color BOLD CYAN))
 
-(define* (display-hint message #:optional (port (current-error-port)))
-  "Display MESSAGE, a l10n message possibly containing Texinfo markup, to
-PORT."
+(define (texinfo-quote str)
+  "Quote at signs and braces in STR to obtain its Texinfo represention."
+  (list->string
+   (string-fold-right (lambda (chr result)
+                        (if (memq chr '(#\@ #\{ #\}))
+                            (cons* #\@ chr result)
+                            (cons chr result)))
+                      '()
+                      str)))
+
+(define* (display-hint message
+                       #:key (port (current-error-port))
+                       #:rest arguments)
+  "Display MESSAGE, a l10n message possibly containing Texinfo markup and
+'format' escape, to PORT.  ARGUMENTS is a (possibly empty) list of strings or
+other objects that must match the 'format' escapes in MESSAGE."
   (define colorize
     (if (color-output? port)
         (lambda (str)
@@ -309,7 +322,16 @@ PORT."
   (display
    ;; XXX: We should arrange so that the initial indent is wider.
    (parameterize ((%text-width (max 15 (- (terminal-columns) 5))))
-     (texi->plain-text message))
+     (texi->plain-text (match arguments
+                         (() (format #f message))
+                         (_  (apply format #f message
+                                    (map (match-lambda
+                                           ((? string? str)
+                                            (texinfo-quote str))
+                                           (obj
+                                            (texinfo-quote
+                                             (object->string obj))))
+                                         arguments))))))
    port))
 
 (define* (report-unbound-variable-error args #:key frame)
@@ -324,8 +346,8 @@ arguments."
        (#f
         (display-hint (G_ "Did you forget a @code{use-modules} form?")))
        ((? module? module)
-        (display-hint (format #f (G_ "Did you forget @code{(use-modules ~a)}?")
-                              (module-name module))))))))
+        (display-hint (G_ "Did you forget @code{(use-modules ~a)}?")
+                      (module-name module)))))))
 
 (define (check-module-matches-file module file)
   "Check whether FILE starts with 'define-module MODULE' and print a hint if
@@ -334,10 +356,10 @@ it doesn't."
   ;; definitions and try loading them with 'guix build -L …', so help them
   ;; diagnose the problem.
   (define (hint)
-    (display-hint (format #f (G_ "File @file{~a} should probably start with:
+    (display-hint (G_ "File @file{~a} should probably start with:
 
 @example\n(define-module ~a)\n@end example")
-                          file module)))
+                  file module))
 
   (catch 'system-error
     (lambda ()
@@ -518,7 +540,7 @@ See the \"Application Setup\" section in the manual, for more info.\n"))
   "Display version information for COMMAND and `(exit 0)'."
   (simple-format #t "~a (~a) ~a~%"
                  command %guix-package-name %guix-version)
-  (format #t "Copyright ~a 2022 ~a"
+  (format #t "Copyright ~a 2023 ~a"
           ;; TRANSLATORS: Translate "(C)" to the copyright symbol
           ;; (C-in-a-circle), if this symbol is available in the user's
           ;; locale.  Otherwise, do not translate "(C)"; leave it as-is.  */
@@ -591,6 +613,9 @@ FILE."
 (set! execlp
   (error-reporting-wrapper execlp (filename . args) filename))
 
+(set! mkdir
+  (error-reporting-wrapper mkdir (directory . args) directory))
+
 (define (make-regexp* regexp . flags)
   "Like 'make-regexp' but error out if REGEXP is invalid, reporting the error
 nicely."
@@ -660,12 +685,12 @@ interpreted."
          (name1  (manifest-entry-name (top-most-entry first)))
          (name2  (manifest-entry-name (top-most-entry second))))
     (if (string=? name1 name2)
-        (display-hint (format #f (G_ "You cannot have two different versions
+        (display-hint (G_ "You cannot have two different versions
 or variants of @code{~a} in the same profile.")
-                              name1))
-        (display-hint (format #f (G_ "Try upgrading both @code{~a} and @code{~a},
+                      name1)
+        (display-hint (G_ "Try upgrading both @code{~a} and @code{~a},
 or remove one of them from the profile.")
-                              name1 name2)))))
+                      name1 name2))))
 
 ;; On Guile 3.0, in 'call-with-error-handling' we need to re-raise.  To
 ;; preserve useful backtraces in case of unhandled errors, we want that to
@@ -1512,7 +1537,16 @@ that may return a colorized version of its argument."
                                    (sort packages package<?))) " ")))
       (split-lines list (string-length "dependencies: "))))
 
-  (define (output->recutils package output)
+  (define %default-output-synopses
+    `(("bin" . ,(G_ "executable programs and scripts"))
+      ("debug" . ,(G_ "debug information"))
+      ("doc" . ,(G_ "documentation"))
+      ("lib" . ,(G_ "shared libraries"))
+      ("static" . ,(G_ "static libraries"))
+      ("out" . ,(G_ "everything else"))))
+
+  (define* (output->recutils package output #:optional
+                             (default-synopses %default-output-synopses))
     (string-append
      "+ " output ": "
      (or
@@ -1522,13 +1556,8 @@ that may return a colorized version of its argument."
           (and (string=? key output) (P_ synopsis)))
          (_ #f))
        (package-properties package))
-      (assoc-ref `(("bin" . ,(G_ "executable programs and scripts"))
-                   ("debug" . ,(G_ "debug information"))
-                   ("lib" . ,(G_ "shared libraries"))
-                   ("static" . ,(G_ "static libraries"))
-                   ("out" . ,(G_ "everything else")))
-                 output)
-      (G_ "see Appendix H"))))
+      (assoc-ref default-synopses output)
+      (G_ "[description missing]"))))
 
   (define (package-outputs/out-last package)
     ((compose append partition)
@@ -1546,8 +1575,16 @@ that may return a colorized version of its argument."
   ;; Note: Don't i18n field names so that people can post-process it.
   (format port "name: ~a~%" (highlight (package-name p) port*))
   (format port "version: ~a~%" (highlight (package-version p) port*))
-  (format port "outputs:~%~{~a~%~}"
-          (map (cut output->recutils p <>) (package-outputs/out-last p)))
+  (match (package-outputs/out-last p)
+    (("out")                            ; one output has everything
+     (format port "outputs:~%~a~%"
+             (output->recutils p "out"
+                               (alist-cons "out" (G_ "everything")
+                                           %default-output-synopses))))
+    (outputs                            ; multiple outputs
+     (format port "outputs:~%~{~a~%~}"
+             (map (cut output->recutils p <>) (package-outputs/out-last p)))))
+
   (format port "systems: ~a~%"
           (split-lines (string-join (package-transitive-supported-systems p))
                        (string-length "systems: ")))
@@ -1656,6 +1693,7 @@ score, the more relevant OBJ is to REGEXPS."
   ;; Metrics used to compute the "relevance score" of a package against a set
   ;; of regexps.
   `((,package-name . 4)
+    (,package-upstream-name* . 2)
 
     ;; Match against uncommon outputs.
     (,(lambda (package)
@@ -2210,8 +2248,7 @@ found."
              (format (current-error-port)
                      (G_ "guix: ~a: command not found~%") command)
              (when hint
-               (display-hint (format #f (G_ "Did you mean @code{~a}?")
-                                     hint)))
+               (display-hint (G_ "Did you mean @code{~a}?") hint))
              (show-guix-usage)))))
       (file
        (load file)

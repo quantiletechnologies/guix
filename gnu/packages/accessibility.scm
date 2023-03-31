@@ -4,6 +4,7 @@
 ;;; Copyright © 2018, 2021, 2022 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2019 Andrew Miloradovsky <andrew@interpretmath.pw>
 ;;; Copyright © 2020 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2022 Hunter Jozwiak <hunter.t.joz@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -22,12 +23,14 @@
 
 (define-module (gnu packages accessibility)
   #:use-module ((guix licenses) #:prefix license:)
+  #:use-module (guix gexp)
   #:use-module (guix utils)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system glib-or-gtk)
+  #:use-module (guix build-system meson)
   #:use-module (gnu packages)
   #:use-module (gnu packages lisp)
   #:use-module (gnu packages ocaml)
@@ -227,7 +230,7 @@ incorporated.")
            libnotify))
     (native-inputs
      (list gettext-minimal intltool pkg-config))
-    (home-page "http://florence.sourceforge.net/")
+    (home-page "https://florence.sourceforge.net/")
     (synopsis "Extensible, scalable virtual keyboard for X11")
     (description
      "Florence is an extensible scalable virtual keyboard for X11.
@@ -243,11 +246,11 @@ available to help to click.")
     (license license:gpl2+)))
 
 (define-public footswitch
-  (let ((commit "ca43d53fc2002520cc825d119702afc124303e73")
-        (revision "2"))
+  (let ((commit "e455d6752221b9e9c3818cc304c873b9c2792490")
+        (revision "0"))
     (package
       (name "footswitch")
-      (version (git-version "0.1" revision commit))
+      (version (git-version "1.0" revision commit))
       (source (origin
                 (method git-fetch)
                 (uri (git-reference
@@ -256,32 +259,32 @@ available to help to click.")
                 (file-name (git-file-name name version))
                 (sha256
                  (base32
-                  "14pyzc4ws1mj859xs9n4x83wzxxvd3bh5bdxzr6nv267xwx1mq68"))))
+                  "0xkk60sg3szpgbl3z8djlpagglsldv9viqibsih6wcnbhikzlc6j"))))
       (build-system gnu-build-system)
+      (arguments
+       (list
+        #:tests? #f                     ; no tests
+        #:make-flags #~(list (string-append "CC=" #$(cc-for-target)))
+        #:phases
+        #~(modify-phases %standard-phases
+            (delete 'configure)
+            ;; Install target in the Makefile does not work for Guix.
+            (replace 'install
+              (lambda _
+                (let ((bin (string-append #$output "/bin")))
+                  (install-file "footswitch" bin)
+                  (install-file "scythe" bin)))))))
       (native-inputs
        (list pkg-config))
       (inputs
        (list hidapi))
-      (arguments
-       `(#:tests? #f ; no tests
-         #:make-flags (list (string-append "CC=" ,(cc-for-target)))
-         #:phases (modify-phases %standard-phases
-                    (delete 'configure)
-                    ;; Install target in the Makefile does not work for Guix
-                    (replace 'install
-                      (lambda* (#:key outputs #:allow-other-keys)
-                        (let ((bin (string-append (assoc-ref outputs "out")
-                                                  "/bin")))
-                          (install-file "footswitch" bin)
-                          (install-file "scythe" bin)
-                          #t))))))
       (home-page "https://github.com/rgerganov/footswitch")
-      (synopsis "Command line utility for PCsensor foot switch")
+      (synopsis "Command line utilities for PCsensor and Scythe foot switches")
       (description
-       "Command line utility for programming foot switches sold by PCsensor.
-It works for both single pedal devices and three pedal devices.  All supported
-devices have vendorId:productId = 0c45:7403 or 0c45:7404.")
-    (license license:expat))))
+       "This package provides command line utilities for programming PCsensor
+and Scythe foot switches.  It works for both single pedal and three pedal
+devices.")
+      (license license:expat))))
 
 (define-public xmagnify
   (package
@@ -316,3 +319,34 @@ works with every X Window System based GUI (depends only on libX11); or as an
 assistant for graphic designers, who need to select individual pixels.")
     ;; Licensed either under Expat or GPLv2+.
     (license (list license:expat license:gpl2+))))
+
+(define-public espeakup
+  (package
+    (name "espeakup")
+    (version "0.90")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/linux-speakup/espeakup")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0lmjwafvfxy07zn18v3dzjwwpnid2xffgvy2dzlwkbns8gb60ds2"))))
+    (build-system meson-build-system)
+    (native-inputs (list pkg-config))
+    (inputs (list espeak-ng alsa-lib))
+    (license license:gpl3+)
+    (synopsis "Bridge for espeak and speakup")
+    (description
+     "Espeakup is a bridge between the speakup driver implemented in
+the Linux kernel and the espeak-ng text to speech synthesizer.
+In order for this package to work, you need to have the following
+kernel modules built:
+@itemize @bullet
+@item
+CONFIG_SPEAKUP=m
+@item
+CONFIG_SPEAKUP_SOFT=m
+@end itemize")
+    (home-page "https://github.com/linux-speakup/espeakup")))

@@ -3,6 +3,7 @@
 ;;; Copyright © 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2019, 2020 Martin Becze <mjbecze@riseup.net>
 ;;; Copyright © 2021 Nicolas Goaziou <mail@nicolasgoaziou.fr>
+;;; Copyright © 2022 Hartmut Goebel <h.goebel@crazy-compilers.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -22,14 +23,11 @@
 (define-module (guix import crate)
   #:use-module (guix base32)
   #:use-module (guix build-system cargo)
-  #:use-module ((guix download) #:prefix download:)
   #:use-module (gcrypt hash)
   #:use-module (guix http-client)
   #:use-module (guix import json)
   #:use-module (guix import utils)
-  #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix memoization)
-  #:use-module (guix monads)
   #:use-module (guix packages)
   #:use-module (guix upstream)
   #:use-module (guix utils)
@@ -216,7 +214,8 @@ and LICENSE."
                          'unknown-license!)))
               (string-split string (string->char-set " /"))))
 
-(define* (crate->guix-package crate-name #:key version include-dev-deps? repo)
+(define* (crate->guix-package crate-name #:key version include-dev-deps?
+                              #:allow-other-keys)
   "Fetch the metadata for CRATE-NAME from crates.io, and return the
 `package' s-expression corresponding to that package, or #f on failure.
 When VERSION is specified, convert it into a semver range and attempt to fetch
@@ -354,11 +353,12 @@ look up the development dependencs for the given crate."
 (define crate-package?
   (url-predicate crate-url?))
 
-(define (latest-release package)
-  "Return an <upstream-source> for the latest release of PACKAGE."
+(define* (import-release package #:key (version #f))
+  "Return an <upstream-source> for the latest release of PACKAGE. Optionally
+include a VERSION string to fetch a specific version."
   (let* ((crate-name (guix-package->crate-name package))
          (crate      (lookup-crate crate-name))
-         (version    (crate-latest-version crate))
+         (version    (or version (crate-latest-version crate)))
          (url        (crate-uri crate-name version)))
     (upstream-source
      (package (package-name package))
@@ -370,5 +370,5 @@ look up the development dependencs for the given crate."
    (name 'crate)
    (description "Updater for crates.io packages")
    (pred crate-package?)
-   (latest latest-release)))
+   (import import-release)))
 

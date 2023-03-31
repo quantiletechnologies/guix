@@ -3,17 +3,18 @@
 ;;; Copyright © 2015 Andy Wingo <wingo@igalia.com>
 ;;; Copyright © 2015 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2016 Sou Bunnbu <iyzsong@gmail.com>
-;;; Copyright © 2017, 2020, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2017, 2020, 2022, 2023 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2017 Nikita <nikita@n0.is>
-;;; Copyright © 2018, 2020 Efraim Flashner <efraim@flashner.co.il>
-;;; Copyright © 2018 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2018, 2020, 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2018, 2023 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2017, 2019 Christopher Baines <mail@cbaines.net>
 ;;; Copyright © 2019 Tim Gesthuizen <tim.gesthuizen@yahoo.de>
 ;;; Copyright © 2019 David Wilson <david@daviwil.com>
 ;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2020 Reza Alizadeh Majd <r.majd@pantherx.org>
 ;;; Copyright © 2021 Brice Waegeneire <brice@waegenei.re>
-;;; Copyright © 2021 muradm <mail@muradm.net>
+;;; Copyright © 2021, 2022 muradm <mail@muradm.net>
+;;; Copyright © 2023 Bruno Victal <mirai@makinata.eu>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -59,6 +60,7 @@
   #:use-module (gnu packages xdisorg)
   #:use-module (gnu packages scanner)
   #:use-module (gnu packages suckless)
+  #:use-module (gnu packages sugar)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages libusb)
   #:use-module (gnu packages lxqt)
@@ -69,9 +71,11 @@
   #:use-module (guix records)
   #:use-module (guix packages)
   #:use-module (guix store)
+  #:use-module (guix ui)
   #:use-module (guix utils)
   #:use-module (guix gexp)
   #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-26)
   #:use-module (ice-9 format)
   #:use-module (ice-9 match)
   #:export (<upower-configuration>
@@ -94,7 +98,7 @@
 
             udisks-configuration
             udisks-configuration?
-            udisks-service
+            udisks-service  ; deprecated
             udisks-service-type
 
             colord-service-type
@@ -103,24 +107,27 @@
             geoclue-configuration
             geoclue-configuration?
             %standard-geoclue-applications
-            geoclue-service
+            geoclue-service  ; deprecated
             geoclue-service-type
 
             bluetooth-service-type
             bluetooth-configuration
             bluetooth-configuration?
-            bluetooth-service
+            bluetooth-service  ; deprecated
 
             elogind-configuration
             elogind-configuration?
-            elogind-service
+            elogind-service  ; deprecated
             elogind-service-type
+
+            %gdm-file-system
+            gdm-file-system-service
 
             %fontconfig-file-system
             fontconfig-file-system-service
 
             accountsservice-service-type
-            accountsservice-service
+            accountsservice-service  ; deprecated
 
             cups-pk-helper-service-type
             sane-service-type
@@ -139,12 +146,17 @@
             lxqt-desktop-configuration?
             lxqt-desktop-service-type
 
+            sugar-desktop-configuration
+            sugar-desktop-configuration?
+            sugar-desktop-service-type
+
             xfce-desktop-configuration
             xfce-desktop-configuration?
             xfce-desktop-service
             xfce-desktop-service-type
 
-            x11-socket-directory-service
+            x11-socket-directory-service ;deprecated
+            x11-socket-directory-service-type
 
             enlightenment-desktop-configuration
             enlightenment-desktop-configuration?
@@ -179,11 +191,19 @@
 (define (bool value)
   (if value "true\n" "false\n"))
 
-(define (package-direct-input-selector input)
+(define (package-direct-input-selector tree)
+  "Return a procedure that selects TREE from the inputs of PACKAGE.  If TREE
+is a list, it recursively searches it until it locates the last item of TREE."
   (lambda (package)
-    (match (assoc-ref (package-direct-inputs package) input)
-      ((package . _) package))))
-
+    (let loop ((tree (if (pair? tree)
+                         tree
+                         (list tree)))
+               (package package))
+      (if (null? tree)
+          package
+          (loop (cdr tree)
+                (car (assoc-ref (package-direct-inputs package)
+                                (car tree))))))))
 
 
 ;;;
@@ -202,11 +222,11 @@
   (ignore-lid?                upower-configuration-ignore-lid?
                               (default #f))
   (use-percentage-for-policy? upower-configuration-use-percentage-for-policy?
-                              (default #f))
+                              (default #t))
   (percentage-low             upower-configuration-percentage-low
-                              (default 10))
+                              (default 20))
   (percentage-critical        upower-configuration-percentage-critical
-                              (default 3))
+                              (default 5))
   (percentage-action          upower-configuration-percentage-action
                               (default 2))
   (time-low                   upower-configuration-time-low
@@ -269,7 +289,8 @@
                      #:environment-variables
                      (list (string-append "UPOWER_CONF_FILE_NAME="
                                           #$config))))
-           (stop #~(make-kill-destructor))))))
+           (stop #~(make-kill-destructor))
+           (actions (list (shepherd-configuration-action config)))))))
 
 (define upower-service-type
   (let ((upower-package (compose list upower-configuration-upower)))
@@ -299,19 +320,6 @@ used by GNOME.")
 ;;; GeoClue D-Bus service.
 ;;;
 
-;; TODO: Export.
-(define-record-type* <geoclue-configuration>
-  geoclue-configuration make-geoclue-configuration
-  geoclue-configuration?
-  (geoclue geoclue-configuration-geoclue
-           (default geoclue))
-  (whitelist geoclue-configuration-whitelist)
-  (wifi-geolocation-url geoclue-configuration-wifi-geolocation-url)
-  (submit-data? geoclue-configuration-submit-data?)
-  (wifi-submission-url geoclue-configuration-wifi-submission-url)
-  (submission-nick geoclue-configuration-submission-nick)
-  (applications geoclue-configuration-applications))
-
 (define* (geoclue-application name #:key (allowed? #t) system? (users '()))
   "Configure default GeoClue access permissions for an application.  NAME is
 the Desktop ID of the application, without the .desktop part.  If ALLOWED? is
@@ -330,6 +338,28 @@ users are allowed."
   (list (geoclue-application "gnome-datetime-panel" #:system? #t)
         (geoclue-application "epiphany" #:system? #f)
         (geoclue-application "firefox" #:system? #f)))
+
+;; TODO: Use define-configuration and export accessors.
+(define-record-type* <geoclue-configuration>
+  geoclue-configuration make-geoclue-configuration
+  geoclue-configuration?
+  (geoclue geoclue-configuration-geoclue
+           (default geoclue))
+  (whitelist geoclue-configuration-whitelist
+             (default '()))
+  (wifi-geolocation-url
+   geoclue-configuration-wifi-geolocation-url
+   ;; Mozilla geolocation service:
+   (default "https://location.services.mozilla.com/v1/geolocate?key=geoclue"))
+  (submit-data? geoclue-configuration-submit-data?
+                (default #f))
+  (wifi-submission-url
+   geoclue-configuration-wifi-submission-url
+   (default "https://location.services.mozilla.com/v1/submit?key=geoclue"))
+  (submission-nick geoclue-configuration-submission-nick
+                   (default "geoclue"))
+  (applications geoclue-configuration-applications
+                (default %standard-geoclue-applications)))
 
 (define* (geoclue-configuration-file config)
   "Return a geoclue configuration file."
@@ -376,18 +406,21 @@ users are allowed."
                 (description "Run the @command{geoclue} location service.
 This service provides a D-Bus interface to allow applications to request
 access to a user's physical location, and optionally to add information to
-online location databases.")))
+online location databases.")
+                (default-value (geoclue-configuration))))
 
-(define* (geoclue-service #:key (geoclue geoclue)
-                          (whitelist '())
-                          (wifi-geolocation-url
-                           ;; Mozilla geolocation service:
-                           "https://location.services.mozilla.com/v1/geolocate?key=geoclue")
-                          (submit-data? #f)
-                          (wifi-submission-url
-                           "https://location.services.mozilla.com/v1/submit?key=geoclue")
-                          (submission-nick "geoclue")
-                          (applications %standard-geoclue-applications))
+(define-deprecated
+  (geoclue-service #:key (geoclue geoclue)
+                   (whitelist '())
+                   (wifi-geolocation-url
+                    ;; Mozilla geolocation service:
+                    "https://location.services.mozilla.com/v1/geolocate?key=geoclue")
+                   (submit-data? #f)
+                   (wifi-submission-url
+                    "https://location.services.mozilla.com/v1/submit?key=geoclue")
+                   (submission-nick "geoclue")
+                   (applications %standard-geoclue-applications))
+  geoclue-service-type
   "Return a service that runs the @command{geoclue} location service.  This
 service provides a D-Bus interface to allow applications to request access to
 a user's physical location, and optionally to add information to online
@@ -755,7 +788,7 @@ site} for more information."
                                                (bluetooth-configuration-enable-adv-mon-interleave-scan
                                                 config))
                                           1 0))
-   
+
    "\n[GATT]"
    "\nCache = " (symbol->string (bluetooth-configuration-cache config))
    "\nKeySize = " (number->string (bluetooth-configuration-key-size config))
@@ -829,13 +862,12 @@ site} for more information."
    (description "Run the @command{bluetoothd} daemon, which manages all the
 Bluetooth devices and provides a number of D-Bus interfaces.")))
 
-(define* (bluetooth-service #:key (bluez bluez) (auto-enable? #f))
+(define-deprecated (bluetooth-service #:key (bluez bluez) (auto-enable? #f))
+  bluetooth-service-type
   "Return a service that runs the @command{bluetoothd} daemon, which manages
 all the Bluetooth devices and provides a number of D-Bus interfaces.  When
 AUTO-ENABLE? is true, the bluetooth controller is powered automatically at
-boot.
-
-Users need to be in the @code{lp} group to access the D-Bus service.
+boot, which can be useful when using a bluetooth keyboard or mouse.
 "
   (service bluetooth-service-type
            (bluetooth-configuration
@@ -928,9 +960,11 @@ screens and scanners.")))
                   (description "Run UDisks, a @dfn{disk management} daemon
 that provides user interfaces with notifications and ways to mount/unmount
 disks.  Programs that talk to UDisks include the @command{udisksctl} command,
-part of UDisks, and GNOME Disks."))))
+part of UDisks, and GNOME Disks.")
+                  (default-value (udisks-configuration)))))
 
-(define* (udisks-service #:key (udisks udisks))
+(define-deprecated (udisks-service #:key (udisks udisks))
+  udisks-service-type
   "Return a service for @uref{http://udisks.freedesktop.org/docs/latest/,
 UDisks}, a @dfn{disk management} daemon that provides user interfaces with
 notifications and ways to mount/unmount disks.  Programs that talk to UDisks
@@ -961,11 +995,7 @@ include the @command{udisksctl} command, part of UDisks, and GNOME Disks."
   (handle-suspend-key               elogind-handle-suspend-key
                                     (default 'suspend))
   (handle-hibernate-key             elogind-handle-hibernate-key
-                                    ;; (default 'hibernate)
-                                    ;; XXX Ignore it for now, since we don't
-                                    ;; yet handle resume-from-hibernation in
-                                    ;; our initrd.
-                                    (default 'ignore))
+                                    (default 'hibernate))
   (handle-lid-switch                elogind-handle-lid-switch
                                     (default 'suspend))
   (handle-lid-switch-docked         elogind-handle-lid-switch-docked
@@ -1033,7 +1063,7 @@ include the @command{udisksctl} command, part of UDisks, and GNOME Disks."
     '(ignore poweroff reboot halt kexec suspend hibernate hybrid-sleep lock))
   (define (handle-action x)
     (if (unspecified? x)
-        ""                              ;empty serializer
+        x                               ;let the unspecified value go through
         (enum x handle-actions)))
   (define (sleep-list tokens)
     (unless (valid-list? tokens char-set:user-name)
@@ -1041,10 +1071,18 @@ include the @command{udisksctl} command, part of UDisks, and GNOME Disks."
     (string-join tokens " "))
   (define-syntax ini-file-clause
     (syntax-rules ()
+      ;; Produce an empty line when encountering an unspecified value.  This
+      ;; is better than an empty string value, which can, in some cases, cause
+      ;; warnings such as "Failed to parse handle action setting".
       ((_ config (prop (parser getter)))
-       (string-append prop "=" (parser (getter config)) "\n"))
+       (let ((value (parser (getter config))))
+         (if (unspecified? value)
+             ""
+             (string-append prop "=" value "\n"))))
       ((_ config str)
-       (string-append str "\n"))))
+       (if (unspecified? str)
+           ""
+           (string-append str "\n")))))
   (define-syntax-rule (ini-file config file clause ...)
     (plain-file file (string-append (ini-file-clause config clause) ...)))
   (ini-file
@@ -1156,6 +1194,9 @@ seats.)"
 
 (define (elogind-shepherd-service config)
   "Return a Shepherd service to start elogind according to @var{config}."
+  (define config-file
+    (elogind-configuration-file config))
+
   (list (shepherd-service
          (requirement '(dbus-system))
          (provision '(elogind))
@@ -1164,9 +1205,9 @@ seats.)"
                                         "/libexec/elogind/elogind"))
                    #:environment-variables
                    (list (string-append "ELOGIND_CONF_FILE="
-                                        #$(elogind-configuration-file
-                                           config)))))
-         (stop #~(make-kill-destructor)))))
+                                        #$config-file))))
+         (stop #~(make-kill-destructor))
+         (actions (list (shepherd-configuration-action config-file))))))
 
 (define elogind-service-type
   (service-type (name 'elogind)
@@ -1202,7 +1243,8 @@ allow other system components to know the set of logged-in users as well as
 their session types (graphical, console, remote, etc.).  It can also clean up
 after users when they log out.")))
 
-(define* (elogind-service #:key (config (elogind-configuration)))
+(define-deprecated (elogind-service #:key (config (elogind-configuration)))
+  elogind-service-type
   "Return a service that runs the @command{elogind} login and seat management
 service.  The @command{elogind} service integrates with PAM to allow other
 system components to know the set of logged-in users as well as their session
@@ -1223,6 +1265,13 @@ when they log out."
     (flags '(read-only))
     (check? #f)))
 
+(define %gdm-file-system
+  (file-system
+    (device "none")
+    (mount-point "/var/lib/gdm")
+    (type "tmpfs")
+    (check? #f)))
+
 ;; The global fontconfig cache directory can sometimes contain stale entries,
 ;; possibly referencing fonts that have been GC'd, so mount it read-only.
 ;; As mentioned https://debbugs.gnu.org/cgi/bugreport.cgi?bug=36924#8 and
@@ -1231,6 +1280,15 @@ when they log out."
   (simple-service 'fontconfig-file-system
                   file-system-service-type
                   (list %fontconfig-file-system)))
+
+;; Avoid stale caches and stale user IDs being reused between system
+;; reconfigurations, which would crash GDM and render the system unusable.
+;; GDM doesn't require persisting anything valuable there anyway.
+(define gdm-file-system-service
+  (simple-service 'gdm-file-system
+                  file-system-service-type
+                  (list %gdm-file-system)))
+
 
 ;;;
 ;;; AccountsService service.
@@ -1254,7 +1312,9 @@ over D-Bus that can list available accounts, change their passwords, and so
 on.  AccountsService integrates with PolicyKit to enable unprivileged users to
 acquire the capability to modify their system configuration.")))
 
-(define* (accountsservice-service #:key (accountsservice accountsservice))
+(define-deprecated
+  (accountsservice-service #:key (accountsservice accountsservice))
+  accountsservice-service-type
   "Return a service that runs AccountsService, a system service that
 can list available accounts, change their passwords, and so on.
 AccountsService integrates with PolicyKit to enable unprivileged users to
@@ -1309,28 +1369,44 @@ rules.")
 (define-record-type* <gnome-desktop-configuration> gnome-desktop-configuration
   make-gnome-desktop-configuration
   gnome-desktop-configuration?
-  (gnome gnome-package (default gnome)))
+  (gnome gnome-desktop-configuration-gnome
+         (default gnome)))
 
-(define (gnome-packages config packages)
-  "Return the list of GNOME dependencies from CONFIG which names are part of
-the given PACKAGES list."
-  (let ((gnome (gnome-package config)))
-    (map (lambda (name)
-           ((package-direct-input-selector name) gnome))
-         packages)))
+(define (gnome-package gnome name)
+  "Return the package NAME among the GNOME package inputs.  NAME can be a
+single name or a tree-like, e.g. @code{'(\"gnome-boxes\" \"spice-gtk\")} to
+denote the spice-gtk input of the gnome-boxes input of the GNOME meta-package."
+  ((package-direct-input-selector name) gnome))
+
+(define (gnome-packages gnome names)
+  "Return the package NAMES among the GNOME package inputs."
+  (map (cut gnome-package gnome <>) names))
 
 (define (gnome-udev-rules config)
   "Return the list of GNOME dependencies that provide udev rules."
-  (gnome-packages config '("gnome-settings-daemon")))
+  (let ((gnome (gnome-desktop-configuration-gnome config)))
+    (gnome-packages gnome '("gnome-settings-daemon"))))
 
 (define (gnome-polkit-settings config)
   "Return the list of GNOME dependencies that provide polkit actions and
 rules."
-  (gnome-packages config
-                  '("gnome-settings-daemon"
-                    "gnome-control-center"
-                    "gnome-system-monitor"
-                    "gvfs")))
+  (let ((gnome (gnome-desktop-configuration-gnome config)))
+    (gnome-packages gnome
+                    '("gnome-settings-daemon"
+                      "gnome-control-center"
+                      "gnome-system-monitor"
+                      "gvfs"
+                      ;; spice-gtk provides polkit actions for USB redirection
+                      ;; in GNOME Boxes.
+                      ("gnome-boxes" "spice-gtk")))))
+
+(define (gnome-setuid-programs config)
+  "Return the list of GNOME setuid programs."
+  (let* ((gnome (gnome-desktop-configuration-gnome config))
+         (spice-gtk (gnome-package gnome '("gnome-boxes" "spice-gtk"))))
+    (map file-like->setuid-program
+         (list (file-append spice-gtk
+                            "/libexec/spice-client-glib-usb-acl-helper")))))
 
 (define gnome-desktop-service-type
   (service-type
@@ -1340,9 +1416,10 @@ rules."
                              gnome-udev-rules)
           (service-extension polkit-service-type
                              gnome-polkit-settings)
+          (service-extension setuid-program-service-type
+                             gnome-setuid-programs)
           (service-extension profile-service-type
-                             (compose list
-                                      gnome-package))))
+                             (compose list gnome-desktop-configuration-gnome))))
    (default-value (gnome-desktop-configuration))
    (description "Run the GNOME desktop environment.")))
 
@@ -1463,21 +1540,73 @@ rules."
 
 
 ;;;
+;;; Sugar desktop service.
+;;;
+
+(define-record-type* <sugar-desktop-configuration> sugar-desktop-configuration
+  make-sugar-desktop-configuration
+  sugar-desktop-configuration?
+  (sugar sugar-package (default sugar))
+  (gobject-introspection
+   sugar-gobject-introspection (default gobject-introspection))
+  (activities
+   sugar-activities (default (list sugar-help-activity))))
+
+(define (sugar-polkit-settings config)
+  "Return the list of packages that provide polkit actions and rules."
+  (list (sugar-package config)))
+
+(define sugar-desktop-service-type
+  (service-type
+   (name 'sugar-desktop)
+   (extensions
+    (list (service-extension polkit-service-type
+                             sugar-polkit-settings)
+          (service-extension profile-service-type
+                             (lambda (config)
+                               (cons* (sugar-package config)
+                                      (sugar-gobject-introspection config)
+                                      (sugar-activities config))))))
+   (default-value (sugar-desktop-configuration))
+   (description "Run the Sugar desktop environment.")))
+
+
+;;;
 ;;; X11 socket directory service
 ;;;
 
-(define x11-socket-directory-service
+(define x11-socket-directory-service-type
+  (let ((x11-socket-directory-shepherd-service
+         (shepherd-service
+          (documentation "Create @file{/tmp/.X11-unix} for XWayland.")
+          (requirement '(file-systems))
+          (provision '(x11-socket-directory))
+          (one-shot? #t)
+          (start #~(lambda _
+                     (let ((directory "/tmp/.X11-unix"))
+                       (mkdir-p directory)
+                       (chmod directory #o1777)))))))
+    (service-type
+     (name 'x11-socket-directory-service)
+     (extensions
+      (list
+       (service-extension shepherd-root-service-type
+                          (compose
+                           list
+                           (const x11-socket-directory-shepherd-service)))))
+     (default-value #f) ; no default value required
+     (description
+      "Create @file{/tmp/.X11-unix} for XWayland.  When using X11, libxcb
+takes care of creating that directory however, when using XWayland, we
+need to create it beforehand."))))
+
+(define-deprecated x11-socket-directory-service
+  x11-socket-directory-service-type
   ;; Return a service that creates /tmp/.X11-unix.  When using X11, libxcb
   ;; takes care of creating that directory.  However, when using XWayland, we
   ;; need to create beforehand.  Thus, create it unconditionally here.
-  (simple-service 'x11-socket-directory
-                  activation-service-type
-                  (with-imported-modules '((guix build utils))
-                    #~(begin
-                        (use-modules (guix build utils))
-                        (let ((directory "/tmp/.X11-unix"))
-                          (mkdir-p directory)
-                          (chmod directory #o1777))))))
+  (service x11-socket-directory-service-type))
+
 
 ;;;
 ;;; Enlightenment desktop service.
@@ -1510,6 +1639,11 @@ rules."
                              (compose list
                                       (package-direct-input-selector
                                        "efl")
+                                      enlightenment-package))
+          (service-extension udev-service-type
+                             (compose list
+                                      (package-direct-input-selector
+                                        "ddcutil")
                                       enlightenment-package))
           (service-extension setuid-program-service-type
                              enlightenment-setuid-programs)
@@ -1643,12 +1777,19 @@ or setting its password with passwd.")))
 ;;; seatd-service-type -- minimal seat management daemon
 ;;;
 
+(define (seatd-group-sanitizer group-or-name)
+  (match group-or-name
+    ((? user-group? group) group)
+    ((? string? group-name) (user-group (name group-name) (system? #t)))
+    (_ (leave (G_ "seatd: '~a' is not a valid group~%") group-or-name))))
+
 (define-record-type* <seatd-configuration> seatd-configuration
   make-seatd-configuration
   seatd-configuration?
   (seatd seatd-package (default seatd))
-  (user seatd-user (default "root"))
-  (group seatd-group (default "users"))
+  (group seatd-group                    ; string | <user-group>
+         (default "seat")
+         (sanitize seatd-group-sanitizer))
   (socket seatd-socket (default "/run/seatd.sock"))
   (logfile seatd-logfile (default "/var/log/seatd.log"))
   (loglevel seatd-loglevel (default "info")))
@@ -1662,8 +1803,7 @@ or setting its password with passwd.")))
          (provision '(seatd elogind))
          (start #~(make-forkexec-constructor
                    (list #$(file-append (seatd-package config) "/bin/seatd")
-                         "-u" #$(seatd-user config)
-                         "-g" #$(seatd-group config))
+                         "-g" #$(user-group-name (seatd-group config)))
                    #:environment-variables
                    (list (string-append "SEATD_LOGLEVEL="
                                         #$(seatd-loglevel config))
@@ -1672,9 +1812,12 @@ or setting its password with passwd.")))
                    #:log-file #$(seatd-logfile config)))
          (stop #~(make-kill-destructor)))))
 
+(define seatd-accounts
+  (match-lambda (($ <seatd-configuration> _ group) (list group))))
+
 (define seatd-environment
   (match-lambda
-    (($ <seatd-configuration> _ _ _ socket)
+    (($ <seatd-configuration> _ _ socket)
      `(("SEATD_SOCK" . ,socket)))))
 
 (define seatd-service-type
@@ -1685,6 +1828,7 @@ to shared devices (graphics, input), without requiring the
 applications needing access to be root.")
    (extensions
     (list
+     (service-extension account-service-type seatd-accounts)
      (service-extension session-environment-service-type seatd-environment)
      ;; TODO: once cgroups is separate dependency we should not mount it here
      ;; for now it is mounted here, because elogind mounts it
@@ -1710,8 +1854,12 @@ applications needing access to be root.")
              (service sddm-service-type))
 
          ;; Screen lockers are a pretty useful thing and these are small.
-         (screen-locker-service slock)
-         (screen-locker-service xlockmore "xlock")
+         (service screen-locker-service-type
+                  (screen-locker-configuration
+                   "slock" (file-append slock "/bin/slock") #f))
+         (service screen-locker-service-type
+                  (screen-locker-configuration
+                   "xlock" (file-append xlockmore "/bin/xlock") #f))
 
          ;; Add udev rules for MTP devices so that non-root users can access
          ;; them.
@@ -1731,6 +1879,10 @@ applications needing access to be root.")
                               (list (file-append nfs-utils "/sbin/mount.nfs")
                                (file-append ntfs-3g "/sbin/mount.ntfs-3g"))))
 
+         ;; This is a volatile read-write file system mounted at /var/lib/gdm,
+         ;; to avoid GDM stale cache and permission issues.
+         gdm-file-system-service
+
          ;; The global fontconfig cache directory can sometimes contain
          ;; stale entries, possibly referencing fonts that have been GC'd,
          ;; so mount it read-only.
@@ -1747,19 +1899,19 @@ applications needing access to be root.")
 
          ;; The D-Bus clique.
          (service avahi-service-type)
-         (udisks-service)
+         (service udisks-service-type)
          (service upower-service-type)
-         (accountsservice-service)
+         (service accountsservice-service-type)
          (service cups-pk-helper-service-type)
          (service colord-service-type)
-         (geoclue-service)
+         (service geoclue-service-type)
          (service polkit-service-type)
-         (elogind-service)
-         (dbus-service)
+         (service elogind-service-type)
+         (service dbus-root-service-type)
 
          (service ntp-service-type)
 
-         x11-socket-directory-service
+         (service x11-socket-directory-service-type)
 
          (service pulseaudio-service-type)
          (service alsa-service-type)

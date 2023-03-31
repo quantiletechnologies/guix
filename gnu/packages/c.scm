@@ -41,9 +41,9 @@
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix build-system cmake)
+  #:use-module (guix build-system copy)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system python)
-  #:use-module (guix build-system trivial)
   #:use-module (guix store)
   #:use-module (gnu packages)
   #:use-module (gnu packages bash)
@@ -55,6 +55,7 @@
   #:use-module (gnu packages perl)
   #:use-module (gnu packages texinfo)
   #:use-module (gnu packages guile)
+  #:use-module (gnu packages llvm)
   #:use-module (gnu packages lua)
   #:use-module (gnu packages multiprecision)
   #:use-module (gnu packages pcre)
@@ -66,6 +67,45 @@
   #:use-module (gnu packages tls)
   #:use-module (gnu packages web)
   #:use-module (gnu packages xml))
+
+(define-public c-intro-and-ref
+  (let ((revision "1")
+        (commit "47e5a234a7c036392e0f9e1e8e48ff3e6855840d"))
+    (package
+      (name "c-intro-and-ref")
+      (version (git-version "0.0.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://git.savannah.gnu.org/git/c-intro-and-ref.git")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0aza4vvlg2w0ss6n5xp741ycvg16d041c1x87yh5hpnzcb6y0ii3"))))
+      (build-system copy-build-system)
+      (arguments
+       (list #:phases #~(modify-phases %standard-phases
+                          (add-after 'unpack 'build
+                            (lambda* (#:key parallel-build? #:allow-other-keys)
+                              (substitute* "Makefile"
+                                (("makeinfo c.texi")
+                                 "makeinfo --no-split c.texi"))
+                              (invoke "make" "c.info" "c.html"
+                                      "-j" (number->string
+                                            (if parallel-build?
+                                                (parallel-job-count)
+                                                1))))))
+             #:install-plan ''(("c.info" "share/info/")
+                               ("c.html" "share/doc/"))))
+      (native-inputs (list texinfo))
+      (home-page "https://www.gnu.org/")
+      (synopsis "GNU C Language Intro and Reference")
+      (description "This manual explains the C language for use with the GNU
+Compiler Collection (GCC) on the GNU/Linux system and other systems.  We refer
+to this dialect as GNU C.  If you already know C, you can use this as a
+reference manual.")
+      (license license:fdl1.3+))))
 
 (define-public cproc
   (let ((commit "70fe9ef1810cc6c05bde9eb0970363c35fa7e802")
@@ -214,7 +254,7 @@ compiler while still keeping it small, simple, fast and understandable.")
 (define-public qbe
   (package
     (name "qbe")
-    (version "1.0")
+    (version "1.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -223,7 +263,7 @@ compiler while still keeping it small, simple, fast and understandable.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0qx4a3fjjrp2m4dsn19rpbjf89k9w7w7l09s96jx8vv15vzsdgis"))))
+                "07nl1kdgpz7hwfkng0yy4xihk0fmv1a2hq9bxzgvhy3vk9r7fmn8"))))
     (build-system gnu-build-system)
     (arguments
      (list #:make-flags
@@ -384,14 +424,14 @@ whose behaviour is inconsistent across *NIX flavours.")
 (define-public libhx
   (package
     (name "libhx")
-    (version "4.3")
+    (version "4.9")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://inai.de/files/libhx/"
                            "libHX-" version ".tar.xz"))
        (sha256
-        (base32 "06zkzaya6j3vaafz80qcgn5qcri047003bhmjisv5sbikcw97jqy"))))
+        (base32 "16rwp8b2j8l0m27rffvb7ma350r79l611sa135hzfywkdli2bqh2"))))
     (build-system gnu-build-system)
     (home-page "https://inai.de/projects/libhx/")
     (synopsis "C library with common data structures and functions")
@@ -719,7 +759,7 @@ portability.")
 (define-public byacc
   (package
     (name "byacc")
-    (version "20220128")
+    (version "20221106")
     (source (origin
              (method url-fetch)
              (uri (string-append
@@ -727,7 +767,7 @@ portability.")
                    version ".tgz"))
              (sha256
               (base32
-               "173l5pdzgqk2ld6lf0ablii0iiw07sry2vrjfrm4wc99qmf81ha2"))))
+               "04lxggjarbidfq8ba5q6kwgqys4lhidbnz8gf3vrrb5wgcibx6d8"))))
     (build-system gnu-build-system)
     (home-page "https://invisible-island.net/byacc/byacc.html")
     (synopsis "Berkeley Yacc LALR parser generator")
@@ -1083,6 +1123,28 @@ Telemetry Transport (MQTT) publish-subscribe messaging protocol.")
     (home-page "https://github.com/awslabs/aws-c-mqtt")
     (license license:asl2.0)))
 
+;; Note: there is another mimalloc embedded in rust-mimalloc (version 1.6.4).
+(define-public mimalloc
+  (package
+    (name "mimalloc")
+    (version "2.0.9")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/microsoft/mimalloc")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "19w0i28p6knjd192rrcw1ayc3x0qp6rcm48cwkls4kwn8fng81fj"))))
+    (build-system cmake-build-system)
+    (arguments
+     `(#:build-type "Release"))
+    (synopsis "General purpose memory allocator")
+    (description "@code{mimalloc} is a drop-in replacement for @code{malloc}.")
+    (home-page "https://microsoft.github.io/mimalloc/")
+    (license license:expat)))
+
 ;;; Factored out of the ck package so that it can be adjusted and called on
 ;;; the host side easily, without impacting the package definition.
 (define (gnu-triplet->ck-machine target)
@@ -1104,6 +1166,7 @@ Telemetry Transport (MQTT) publish-subscribe messaging protocol.")
              ("ppc64"       => "ppc64")
              ("ppc"         => "ppc")
              ("s390x"       => "s390x")
+             ("riscv64"     => "riscv64")
              ("sparc64"     => "sparcv9"))))
 
 (define-public ck
@@ -1159,6 +1222,82 @@ structures designed to aid in the research, design and implementation of high
 performance concurrent systems developed in C99+.")
     (license (list license:bsd-2        ;everything except...
                    license:asl2.0))))   ;src/ck_hp.c
+
+(define-public tinydir
+  (package
+    (name "tinydir")
+    (version "1.2.5")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/cxong/tinydir")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1nprgdfx4i8wzc1idw6chan4fjfa75b5ll8kghdc0q2278pny259"))
+              (patches (search-patches "tinydir-fix-cbehave-test.patch"))
+              (modules '((guix build utils)))
+              (snippet '(delete-file-recursively "tests/cbehave"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'path-cmake
+            (lambda _
+              (substitute* "tests/CMakeLists.txt"
+                (("^include_dir.*cbehave.*")
+                 (string-append "include_directories("#$cbehave "/include)"))
+                (("^add_subdir.*cbeha.*") ""))))
+          (add-before 'configure 'chdir
+            (lambda _
+              (chdir "tests")))
+          (replace 'install
+            (lambda _
+              (install-file "../tinydir.h"
+                            (string-append #$output "/include")))))))
+    (native-inputs (list cbehave))
+    (home-page "https://github.com/cxong/tinydir")
+    (synopsis "List directories programmatically")
+    (description "@code{tinydir} is a header-only C wrapper for listing
+directory contents.")
+    (license license:bsd-2)))
+
+(define-public libdispatch
+  (package
+    (name "libdispatch")
+    (version "5.7")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/apple/swift-corelibs-libdispatch")
+             (commit (string-append "swift-" version "-RELEASE"))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "0skg1azbhbg7y0ql2a5sx6lmfip8l1rajqm95zzf9xv45n4dg9nn"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               ;; Use Clang instead of GCC.
+               (add-before 'configure 'prepare-build-environment
+                 (lambda _
+                   (setenv "AR" "llvm-ar")
+                   (setenv "NM" "llvm-nm")
+                   (setenv "CC" "clang")
+                   (setenv "CXX" "clang++"))))))
+    (native-inputs (list clang llvm))
+    (home-page "https://apple.github.io/swift-corelibs-libdispatch/")
+    (synopsis "Concurrent code execution on multicore hardware")
+    (description
+     "Grand Central Dispatch (GCD or libdispatch) implements a concurrency model
+wherein program tasks are divided into work items.  These can be run
+sequentially or in parallel, with optional synchronization in between, and GCD
+will take care of dispatching tasks to available cores.")
+    (license license:asl2.0)))
 
 (define-public utf8-h
   ;; The latest tag is used as there is no release.

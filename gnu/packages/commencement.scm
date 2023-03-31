@@ -2475,15 +2475,15 @@ exec " gcc "/bin/" program
      `(#:tests? #f                            ; the test suite needs diffutils
        #:guile ,%bootstrap-guile
        #:implicit-inputs? #f
-       ,@(match (%current-system)
-           ((or "arm-linux" "aarch64-linux")
-            (substitute-keyword-arguments (package-arguments diffutils)
-              ((#:configure-flags flags ''())
+       ,@(substitute-keyword-arguments (package-arguments diffutils)
+           ((#:configure-flags flags ''())
+            (match (%current-system)
+              ((or "arm-linux" "aarch64-linux")
                ;; The generated config.status has some problems due to the
                ;; bootstrap environment.  Disable dependency tracking to work
                ;; around it.
-               `(cons "--disable-dependency-tracking" ,flags))))
-           (_ '()))))))
+               `(cons "--disable-dependency-tracking" ,flags))
+              (_ flags))))))))
 
 (define findutils-boot0
   (package
@@ -2526,7 +2526,9 @@ exec " gcc "/bin/" program
                            (substitute* "gnulib-tests/Makefile"
                              (("^XFAIL_TESTS =")
                               "XFAIL_TESTS = test-fnmatch ")))))
-                     '()))))))))
+                     '())))
+           ((#:make-flags flags ''())
+            ''()))))))
 
 (define file
   (package
@@ -3032,6 +3034,7 @@ memoized as a function of '%current-system'."
                                   ("flex" ,flex-boot0)))
                  (inputs `(("flex" ,flex-boot0)))
                  (arguments
+                  ;; TODO: On next rebuild cycle, reuse phases from 'mig'.
                   `(#:configure-flags
                     `(,(string-append "LDFLAGS=-Wl,-rpath="
                                       (assoc-ref %build-inputs "flex") "/lib/")))))))
@@ -3621,7 +3624,7 @@ exec ~a/bin/~a-~a -B~a/lib -Wl,-dynamic-linker -Wl,~a/~a \"$@\"~%"
   ;; This package must be public because other modules refer to it.  However,
   ;; mark it as hidden so that 'fold-packages' ignores it.
   (with-boot4 (hidden-package
-               (package-with-bootstrap-guile guile-3.0/fixed))))
+               (package-with-bootstrap-guile guile-3.0/pinned))))
 
 (define-public glibc-utf8-locales-final
   ;; Now that we have GUILE-FINAL, build the UTF-8 locales.  They are needed

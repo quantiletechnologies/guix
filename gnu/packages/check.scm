@@ -38,6 +38,11 @@
 ;;; Copyright © 2020, 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Hugo Lecomte <hugo.lecomte@inria.fr>
 ;;; Copyright © 2022 Maxime Devos <maximedevos@telenet.be>
+;;; Copyright © 2022 David Elsing <david.elsing@posteo.net>
+;;; Copyright © 2022 Sharlatan Hellseher <sharlatanus@gmail.com>
+;;; Copyright © 2022 jgart <jgart@dismail.de>
+;;; Copyright © 2023 Luis Felipe López Acevedo <luis.felipe.la@protonmail.com>
+;;; Copyright © 2023 Timo Wilken <guix@twilken.net>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -56,6 +61,7 @@
 
 (define-module (gnu packages check)
   #:use-module (gnu packages)
+  #:use-module (gnu packages admin)
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
@@ -66,6 +72,8 @@
   #:use-module (gnu packages gnome)
   #:use-module (gnu packages golang)
   #:use-module (gnu packages gtk)
+  #:use-module (gnu packages guile)
+  #:use-module (gnu packages guile-xyz)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
@@ -74,6 +82,7 @@
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages python-science)
+  #:use-module (gnu packages texinfo)
   #:use-module (gnu packages time)
   #:use-module (gnu packages xml)
   #:use-module (guix utils)
@@ -86,7 +95,9 @@
   #:use-module (guix build-system glib-or-gtk)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system go)
+  #:use-module (guix build-system guile)
   #:use-module (guix build-system meson)
+  #:use-module (guix build-system pyproject)
   #:use-module (guix build-system python)
   #:use-module (guix build-system trivial)
   #:use-module (srfi srfi-1))
@@ -246,6 +257,34 @@ source code editors and IDEs.")
               (base32
                "0d22h8xshmbpl9hba9ch3xj8vb9ybm5akpsbbh7yj07fic4h2hj6"))))))
 
+(define-public clara
+  (package
+    (name "clara")
+    (version "1.1.5")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/catchorg/Clara")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "08mlm9ax5d7wkmsihm1xnlgp7rfgff0bfl4ly4850xmrdaxmmkl3"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'install
+            (lambda _
+              (install-file (string-append #$source "/single_include/clara.hpp")
+                            (string-append #$output "/include")))))))
+    (home-page "https://github.com/catchorg/Clara")
+    (synopsis "Simple command line parser for C++")
+    (description "Clara is a simple to use, composable, command line parser
+for C++ 11 and beyond implemented as a single-header library.")
+    (license license:boost1.0)))
+
 (define-public clitest
   (package
     (name "clitest")
@@ -317,7 +356,7 @@ testing of Unix command lines.")
                      (lambda _ (invoke "autoreconf" "-vfi"))))))
     (native-inputs
      (list automake autoconf libtool))
-    (home-page "http://cunit.sourceforge.net/")
+    (home-page "https://cunit.sourceforge.net/")
     (synopsis "Automated testing framework for C")
     (description
      "CUnit is a lightweight system for writing, administering, and running
@@ -439,7 +478,7 @@ PyUnit and others.")
 multi-paradigm automated test framework for C++ and Objective-C.")
     (license license:boost1.0)))
 
-(define-public catch-framework2-1
+(define-public catch2-1
   (package
     (name "catch2")
     (version "1.12.2")
@@ -468,7 +507,7 @@ multi-paradigm automated test framework for C++ and Objective-C.")
 a multi-paradigm automated test framework for C++ and Objective-C.")
     (license license:boost1.0)))
 
-(define-public catch-framework2
+(define-public catch2
   (package
     (name "catch2")
     (version "2.13.8")
@@ -485,6 +524,142 @@ a multi-paradigm automated test framework for C++ and Objective-C.")
     (build-system cmake-build-system)
     (inputs
      (list python-wrapper))
+    (synopsis "Automated test framework for C++ and Objective-C")
+    (description "Catch2 stands for C++ Automated Test Cases in Headers and is
+a multi-paradigm automated test framework for C++ and Objective-C.")
+    (license license:boost1.0)))
+
+(define-public cbehave
+  (let ((commit "5deaea0eaaf52f1c5ccdac0c68c003988f348fb4")
+        (revision "1"))
+    (package
+      (name "cbehave")
+      (version (git-version "0.2.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/bigwhite/cbehave")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0kicawxmxn059n3rmfc7r2q5wfjrqbr6lm8dmsi86ba76ak0f9gi"))
+                (snippet
+                 #~(begin
+                     (for-each delete-file
+                               '("aclocal.m4"
+                                 "config.guess" "config.sub" "configure"
+                                 "depcomp" "install-sh"
+                                 "libtool" "ltmain.sh" "missing"
+                                 "Makefile.in" "src/Makefile.in"
+                                 "src/example/Makefile.in"))))))
+      (build-system gnu-build-system)
+      (arguments
+       (list
+        #:configure-flags #~(list "--enable-shared" "--disable-static")
+        #:phases
+        #~(modify-phases %standard-phases
+            (add-before 'bootstrap 'rename-configure.in
+              (lambda _
+                (rename-file "configure.in" "configure.ac")))
+            (add-after 'rename-configure.in 'set-AM_PROG_AR
+              (lambda _
+                (substitute* "configure.ac"
+                  (("^AC_PROG_LIBTOOL.*" orig)
+                   (string-append "AM_PROG_AR\n" orig)))))
+            (add-after 'set-AM_PROG_AR 'enable-tests
+              (lambda _
+                (let ((port (open-file "src/example/Makefile.am" "a")))
+                  (display (string-append "\nTESTS = calculator_test"
+                                          " text_editor_test string_test"
+                                          " product_database_test mock_test\n")
+                           port)
+                  (close-port port))))
+            (add-before 'check 'create-dummy-file
+              (lambda _
+                (invoke "touch" "src/example/foo.txt"))))))
+      (native-inputs (list autoconf automake libtool))
+      (home-page "https://github.com/bigwhite/cbehave")
+      (synopsis "Behavior-driven development framework")
+      (description "CBehave is a behavior-driven development implemented in C.
+It allows the specification of behaviour scenarios using a given-when-then
+pattern.")
+      (license license:apsl2))))
+
+(define-public catch2-3.1
+  (package
+    (name "catch2")
+    (version "3.1.1")
+    (home-page "https://github.com/catchorg/Catch2")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/catchorg/Catch2")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1qnr5b3zq8brh43f924rgnw5gmmjf9ax7kbq2crz1mlwgmdymxlp"))))
+    (outputs (list "out" "static"))
+    (build-system meson-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'patch-meson
+            (lambda _
+              (substitute* "src/catch2/meson.build"
+                (("static_library") "both_libraries"))))
+          (add-after 'install 'install-cmake-config
+            (lambda* (#:key outputs #:allow-other-keys)
+              (define prefix (string-append (assoc-ref outputs "out")
+                                            "/lib/cmake/Catch2/"))
+              (mkdir-p prefix)
+              (call-with-output-file (string-append
+                                      prefix
+                                      "catch2-config-version.cmake")
+                (lambda (port)
+                  (format
+                   port
+                   "set(PACKAGE_VERSION ~s)~@
+                    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)~@
+                    set(PACKAGE_VERSION_EXACT TRUE)~@
+                    set(PACKAGE_VERSION_COMPATIBLE TRUE)~@
+                    elseif(PACKAGE_FIND_VERSION VERSION_LESS_EQUAL ~
+                           PACKAGE_VERSION)~@
+                    set(PACKAGE_VERSION_COMPATIBLE TRUE)~@
+                    else()~@
+                    set(PACKAGE_VERSION_COMPATIBLE FALSE)~@
+                    endif()"
+                   #$version)))
+              (call-with-output-file (string-append prefix
+                                                    "catch2-config.cmake")
+                (lambda (port)
+                  (format
+                   port
+                   "include(FindPkgConfig)~@
+                    pkg_check_modules(CATCH2 IMPORTED_TARGET GLOBAL catch2)~@
+                    pkg_check_modules(CATCH2MAIN ~
+                                      IMPORTED_TARGET GLOBAL ~
+                                      catch2 catch2-with-main)~@
+                    if(CATCH2_FOUND)~@
+                      add_library(Catch2::Catch2 ALIAS PkgConfig::CATCH2)~@
+                    endif()~@
+                    if(CATCH2MAIN_FOUND)~@
+                      add_library(Catch2::Catch2WithMain ~
+                                  ALIAS PkgConfig::CATCH2MAIN)~@
+                    endif()")))))
+          (add-after 'install 'move-static-libraries
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let ((out (assoc-ref outputs "out"))
+                    (static (assoc-ref outputs "static")))
+                (for-each
+                 (lambda (file)
+                   (install-file file (string-append static "/lib"))
+                   (delete-file file))
+                 (find-files (string-append out "/lib")
+                             "\\.a$"))))))))
+    (inputs (list python-wrapper))
     (synopsis "Automated test framework for C++ and Objective-C")
     (description "Catch2 stands for C++ Automated Test Cases in Headers and is
 a multi-paradigm automated test framework for C++ and Objective-C.")
@@ -567,6 +742,51 @@ normally do not detect.  The goal is to detect only real errors in the code
 (i.e. have zero false positives).")
     (license license:gpl3+)))
 
+(define-public cukinia
+  (package
+    (name "cukinia")
+    (version "0.6.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/savoirfairelinux/cukinia")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1i92b37w8kb0rzkazlnnhjjbh1l1nmk2yrjvar7rpl97i9gn212m"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      ;; The test suite assumes the host system runs systemd, has a root user,
+      ;; among other things (see:
+      ;; https://github.com/savoirfairelinux/cukinia/issues/51).
+      #:tests? #f
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)           ;no configure script
+          (delete 'build)               ;no build system
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (when tests?
+                (invoke "./cukinia" "tests/testcases.conf"))))
+          (replace 'install
+            (lambda _
+              (install-file "cukinia" (string-append #$output "/bin")))))))
+    (home-page "https://github.com/savoirfairelinux/cukinia")
+    (synopsis "Simple on-target system test framework")
+    (description "Cukinia is designed to help GNU/Linux-based embedded
+firmware developers run simple system-level validation tests on their
+firmware.  Cukinia integrates well with embedded firmware generation
+frameworks such as Buildroot and Yocto, and can be run manually or by your
+favourite continuous integration framework.  Among Cukinia features are:
+@itemize
+@item simple to use
+@item no dependencies other than BusyBox or GNU Coreutils
+@item easy integration with CI/CD pipelines.
+@end itemize")
+    (license (list license:gpl3+ license:asl2.0)))) ;dual license
+
 (define-public cxxtest
   (package
     (name "cxxtest")
@@ -615,7 +835,7 @@ and it supports a very flexible form of test discovery.")
 (define-public doctest
   (package
     (name "doctest")
-    (version "2.4.8")
+    (version "2.4.9")
     (home-page "https://github.com/onqtam/doctest")
     (source (origin
               (method git-fetch)
@@ -624,7 +844,7 @@ and it supports a very flexible form of test discovery.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "057wdkv3gcz42mh1j284sgvm16i5fk1f9b1plgvavca70q4p52gz"))))
+                "1pkpwwvskcr21p00zrbnxpddv34p605mls86qirqqdwggmws82ds"))))
     (build-system cmake-build-system)
     (synopsis "C++ test framework")
     (description
@@ -809,6 +1029,58 @@ C++ but is used in C and C++ projects and frequently used in embedded systems
 but it works for any C/C++ project.")
     (license license:bsd-3)))
 
+(define-public actionlint
+  (package
+    (name "actionlint")
+    (version "1.6.23")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/rhysd/actionlint")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "07is4920a40zrl7mfldg0az2pisi7f6dv4vh3ijn3nzb4i7fqbni"))))
+    (build-system go-build-system)
+    (arguments
+     '(#:import-path "github.com/rhysd/actionlint/cmd/actionlint"
+       #:unpack-path "github.com/rhysd/actionlint"
+       #:install-source? #f))
+    (inputs (list go-github-com-fatih-color
+                  go-github-com-mattn-go-colorable
+                  go-github-com-mattn-go-runewidth
+                  go-github-com-robfig-cron-1.2
+                  go-golang.org-x-sync-errgroup
+                  go-golang.org-x-sync-semaphore
+                  go-gopkg-in-yaml-v3))
+    (native-inputs (list go-github-com-google-go-cmp-cmp))
+    (home-page "https://rhysd.github.io/actionlint/")
+    (synopsis "Static checker for GitHub Actions workflow files")
+    (description
+     "actionlint is a static checker for GitHub Actions
+workflow files.  Features include:
+
+@itemize
+@item Syntax check for workflow files to check unexpected or missing
+keys following workflow syntax
+@item Strong type check for @code{$@{@{ @}@}} expressions to catch
+several semantic errors like access to not existing property, type
+mismatches, ...
+@item Actions usage check to check that inputs at @code{with:} and
+outputs in @code{steps.@{id@}.outputs} are correct
+@item Reusable workflow check to check inputs/outputs/secrets of
+reusable workflows and workflow calls
+@item shellcheck and pyflakes integrations for scripts at @code{run:}
+@item Security checks; script injection by untrusted inputs,
+hard-coded credentials
+@item Other several useful checks; glob syntax validation,
+dependencies check for @code{needs:}, runner label validation, cron
+syntax validation, ...
+@end itemize
+")
+    (license license:expat)))
+
 (define-public python-parameterized
   (package
     (name "python-parameterized")
@@ -900,7 +1172,7 @@ available via the @code{unittest.mock} module.")
                   (add-after 'unpack 'invoke-2to3
                     (lambda _
                       (invoke "2to3" "-w" "."))))))
-    (home-page "http://readthedocs.org/docs/nose/")
+    (home-page "https://readthedocs.org/docs/nose/")
     (synopsis "Python testing library")
     (description
      "Nose extends the unittest library to make testing easier.")
@@ -1034,6 +1306,31 @@ and many external plugins.")
 
 (define-public python-pytest-6 python-pytest)
 
+;; Astropy started using hard dependencies for Pytest 7+, which might
+;; happen for some other projects. It could be set as default in staging.
+(define-public python-pytest-7.1
+  (package
+    (inherit python-pytest)
+    (version "7.1.3")
+    (name "python-pytest")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "pytest" version))
+       (sha256
+        (base32
+         "0f8c31v5r2kgjixvy267n0nhc4xsy65g3n9lz1i1377z5pn5ydjg"))))
+    (arguments
+     (substitute-keyword-arguments (package-arguments python-pytest)
+       ((#:phases phases #~%standard-phases)
+        #~(modify-phases #$phases
+            (add-before 'build 'pretend-version
+              (lambda _
+                (setenv "SETUPTOOLS_SCM_PRETEND_VERSION" #$version)))))))
+    (propagated-inputs
+     (modify-inputs (package-propagated-inputs python-pytest)
+       (replace "python-pluggy" python-pluggy-next)))))
+
 (define-public python-pytest-bootstrap
   (package
     (inherit python-pytest)
@@ -1134,6 +1431,25 @@ supports coverage of subprocesses.")
     (synopsis "HTTP server for pytest")
     (description "Pytest plugin library to test http clients without
 contacting the real http server.")
+    (license license:expat)))
+
+(define-public python-pytest-param-files
+  (package
+    (name "python-pytest-param-files")
+    (version "0.3.4")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "pytest_param_files" version))
+              (sha256
+               (base32
+                "0gc9nsqizrjapjnbcs1bdxfcl69dpmwbpd9sssjidgcikm7k433c"))))
+    (build-system pyproject-build-system)
+    (native-inputs (list python-flit-core))
+    (propagated-inputs (list python-pytest))
+    (home-page "https://github.com/chrisjsewell/pytest-param-files")
+    (synopsis "Pytest plugin to parameterize tests from external files")
+    (description "This Pytest plugin enables creating Pytest parametrize
+decorators from external files.")
     (license license:expat)))
 
 (define-public python-pytest-random-order
@@ -2043,7 +2359,7 @@ instantly.")
 much larger range of examples than you would ever want to write by hand.  It’s
 based on the Haskell library, Quickcheck, and is designed to integrate
 seamlessly into your existing Python unit testing work flow.")
-    (home-page "https://github.com/HypothesisWorks/hypothesis")
+    (home-page "https://hypothesis.works/")
     (license license:mpl2.0)))
 
 ;;; TODO: Make the default python-hypothesis in the next rebuild cycle.
@@ -2192,7 +2508,7 @@ failures.")
     (home-page "https://github.com/ktosiek/pytest-freezegun")
     (synopsis "Pytest plugin to freeze time in test fixtures")
     (description "The @code{pytest-freezegun} plugin wraps tests and fixtures
-with @code{freeze_time}, which allows to control (i.e., freeze) the time seen
+with @code{freeze_time}, which controls (i.e., freeze) the time seen
 by the test.")
     (license license:expat)))
 
@@ -2416,6 +2732,24 @@ all on a minimally sized program.  It's highly configurable and handle
 pragmas to control it from within your code.  Additionally, it is
 possible to write plugins to add your own checks.")
     (license license:gpl2+)))
+
+(define-public python-setuptools-lint
+  (package
+    (name "python-setuptools-lint")
+    (version "0.6.0")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "setuptools-lint" version))
+              (sha256
+               (base32
+                "16a1ac5n7k7sx15cnk03gw3fmslab3a7m74dc45rgpldgiff3577"))))
+    (build-system python-build-system)
+    (propagated-inputs (list python-pylint))
+    (home-page "https://github.com/johnnoone/setuptools-pylint")
+    (synopsis "Run pylint with @command{python setup.py lint}")
+    (description "This package expose pylint as a lint command into
+setup.py.")
+    (license license:bsd-3)))
 
 (define-public python-paramunittest
   (package
@@ -2719,18 +3053,29 @@ create data based on random numbers and yet remain repeatable.")
 (define-public python-freezegun
   (package
     (name "python-freezegun")
-    (version "0.3.14")
+    (version "1.2.2")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "freezegun" version))
        (sha256
-        (base32 "0al75mk829j1izxi760b7yjnknjihyfhp2mvi5qiyrxb9cpxwqk2"))))
+        (base32 "0ijlq32qvpm5zprfzbyzawpl9qjsknlxhryr1i0q84wl0sxd28nd"))
+       (modules '((guix build utils)))
+       (snippet
+        ;; Add an explicit case for static methods as they are callable
+        ;; in Python 3.10, breaking this conditional.
+        ;; XXX Taken from upstream pull request:
+        ;; https://github.com/spulec/freezegun/pull/397
+        '(substitute* "freezegun/api.py"
+           (("if not callable\\(attr_value\\) or \
+inspect\\.isclass\\(attr_value\\):")
+            "if (not callable(attr_value) or inspect.isclass(attr_value)\
+or isinstance(attr_value, staticmethod)):")))))
     (build-system python-build-system)
     (native-inputs
-     (list python-mock python-pytest))
+     (list python-pytest))
     (propagated-inputs
-     (list python-six python-dateutil))
+     (list python-dateutil))
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -2812,7 +3157,7 @@ retried.")
                     (lambda* (#:key inputs outputs #:allow-other-keys)
                       (add-installed-pythonpath inputs outputs)
                       (invoke "pytest" "-vv"))))))
-    (home-page "http://hamcrest.org/")
+    (home-page "https://hamcrest.org/")
     (synopsis "Hamcrest matchers for Python")
     (description "PyHamcrest is a framework for writing matcher objects,
 allowing you to declaratively define \"match\" rules.")
@@ -2902,7 +3247,7 @@ provides a simple way to achieve this.")
 (define-public umockdev
   (package
     (name "umockdev")
-    (version "0.14.4")
+    (version "0.17.13")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://github.com/martinpitt/umockdev/"
@@ -2910,23 +3255,25 @@ provides a simple way to achieve this.")
                                   "umockdev-" version ".tar.xz"))
               (sha256
                (base32
-                "0xmi24ckpps32k7hc139psgbsnsf4g106sv4l9m445m46amkxggd"))))
-    (build-system gnu-build-system)
+                "1kqkraag5v1jl5qfv0mb3ckm8yq2im21mng08sbs9dh9c9pbyvkc"))))
+    (build-system meson-build-system)
     (arguments
      (list #:phases
            #~(modify-phases %standard-phases
-               (add-after 'unpack 'fix-test
+               (add-after 'unpack 'skip-test-umockdev.c
+                 ;; This test depends on /sys being available, among other
+                 ;; things.
                  (lambda _
-                   (substitute* "tests/test-umockdev.c"
-                     (("/run") "/tmp"))))
+                   (call-with-output-file "tests/test-umockdev.c"
+                     (lambda (port)
+                       (format port "int main(void) { return 0; }")))))
                ;; Avoid having to set 'LD_LIBRARY_PATH' to use umockdev
                ;; via introspection.
                (add-after 'unpack 'absolute-introspection-library
-                 (lambda _
-                   (substitute* "Makefile.in"
-                     (("g-ir-compiler -l libumockdev")
-                      (string-append "g-ir-compiler -l " #$output
-                                     "/lib/libumockdev")))))
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   (substitute* "meson.build"
+                     (("libumockdev.so.0" all)
+                      (string-append #$output "/lib/" all)))))
                (add-after 'install 'absolute-filenames
                  (lambda* (#:key inputs #:allow-other-keys)
                    ;; 'patch-shebangs' will take care of the shebang.
@@ -2935,17 +3282,19 @@ provides a simple way to achieve this.")
                      (("libumockdev")
                       (string-append #$output "/lib/libumockdev"))))))))
     (native-inputs
-     (list vala
-           gobject-introspection
+     (list gobject-introspection
            gtk-doc/stable
            pkg-config
-           ;; For tests.
            python
+           vala
            which))
     (inputs
-     (list bash-minimal ;for umockdev-wrapper
-           coreutils-minimal ;for bin/env
-           glib eudev libgudev))
+     (list bash-minimal                 ;for umockdev-wrapper
+           coreutils-minimal            ;for bin/env
+           eudev
+           glib
+           libgudev
+           libpcap))
     (home-page "https://github.com/martinpitt/umockdev/")
     (synopsis "Mock hardware devices for creating unit tests")
     (description "umockdev mocks hardware devices for creating integration
@@ -3044,7 +3393,7 @@ system.  The code under test requires no modification to work with pyfakefs.")
 (define-public python-aiounittest
   (package
     (name "python-aiounittest")
-    (version "1.4.1")
+    (version "1.4.2")
     ;; Pypi package lacks tests.
     (source
      (origin (method git-fetch)
@@ -3054,7 +3403,7 @@ system.  The code under test requires no modification to work with pyfakefs.")
              (file-name (git-file-name name version))
              (sha256
               (base32
-               "10x7ds09b9415r92f7g9714gxixvvq3bm5mnh29ml9aba8blcb0n"))))
+               "0srahyzrk5awfh4rmppvqkblfmiavdklxl9i5mcr8gl7ahiwwl7f"))))
     (build-system python-build-system)
     (arguments
      '(#:phases (modify-phases %standard-phases
@@ -3157,14 +3506,14 @@ directories and files.")
 (define-public python-pytest-regressions
   (package
     (name "python-pytest-regressions")
-    (version "2.2.0")
+    (version "2.3.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "pytest-regressions" version))
        (sha256
         (base32
-         "05jpsvv8rj8i4x24fphpnar5dl4s6d6bw6ikjk5d8v96rdviz9qm"))))
+         "0792s1rp4hksfarnnciy0yiy2q2yqqsbin3mc9h2gxp86kdlrv5k"))))
     (build-system python-build-system)
     (propagated-inputs
      (list python-pytest-datadir python-pyyaml))
@@ -3173,7 +3522,6 @@ directories and files.")
            python-numpy
            python-pandas
            python-pillow
-           python-pre-commit
            python-restructuredtext-lint
            python-tox
            python-setuptools-scm
@@ -3185,3 +3533,79 @@ directories and files.")
 tables by saving expected data in a data directory (courtesy of pytest-datadir)
 that can be used to verify that future runs produce the same data.")
     (license license:expat)))
+
+(define-public guile-proba
+  (package
+    (name "guile-proba")
+    (version "0.3.0")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://codeberg.org/luis-felipe/guile-proba")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1mjnrbb6gv5f95i1ihn75yh7ya445pcnj13cy34x2v58h9n2r80s"))))
+    (build-system guile-build-system)
+    (inputs (list bash-minimal guile-3.0))
+    (native-inputs (list texinfo))
+    (propagated-inputs (list guile-config guile-lib))
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'set-paths 'add-output-to-guile-load-paths
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let* ((out (assoc-ref outputs "out"))
+                     (guile-version (target-guile-effective-version))
+                     (scm-path (string-append out
+                                              "/share/guile/site/"
+                                              guile-version))
+                     (go-path (string-append out
+                                             "/lib/guile/"
+                                             guile-version
+                                             "/site-ccache")))
+                (setenv "GUILE_LOAD_PATH"
+                        (string-append scm-path ":"
+                                       (getenv "GUILE_LOAD_PATH")))
+                (setenv "GUILE_LOAD_COMPILED_PATH"
+                        (string-append
+                         go-path ":"
+                         (getenv "GUILE_LOAD_COMPILED_PATH"))))))
+          (add-after 'build 'build-manual
+            (lambda _
+              (invoke "makeinfo" "manual/main.texi")))
+          (add-after 'build 'check
+            (lambda _
+              (invoke "guile" "proba.scm" "run" "tests")))
+          (add-after 'install 'install-wrapped-script
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let* ((out (assoc-ref outputs "out"))
+                     (bin-dir (string-append out "/bin"))
+                     (script (string-append bin-dir "/proba")))
+                (mkdir-p bin-dir)
+                (copy-file "proba.scm" script)
+                (chmod script #o555)
+                (wrap-program script
+                  `("GUILE_LOAD_PATH" = (,(getenv "GUILE_LOAD_PATH")))
+                  `("GUILE_LOAD_COMPILED_PATH" =
+                    (,(getenv "GUILE_LOAD_COMPILED_PATH")))))))
+          (add-after 'install 'install-manual
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let* ((out (assoc-ref outputs "out"))
+                     (info-dir (string-append out "/share/info")))
+                (mkdir-p info-dir)
+                (install-file "guile-proba" info-dir)))))
+      #:scheme-file-regexp
+      #~(begin
+          (use-modules (ice-9 regex))
+          (lambda (file stat) (string-match "/proba/.*\\.scm$" file)))))
+    (home-page "https://luis-felipe.gitlab.io/guile-proba/")
+    (synopsis "Testing tools for GNU Guile projects with SRFI 64 test suites")
+    (description
+     "This software is a set of testing tools for GNU Guile projects
+with SRFI 64-based test suites.  It comes with a command-line interface
+to run test collections, and a library that includes a test runner and
+helpers for writing tests.")
+    (license license:public-domain)))

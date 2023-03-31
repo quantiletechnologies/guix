@@ -5,7 +5,7 @@
 ;;; Copyright © 2018 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2018, 2019 Rutger Helling <rhelling@mykolab.com>
 ;;; Copyright © 2019 Vagrant Cascadian <vagrant@reproducible-builds.org>
-;;; Copyright © 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2022, 2023 Efraim Flashner <efraim@flashner.co.il>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -48,12 +48,12 @@
   #:use-module (gnu packages llvm)
   #:use-module (gnu packages man)
   #:use-module (gnu packages maths)
-  #:use-module (gnu packages mono)
   #:use-module (gnu packages ocaml)
   #:use-module (gnu packages package-management)
   #:use-module (gnu packages pascal)
   #:use-module (gnu packages patchutils)
   #:use-module (gnu packages pdf)
+  #:use-module (gnu packages python-check)
   #:use-module (gnu packages python-web)
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages sqlite)
@@ -75,7 +75,7 @@
 (define-public diffoscope
   (package
     (name "diffoscope")
-    (version "221")
+    (version "239")
     (source
      (origin
        (method git-fetch)
@@ -84,9 +84,7 @@
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0b89hygd4m18p3wcx7haz0kwx7gn7irjswxz29lv8sb2r1vqq4za"))
-       (patches
-        (search-patches "diffoscope-fix-llvm-test.patch"))))
+        (base32 "1awxazbrqqzqr5x50kam50ibmnjvidynkzp2158rdx5gy5lmnwcy"))))
     (build-system python-build-system)
     (arguments
      `(#:phases (modify-phases %standard-phases
@@ -113,8 +111,8 @@
                         (("\\[\"getfacl\",")
                          (string-append "[\"" (which "getfacl") "\",")))))
                   (add-after 'build 'build-man-page
-                    (lambda* (#:key (make-flags '()) #:allow-other-keys)
-                      (apply invoke "make" "-C" "doc" make-flags)))
+                    (lambda _
+                      (invoke "make" "-C" "doc")))
                   (add-before 'check 'writable-test-data
                     (lambda _
                       ;; Tests may need write access to tests directory.
@@ -142,94 +140,94 @@
                       (let* ((out (assoc-ref outputs "out"))
                              (man (string-append out "/share/man/man1")))
                         (install-file "doc/diffoscope.1" man)))))))
-    (inputs (list rpm ;for rpm-python
+    (inputs (list rpm                   ;for rpm-python
                   python-debian
                   python-libarchive-c
                   python-magic
                   python-tlsh
-                  acl ;for getfacl
-                  coreutils ;for stat
-                  diffutils ;for diff
+                  acl                   ;for getfacl
+                  coreutils             ;for stat
+                  diffutils             ;for diff
                   xxd))
     (native-inputs
      (append
-       (list help2man
+      (list help2man
 
-             ;; Below are packages used for tests.
-             binwalk
-             python-pytest
-             python-chardet
-             python-h5py
-             python-pypdf2
-             python-progressbar33
+            ;; Below are packages used for tests.
+            binwalk
+            python-pytest
+            python-chardet
+            python-h5py
+            python-pypdf
+            python-progressbar33
 
-             abootimg
-             bdb
-             binutils
-             bzip2
-             cdrtools
-             colord
-             cpio
-             docx2txt
-             dtc
-             e2fsprogs
-             ffmpeg
+            abootimg
+            bdb
+            binutils
+            bzip2
+            cdrkit-libre
+            colord
+            cpio
+            docx2txt
+            dtc
+            e2fsprogs
+            ffmpeg
 
-             ;; XXX: Must be the same version as python-magic uses;
-             ;; remove when 'file' is updated.
-             file-next)
+            ;; XXX: Must be the same version as python-magic uses;
+            ;; remove when 'file' is updated.
+            file-next)
 
-       (match (%current-system)
-              ;; fpc is only available on x86 currently.
-              ((or "x86_64-linux" "i686-linux")
-               (list fpc))
-              (_ '()))
+      (match (%current-system)
+        ;; fpc is only available on x86 currently.
+        ((or "x86_64-linux" "i686-linux")
+         (list fpc))
+        (_ '()))
 
-       (list gettext-minimal
-             ghostscript
-             `(,giflib "bin")
-             gnumeric
-             gnupg
-             hdf5
-             imagemagick
-             libarchive
-             llvm-9
-             lz4
-             mono
-             ocaml
-             odt2txt
-             openssh
-             openssl
-             pgpdump
-             poppler
-             python-jsbeautifier
-             r-minimal
-             rpm
-             sng
-             sqlite
-             squashfs-tools
-             tcpdump
-             unzip
-             wabt
-             xxd
-             xz
-             zip
-             zstd)
+      (list gettext-minimal
+            ghostscript
+            `(,giflib "bin")
+            gnumeric
+            gnupg
+            hdf5
+            imagemagick
+            libarchive
+            llvm
+            lz4
+            lzip
+            ocaml
+            odt2txt
+            openssh
+            openssl
+            pgpdump
+            poppler
+            python-jsbeautifier
+            r-minimal
+            rpm
+            sng
+            sqlite
+            squashfs-tools
+            tcpdump
+            unzip
+            wabt
+            xxd
+            xz
+            zip
+            zstd)
 
-       ;; Also for tests.  The test suite skips tests when these are missing.
-       (match (%current-system)
-         ;; ghc is only available on x86 currently.
-         ((or "x86_64-linux" "i686-linux")
-          (list ghc))
-         (_ '()))
-       (match (%current-system)
-         ;; openjdk and dependent packages are only
-         ;; available on x86_64 currently.
-         ((or "x86_64-linux")
-          (list enjarify)
-          ;; No unversioned openjdk available.
-          (list `(,openjdk12 "jdk")))
-         (_ '()))))
+      ;; Also for tests.  The test suite skips tests when these are missing.
+      (match (%current-system)
+        ;; ghc is only available on x86 currently.
+        ((or "x86_64-linux" "i686-linux")
+         (list ghc))
+        (_ '()))
+      (match (%current-system)
+        ;; openjdk and dependent packages are only
+        ;; available on x86_64 currently.
+        ((or "x86_64-linux")
+         (list enjarify)
+         ;; No unversioned openjdk available.
+         (list `(,openjdk12 "jdk")))
+        (_ '()))))
     (home-page "https://diffoscope.org/")
     (synopsis "Compare files, archives, and directories in depth")
     (description
@@ -246,7 +244,7 @@ install.")
 (define-public reprotest
   (package
     (name "reprotest")
-    (version "0.7.21")
+    (version "0.7.23")
     (source
      (origin
        (method git-fetch)
@@ -255,8 +253,7 @@ install.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32
-         "1jmnp6dwd91w00vfvph89cvgxwk0nvij8his9az5b72265jf9bxz"))))
+        (base32 "0hkzh4i3c5hrbvdkhbmwm5vmb4msnlm5rvhjin6h2ni40kix69g0"))))
     (inputs
      (list python-debian python-distro python-libarchive-c python-rstr))
     (native-inputs
@@ -280,9 +277,7 @@ install.")
          (add-after 'unpack 'adjust-locales
            (lambda _
              (substitute* "reprotest/build.py"
-               (("'C.UTF-8'") "'en_US.UTF-8'")
-               (("'ru_RU.CP1251'") "'ru_RU.KOI8-R'")
-               (("'kk_KZ.RK1048'") "'kk_KZ'"))
+               (("'C.UTF-8'") "'en_US.UTF-8'"))
              (substitute* "reprotest/lib/adt_testbed.py"
                (("export LANG=C.UTF-8") "export LANG=en_US.UTF-8"))
              #t))
@@ -297,8 +292,7 @@ install.")
                (install-file "doc/reprotest.1" mandir1)
                (mkdir-p docdir)
                (install-file "./README.rst" docdir)
-               (install-file "./README-dev.rst" docdir))
-             #t)))))
+               (install-file "./README-dev.rst" docdir)))))))
     (home-page "https://salsa.debian.org/reproducible-builds/reprotest")
     (synopsis "Build software and check it for reproducibility")
     (description "Reprotest builds the same source code twice in different

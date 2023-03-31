@@ -25,8 +25,8 @@
   #:use-module (gnu packages boost)
   #:use-module (gnu packages check)
   #:use-module (gnu packages glib)
+  #:use-module (gnu packages hunspell)
   #:use-module (gnu packages icu4c)
-  #:use-module (gnu packages libreoffice)
   #:use-module (gnu packages man)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
@@ -58,7 +58,7 @@
         (base32 "0wbb6dwmzlsyy224y0liis0azgzwbjdvcyzc31pw1aw6vbp36na6"))))
     (build-system cmake-build-system)
     (native-inputs
-     (list catch-framework2
+     (list catch2
            git-minimal
            perl
            ;;FIX-ME: Building with ronn fails.

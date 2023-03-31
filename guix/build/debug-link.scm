@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2018 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2018, 2023 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -38,10 +38,10 @@
 ;;; create separate debug files (info "(gdb) Separate Debug Files").
 ;;;
 ;;; The main facility of this module is 'graft-debug-links', which allows us
-;;; to update the CRC that appears in '.gnu_debuglink' sections when grafting,
-;;; such that separate debug files remain usable after grafting.  Failing to
-;;; do that, GDB would complain about CRC mismatch---see
-;;; <https://bugs.gnu.org/19973>.
+;;; to update the cyclic redundancy check (CRC) that appears in
+;;; '.gnu_debuglink' sections when grafting, such that separate debug files
+;;; remain usable after grafting.  Failing to do that, GDB would complain
+;;; about CRC mismatch---see <https://issues.guix.gnu.org/19973>.
 ;;;
 ;;; Code:
 
@@ -175,7 +175,15 @@ directories."
                 outputs))
 
   (append-map (lambda (directory)
-                (filter elf-file?
+                (filter (lambda (file)
+                          (catch 'system-error
+                            (lambda ()
+                              (elf-file? file))
+                            (lambda args
+                              ;; FILE might be a dangling symlink.
+                              (if (= ENOENT (system-error-errno args))
+                                  #f
+                                  (apply throw args)))))
                         (with-error-to-port (%make-void-port "w")
                           (lambda ()
                             (find-files directory)))))

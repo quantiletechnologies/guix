@@ -59,6 +59,7 @@
             guix-build-coordinator-agent-configuration-authentication
             guix-build-coordinator-agent-configuration-systems
             guix-build-coordinator-agent-configuration-max-parallel-builds
+            guix-build-coordinator-agent-configuration-max-allocated-builds
             guix-build-coordinator-agent-configuration-max-1min-load-average
             guix-build-coordinator-agent-configuration-derivation-substitute-urls
             guix-build-coordinator-agent-configuration-non-derivation-substitute-urls
@@ -125,7 +126,18 @@
             nar-herder-configuration-storage
             nar-herder-configuration-storage-limit
             nar-herder-configuration-storage-nar-removal-criteria
-            nar-herder-configuration-log-level))
+            nar-herder-configuration-log-level
+            nar-herder-configuration-cached-compressions
+            nar-herder-configuration-cached-compression-min-uses
+            nar-herder-configuration-cached-compression-workers
+            nar-herder-configuration-cached-compression-nar-source
+
+            nar-herder-cached-compression-configuration
+            nar-herder-cached-compression-configuration?
+            nar-herder-cached-compression-configuration-type
+            nar-herder-cached-compression-configuration-level
+            nar-herder-cached-compression-configuration-directory
+            nar-herder-cached-compression-configuration-directory-max-size))
 
 ;;;; Commentary:
 ;;;
@@ -177,6 +189,9 @@
   (max-parallel-builds
    guix-build-coordinator-agent-configuration-max-parallel-builds
    (default 1))
+  (max-allocated-builds
+   guix-build-coordinator-agent-configuration-max-allocated-builds
+   (default #f))
   (max-1min-load-average
    guix-build-coordinator-agent-configuration-max-1min-load-average
    (default #f))
@@ -329,31 +344,38 @@
       (documentation "Guix Build Coordinator")
       (provision '(guix-build-coordinator))
       (requirement '(networking))
-      (start #~(make-forkexec-constructor
-                (list #$(make-guix-build-coordinator-start-script
-                         database-uri-string
-                         allocation-strategy
-                         "/var/run/guix-build-coordinator/pid"
-                         package
-                         #:agent-communication-uri-string
-                         agent-communication-uri-string
-                         #:client-communication-uri-string
-                         client-communication-uri-string
-                         #:hooks hooks
-                         #:parallel-hooks parallel-hooks
-                         #:guile guile))
-                #:user #$user
-                #:group #$group
-                #:pid-file "/var/run/guix-build-coordinator/pid"
-                ;; Allow time for migrations to run
-                #:pid-file-timeout 60
-                #:environment-variables
-                `(,(string-append
-                    "GUIX_LOCPATH=" #$glibc-utf8-locales "/lib/locale")
-                  "LC_ALL=en_US.utf8"
-                  "PATH=/run/current-system/profile/bin") ; for hooks
-                #:log-file "/var/log/guix-build-coordinator/coordinator.log"))
-      (stop #~(make-kill-destructor))))))
+      (start #~(lambda args
+                 (parameterize ((%current-logfile-date-format ""))
+                   (apply
+                    (make-forkexec-constructor
+                     (list #$(make-guix-build-coordinator-start-script
+                              database-uri-string
+                              allocation-strategy
+                              "/var/run/guix-build-coordinator/pid"
+                              package
+                              #:agent-communication-uri-string
+                              agent-communication-uri-string
+                              #:client-communication-uri-string
+                              client-communication-uri-string
+                              #:hooks hooks
+                              #:parallel-hooks parallel-hooks
+                              #:guile guile))
+                     #:user #$user
+                     #:group #$group
+                     #:pid-file "/var/run/guix-build-coordinator/pid"
+                     ;; Allow time for migrations to run
+                     #:pid-file-timeout 60
+                     #:environment-variables
+                     `(,(string-append
+                         "GUIX_LOCPATH=" #$glibc-utf8-locales "/lib/locale")
+                       "LC_ALL=en_US.utf8"
+                       "PATH=/run/current-system/profile/bin") ; for hooks
+                     #:log-file "/var/log/guix-build-coordinator/coordinator.log")
+                    args))))
+      (stop #~(make-kill-destructor))
+      (modules
+       `((shepherd comm)
+         ,@%default-modules))))))
 
 (define (guix-build-coordinator-activation config)
   #~(begin
@@ -406,6 +428,7 @@
 (define (guix-build-coordinator-agent-shepherd-services config)
   (match-record config <guix-build-coordinator-agent-configuration>
     (package user coordinator authentication max-parallel-builds
+             max-allocated-builds
              max-1min-load-average
              derivation-substitute-urls non-derivation-substitute-urls
              systems)
@@ -414,57 +437,67 @@
       (documentation "Guix Build Coordinator Agent")
       (provision '(guix-build-coordinator-agent))
       (requirement '(networking))
-      (start #~(make-forkexec-constructor
-                (list #$(file-append package "/bin/guix-build-coordinator-agent")
-                      #$(string-append "--coordinator=" coordinator)
-                      #$@(match authentication
-                           (($ <guix-build-coordinator-agent-password-auth>
-                               uuid password)
-                            #~(#$(string-append "--uuid=" uuid)
-                               #$(string-append "--password=" password)))
-                           (($ <guix-build-coordinator-agent-password-file-auth>
-                               uuid password-file)
-                            #~(#$(string-append "--uuid=" uuid)
-                               #$(string-append "--password-file="
-                                                password-file)))
-                           (($ <guix-build-coordinator-agent-dynamic-auth>
-                               agent-name token)
-                            #~(#$(string-append "--name=" agent-name)
-                               #$(string-append "--dynamic-auth-token=" token)))
-                           (($
-                             <guix-build-coordinator-agent-dynamic-auth-with-file>
-                             agent-name token-file)
-                            #~(#$(string-append "--name=" agent-name)
-                               #$(string-append "--dynamic-auth-token-file="
-                                                token-file))))
-                      #$(simple-format #f "--max-parallel-builds=~A"
-                                       max-parallel-builds)
-                      #$@(if max-1min-load-average
-                             #~(#$(simple-format #f "--max-1min-load-average=~A"
-                                                 max-1min-load-average))
-                             #~())
-                      #$@(if derivation-substitute-urls
-                             #~(#$(string-append
-                                   "--derivation-substitute-urls="
+      (start
+       #~(lambda _
+           (parameterize ((%current-logfile-date-format ""))
+             (fork+exec-command
+              (list #$(file-append package "/bin/guix-build-coordinator-agent")
+                    #$(string-append "--coordinator=" coordinator)
+                    #$@(match authentication
+                         (($ <guix-build-coordinator-agent-password-auth>
+                             uuid password)
+                          #~(#$(string-append "--uuid=" uuid)
+                             #$(string-append "--password=" password)))
+                         (($ <guix-build-coordinator-agent-password-file-auth>
+                             uuid password-file)
+                          #~(#$(string-append "--uuid=" uuid)
+                             #$(string-append "--password-file="
+                                              password-file)))
+                         (($ <guix-build-coordinator-agent-dynamic-auth>
+                             agent-name token)
+                          #~(#$(string-append "--name=" agent-name)
+                             #$(string-append "--dynamic-auth-token=" token)))
+                         (($
+                           <guix-build-coordinator-agent-dynamic-auth-with-file>
+                           agent-name token-file)
+                          #~(#$(string-append "--name=" agent-name)
+                             #$(string-append "--dynamic-auth-token-file="
+                                              token-file))))
+                    #$(simple-format #f "--max-parallel-builds=~A"
+                                     max-parallel-builds)
+                    #$@(if max-allocated-builds
+                           #~(#$(simple-format #f "--max-allocated-builds=~A"
+                                               max-allocated-builds))
+                           #~())
+                    #$@(if max-1min-load-average
+                           #~(#$(simple-format #f "--max-1min-load-average=~A"
+                                               max-1min-load-average))
+                           #~())
+                    #$@(if derivation-substitute-urls
+                           #~(#$(string-append
+                                 "--derivation-substitute-urls="
                                  (string-join derivation-substitute-urls " ")))
-                             #~())
-                      #$@(if non-derivation-substitute-urls
-                             #~(#$(string-append
-                                   "--non-derivation-substitute-urls="
-                                   (string-join non-derivation-substitute-urls " ")))
-                             #~())
-                      #$@(map (lambda (system)
-                                (string-append "--system=" system))
-                              (or systems '())))
-                #:user #$user
-                #:environment-variables
-                `(,(string-append
-                    "GUIX_LOCPATH=" #$glibc-utf8-locales "/lib/locale")
-                  ;; XDG_CACHE_HOME is used by Guix when caching narinfo files
-                  "XDG_CACHE_HOME=/var/cache/guix-build-coordinator-agent"
-                  "LC_ALL=en_US.utf8")
-                #:log-file "/var/log/guix-build-coordinator/agent.log"))
-      (stop #~(make-kill-destructor))))))
+                           #~())
+                    #$@(if non-derivation-substitute-urls
+                           #~(#$(string-append
+                                 "--non-derivation-substitute-urls="
+                                 (string-join non-derivation-substitute-urls " ")))
+                           #~())
+                    #$@(map (lambda (system)
+                              (string-append "--system=" system))
+                            (or systems '())))
+              #:user #$user
+              #:environment-variables
+              `(,(string-append
+                  "GUIX_LOCPATH=" #$glibc-utf8-locales "/lib/locale")
+                ;; XDG_CACHE_HOME is used by Guix when caching narinfo files
+                "XDG_CACHE_HOME=/var/cache/guix-build-coordinator-agent"
+                "LC_ALL=en_US.utf8")
+              #:log-file "/var/log/guix-build-coordinator/agent.log"))))
+      (stop #~(make-kill-destructor))
+      (modules
+       `((shepherd comm)
+         ,@%default-modules))))))
 
 (define (guix-build-coordinator-agent-activation config)
   #~(begin
@@ -517,39 +550,44 @@
       (provision '(guix-build-coordinator-queue-builds))
       (requirement '(networking))
       (start
-       #~(make-forkexec-constructor
-          (list
-           #$(file-append
-              package
-              "/bin/guix-build-coordinator-queue-builds-from-guix-data-service")
-           #$(string-append "--coordinator=" coordinator)
-           #$@(map (lambda (system)
-                     (string-append "--system=" system))
-                   (or systems '()))
-           #$@(map (match-lambda
-                     ((system . target)
-                      (string-append "--system-and-target=" system "=" target)))
-                   (or systems-and-targets '()))
-           #$@(if guix-data-service
-                  #~(#$(string-append "--guix-data-service=" guix-data-service))
-                  #~())
-           #$@(if guix-data-service-build-server-id
-                  #~(#$(simple-format
-                        #f
-                        "--guix-data-service-build-server-id=~A"
-                        guix-data-service-build-server-id))
-                  #~())
-           #$@(if processed-commits-file
-                  #~(#$(string-append "--processed-commits-file="
-                                      processed-commits-file))
-                  #~()))
-          #:user #$user
-          #:environment-variables
-          `(,(string-append
-              "GUIX_LOCPATH=" #$glibc-utf8-locales "/lib/locale")
-            "LC_ALL=en_US.utf8")
-          #:log-file "/var/log/guix-build-coordinator/queue-builds.log"))
-      (stop #~(make-kill-destructor))))))
+       #~(lambda _
+           (parameterize ((%current-logfile-date-format ""))
+             (fork+exec-command
+              (list
+               #$(file-append
+                  package
+                  "/bin/guix-build-coordinator-queue-builds-from-guix-data-service")
+               #$(string-append "--coordinator=" coordinator)
+               #$@(map (lambda (system)
+                         (string-append "--system=" system))
+                       (or systems '()))
+               #$@(map (match-lambda
+                         ((system . target)
+                          (string-append "--system-and-target=" system "=" target)))
+                       (or systems-and-targets '()))
+               #$@(if guix-data-service
+                      #~(#$(string-append "--guix-data-service=" guix-data-service))
+                      #~())
+               #$@(if guix-data-service-build-server-id
+                      #~(#$(simple-format
+                            #f
+                            "--guix-data-service-build-server-id=~A"
+                            guix-data-service-build-server-id))
+                      #~())
+               #$@(if processed-commits-file
+                      #~(#$(string-append "--processed-commits-file="
+                                          processed-commits-file))
+                      #~()))
+              #:user #$user
+              #:environment-variables
+              `(,(string-append
+                  "GUIX_LOCPATH=" #$glibc-utf8-locales "/lib/locale")
+                "LC_ALL=en_US.utf8")
+              #:log-file "/var/log/guix-build-coordinator/queue-builds.log"))))
+      (stop #~(make-kill-destructor))
+      (modules
+       `((shepherd comm)
+         ,@%default-modules))))))
 
 (define (guix-build-coordinator-queue-builds-activation config)
   #~(begin
@@ -801,17 +839,67 @@ ca-certificates.crt file in the system profile."
   (negative-ttl  nar-herder-configuration-negative-ttl
                  (default #f))
   (log-level     nar-herder-configuration-log-level
-                 (default 'DEBUG)))
+                 (default 'DEBUG))
+  (cached-compressions
+   nar-herder-configuration-cached-compressions
+   (default '()))
+  (cached-compression-min-uses
+   nar-herder-configuration-cached-compression-min-uses
+   (default 3))
+  (cached-compression-workers
+   nar-herder-configuration-cached-compression-workers
+   (default 2))
+  (cached-compression-nar-source
+   nar-herder-configuration-cached-compression-nar-source
+   (default #f)))
 
+(define-record-type* <nar-herder-cached-compression-configuration>
+  nar-herder-cached-compression-configuration
+  make-nar-herder-cached-compression-configuration
+  nar-herder-cached-compression-configuration?
+  (type                nar-herder-cached-compression-configuration-type)
+  (level               nar-herder-cached-compression-configuration-level
+                       (default #f))
+  (directory           nar-herder-cached-compression-configuration-directory
+                       (default #f))
+  (directory-max-size
+   nar-herder-cached-compression-configuration-directory-max-size
+   (default #f)))
 
 (define (nar-herder-shepherd-services config)
+  (define (cached-compression-configuration->options cached-compression)
+    (match-record
+        cached-compression
+        <nar-herder-cached-compression-configuration>
+      (type level directory directory-max-size)
+
+      `(,(simple-format #f "--enable-cached-compression=~A~A"
+                        type
+                        (if level
+                            (simple-format #f ":~A" level)
+                            ""))
+        ,@(if directory
+              (list
+               (simple-format #f "--cached-compression-directory=~A=~A"
+                              type
+                              directory))
+              '())
+        ,@(if directory-max-size
+              (list
+               (simple-format #f "--cached-compression-directory-max-size=~A=~A"
+                              type
+                              directory-max-size))
+              '()))))
+
   (match-record config <nar-herder-configuration>
     (package user group
              mirror
              database database-dump
              host port
              storage storage-limit storage-nar-removal-criteria
-             ttl negative-ttl log-level)
+             ttl negative-ttl log-level
+             cached-compressions cached-compression-min-uses
+             cached-compression-workers cached-compression-nar-source)
 
     (unless (or mirror storage)
       (error "nar-herder: mirror or storage must be set"))
@@ -855,6 +943,24 @@ ca-certificates.crt file in the system profile."
                              '())
                       #$@(if log-level
                              (list (simple-format #f "--log-level=~A" log-level))
+                             '())
+                      #$@(append-map
+                          cached-compression-configuration->options
+                          cached-compressions)
+                      #$@(if cached-compression-min-uses
+                             (list (simple-format
+                                    #f "--cached-compression-min-uses=~A"
+                                    cached-compression-min-uses))
+                             '())
+                      #$@(if cached-compression-workers
+                             (list (simple-format
+                                    #f "--cached-compression-workers=~A"
+                                    cached-compression-workers))
+                             '())
+                      #$@(if cached-compression-nar-source
+                             (list (simple-format
+                                    #f "--cached-compression-nar-source=~A"
+                                    cached-compression-nar-source))
                              '()))
                 #:user #$user
                 #:group #$group

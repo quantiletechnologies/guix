@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2017 Caleb Ristvedt <caleb.ristvedt@cune.org>
-;;; Copyright © 2018-2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2018-2022 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -28,9 +28,7 @@
   #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
-  #:use-module (rnrs bytevectors)
   #:use-module (rnrs io ports)
-  #:use-module (ice-9 ftw)
   #:use-module (ice-9 match)
   #:use-module (guix serialization)
   #:export (nar-sha256
@@ -262,7 +260,10 @@ down the road."
       (deduplicate file (dump-and-compute-hash) #:store store)
       (call-with-output-file file
         (lambda (output)
-          (dump-port input output size)))))
+          (if (file-port? input)
+              (sendfile output input size 0)
+              (dump-port input output size
+                         #:buffer-size %deduplication-minimum-size))))))
 
 (define* (copy-file/deduplicate source target
                                 #:key (store (%store-directory)))

@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2015, 2016, 2017, 2018, 2019, 2020 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2015-2020, 2022-2023 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2017 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2018, 2019, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2018, 2021 Ludovic Courtès <ludo@gnu.org>
@@ -31,6 +31,8 @@
   #:use-module (guix build-system go)
   #:use-module (guix build-system meson)
   #:use-module (guix build-system qt)
+  #:use-module (guix gexp)
+  #:use-module (guix utils)
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix packages)
@@ -38,10 +40,12 @@
   #:use-module (gnu packages acl)
   #:use-module (gnu packages adns)
   #:use-module (gnu packages autotools)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages crypto)
   #:use-module (gnu packages curl)
+  #:use-module (gnu packages dlang)
   #:use-module (gnu packages documentation)
   #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages glib)
@@ -50,6 +54,7 @@
   #:use-module (gnu packages graphviz)
   #:use-module (gnu packages image)
   #:use-module (gnu packages kde-frameworks)
+  #:use-module (gnu packages libevent)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages lua)
   #:use-module (gnu packages ocaml)
@@ -213,7 +218,7 @@ Nextcloud Server with your computer.")
 (define-public megacmd
   (package
     (name "megacmd")
-    (version "1.1.0")
+    (version "1.5.1")
     (source
       (origin
         (method git-fetch)
@@ -223,28 +228,29 @@ Nextcloud Server with your computer.")
               (recursive? #t)))
         (sha256
          (base32
-          "004j8m3xs6slx03g2g6wzr97myl2v3zc09wxnfar5c62a625pd53"))
+          "12v46jyxdgp2qqdpmd084d60hd5srjbgwpk082b3rp5dl7yg1rd8"))
         (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     ;; XXX: Disabling tests because they depend on libgtest.la from googletest,
     ;; which is not installed for unclear reasons.
     (arguments
-     `(#:tests? #f
-       #:configure-flags '("--with-pcre")))
+     (list #:tests? #f
+           #:configure-flags #~'("--with-pcre")))
     (native-inputs
      (list autoconf automake libtool))
     (inputs
-     `(("c-ares" ,c-ares)
-       ("crypto++" ,crypto++)
-       ("curl" ,curl)
-       ("freeimage" ,freeimage)
-       ("gtest" ,googletest)
-       ("openssl" ,openssl)
-       ("pcre" ,pcre)
-       ("readline" ,readline)
-       ("sodium" ,libsodium)
-       ("sqlite3" ,sqlite)
-       ("zlib" ,zlib)))
+     (list c-ares
+           crypto++
+           curl
+           freeimage
+           googletest
+           libuv
+           openssl
+           pcre
+           readline
+           libsodium
+           sqlite
+           zlib))
     (home-page "https://mega.nz/cmd")
     (synopsis
      "Command Line Interactive and Scriptable Application to access mega.nz")
@@ -358,6 +364,61 @@ to and a server to synchronize to.  You can configure more computers to
 synchronize to the same server and any change to the files on one computer will
 silently and reliably flow across to every other.")
     (license license:gpl2+)))
+
+(define-public onedrive
+  (package
+    (name "onedrive")
+    (version "2.4.23")
+    (source
+      (origin
+        (method git-fetch)
+        (uri (git-reference
+               (url "https://github.com/abraunegg/onedrive")
+               (commit (string-append "v" version))))
+        (file-name (git-file-name name version))
+        (sha256
+         (base32 "1nj4g1rbbg6g9kw1k89dmjg4mnyh5q1b3wbjhrayvnjmssx66yn8"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+       #:configure-flags
+       #~(list "--enable-completions"
+               "--enable-notifications"
+               (string-append "--with-zsh-completion-dir="
+                              #$output "/share/zsh/site-functions")
+               (string-append "--with-fish-completion-dir="
+                              #$output "/share/fish/vendor_completions.d"))
+       #:make-flags
+       #~(list (string-append "CC=" #$(cc-for-target)))
+       #:phases
+       #~(modify-phases %standard-phases
+         (add-after 'unpack 'link-to-external-libraries
+           (lambda _
+             ;; Only link necessary libraries.
+             (setenv "DCFLAGS" "-L--as-needed")))
+         (add-after 'configure 'adjust-makefile
+           (lambda _
+             (substitute* "Makefile"
+               (("-O ") "-O2 "))))
+         (replace 'check
+           (lambda* (#:key tests? #:allow-other-keys)
+             (when tests?
+               (invoke "./onedrive" "--version")))))))
+    (native-inputs
+     (list pkg-config))
+    (inputs
+     (list bash-minimal
+           curl-minimal
+           ldc
+           libnotify
+           sqlite))
+    (home-page "https://abraunegg.github.io")
+    (synopsis "Client for OneDrive")
+    (description "OneDrive Client which supports OneDrive Personal, OneDrive for
+Business, OneDrive for Office365 and SharePoint and fully supports Azure
+National Cloud Deployments.  It supports one-way and two-way sync capabilities
+and securely connects to Microsoft OneDrive services.")
+    (license license:gpl3)))
 
 (define-public lsyncd
   (package

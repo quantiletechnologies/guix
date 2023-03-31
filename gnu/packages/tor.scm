@@ -4,13 +4,13 @@
 ;;; Copyright © 2016, 2017, 2018, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016, 2017 Nikita <nikita@n0.is>
 ;;; Copyright © 2017–2021 Tobias Geerinckx-Rice <me@tobias.gr>
-;;; Copyright © 2017, 2018, 2019, 2021 Eric Bavier <bavier@posteo.net>
+;;; Copyright © 2017, 2018, 2019, 2021, 2023 Eric Bavier <bavier@posteo.net>
 ;;; Copyright © 2017 Rutger Helling <rhelling@mykolab.com>
-;;; Copyright © 2018 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2018, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2020 Vincent Legoll <vincent.legoll@gmail.com>
 ;;; Copyright © 2020 Brice Waegeneire <brice@waegenei.re>
 ;;; Copyright © 2020 André Batista <nandre@riseup.net>
-;;; Copyright © 2021-2022 Danial Behzadi <dani.behzi@ubuntu.com>
+;;; Copyright © 2021-2023 Danial Behzadi <dani.behzi@ubuntu.com>
 ;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2022 Jim Newsome <jnewsome@torproject.org>
 ;;;
@@ -38,6 +38,7 @@
   #:use-module (guix git-download)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system python)
+  #:use-module (guix build-system pyproject)
   #:use-module (gnu packages)
   #:use-module (gnu packages base)
   #:use-module (gnu packages libevent)
@@ -45,6 +46,7 @@
   #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages pcre)
+  #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
@@ -61,14 +63,14 @@
 (define-public tor
   (package
     (name "tor")
-    (version "0.4.7.10")
+    (version "0.4.7.13")
     (source (origin
              (method url-fetch)
              (uri (string-append "https://dist.torproject.org/tor-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "0nss8g6hx42nqiir6l03dj15r433fvygq9r00nmnv8wylpgmczk4"))))
+               "17ga25dq2lcph390ljqmyd8sggp97h42d3h423qmci83rqn1fy90"))))
     (build-system gnu-build-system)
     (arguments
      (list #:configure-flags
@@ -185,12 +187,14 @@ This package only provides a client to the Tor Network.")))
                (("getcap=.*")
                 (string-append "getcap=" (which "getcap") "\n"))))))))
     (home-page "https://www.torproject.org/")
-    (synopsis "Transparently route an application's traffic through Tor.")
+    (synopsis "Transparently route an application's traffic through Tor")
     (description
      "Torsocks allows you to use most applications in a safe way with Tor.  It
 ensures that DNS requests are handled safely and explicitly rejects UDP
 traffic from the application you're using.")
-
+    (properties
+     '((release-monitoring-url
+         . "https://gitlab.torproject.org/tpo/core/torsocks/-/tags")))
     ;; All the files explicitly say "version 2 only".
     (license license:gpl2)))
 
@@ -253,7 +257,7 @@ networks.")
 (define-public onionshare-cli
   (package
     (name "onionshare-cli")
-    (version "2.5")
+    (version "2.6")
     (source
      (origin
        (method git-fetch)
@@ -262,7 +266,8 @@ networks.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "16m5ll0v0qjbirwwzbzxg53kq4ry1n3ay5x0h8zkij73v3x0q864"))))
+        (base32 "1bhrp019a0923h7dnfxhgvgvdp81blvnsbnvzy34hp827abxf3ic"))
+       (patches (search-patches "onionshare-cli-async-mode.patch"))))
     (build-system python-build-system)
     (native-inputs
      (list python-pytest))
@@ -326,6 +331,11 @@ OnionShare.")
      (substitute-keyword-arguments (package-arguments onionshare-cli)
        ((#:phases phases)
         #~(modify-phases #$phases
+            (add-after 'unpack 'absolutize
+              (lambda* (#:key inputs #:allow-other-keys)
+                (substitute* "desktop/onionshare/tab/mode/history.py"
+                  (("Popen\\(\\[\"xdg-open\"")
+                   (string-append "Popen([\"" (which "xdg-open") "\"")))))
             (replace 'change-directory
               (lambda _ (chdir "desktop/")))
             (add-after 'install 'install-data
@@ -350,15 +360,9 @@ OnionShare.")
                   (setenv "QT_QPA_PLATFORM" "offscreen")
                   (setenv "HOME" "/tmp")
                   (apply invoke "xvfb-run" "pytest" "-vv"
-                         (find-files "tests" "^test_gui.*\\.py$")))))))
-       ;; Most tests fail: "2 failed, 8 warnings, 44 errors in 6.06s", due to
-       ;; error "RuntimeError: Please destroy the Application singleton before
-       ;; creating a new Application instance." (see:
-       ;; https://github.com/onionshare/onionshare/issues/1603).
-       ((#:tests? _ #f)
-        #f)))
+                         (find-files "tests" "^test_gui.*\\.py$")))))))))
     (native-inputs
-     (list python-pytest))
+     (list python-pytest xvfb-run))
     (inputs
      ;; The desktop client uses onionshare-cli like a python module.  But
      ;; propagating onionshare-cli's inputs is not great, since a user would
@@ -369,7 +373,7 @@ OnionShare.")
                 python-shiboken-2
                 python-pyside-2
                 python-qrcode
-                xvfb-run)))
+                xdg-utils)))
     (description "OnionShare lets you securely and anonymously share files,
 host websites, and chat with friends using the Tor network.")))
 
@@ -432,17 +436,17 @@ Potential client and exit connections are scrubbed of sensitive information.")
 (define-public tractor
   (package
     (name "tractor")
-    (version "3.14")
+    (version "4.1.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "traxtor" version))
        (sha256
         (base32
-         "06jhsg179rfckagrpk9r8wqp44anf1bchm3ins2saf5806f0n5lw"))))
-    (build-system python-build-system)
+         "1542g6alycwlmvndxcijzn4d5lgycmxxb78gqd8qwgm9kw0fnr3q"))))
+    (build-system pyproject-build-system)
     (native-inputs
-     `(("glib:bin" ,glib "bin")))       ; for glib-compile-schemas.
+     (list (list glib "bin")))       ; for glib-compile-schemas.
     (inputs
      (list python-fire
            python-psutil
@@ -451,20 +455,26 @@ Potential client and exit connections are scrubbed of sensitive information.")
            python-stem
            python-termcolor))
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (add-after 'install 'install-man-page
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (man1 (string-append out "/share/man/man1")))
-               (install-file "tractor/man/tractor.1" man1)
-               #t)))
-         (add-after 'install 'install-gschema
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (schemas (string-append out "/share/glib-2.0/schemas")))
-               (install-file "tractor/tractor.gschema.xml" schemas)
-               #t))))))
+     (list
+      #:tests? #f                   ; no test suite.
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'install 'install-man-page
+            (lambda _
+              (let ((man1 (string-append #$output "/share/man/man1")))
+                (install-file "tractor/man/tractor.1" man1))))
+          (add-after 'install 'install-bash-completion
+            (lambda _
+              (mkdir "bash-completion")
+              (rename-file "tractor/tractor-completion"
+                           "bash-completion/tractor")
+              (let ((bash-completion
+                      (string-append #$output "/share/bash-completion/completions")))
+                (install-file "bash-completion/tractor" bash-completion))))
+          (add-after 'install 'install-gschema
+            (lambda _
+              (let ((schemas (string-append #$output "/share/glib-2.0/schemas")))
+                (install-file "tractor/tractor.gschema.xml" schemas)))))))
     (home-page "https://framagit.org/tractor")
     (synopsis "Setup an onion routing proxy")
     (description

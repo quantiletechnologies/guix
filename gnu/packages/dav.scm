@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2015, 2016, 2017 Leo Famulari <leo@famulari.name>
-;;; Copyright © 2018, 2019, 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2018, 2019, 2022, 2023 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2020 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2021 Tanguy Le Carrour <tanguy@bioneland.org>
@@ -122,14 +122,13 @@ efficient syncing
 (define-public vdirsyncer
   (package
     (name "vdirsyncer")
-    ;; When updating, check whether python-click-5 can be removed entirely.
-    (version "0.18.0")
+    (version "0.19.1")
     (source (origin
              (method url-fetch)
              (uri (pypi-uri name version))
              (sha256
               (base32
-               "00f2bw1a2jbbd1sbci0swnd67kylr341aa9rpbxkajbp3zakxg17"))))
+               "1bh3kz0d8g07xnlkb5l2fj6fdakqps1wviab6zv139x5b9rcfxma"))))
     (build-system python-build-system)
     (arguments
      `(#:tests? #f ; The test suite is very flakey.
@@ -141,38 +140,30 @@ efficient syncing
             (setenv "DAV_SERVER" "radicale")
             (setenv "REMOTESTORAGE_SERVER" "skip")
             (if tests?
-                (invoke "make" "test")
-                #t)))
+                (invoke "make" "test"))))
         (add-after 'unpack 'patch-version-call
           (lambda _
             (substitute* "docs/conf.py"
-              (("^release.*") (string-append "release = '" ,version "'\n")))
-            #t))
-        (add-after 'install 'manpage
-          (lambda* (#:key inputs outputs #:allow-other-keys)
-            (invoke "make" "--directory=docs/" "man")
-            (install-file
-              "docs/_build/man/vdirsyncer.1"
-              (string-append
-                (assoc-ref outputs "out")
-                "/share/man/man1"))
-            #t)))))
+              (("^release.*") (string-append "release = '" ,version "'\n"))))))))
     (native-inputs
      (list python-setuptools-scm
            python-sphinx
            ;; Required for testing
+           python-aioresponses
            python-hypothesis
+           python-trustme
            python-pytest
-           python-pytest-localserver
-           python-pytest-subtesthack
-           python-urllib3
-           python-wsgi-intercept
+           python-pytest-asyncio
+           python-pytest-cov
+           python-pytest-httpserver
            radicale))
     (inputs
-     (list ;; XXX https://github.com/mitsuhiko/click/issues/200
-           python-click-5))
-    (propagated-inputs
-     (list python-atomicwrites python-click-log python-click-threading
+     (list python-aiohttp
+           python-aiostream
+           python-atomicwrites
+           python-click
+           python-click-log
+           python-requests
            python-requests-toolbelt))
     (synopsis "Synchronize calendars and contacts")
     (description "Vdirsyncer synchronizes your calendars and addressbooks

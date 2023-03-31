@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2021-2022 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2021-2023 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -143,6 +143,11 @@ expressions."
                    #:max-width 11)
 
 (test-pretty-print "\
+(begin
+  1+ 1- 123/ 456*
+  (1+ 41))")
+
+(test-pretty-print "\
 (lambda (x y)
   ;; This is a procedure.
   (let ((z (+ x y)))
@@ -187,6 +192,9 @@ expressions."
                 xyz))))")
 
 (test-pretty-print "\
+(string-append \"a\\tb\" \"\\n\")")
+
+(test-pretty-print "\
 (description \"abcdefghijkl
 mnopqrstuvwxyz.\")"
                    #:max-width 30)
@@ -203,6 +211,15 @@ mnopqrstuvwxyz.\")"
                    #:max-width 33)
 
 (test-pretty-print "\
+(list ;margin comment
+      a b c)")
+
+(test-pretty-print "\
+(list
+ ;; This is a line comment immediately following the list head.
+ #:test-flags #~(list \"-m\" \"not external and not samples\"))")
+
+(test-pretty-print "\
 (modify-phases %standard-phases
   (replace 'build
     ;; Nicely indented in 'modify-phases' context.
@@ -213,6 +230,21 @@ mnopqrstuvwxyz.\")"
 (modify-inputs inputs
   ;; Regular indentation for 'replace' here.
   (replace \"gmp\" gmp))")
+
+(test-pretty-print "\
+#~(modify-phases phases
+    (add-after 'whatever 'something-else
+      (lambda _
+        ;; This comment appears inside a gexp.
+        42)))")
+
+(test-pretty-print "\
+#~(list #$@(list coreutils ;yup
+                 grep) ;margin comment
+        #+sed
+
+        ;; Line comment.
+        #$grep)")
 
 (test-pretty-print "\
 (package
@@ -246,6 +278,14 @@ mnopqrstuvwxyz.\")"
                 (b 4))
            (+ a b))))
   (list x y z))")
+
+(test-pretty-print "\
+(begin
+  (chmod \"foo\" #o750)
+  (chmod port
+         (logand #o644
+                 (lognot (umask))))
+  (logand #x7f xyz))")
 
 (test-pretty-print "\
 (substitute-keyword-arguments (package-arguments x)
@@ -282,6 +322,11 @@ mnopqrstuvwxyz.\")"
 
   ;; page break above
   end)")
+
+(test-pretty-print "\
+(home-environment
+  (services
+   (list (service-type home-bash-service-type))))")
 
 (test-pretty-print/sequence "\
 ;;; This is a top-level comment.

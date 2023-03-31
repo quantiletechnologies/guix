@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2014, 2015, 2017, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2014, 2015, 2017, 2019, 2020, 2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013, 2015 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2012, 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;; Copyright © 2015 Mark H Weaver <mhw@netris.org>
@@ -57,6 +57,7 @@
             edl1.0
             epl1.0
             epl2.0
+            eupl1.1
             eupl1.2
             expat expat-0
             freetype
@@ -74,6 +75,7 @@
             knuth
             lal1.3
             lgpl2.0 lgpl2.0+ lgpl2.1 lgpl2.1+ lgpl3 lgpl3+ llgpl
+            lpl1.02
             lppl lppl1.0+ lppl1.1+ lppl1.2 lppl1.2+
             lppl1.3 lppl1.3+
             lppl1.3a lppl1.3a+
@@ -109,13 +111,6 @@
             hpnd
             fsdg-compatible))
 
-(define-record-type <license>
-  (license name uri comment)
-  license?
-  (name    license-name)
-  (uri     license-uri)
-  (comment license-comment))
-
 ;;; Commentary:
 ;;;
 ;;; Available licenses.
@@ -128,6 +123,53 @@
 ;;; when modifying this list to avoid mismatches.
 ;;;
 ;;; Code:
+
+(define-record-type <license>
+  (license name uri comment)
+  actual-license?
+  (name    license-name)
+  (uri     license-uri)
+  (comment license-comment))
+
+(define-syntax define-license-predicate
+  (syntax-rules (define define*)
+    "Define PREDICATE as a license predicate that, when applied to trivial
+cases, reduces to #t at macro-expansion time."
+    ((_ predicate (variables ...) (procedures ...)
+        (define variable _) rest ...)
+     (define-license-predicate
+       predicate
+       (variable variables ...) (procedures ...)
+       rest ...))
+    ((_ predicate (variables ...) (procedures ...)
+        (define* (procedure _ ...) _ ...)
+        rest ...)
+     (define-license-predicate
+       predicate
+       (variables ...) (procedure procedures ...)
+       rest ...))
+    ((_ predicate (variables ...) (procedures ...))
+     (define-syntax predicate
+       (lambda (s)
+         (syntax-case s (variables ... procedures ...)
+           ((_ variables) #t) ...
+           ((_ (procedures _)) #t) ...
+           ((_ obj) #'(actual-license? obj))
+           (id
+            (identifier? #'id)
+            #'actual-license?)))))))
+
+(define-syntax begin-license-definitions
+  (syntax-rules ()
+    ((_ predicate definitions ...)
+     (begin
+       ;; Define PREDICATE such that it expands to #t when passed one of the
+       ;; identifiers in DEFINITIONS.
+       (define-license-predicate predicate () () definitions ...)
+
+       definitions ...))))
+
+(begin-license-definitions license?
 
 (define agpl1
   (license "AGPL 1"
@@ -304,6 +346,11 @@ at URI, which may be a file:// URI pointing the package's tree."
            "https://www.eclipse.org/legal/epl-2.0/"
            "https://www.gnu.org/licenses/license-list#EPL2"))
 
+(define eupl1.1
+  (license "EUPL 1.1"
+           "https://directory.fsf.org/wiki/License:EUPL-1.1"
+           "https://www.gnu.org/licenses/license-list#EUPL-1.1"))
+
 (define eupl1.2
   (license "EUPL 1.2"
            "https://directory.fsf.org/wiki/License:EUPL-1.2"
@@ -470,6 +517,11 @@ at URI, which may be a file:// URI pointing the package's tree."
            "https://opensource.franz.com/preamble.html"
            "Lisp Lesser General Public License"))
 
+(define lpl1.02 ;Lucent
+  (license "LPL 1.02"
+           "https://directory.fsf.org/wiki/License:LPL-1.02"
+           "https://www.gnu.org/licenses/license-list.html#lucent102"))
+
 (define lppl
   (license "LPPL (any version)"
            "https://www.latex-project.org/lppl/lppl-1-0/"
@@ -567,7 +619,7 @@ at URI, which may be a file:// URI pointing the package's tree."
 
 (define nmap
   (license "Nmap license"
-           "https://svn.nmap.org/nmap/COPYING"
+           "https://svn.nmap.org/nmap/LICENSE"
            "https://fedoraproject.org/wiki/Licensing/Nmap"))
 
 (define ogl-psi1.0
@@ -717,6 +769,6 @@ Data.  More details can be found at URI.  See also
 https://www.gnu.org/distros/free-system-distribution-guidelines.en.html#non-functional-data."
   (license "FSDG-compatible"
            uri
-           comment))
+           comment)))
 
 ;;; licenses.scm ends here

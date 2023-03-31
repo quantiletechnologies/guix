@@ -1,6 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2015 David Thompson <davet@gnu.org>
-;;; Copyright © 2015-2022 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2015-2023 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2016 Nikita <nikita@n0.is>
 ;;; Copyright © 2016, 2017, 2018 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2017, 2018, 2019 Christopher Baines <mail@cbaines.net>
@@ -14,6 +14,7 @@
 ;;; Copyright © 2020 Arun Isaac <arunisaac@systemreboot.net>
 ;;; Copyright © 2020 Oleg Pykhalov <go.wigust@gmail.com>
 ;;; Copyright © 2020, 2021 Alexandru-Sergiu Marton <brown121407@posteo.ro>
+;;; Copyright © 2022 Simen Endsjø <simendsjo@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -93,6 +94,7 @@
             nginx-configuration
             nginx-configuration?
             nginx-configuration-nginx
+            nginx-configuration-shepherd-requirement
             nginx-configuration-log-directory
             nginx-configuration-run-directory
             nginx-configuration-server-blocks
@@ -556,6 +558,8 @@
   nginx-configuration?
   (nginx         nginx-configuration-nginx          ;file-like
                  (default nginx))
+  (shepherd-requirement nginx-configuration-shepherd-requirement
+                        (default '()))              ;list of symbols
   (log-directory nginx-configuration-log-directory  ;string
                  (default "/var/log/nginx"))
   (run-directory nginx-configuration-run-directory  ;string
@@ -643,8 +647,12 @@ of index files."
      "      server_name " (config-domain-strings server-name) ";\n"
      (and/l ssl-certificate     "      ssl_certificate " <> ";\n")
      (and/l ssl-certificate-key "      ssl_certificate_key " <> ";\n")
-     "      root " root ";\n"
-     "      index " (config-index-strings index) ";\n"
+     (if (not (equal? "" root))
+         (list "      root " root ";\n")
+         "")
+     (if (not (null? index))
+         (list "      index " (config-index-strings index) ";\n")
+         "")
      (if (not (nil? try-files))
          (and/l (config-index-strings try-files) "      try_files " <> ";\n")
          "")
@@ -779,16 +787,14 @@ of index files."
 (define (nginx-shepherd-service config)
   (match-record config
                 <nginx-configuration>
-                (nginx file run-directory)
+                (nginx file run-directory shepherd-requirement)
    (let* ((nginx-binary (file-append nginx "/sbin/nginx"))
           (pid-file (in-vicinity run-directory "pid"))
+          (config-file (or file (default-nginx-config config)))
           (nginx-action
            (lambda args
              #~(lambda _
-                 (invoke #$nginx-binary "-c"
-                         #$(or file
-                               (default-nginx-config config))
-                         #$@args)
+                 (invoke #$nginx-binary "-c" #$config-file #$@args)
                  (match '#$args
                    (("-s" . _) #f)
                    (_
@@ -799,15 +805,25 @@ of index files."
                           #~#t
                           #~(read-pid-file #$pid-file))))))))
 
-     ;; TODO: Add 'reload' action.
      (list (shepherd-service
             (provision '(nginx))
             (documentation "Run the nginx daemon.")
-            (requirement '(user-processes loopback))
+            (requirement `(user-processes loopback ,@shepherd-requirement))
             (modules `((ice-9 match)
                        ,@%default-modules))
             (start (nginx-action "-p" run-directory))
-            (stop (nginx-action "-s" "stop")))))))
+            (stop (nginx-action "-s" "stop"))
+            (actions
+              (list
+               (shepherd-configuration-action config-file)
+               (shepherd-action
+                 (name 'reload)
+                 (documentation "Reload nginx configuration file and restart worker processes.
+This has the effect of killing old worker processes and starting new ones, using
+the same configuration file.  It is useful for situations where the same nginx
+configuration file can point to different things after a reload, such as
+renewed TLS certificates, or @code{include}d files.")
+                 (procedure (nginx-action "-s" "reload"))))))))))
 
 (define nginx-service-type
   (service-type (name 'nginx)
@@ -970,7 +986,7 @@ and the back-end of a Web service.")))
 
 (define php-fpm-accounts
   (match-lambda
-    (($ <php-fpm-configuration> php socket user group socket-user socket-group _ _ _ _ _ _)
+    (($ <php-fpm-configuration> php socket user group socket-user socket-group)
      `(,@(if (equal? group "php-fpm")
              '()
              (list (user-group (name "php-fpm") (system? #t))))
@@ -1139,8 +1155,7 @@ a webserver.")
 
   (package  hpcguix-web-package (default hpcguix-web)) ;file-like
 
-  ;; Specs is gexp of hpcguix-web configuration file
-  (specs    hpcguix-web-configuration-specs)
+  (specs    hpcguix-web-configuration-specs (default #f)) ;#f | gexp
   (address  hpcguix-web-configuration-address (default "127.0.0.1"))
   (port     hpcguix-web-configuration-port (default 5000)))
 
@@ -1201,8 +1216,11 @@ a webserver.")
                        "-p"
                        #$(number->string
                           (hpcguix-web-configuration-port config))
-                       (string-append "--config="
-                                      #$(scheme-file "hpcguix-web.scm" specs)))
+                       #$@(if specs
+                              #~((string-append "--config="
+                                                #$(scheme-file
+                                                   "hpcguix-web.scm" specs)))
+                              #~()))
                  #:user "hpcguix-web"
                  #:group "hpcguix-web"
                  #:environment-variables
@@ -1223,7 +1241,8 @@ a webserver.")
           (service-extension rottlog-service-type
                              (const %hpcguix-web-log-rotations))
           (service-extension shepherd-root-service-type
-                             (compose list hpcguix-web-shepherd-service))))))
+                             (compose list hpcguix-web-shepherd-service))))
+   (default-value (hpcguix-web-configuration))))
 
 
 ;;;
@@ -1390,7 +1409,7 @@ files.")
   (replacement       anonip-configuration-replacement  ;string
                      (default #f))
   (ipv4mask          anonip-configuration-ipv4mask     ;number
-                     (default #f)) 
+                     (default #f))
   (ipv6mask          anonip-configuration-ipv6mask     ;number
                      (default #f))
   (increment         anonip-configuration-increment    ;number
@@ -1422,35 +1441,49 @@ files.")
                          (format #false "~a=~a"
                                  option value))))
                (list)))))
-    (list (shepherd-service
-           (provision (list (symbol-append 'anonip- (string->symbol output))))
-           (requirement '(user-processes))
-           (documentation "Anonimyze the given log file location with anonip.")
-           (start #~(lambda _
-                      (unless (file-exists? #$input)
-                          (mknod #$input 'fifo #o600 0))
-                      (let ((pid (fork+exec-command
-                                  (append
-                                      (list #$(file-append (anonip-configuration-anonip config)
-                                                           "/bin/anonip")
-                                            (string-append "--input=" #$input)
-                                            (string-append "--output=" #$output))
-                                      (if #$(anonip-configuration-skip-private? config)
-                                          '("--skip-private") (list))
-                                    '#$(optional anonip-configuration-column "--column")
-                                    '#$(optional anonip-configuration-ipv4mask "--ipv4mask")
-                                    '#$(optional anonip-configuration-ipv6mask "--ipv6mask")
-                                    '#$(optional anonip-configuration-increment "--increment")
-                                    '#$(optional anonip-configuration-replacement "--replacement")
-                                    '#$(optional anonip-configuration-delimiter "--delimiter")
-                                    '#$(optional anonip-configuration-regex "--regex"))
-                                  ;; Run in a UTF-8 locale
-                                  #:environment-variables
-                                  (list (string-append "GUIX_LOCPATH=" #$glibc-utf8-locales
-                                                       "/lib/locale")
-                                        "LC_ALL=en_US.utf8"))))
-                        pid)))
-           (stop #~(make-kill-destructor))))))
+    (list
+     (shepherd-service
+      (provision
+       (list (symbol-append 'anonip- (string->symbol output))))
+      (requirement '(user-processes))
+      (documentation
+       "Anonimyze the given log file location with anonip.")
+      (start
+       #~(lambda ()
+           (define (spawn)
+             (fork+exec-command
+              (append
+               (list #$(file-append (anonip-configuration-anonip config)
+                                    "/bin/anonip")
+                     (string-append "--input=" #$input)
+                     (string-append "--output=" #$output))
+               (if #$(anonip-configuration-skip-private? config)
+                   '("--skip-private") (list))
+               '#$(optional anonip-configuration-column "--column")
+               '#$(optional anonip-configuration-ipv4mask "--ipv4mask")
+               '#$(optional anonip-configuration-ipv6mask "--ipv6mask")
+               '#$(optional anonip-configuration-increment "--increment")
+               '#$(optional anonip-configuration-replacement
+                            "--replacement")
+               '#$(optional anonip-configuration-delimiter "--delimiter")
+               '#$(optional anonip-configuration-regex "--regex"))
+              ;; Run in a UTF-8 locale
+              #:environment-variables
+              (list (string-append "GUIX_LOCPATH=" #$glibc-utf8-locales
+                                   "/lib/locale")
+                    "LC_ALL=en_US.utf8")))
+
+           (let ((stat (stat #$input #f)))
+             (cond ((not stat)
+                    (mknod #$input 'fifo #o600 0)
+                    (spawn))
+                   ((eq? 'fifo (stat:type stat))
+                    (spawn))
+                   (else
+                    (format #t "'~a' is not a FIFO; bailing out~%"
+                            #$input)
+                    #f)))))
+      (stop #~(make-kill-destructor))))))
 
 (define anonip-service-type
   (service-type
@@ -2112,24 +2145,23 @@ root=/srv/gemini
             (stop #~(make-kill-destructor)))))))
 
 (define agate-accounts
-  (match-lambda
-    (($ <agate-configuration> _ _ _ _ _
-                              _ _ _ _
-                              _ user group _)
-     `(,@(if (equal? group "agate")
-             '()
-             (list (user-group (name "agate") (system? #t))))
-       ,(user-group
-         (name group)
-         (system? #t))
-       ,(user-account
-         (name user)
-         (group group)
-         (supplementary-groups '("agate"))
-         (system? #t)
-         (comment "agate server user")
-         (home-directory "/var/empty")
-         (shell (file-append shadow "/sbin/nologin")))))))
+  (lambda (config)
+    (let ((group (agate-configuration-group config))
+          (user (agate-configuration-user config)))
+      `(,@(if (equal? group "agate")
+              '()
+              (list (user-group (name "agate") (system? #t))))
+        ,(user-group
+          (name group)
+          (system? #t))
+        ,(user-account
+          (name user)
+          (group group)
+          (supplementary-groups '("agate"))
+          (system? #t)
+          (comment "agate server user")
+          (home-directory "/var/empty")
+          (shell (file-append shadow "/sbin/nologin")))))))
 
 (define agate-service-type
   (service-type

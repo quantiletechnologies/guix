@@ -22,14 +22,11 @@
   #:use-module (guix gexp)
   #:use-module (guix monads)
   #:use-module (guix packages)
-  #:use-module (guix derivations)
   #:use-module (guix search-paths)
   #:use-module (guix build-system)
   #:use-module (guix build-system gnu)
   #:use-module ((guix build-system python)
                 #:select (default-python default-python2))
-  #:use-module (ice-9 match)
-  #:use-module (srfi srfi-26)
   #:export (%waf-build-system-modules
             waf-build
             waf-build-system))
@@ -111,6 +108,7 @@ as its build system."
     (gexp->derivation name build
                       #:system system
                       #:target #f
+                      #:graft? #f
                       #:modules imported-modules
                       #:guile-for-build guile)))
 

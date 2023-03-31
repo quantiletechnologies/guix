@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2014-2022 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014-2023 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2016 Alex Kost <alezost@gmail.com>
 ;;; Copyright © 2016, 2017, 2018 Chris Marusich <cmmarusich@gmail.com>
 ;;; Copyright © 2017, 2019 Mathieu Othacehe <m.othacehe@gmail.com>
@@ -38,9 +38,9 @@
                (sqlite-register store-database-file call-with-database)
   #:autoload   (guix build store-copy) (copy-store-item)
   #:use-module (guix describe)
-  #:use-module (guix grafts)
   #:use-module (guix gexp)
   #:use-module (guix derivations)
+  #:use-module (guix diagnostics)
   #:use-module (guix packages)
   #:use-module (guix utils)
   #:use-module (guix monads)
@@ -55,20 +55,14 @@
   #:autoload   (guix scripts pull) (channel-commit-hyperlink)
   #:autoload   (guix graph) (export-graph node-type
                              graph-backend-name lookup-backend)
-  #:use-module (guix scripts graph)
   #:use-module (guix scripts system reconfigure)
   #:use-module (guix build utils)
   #:use-module (guix progress)
-  #:use-module ((guix build syscalls) #:select (terminal-columns))
   #:use-module (gnu build image)
   #:use-module (gnu build install)
   #:autoload   (gnu build file-systems)
                  (find-partition-by-label find-partition-by-uuid)
-  #:autoload   (gnu build linux-modules)
-                 (device-module-aliases matching-modules)
-  #:use-module (gnu system linux-initrd)
   #:use-module (gnu image)
-  #:use-module (guix platform)
   #:use-module (gnu system)
   #:use-module (gnu bootloader)
   #:use-module (gnu system file-systems)
@@ -81,7 +75,6 @@
   #:use-module (gnu services shepherd)
   #:use-module (gnu services herd)
   #:use-module (srfi srfi-1)
-  #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-19)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
@@ -91,6 +84,7 @@
   #:use-module (ice-9 match)
   #:use-module (rnrs bytevectors)
   #:export (guix-system
+            read-operating-system
 
             service-node-type
             shepherd-service-node-type))
@@ -105,6 +99,11 @@
   (make-user-module '((gnu system)
                       (gnu services)
                       (gnu system shadow))))
+
+;; Note: The procedure below is used in external projects such as Emacs-Guix.
+(define (read-operating-system file)
+  "Read the operating-system declaration from FILE and return it."
+  (load* file %user-module))
 
 
 ;;;
@@ -627,9 +626,9 @@ any, are available.  Raise an error if they're not."
                              (G_ "device '~a' not found: ~a~%")
                              device (strerror errno))
                       (unless (string-prefix? "/" device)
-                        (display-hint (format #f (G_ "If '~a' is a file system
+                        (display-hint (G_ "If '~a' is a file system
 label, write @code{(file-system-label ~s)} in your @code{device} field.")
-                                              device device)))))))
+                                      device device))))))
               literal)
     (for-each (lambda (fs)
                 (let ((label (file-system-label->string
@@ -836,7 +835,10 @@ static checks."
     (check-mapped-devices os)
     (when (zero? (getuid))
       (check-file-system-availability (operating-system-file-systems os))
-      (check-initrd-modules os)))
+      (unless (%current-target-system)
+        ;; Skip the check if the user is making use of --target, as it cannot
+        ;; be checked against the running kernel.
+        (check-initrd-modules os))))
 
   (mlet* %store-monad
       ((sys       (system-derivation-for-action image action
@@ -1039,12 +1041,16 @@ Some ACTIONS support additional ARGS.\n"))
   (newline)
   (display (G_ "
       --graph-backend=BACKEND
-                         use BACKEND for 'extension-graphs' and 'shepherd-graph'"))
+                         use BACKEND for 'extension-graph' and 'shepherd-graph'"))
   (newline)
   (display (G_ "
   -I, --list-installed[=REGEXP]
                          for 'describe' and 'list-generations', list installed
                          packages matching REGEXP"))
+  (newline)
+  (show-cross-build-options-help)
+  (newline)
+  (show-native-build-options-help)
   (newline)
   (display (G_ "
   -h, --help             display this help and exit"))
@@ -1136,14 +1142,6 @@ Some ACTIONS support additional ARGS.\n"))
                    (let ((level (string->number* arg)))
                      (alist-cons 'verbosity level
                                  (alist-delete 'verbosity result)))))
-         (option '(#\s "system") #t #f
-                 (lambda (opt name arg result)
-                   (alist-cons 'system arg
-                               (alist-delete 'system result eq?))))
-         (option '("target") #t #f
-                 (lambda (opt name arg result)
-                   (alist-cons 'target arg
-                               (alist-delete 'target result eq?))))
          (option '(#\r "root") #t #f
                  (lambda (opt name arg result)
                    (alist-cons 'gc-root arg result)))
@@ -1153,7 +1151,9 @@ Some ACTIONS support additional ARGS.\n"))
          (option '(#\I "list-installed") #f #t
                  (lambda (opt name arg result)
                    (alist-cons 'list-installed (or arg "") result)))
-         %standard-build-options))
+         (append %standard-build-options
+                 %standard-cross-build-options
+                 %standard-native-build-options)))
 
 (define %default-options
   ;; Alist of default option values.
@@ -1259,7 +1259,10 @@ resulting from command-line parsing."
                          (size image-size)
                          (volatile-root? volatile?)
                          (shared-network? shared-network?))))
-         (os          (image-operating-system image))
+         (os          (or (image-operating-system image)
+                          (raise
+                           (formatted-message
+                            (G_ "image lacks an operating-system")))))
          (target-file (match args
                         ((first second) second)
                         (_ #f)))
@@ -1407,8 +1410,7 @@ argument list and OPTS is the option alist."
            (let ((hint (string-closest arg actions #:threshold 3)))
              (report-error (G_ "~a: unknown action~%") arg)
              (when hint
-               (display-hint
-                (format #f (G_ "Did you mean @code{~a}?~%") hint)))
+               (display-hint (G_ "Did you mean @code{~a}?~%") hint))
              (exit 1)))))
 
   (define (match-pair car)

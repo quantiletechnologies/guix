@@ -25,7 +25,6 @@
   #:use-module (guix search-paths)
   #:use-module (guix build-system)
   #:use-module (guix build-system gnu)
-  #:use-module (ice-9 match)
   #:export (%scons-build-system-modules
             scons-build
             scons-build-system))
@@ -45,8 +44,8 @@
 (define (default-scons)
   "Return the default SCons package."
   ;; Lazily resolve the binding to avoid a circular dependency.
-  (let ((python (resolve-interface '(gnu packages python-xyz))))
-    (module-ref python 'scons)))
+  (let ((build-tools (resolve-interface '(gnu packages build-tools))))
+    (module-ref build-tools 'scons)))
 
 (define* (lower name
                 #:key source inputs native-inputs outputs system target
@@ -100,7 +99,9 @@ provides a 'SConstruct' file as its build system."
           #$(with-build-variables inputs outputs
               #~(scons-build #:name #$name
                              #:source #+source
-                             #:scons-flags #$(sexp->gexp scons-flags)
+                             #:scons-flags #$(if (pair? scons-flags)
+                                                 (sexp->gexp scons-flags)
+                                                 scons-flags)
                              #:system #$system
                              #:build-targets #$build-targets
                              #:test-target #$test-target
@@ -119,6 +120,7 @@ provides a 'SConstruct' file as its build system."
   (gexp->derivation name builder
                     #:system system
                     #:target #f
+                    #:graft? #f
                     #:guile-for-build guile))
 
 (define scons-build-system

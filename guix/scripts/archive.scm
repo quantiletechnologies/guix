@@ -18,7 +18,6 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (guix scripts archive)
-  #:use-module (guix config)
   #:use-module (guix utils)
   #:use-module (guix combinators)
   #:use-module ((guix build utils) #:select (mkdir-p))
@@ -26,7 +25,6 @@
                 #:select (fold-archive restore-file))
   #:use-module (guix store)
   #:use-module ((guix status) #:select (with-status-verbosity))
-  #:use-module (guix grafts)
   #:use-module (guix packages)
   #:use-module (guix derivations)
   #:use-module (guix monads)

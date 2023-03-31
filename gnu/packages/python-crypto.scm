@@ -49,7 +49,9 @@
   #:use-module (guix gexp)
   #:use-module (guix git-download)
   #:use-module (guix build-system cargo)
+  #:use-module (guix build-system pyproject)
   #:use-module (guix build-system python)
+  #:use-module (guix utils)
   #:use-module (gnu packages)
   #:use-module (gnu packages check)
   #:use-module (gnu packages crates-io)
@@ -325,29 +327,33 @@ do what is needed for client/server Kerberos authentication based on
 (define-public python-keyring
   (package
     (name "python-keyring")
-    (version "22.0.1")
+    (version "23.9.3")
     (source
      (origin
-      (method url-fetch)
-      (uri (pypi-uri "keyring" version))
-      (sha256
-       (base32
-        "1pvqc6may03did0iz98gasg7cy4h8ljzs4ibh927bfzda8a3xjws"))))
-    (build-system python-build-system)
+       (method url-fetch)
+       (uri (pypi-uri "keyring" version))
+       (sha256
+        (base32
+         "19f4jpsxng9sjfqi8ww5hgg196r2zh1zb8g71wjr1xa27kc1vc39"))))
+    (build-system pyproject-build-system)
     (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (replace 'check
-           (lambda* (#:key tests? #:allow-other-keys)
-             (when tests?
-               (invoke "pytest" "-vv" "-c" "/dev/null" "tests")))))))
+     (list
+      #:test-flags '(list "-c" "/dev/null") ;avoid extra test dependencies
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-before 'check 'workaround-test-failure
+            (lambda _
+              ;; Workaround a failure in the test_entry_point test (see:
+              ;; https://github.com/jaraco/keyring/issues/526).
+              (delete-file-recursively "keyring.egg-info"))))))
     (native-inputs
      (list python-toml
            python-pytest
-           python-setuptools
            python-setuptools-scm))
     (propagated-inputs
-     (list python-secretstorage))
+     (list python-importlib-metadata
+           python-jaraco-classes
+           python-secretstorage))
     (home-page "https://github.com/jaraco/keyring")
     (synopsis "Store and access your passwords safely")
     (description
@@ -394,6 +400,86 @@ general production use.  Include this module and use its backends at your own
 risk.")
     (license license:expat)))
 
+(define-public python-blake3
+  (package
+    (name "python-blake3")
+    (version "0.3.1")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (pypi-uri "blake3" version))
+       (sha256
+        (base32 "1p6z6jfk8n1lshz4cp6dgz2i8zmqdxwr8d9m86ypp3m1kp70k5xk"))))
+    (build-system cargo-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'install 'build-python-module
+            (lambda _
+              ;; We don't use maturin.
+              (delete-file "pyproject.toml")
+              (call-with-output-file "pyproject.toml"
+                (lambda (port)
+                  (format port "\
+[build-system]
+build-backend = 'setuptools.build_meta'
+requires = ['setuptools']
+")))
+              (call-with-output-file "setup.cfg"
+                (lambda (port)
+                  (format port "\
+
+[metadata]
+name = blake3
+version = '~a'
+
+[options]
+packages = find:
+
+[options.packages.find]
+exclude =
+  src*
+  c_impl*
+  tests*
+  Cargo.toml
+" #$version)))
+              ;; ZIP does not support timestamps before 1980.
+              (setenv "SOURCE_DATE_EPOCH" "315532800")
+              (invoke "python" "-m" "build" "--wheel" "--no-isolation" ".")))
+          (add-after 'build-python-module 'install-python-module
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let ((whl (car (find-files "dist" "\\.whl$"))))
+                (invoke "pip" "--no-cache-dir" "--no-input"
+                        "install" "--no-deps" "--prefix" #$output whl))))
+          (add-after 'install-python-module 'install-python-library
+            (lambda _
+              (let ((site (string-append #$output "/lib/python"
+                                         #$(version-major+minor
+                                            (package-version python))
+                                         "/site-packages")))
+                (mkdir-p site)
+                (copy-file "target/release/libblake3.so"
+                           (string-append site "/blake3.so"))))))
+      #:cargo-inputs
+      `(("rust-blake3" ,rust-blake3-1)
+        ("rust-hex" ,rust-hex-0.4)
+        ("rust-parking-lot" ,rust-parking-lot-0.11)
+        ("rust-pyo3" ,rust-pyo3-0.15)
+        ("rust-rayon" ,rust-rayon-1))))
+    (inputs (list rust-blake3-1))
+    (native-inputs
+     (list python-wrapper
+           python-pypa-build
+           python-wheel))
+    (home-page "https://github.com/oconnor663/blake3-py")
+    (synopsis "Python bindings for the Rust blake3 crate")
+    (description "This package provides Python bindings for the Rust crate of
+blake3, a cryptographic hash function.")
+    ;; This work is released into the public domain with CC0
+    ;; 1.0. Alternatively, it is licensed under the Apache License 2.0.
+    (license (list license:asl2.0 license:cc0))))
+
 (define-public python-certauth
   (package
     (name "python-certauth")
@@ -422,13 +508,13 @@ for example, for recording or replaying web content.")
 (define-public python-certifi
   (package
     (name "python-certifi")
-    (version "2021.10.8")
+    (version "2022.6.15")
     (source (origin
               (method url-fetch)
               (uri (pypi-uri "certifi" version))
               (sha256
                (base32
-                "0wl8ln7acd797i1q7mmb430l6hqwhmk4bd37x8ycw02b3my4x23q"))))
+                "03c2l11lgljx0kz17cvdc4hlc3p1594ajdih9zq0a4dig285mj44"))))
     (build-system python-build-system)
     (arguments '(#:tests? #f))          ;no tests
     (home-page "https://certifi.io/")
@@ -441,14 +527,14 @@ is used by the Requests library to verify HTTPS requests.")
 (define-public python-cryptography-vectors-next
   (package
     (name "python-cryptography-vectors")
-    (version "36.0.1")
+    (version "37.0.4")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "cryptography_vectors" version))
        (sha256
         (base32
-         "166mvhhmgglqai1sjkkb76mpdkad2yykam11d2w44hs2snpr117w"))))
+         "1a1yi37ygw0jp72q280cmxd3qn9y9vmcch2bcnjkg2g2202l0qas"))))
     (build-system python-build-system)
     (home-page "https://github.com/pyca/cryptography")
     (synopsis "Test vectors for the cryptography package")
@@ -470,14 +556,14 @@ is used by the Requests library to verify HTTPS requests.")
 (define-public python-cryptography-next
   (package
     (name "python-cryptography")
-    (version "36.0.1")
+    (version "37.0.4")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "cryptography" version))
        (sha256
         (base32
-         "0f1n8bvngarhsssm60xc59xfzkh7yqpyyyypaph3v5bs7pfc3rak"))))
+         "10haq7sn8mrdlhcfs791rczknnxm0wpww0lkpjzcqx141ryc3yb3"))))
     (build-system python-build-system)
     (arguments
      (list
@@ -489,11 +575,13 @@ is used by the Requests library to verify HTTPS requests.")
                   (ice-9 match))
       #:phases
       #~(modify-phases (@ (guix build python-build-system) %standard-phases)
-          (add-after 'unpack 'loosen-ouroboros-version
+          (add-after 'unpack 'adjust-pyo3-requirement
             (lambda _
+              ;; The package depends on 0.15.2, which is not on crates.io(!?).
+              ;; Downgrade to 0.15.1...
               (substitute* "src/rust/Cargo.toml"
-                (("ouroboros = \"0\\.13\"")
-                 "ouroboros = \"0.14\""))))
+                (("pyo3 = \\{ version = \"0\\.15\\.2\"")
+                 "pyo3 = { version = \"0.15.1\""))))
           (add-before 'build 'configure-cargo
             (lambda* (#:key inputs #:allow-other-keys)
               ;; Hide irrelevant inputs from cargo-build-system so it does
@@ -518,6 +606,9 @@ is used by the Requests library to verify HTTPS requests.")
                 (invoke "pytest" "-vv" "tests")))))))
     (inputs
      (list openssl
+           ;; TODO: Most of these inputs are transitive dependencies of
+           ;; the Rust requirements (see src/rust/cargo.toml).  Surely
+           ;; there is a better way than manually listing everything..?
            rust-aliasable-0.1
            rust-asn1-0.8
            rust-asn1-derive-0.8
@@ -538,8 +629,8 @@ is used by the Requests library to verify HTTPS requests.")
            rust-num-integer-0.1
            rust-num-traits-0.2
            rust-once-cell-1
-           rust-ouroboros-0.14
-           rust-ouroboros-macro-0.14
+           rust-ouroboros-0.15
+           rust-ouroboros-macro-0.15
            rust-parking-lot-0.11
            rust-parking-lot-core-0.8
            rust-paste-0.1
@@ -572,6 +663,7 @@ is used by the Requests library to verify HTTPS requests.")
            python-pretend
            python-pytz
            python-pytest
+           python-pytest-benchmark
            python-pytest-subtests
            python-setuptools-rust
            rust
@@ -602,7 +694,7 @@ message digests and key derivation functions.")
                (add-after 'unpack 'set-no-rust
                  (lambda _
                    (setenv "CRYPTOGRAPHY_DONT_BUILD_RUST" "1"))))))
-    (inputs (list openssl))
+    (inputs (list openssl-1.1))
     (native-inputs
      (list python-cryptography-vectors
            python-hypothesis
@@ -910,14 +1002,14 @@ protocol (Javascript Object Signing and Encryption).")
 (define-public python-pycryptodome
   (package
     (name "python-pycryptodome")
-    (version "3.11.0")
+    (version "3.15.0")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "pycryptodome" version))
        (sha256
         (base32
-         "1l3a80z3lxcj1q0hzj1d3plavy2d51y4vzcd85zj0zm7yyxrd022"))
+         "1f0qc0ns3ppybkr7wi66gsl5wfkcx1fdklmh3362nn84spddsdci"))
        (modules '((guix build utils)))
        (snippet pycryptodome-unbundle-tomcrypt-snippet)))
     (build-system python-build-system)
@@ -972,7 +1064,7 @@ PyCryptodome variants, the other being python-pycryptodomex.")
        (method url-fetch)
        (uri (pypi-uri "pycryptodomex" version))
        (sha256
-        (base32 "0vcd65ylri2a4pdqcc1897jasj7wfmqklj8x3pdynmdvark3d603"))
+        (base32 "1vf0xbsqvcp4k3cl8cmxrlij9a88hajw6d3z0jhd3c5d5nxz2hbk"))
        (modules '((guix build utils)))
        (snippet pycryptodome-unbundle-tomcrypt-snippet)))
     (description
@@ -1159,13 +1251,13 @@ been constructed to maintain extensive documentation on how to use
 (define-public python-pyotp
   (package
     (name "python-pyotp")
-    (version "2.4.1")
+    (version "2.7.0")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "pyotp" version))
        (sha256
-        (base32 "0jsqfmx9i7j8z81r4zazv76xzy1fcq8v9s2r4kvx7ajfndq3z2h3"))))
+        (base32 "1dbcgpf576kmrpkx3ly8jq4g5g22r9n1rra55c1xqxyzl2mrz66f"))))
     (build-system python-build-system)
     (home-page "https://github.com/pyauth/pyotp")
     (synopsis "Python One Time Password Library")
@@ -1411,21 +1503,14 @@ items and collections, editing items, locking and unlocking collections
 (define-public python-trustme
   (package
     (name "python-trustme")
-    (version "0.6.0")
+    (version "0.9.0")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "trustme" version))
        (sha256
-        (base32 "0v3vr5z6apnfmklf07m45kv5kaqvm6hxrkaqywch57bjd2siiywx"))))
-    (build-system python-build-system)
-    (arguments
-     `(#:phases
-       (modify-phases %standard-phases
-         (replace 'check
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (add-installed-pythonpath inputs outputs)
-             (invoke "pytest" "-vv"))))))
+        (base32 "0v2qzszmyazfgc1snicdr4b4qdajpjd4pbinpgrn9vfff0yv41sy"))))
+    (build-system pyproject-build-system)
     (native-inputs
      (list python-more-itertools
            python-pyopenssl
@@ -1434,7 +1519,9 @@ items and collections, editing items, locking and unlocking collections
            python-service-identity
            python-zipp))
     (propagated-inputs
-     (list python-cryptography))
+     (list python-cryptography
+           python-idna
+           python-ipaddress))
     (home-page "https://github.com/python-trio/trustme")
     (synopsis "Fake a certificate authority for tests")
     (description
@@ -1672,4 +1759,34 @@ supply a handful of python functions as methods to a class.")
     (synopsis "Python ECDSA library")
     (description "This package provides a Python ECDSA library, optimized for
 speed but without C extensions.")
+    (license license:expat)))
+
+(define-public python-zxcvbn
+  (package
+    (name "python-zxcvbn")
+    (version "4.4.28")
+    (source (origin
+              (method git-fetch)        ;for tests
+              (uri (git-reference
+                    (url "https://github.com/dwolfhub/zxcvbn-python")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0xzlsqc9h0llfy19w4m39jgfcnvzqviv8jhgwn3r75kip97i5mvs"))))
+    (build-system python-build-system)
+    (home-page "https://github.com/dwolfhub/zxcvbn-python")
+    (synopsis "Realistic password strength estimator Python library")
+    (description "This is a Python implementation of the @code{zxcvbn} library
+created at Dropbox.  The original library, written for JavaScript, can be
+found @url{https://github.com/dropbox/zxcvbn, here}.  This port includes
+features such as:
+@enumerate
+@item Accepts user data to be added to the dictionaries that are tested
+against (name, birthdate, etc.)
+@item Gives a score to the password, from 0 (terrible) to 4 (great).
+@item Provides feedback on the password and ways to improve it.
+@item Returns time estimates on how long it would take to guess the password
+in different situations.
+@end enumerate")
     (license license:expat)))

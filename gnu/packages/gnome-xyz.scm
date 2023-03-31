@@ -6,7 +6,7 @@
 ;;; Copyright © 2020 Jack Hill <jackhill@jackhill.us>
 ;;; Copyright © 2020 Kei Kebreau <kkebreau@posteo.net>
 ;;; Copyright © 2020 Ekaitz Zarraga <ekaitz@elenq.tech>
-;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2020, 2023 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2020 Ryan Prior <rprior@protonmail.com>
 ;;; Copyright © 2020 Ellis Kenyo <me@elken.dev>
 ;;; Copyright © 2020 Stefan Reichör <stefan@xsteve.at>
@@ -55,6 +55,7 @@
   #:use-module (gnu packages bash)
   #:use-module (gnu packages build-tools)
   #:use-module (gnu packages check)
+  #:use-module (gnu packages freedesktop)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gnome)
@@ -69,7 +70,8 @@
   #:use-module (gnu packages tls)
   #:use-module (gnu packages ruby)
   #:use-module (gnu packages web)
-  #:use-module (gnu packages xml))
+  #:use-module (gnu packages xml)
+  #:use-module (gnu packages xorg))
 
 (define-public arc-icon-theme
   (package
@@ -196,7 +198,7 @@ simple and consistent.")
 (define-public papirus-icon-theme
   (package
     (name "papirus-icon-theme")
-    (version "20220508")
+    (version "20230104")
     (source
      (origin
        (method git-fetch)
@@ -204,7 +206,7 @@ simple and consistent.")
              (url "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme")
              (commit version)))
        (sha256
-        (base32 "0rpcniaw8xbn23q67m26vgx3fynn4v056azrfp63lxdh46gfsvmc"))
+        (base32 "1x40gdqyw0gj389by6904g5a64r72by544k3nlyiamjhg2zmpx97"))
        (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     (arguments
@@ -214,13 +216,156 @@ simple and consistent.")
        (modify-phases %standard-phases
          (delete 'bootstrap)
          (delete 'configure)
-         (delete 'build))))
+         (delete 'build)
+         (add-before 'install 'halve-inode-consumption
+           ;; This package uses over 100K inodes, which is a lot.  We can easily
+           ;; halve that number by using (hard) links, to no ill effect.
+           ;; See <https://logs.guix.gnu.org/guix/2023-01-31.log#171227>.
+           ;; However, the source checkout will still use the full amount!
+           (lambda _
+             (let ((symlink? (lambda (_ stat)
+                               (eq? 'symlink (stat:type stat)))))
+               (for-each (lambda (file)
+                           (let ((target (canonicalize-path file)))
+                             (when (eq? 'regular (stat:type (stat target)))
+                               (delete-file file)
+                               (link target file))))
+                         (find-files "." symlink?))))))))
     (native-inputs
      (list `(,gtk+ "bin")))
     (home-page "https://git.io/papirus-icon-theme")
     (synopsis "Fork of Paper icon theme with a lot of new icons and a few extras")
     (description "Papirus is a fork of the icon theme Paper with a lot of new icons
 and a few extra features.")
+    (license license:gpl3)))
+
+(define-public flat-remix-icon-theme
+  (package
+    (name "flat-remix-icon-theme")
+    (version "20220525")
+    (source
+     (origin
+       (method git-fetch)
+       (uri
+        (git-reference
+         (url "https://github.com/daniruiz/flat-remix")
+         (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "0ygazxccqf7hn1hxnf1mmsp17gm1m4hpcandfz9v5ijrgkd1m596"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:tests? #f                      ; no included tests
+       #:make-flags `(,(string-append "PREFIX=" (assoc-ref %outputs "out")))
+       #:phases (modify-phases %standard-phases
+                  (delete 'configure))))
+    (home-page "https://drasite.com/flat-remix")
+    (synopsis "Icon theme with material design")
+    (description "Flat Remix is an icon theme inspired by material design.  It
+is mostly flat using a colorful palette with some shadows, highlights, and
+gradients for some depth.")
+    (license license:gpl3+)))
+
+(define-public flat-remix-gtk-theme
+  (package
+    (name "flat-remix-gtk-theme")
+    (version "20220627")
+    (source
+     (origin
+       (method git-fetch)
+       (uri
+        (git-reference
+         (url "https://github.com/daniruiz/flat-remix-gtk")
+         (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1kwahlrcm9rfsrd97q9lsbfz5390qafwbv78zl6j2vqgqnxhpwng"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:tests? #f                      ; no included tests
+       #:make-flags `(,(string-append "PREFIX=" (assoc-ref %outputs "out")))
+       #:phases (modify-phases %standard-phases
+                  (delete 'configure))))
+    (home-page "https://drasite.com/flat-remix-gtk")
+    (synopsis "GTK application theme with material design")
+    (description "Flat Remix GTK is a GTK application theme inspired by
+material design.  It is mostly flat using a colorful palette with some
+shadows, highlights, and gradients for some depth.")
+    (license license:gpl3+)))
+
+(define-public flat-remix-gnome-theme
+  (package
+    (name "flat-remix-gnome-theme")
+    (version "20221107-1")
+    (source
+     (origin
+       (method git-fetch)
+       (uri
+        (git-reference
+         (url "https://github.com/daniruiz/flat-remix-gnome")
+         ;; This commit adds GtkSourceView 5 theme, for GNOME Text Editor.
+         (commit "b5616efc515e9f1417436e67d94718db7529a2ba")))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "10fgdz8hz8rd7aj4vb3bvl8khzb2fvaia7n00gi0x19yvnnh36pr"))))
+    (build-system copy-build-system)
+    (arguments
+     `(#:install-plan
+       `(("share" "/")
+         ("themes" "/share/"))))
+    (home-page "https://drasite.com/flat-remix-gnome")
+    (synopsis "GNOME shell theme with material design")
+    (description "Flat Remix GNOME is a GNOME shell theme inspired by material
+design.  It is mostly flat using a colorful palette with some shadows,
+highlights, and gradients for some depth.")
+    (license license:gpl3+)))
+
+(define-public bibata-cursor-theme
+  (package
+    (name "bibata-cursor-theme")
+    (version "2.0.3")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/ful1e5/Bibata_Cursor")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1bhspswgxizc4sr2bihfjic8wm4khd6waw9qgw0yssfy0fm3nafc"))))
+    (build-system trivial-build-system)
+    (native-inputs (list python-attrs python-clickgen))
+    (arguments
+     (list
+      #:modules '((guix build utils))
+      #:builder
+      #~(begin
+          (use-modules (guix build utils))
+          (let ((themes-dir (string-append #$output "/share/icons")))
+            (mkdir-p themes-dir)
+            (let loop
+                ((themes '(("Bibata-Modern-Amber" . "Yellowish and rounded")
+                           ("Bibata-Modern-Classic" . "Black and rounded")
+                           ("Bibata-Modern-Ice" . "White and rounded")
+                           ("Bibata-Original-Amber" . "Yellowish and sharp")
+                           ("Bibata-Original-Classic" . "Black and sharp")
+                           ("Bibata-Original-Ice" . "White and sharp"))))
+              (define theme
+                (car themes))
+              (invoke (search-input-file %build-inputs "/bin/ctgen")
+                      (string-append #$source "/build.toml")
+                      "-p" "x11"
+                      "-d" (string-append #$source "/bitmaps/" (car theme))
+                      "-n" (car theme)
+                      "-c" (string-append (cdr theme) " edge Bibata cursors")
+                      "-o" themes-dir)
+              (unless (null? (cdr themes))
+                (loop (cdr themes))))))))
+    (home-page "https://github.com/ful1e5/Bibata_Cursor")
+    (synopsis "Open-source, compact, and material-designed cursor set")
+    (description
+     "Bibata is an open-source, compact, and material designed
+cursor set.  This project aims at improving the cursor experience.")
     (license license:gpl3)))
 
 (define-public gnome-plots
@@ -303,6 +448,97 @@ and products.  Plots is designed to integrate well with the GNOME desktop and
 takes advantage of modern hardware using OpenGL.")
     (license license:gpl3+)))
 
+(define-public portfolio
+  (package
+    (name "portfolio")
+    (version "0.9.14")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/tchx84/Portfolio")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0h09v8lhz3kv6qmwjhx3gr7rp6ccfhrzm54gjnaixl4dcg9zddls"))))
+    (arguments
+     (list #:glib-or-gtk? #t
+           #:imported-modules `(,@%meson-build-system-modules
+                                (guix build python-build-system))
+           #:modules '((guix build meson-build-system)
+                       ((guix build python-build-system)
+                        #:prefix python:)
+                       (guix build utils))
+           #:phases #~(modify-phases %standard-phases
+                        (add-after 'install 'rename-executable
+                          (lambda _
+                            (with-directory-excursion (string-append #$output
+                                                                     "/bin")
+                              (symlink "dev.tchx84.Portfolio" "portfolio"))))
+                        (add-after 'glib-or-gtk-wrap 'python-and-gi-wrap
+                          (lambda* (#:key inputs outputs #:allow-other-keys)
+                            (wrap-program (search-input-file outputs
+                                                             "bin/dev.tchx84.Portfolio")
+                              `("GUIX_PYTHONPATH" =
+                                (,(getenv "GUIX_PYTHONPATH") ,(python:site-packages
+                                                               inputs
+                                                               outputs)))
+                              `("GI_TYPELIB_PATH" =
+                                (,(getenv "GI_TYPELIB_PATH")))))))))
+    (build-system meson-build-system)
+    (inputs (list bash-minimal python-pygobject gtk+ libhandy))
+    (native-inputs
+     (list desktop-file-utils
+           gettext-minimal
+           `(,glib "bin")
+           `(,gtk+ "bin")
+           python))
+    (home-page "https://github.com/tchx84/Portfolio")
+    (synopsis "Minimalist file manager for Linux mobile devices")
+    (description
+     "Portfolio is a minimalist file manager for those who want to use Linux
+mobile devices.  Tap to activate and long press to select, to browse, open,
+copy, move, delete, or edit your files.")
+    (license license:gpl3+)))
+
+(define-public gnome-shell-extension-unite-shell
+  (package
+    (name "gnome-shell-extension-unite-shell")
+    (version "69")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/hardpixel/unite-shell")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "10yh6ylyp43ykcza180iak08wfypay3raqf3p0vrj9ngm98qzq70"))))
+    (build-system copy-build-system)
+    (native-inputs (list `(,glib "bin") gettext-minimal))
+    (inputs (list xprop))
+    (arguments
+     (list #:install-plan ''(("./unite@hardpixel.eu"
+                              "share/gnome-shell/extensions/unite@hardpixel.eu"))
+           #:phases #~(modify-phases %standard-phases
+                        (add-after 'unpack 'patch-xprop-bin
+                          (lambda _
+                            (substitute* "unite@hardpixel.eu/window.js"
+                              (("xprop")
+                               (string-append #$(this-package-input "xprop")
+                                              "/bin/xprop")))))
+                        (add-before 'install 'compile-schemas
+                          (lambda _
+                            (with-directory-excursion "unite@hardpixel.eu/schemas"
+                              (invoke "glib-compile-schemas" ".")))))))
+    (home-page "https://github.com/hardpixel/unite-shell")
+    (synopsis "Top panel and window decoration extension for GNOME Shell")
+    (description
+     "Unite is a GNOME Shell extension which makes a few layout
+tweaks to the top panel and removes window decorations to make it look like
+Ubuntu Unity Shell.")
+    (license license:gpl3)))
+
 (define-public gnome-shell-extension-appindicator
   (package
     (name "gnome-shell-extension-appindicator")
@@ -330,7 +566,7 @@ GNOME Shell.")
 (define-public gnome-shell-extension-clipboard-indicator
   (package
     (name "gnome-shell-extension-clipboard-indicator")
-    (version "39")
+    (version "42")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -342,7 +578,7 @@ GNOME Shell.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1kq6bzxki7lwmw690f4qml8pvfwafpqpsfnq2kyjhrp8nh39axwi"))
+                "0wf2k33pbwjdf8i4y3aw32fgvjbh751qh7504lwhnl02rcq5dc88"))
               (modules '((guix build utils)))
               (snippet
                ;; Remove pre-compiled settings schemas and translations from
@@ -449,7 +685,7 @@ easier to keep track of applications running in the background.")
 (define-public gnome-shell-extension-dash-to-dock
   (package
     (name "gnome-shell-extension-dash-to-dock")
-    (version "71")
+    (version "73")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -458,7 +694,7 @@ easier to keep track of applications running in the background.")
                                            version))))
               (sha256
                (base32
-                "12b6ljzs5071zs0kcf5yj4jfhq10b1gnldv0hmbksnqzz5g719wf"))
+                "1l0isbrgfc8v46l1yc5l4myz7qnlxzyfyiifipp86z9d79d8klzw"))
               (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     (arguments
@@ -487,17 +723,17 @@ faster window switching.")
 (define-public gnome-shell-extension-gsconnect
   (package
     (name "gnome-shell-extension-gsconnect")
-    (version "48")
+    (version "50")       ; See GNOME Shell supported versions in metadata.json
     (source (origin
               (method git-fetch)
               (uri (git-reference
-                    (url (string-append "https://github.com/andyholmes"
+                    (url (string-append "https://github.com/GSConnect"
                                         "/gnome-shell-extension-gsconnect.git"))
                     (commit (string-append "v" version))))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "15agblnm7k1wqnnz6gwhwym992fzqkdz8mkm04805783bx60b8bh"))))
+                "0vg87fdihs5kp7apgyd32ldjmwzmrxaimsc005yjyy8m3f65sjmr"))))
     (build-system meson-build-system)
     (arguments
      `(#:tests? #f ;; every test fails
@@ -568,7 +804,7 @@ faster window switching.")
        ("gobject-introspection" ,gobject-introspection)
        ("libxml2" ,libxml2)
        ("pkg-config" ,pkg-config)))
-    (home-page "https://github.com/andyholmes/gnome-shell-extension-gsconnect/wiki")
+    (home-page "https://github.com/GSConnect/gnome-shell-extension-gsconnect/wiki")
     (synopsis "Connect GNOME Shell with your Android phone")
     (description "GSConnect is a complete implementation of KDE Connect
 especially for GNOME Shell, allowing devices to securely share content, like
@@ -627,7 +863,7 @@ currently focused application in the top panel of the GNOME shell.")
 (define-public gnome-shell-extension-just-perfection
   (package
     (name "gnome-shell-extension-just-perfection")
-    (version "20.0")
+    (version "22.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -636,7 +872,7 @@ currently focused application in the top panel of the GNOME shell.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1b1hzibgryn861av2bjnfh5bmzs2bxfcsyl0ardkaj97228xsjzy"))))
+                "0r4rflppcp05kwhzmh07dzi7znc4kch4nc8mzw61arj3qsfq2qqj"))))
     (build-system copy-build-system)
     (arguments
      `(#:install-plan
@@ -678,7 +914,7 @@ certain elements or change animation speeds.")
 (define-public gnome-shell-extension-dash-to-panel
   (package
     (name "gnome-shell-extension-dash-to-panel")
-    (version "45")
+    (version "51")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -686,7 +922,7 @@ certain elements or change animation speeds.")
                     (commit (string-append "v" version))))
               (sha256
                (base32
-                "05bfd3b1g9zd86pl1rpgfqsmip271lasyfj8phpqf1gdds5yz6f6"))
+                "103pl77dhafi2ayds5yma2smv3b58zcysnd6vl5m5zavjvk35sz7"))
               (file-name (git-file-name name version))))
     (build-system gnu-build-system)
     (arguments
@@ -714,27 +950,31 @@ into a single panel, similar to that found in KDE Plasma and Windows 7+.")
     (license license:gpl2+)))
 
 (define-public gnome-shell-extension-noannoyance
-  (package
-    (name "gnome-shell-extension-noannoyance")
-    (version "5")
-    (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url "https://github.com/BjoernDaase/noannoyance")
-                    (commit "e37b5b3c31f577b4698bc6659bc9fec5ea9ac5d4")))
-              (sha256
-               (base32
-                "0fa8l3xlh8kbq07y4385wpb908zm6x53z81q16xlmin97dln32hh"))
-              (file-name (git-file-name name version))))
-    (build-system copy-build-system)
-    (arguments
-     '(#:install-plan
-       '(("." "share/gnome-shell/extensions/noannoyance@daase.net"))))
-    (synopsis "Remove 'Window is ready' annotation")
-    (description "One of the many extensions that remove this message.
+  (let ((revision "1")
+        (commit "b759d10fd2799bc084007fdd927b62637c3dbd2c"))
+    (package
+      (name "gnome-shell-extension-noannoyance")
+      ;; XXX: There is no version noted anywhere in the source.  Thus, infer it
+      ;;      from <https://extensions.gnome.org/extension/2182/noannoyance/>.
+      (version (git-version "16" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/bdaase/noannoyance")
+                      (commit commit)))
+                (sha256
+                 (base32
+                  "0hh7fdqvx54h9j41ia2jl0nq1d5i66k7blw41ya6hkh7201r4anp"))
+                (file-name (git-file-name name version))))
+      (build-system copy-build-system)
+      (arguments
+       '(#:install-plan
+         '(("." "share/gnome-shell/extensions/noannoyance@daase.net"))))
+      (synopsis "Remove 'Window is ready' annotation")
+      (description "One of the many extensions that remove this message.
 It uses ES6 syntax and claims to be more actively maintained than others.")
-    (home-page "https://extensions.gnome.org/extension/2182/noannoyance/")
-    (license license:gpl2)))
+      (home-page "https://extensions.gnome.org/extension/2182/noannoyance/")
+      (license license:gpl2))))
 
 (define-public gnome-shell-extension-paperwm
   (package
@@ -776,7 +1016,7 @@ notebooks and tiling window managers.")
 (define-public gpaste
   (package
     (name "gpaste")
-    (version "3.42.2")
+    (version "42.2")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -785,19 +1025,26 @@ notebooks and tiling window managers.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1k5qvgzwl357k72qfim5zfas2a0n6j24jnlm1v472l7h6gb6lssm"))
+                "0qq2p19p3r3lz8yfynpnf36cipv54bzdbmq1x5zgwhyl4yl41g28"))
               (patches
                (search-patches "gpaste-fix-paths.patch"))))
     (build-system meson-build-system)
     (native-inputs
-     (list autoconf automake gettext-minimal gobject-introspection
+     (list gcr
+           gettext-minimal
+           gobject-introspection
            (list glib "bin")            ; for glib-compile-resources
-           libtool pkg-config vala))
+           pkg-config
+           vala))
     (inputs
-     (list appstream-glib libarchive gjs mutter graphene))
+     (list appstream-glib
+           gjs
+           gtk
+           mutter
+           libadwaita
+           libarchive))
     (arguments
-     (list #:meson meson-0.59      ;positional arguments error with meson 0.60
-           #:glib-or-gtk? #true
+     (list #:glib-or-gtk? #true
            #:configure-flags
            #~(list
               (string-append "-Dcontrol-center-keybindings-dir="
@@ -809,12 +1056,14 @@ notebooks and tiling window managers.")
            #:phases
            #~(modify-phases %standard-phases
                (add-after 'unpack 'fix-introspection-install-dir
-                 (lambda* (#:key outputs #:allow-other-keys)
-                   (let ((out (assoc-ref outputs "out")))
-                     (substitute* '("src/gnome-shell/extension.js"
-                                    "src/gnome-shell/prefs.js")
-                       (("@typelibPath@")
-                        (string-append out "/lib/girepository-1.0/")))))))))
+                 (lambda _
+                   (substitute* "src/libgpaste/gpaste/gpaste-settings.c"
+                     (("@gschemasCompiled@")
+                      (string-append #$output "/share/glib-2.0/schemas/")))
+                   (substitute* '("src/gnome-shell/extension.js"
+                                  "src/gnome-shell/prefs.js")
+                     (("@typelibPath@")
+                      (string-append #$output "/lib/girepository-1.0/"))))))))
     (home-page "https://github.com/Keruspe/GPaste")
     (synopsis "Clipboard management system for GNOME Shell")
     (description "GPaste is a clipboard manager, a tool which allows you to
@@ -828,7 +1077,7 @@ copies you now want to paste.")
 (define-public gnome-shell-extension-vertical-overview
   (package
     (name "gnome-shell-extension-vertical-overview")
-    (version "8")
+    (version "10")
     (source
      (origin
        (method git-fetch)
@@ -837,7 +1086,7 @@ copies you now want to paste.")
              (commit (string-append "v" version))))
        (sha256
         (base32
-         "01vz48p3bh7p3ybdyw0s0ahs18lk2kzk9x4ad46s0dnwmmsyhww9"))
+         "1sqkbg93qqrq47wyfnh2flg7dpsmv5c2pmkx8kgqhnbl7j2kgi0l"))
        (file-name (git-file-name name version))
        (snippet
         '(begin (delete-file "schemas/gschemas.compiled")))))
@@ -909,7 +1158,7 @@ position when the mouse is moved rapidly.")
 (define-public gnome-shell-extension-burn-my-windows
   (package
     (name "gnome-shell-extension-burn-my-windows")
-    (version "15")
+    (version "22")
     (source
      (origin
        (method git-fetch)
@@ -918,7 +1167,7 @@ position when the mouse is moved rapidly.")
              (commit (string-append "v" version))))
        (sha256
         (base32
-         "1gabnqdk11n6345jzv9sc4yjmfrdgg0lsz6zc29gc5afzgirkhm5"))
+         "185xrf330d9bflmk0l61cnzlylnppb2v4yz6v6ygkk4zpwyil8np"))
        (file-name (git-file-name name version))))
     (build-system copy-build-system)
     (arguments
@@ -948,7 +1197,7 @@ animation of closing windowed applications.")
 (define-public gnome-shell-extension-blur-my-shell
   (package
     (name "gnome-shell-extension-blur-my-shell")
-    (version "29")
+    (version "44")
     (source
      (origin
        (method git-fetch)
@@ -958,22 +1207,21 @@ animation of closing windowed applications.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "13x7zgaj3dz7lypdv1bgmpmh0f2w53q567zxmhmqimi1gy5mjrvk"))
-       (snippet
-        '(begin (delete-file "src/schemas/gschemas.compiled")))))
+         "0h7yfvrrg5r821mzrp42c09jws06mw6v9avvkfykqj8n8qnslmyx"))))
     (build-system copy-build-system)
     (arguments
-     `(#:install-plan
-       '(("." ,(string-append
-                "share/gnome-shell/extensions/"
-                "blur-my-shell@aunetx")
-          #:include-regexp ("\\.js(on)?$" "\\.css$" "\\.ui$" "\\.png$"
-                            "\\.xml$" "\\.compiled$")))
+     '(#:install-plan
+       (let ((extension "share/gnome-shell/extensions/blur-my-shell@aunetx"))
+         `(("src/" ,extension)
+           ("resources/" ,extension
+            #:include-regexp ("\\.svg$" "\\.ui"))
+           ("." ,extension
+            #:exclude-regexp ("src/" "resources/")
+            #:include-regexp ("\\.js(on)?$" "\\.css$" "\\.ui$" "\\.png$"
+                              "\\.xml$" "\\.compiled$"))))
        #:phases
        (modify-phases %standard-phases
-         (add-after 'unpack 'cd-src
-           (lambda _ (chdir "src")))
-         (add-before 'install 'compile-schemas
+         (add-after 'unpack 'compile-schemas
            (lambda _
              (with-directory-excursion "schemas"
                (invoke "glib-compile-schemas" ".")))))))
@@ -988,7 +1236,7 @@ GNOME Shell, including the top panel, dash and overview.")
 (define-public gnome-shell-extension-radio
   (package
     (name "gnome-shell-extension-radio")
-    (version "19")
+    (version "20")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -998,7 +1246,7 @@ GNOME Shell, including the top panel, dash and overview.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "1qsi6c57hxh4jqdw18knm06601lhag6jdbvzg0r79aa9572zy8a0"))))
+                "01dmziad9g7bs3hr59aaz3mivkc6rqfyb9bz2v202zk22vcr5a2y"))))
     (build-system copy-build-system)
     (arguments
      (list
@@ -1084,7 +1332,7 @@ of windows.")
 (define-public arc-theme
   (package
     (name "arc-theme")
-    (version "20210412")
+    (version "20221218")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1093,17 +1341,16 @@ of windows.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0zs44dagp6baiyszlr1kj5ncap43fg32dv07rl46nxbds2p65lh4"))))
+                "0yznqjz1a1mcwks8z7pybgzrjiwg978bfpdmkaq926wy82qslngd"))))
     (build-system meson-build-system)
     (arguments
      '(#:configure-flags
-       '("-Dthemes=gnome-shell,gtk2,gtk3,metacity,plank,unity,xfwm")
+       '("-Dthemes=gnome-shell,gtk2,gtk3,gtk4,metacity,plank,unity,xfwm")
        #:phases
        (modify-phases %standard-phases
          (add-before 'build 'set-home   ;placate Inkscape
            (lambda _
-             (setenv "HOME" (getcwd))
-             #t)))))
+             (setenv "HOME" (getcwd)))))))
     (native-inputs
      (list `(,glib "bin") ; for glib-compile-resources
            gnome-shell
@@ -1111,7 +1358,9 @@ of windows.")
            inkscape/stable
            optipng
            pkg-config
+           python
            sassc/libsass-3.5))
+    (inputs (list gtk-engines)) ;for gtk+-2 to work properly
     (synopsis "Flat GTK+ theme with transparent elements")
     (description "Arc is a flat theme with transparent elements for GTK 3, GTK
 2, and GNOME Shell which supports GTK 3 and GTK 2 based desktop environments
@@ -1196,7 +1445,7 @@ like Gnome, Unity, Budgie, Pantheon, XFCE, Mate and others.")
 (define-public materia-theme
   (package
     (name "materia-theme")
-    (version "20200916")
+    (version "20210322")
     (source
       (origin
         (method git-fetch)
@@ -1207,7 +1456,7 @@ like Gnome, Unity, Budgie, Pantheon, XFCE, Mate and others.")
         (file-name (git-file-name name version))
         (sha256
           (base32
-            "0qaxxafsn5zd2ysgr0jyv5j73360mfdmxyd55askswlsfphssn74"))))
+            "1fsicmcni70jkl4jb3fvh7yv0v9jhb8nwjzdq8vfwn256qyk0xvl"))))
     (build-system meson-build-system)
     (native-inputs
      (list gtk+ sassc))
@@ -1240,13 +1489,13 @@ Cinnamon, MATE, Unity, Xfce, LightDM, GDM, Chrome theme, etc.")
        #:tests? #f
        #:phases
        (modify-phases %standard-phases
-         (delete 'configure))))             ; no configure script
+         (delete 'configure))))         ; no configure script
     (native-inputs
-     `(("glib:bin" ,glib "bin")             ; for glib-compile-schemas
-       ("gnome-shell" ,gnome-shell)
-       ("gtk+" ,gtk+)
-       ("xmllint" ,libxml2)
-       ("ruby-sass" ,ruby-sass)))
+     (list `(,glib "bin")               ; for glib-compile-schemas
+           gnome-shell
+           gtk+
+           libxml2
+           ruby-sass))
     (synopsis "Flat theme with light and dark elements")
     (description "Numix is a modern flat theme with a combination of light and
 dark elements.  It supports GNOME, Unity, Xfce, and Openbox.")
@@ -1315,6 +1564,30 @@ variants.")
     (license (list license:gpl3            ; According to COPYING.
                    license:lgpl2.1         ; Some style sheets.
                    license:cc-by-sa4.0)))) ; Some icons
+
+(define-public postmarketos-theme
+  (package
+    (name "postmarketos-theme")
+    (version "0.6.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitlab.com/postmarketOS/postmarketos-theme")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "09in7737cirmw2c0ac40ac29szfgdva6q0zl32mdi12marybd2g5"))))
+    (build-system meson-build-system)
+    (native-inputs (list sassc))
+    (home-page "https://gitlab.com/postmarketOS/postmarketos-theme")
+    (synopsis "PostmarketOS themed themes")
+    (description
+     "@code{postmarketos-theme} contains a GTK3 and GTK4 theme which is based
+on Adwaita but replaces the standard blue highlights in the theme with
+postmarketOS green.  There's also the oled and paper variants of the theme
+that are completely black and completely white.")
+    (license license:lgpl2.0+)))
 
 (define-public eiciel
   (package
@@ -1424,6 +1697,47 @@ language specification for the Language Server Protocol (LSP).  This tool is
 used in text editing environments to provide a complete and integrated
 feature-set for programming Vala effectively.")
     (license license:lgpl2.1+)))
+
+
+(define-public yaru-theme
+  (package
+    (name "yaru-theme")
+    (version "22.10.3")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/ubuntu/yaru")
+             (commit version)))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32
+         "0f052a5cyf4lijyrdp4kjvxrx6d5fbj7109pi2bhxs9lk5jy8z86"))))
+    (build-system meson-build-system)
+    (native-inputs
+     (list python sassc pkg-config `(,glib "bin") `(,gtk+ "bin")))
+    (arguments
+     (list #:configure-flags #~'("-Dmate=true"
+                                 "-Dmate-dark=true"
+                                 "-Dxfwm4=true"
+                                 "-Dmetacity=true"
+                                 "-Dsessions=false")))
+    (home-page "https://github.com/ubuntu/yaru")
+    (synopsis "Ubuntu community theme yaru")
+    (description "Yaru is the default theme for Ubuntu.
+
+It contains:
+
+@itemize
+@item a GNOME Shell theme based on the upstream GNOME shell theme
+@item a light and dark GTK theme (gtk2 and gtk3) based on the upstream Adwaita
+ Gtk theme
+@item an icon & cursor theme, derived from the Unity8 Suru icons and Suru icon
+ theme
+@item a sound theme, combining sounds from the WoodenBeaver and Touch-Remix
+ sound themes.
+@end itemize")
+    (license (list license:lgpl2.1 license:lgpl3 license:cc-by-sa4.0))))
 
 (define-public nordic-theme
   (let ((commit "07d764c5ebd5706e73d2e573f1a983e37b318915")

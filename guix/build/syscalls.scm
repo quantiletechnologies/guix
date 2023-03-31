@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014-2023 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2015 David Thompson <davet@gnu.org>
 ;;; Copyright © 2015 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2017 Mathieu Othacehe <m.othacehe@gmail.com>
@@ -46,10 +46,12 @@
             MS_NOEXEC
             MS_REMOUNT
             MS_NOATIME
+            MS_NODIRATIME
             MS_STRICTATIME
             MS_RELATIME
             MS_BIND
             MS_MOVE
+            MS_REC
             MS_SHARED
             MS_LAZYTIME
             MNT_FORCE
@@ -445,9 +447,14 @@ If an error occurs while creating the binding, defer the error report until
 the returned procedure is called."
   (catch #t
     (lambda ()
+      ;; Note: When #:library is set, try it first and fall back to libc
+      ;; proper.  This is because libraries like libutil.so have been subsumed
+      ;; by libc.so with glibc >= 2.34.
       (let ((ptr (dynamic-func name
                                (if library
-                                   (dynamic-link library)
+                                   (or (false-if-exception
+                                        (dynamic-link library))
+                                       (dynamic-link))
                                    (dynamic-link)))))
         ;; The #:return-errno? facility was introduced in Guile 2.0.12.
         (pointer->procedure return-type ptr argument-types
@@ -537,8 +544,10 @@ the last argument of `mknod'."
 (define MS_NOEXEC             8)
 (define MS_REMOUNT           32)
 (define MS_NOATIME         1024)
+(define MS_NODIRATIME      2048)
 (define MS_BIND            4096)
 (define MS_MOVE            8192)
+(define MS_REC            16384)
 (define MS_SHARED       1048576)
 (define MS_RELATIME     2097152)
 (define MS_STRICTATIME 16777216)
@@ -549,50 +558,50 @@ the last argument of `mknod'."
 (define MNT_EXPIRE      4)
 (define UMOUNT_NOFOLLOW 8)
 
-(define-as-needed (mount source target type
-                         #:optional (flags 0) options
-                         #:key (update-mtab? #f))
-  "Mount device SOURCE on TARGET as a file system TYPE.
-Optionally, FLAGS may be a bitwise-or of the MS_* <sys/mount.h>
-constants, and OPTIONS may be a string.  When FLAGS contains
-MS_REMOUNT, SOURCE and TYPE are ignored.  When UPDATE-MTAB? is true,
-update /etc/mtab.  Raise a 'system-error' exception on error."
+(define-as-needed mount
   ;; XXX: '#:update-mtab?' is not implemented by core 'mount'.
   (let ((proc (syscall->procedure int "mount" `(* * * ,unsigned-long *))))
-    (let-values (((ret err)
-                  (proc (if source
-                            (string->pointer source)
-                            %null-pointer)
-                        (string->pointer target)
-                        (if type
-                            (string->pointer type)
-                            %null-pointer)
-                        flags
-                        (if options
-                            (string->pointer options)
-                            %null-pointer))))
-      (unless (zero? ret)
-        (throw 'system-error "mount" "mount ~S on ~S: ~A"
-               (list source target (strerror err))
-               (list err)))
-      (when update-mtab?
-        (augment-mtab source target type options)))))
+    (lambda* (source target type
+                     #:optional (flags 0) options
+                     #:key (update-mtab? #f))
+      "Mount device SOURCE on TARGET as a file system TYPE.
+Optionally, FLAGS may be a bitwise-or of the MS_* <sys/mount.h> constants, and
+OPTIONS may be a string.  When FLAGS contains MS_REMOUNT, SOURCE and TYPE are
+ignored.  When UPDATE-MTAB? is true, update /etc/mtab.  Raise a 'system-error'
+exception on error."
+      (let-values (((ret err)
+                    (proc (if source
+                              (string->pointer source)
+                              %null-pointer)
+                          (string->pointer target)
+                          (if type
+                              (string->pointer type)
+                              %null-pointer)
+                          flags
+                          (if options
+                              (string->pointer options)
+                              %null-pointer))))
+        (unless (zero? ret)
+          (throw 'system-error "mount" "mount ~S on ~S: ~A"
+                 (list source target (strerror err))
+                 (list err)))
+        (when update-mtab?
+          (augment-mtab source target type options))))))
 
-(define-as-needed (umount target
-                          #:optional (flags 0)
-                          #:key (update-mtab? #f))
-  "Unmount TARGET.  Optionally FLAGS may be one of the MNT_* or UMOUNT_*
-constants from <sys/mount.h>."
+(define-as-needed umount
   ;; XXX: '#:update-mtab?' is not implemented by core 'umount'.
-  (let ((proc (syscall->procedure int "umount2" `(* ,int))))
-    (let-values (((ret err)
-                  (proc (string->pointer target) flags)))
-      (unless (zero? ret)
-        (throw 'system-error "umount" "~S: ~A"
-               (list target (strerror err))
-               (list err)))
-      (when update-mtab?
-        (remove-from-mtab target)))))
+  (let ((proc (syscall->procedure int "umount2" `(* ,int)))) ;XXX
+    (lambda* (target #:optional (flags 0) #:key (update-mtab? #f))
+      "Unmount TARGET.  Optionally FLAGS may be one of the MNT_* or UMOUNT_*
+constants from <sys/mount.h>."
+      (let-values (((ret err)
+                    (proc (string->pointer target) flags)))
+        (unless (zero? ret)
+          (throw 'system-error "umount" "~S: ~A"
+                 (list target (strerror err))
+                 (list err)))
+        (when update-mtab?
+          (remove-from-mtab target))))))
 
 ;; Mount point information.
 (define-record-type <mount>
@@ -640,7 +649,8 @@ the remaining unprocessed options."
                         ("nodev"      => MS_NODEV)
                         ("noexec"     => MS_NOEXEC)
                         ("relatime"   => MS_RELATIME)
-                        ("noatime"    => MS_NOATIME)))))))
+                        ("noatime"    => MS_NOATIME)
+                        ("nodiratime" => MS_NODIRATIME)))))))
 
 (define (mount-flags mount)
   "Return the mount flags of MOUNT, a <mount> record, as an inclusive or of
@@ -732,25 +742,27 @@ current process."
 (define-as-needed RB_SW_SUSPEND  #xd000fce2)
 (define-as-needed RB_KEXEC       #x45584543)
 
-(define-as-needed (reboot #:optional (cmd RB_AUTOBOOT))
+(define-as-needed reboot
   (let ((proc (syscall->procedure int "reboot" (list int))))
-    (let-values (((ret err) (proc cmd)))
-      (unless (zero? ret)
-        (throw 'system-error "reboot" "~S: ~A"
-               (list cmd (strerror err))
-               (list err))))))
+    (lambda* (#:optional (cmd RB_AUTOBOOT))
+      (let-values (((ret err) (proc cmd)))
+        (unless (zero? ret)
+          (throw 'system-error "reboot" "~S: ~A"
+                 (list cmd (strerror err))
+                 (list err)))))))
 
-(define-as-needed (load-linux-module data #:optional (options ""))
+(define-as-needed load-linux-module
   (let ((proc (syscall->procedure int "init_module"
                                   (list '* unsigned-long '*))))
-    (let-values (((ret err)
-                  (proc (bytevector->pointer data)
-                        (bytevector-length data)
-                        (string->pointer options))))
-      (unless (zero? ret)
-        (throw 'system-error "load-linux-module" "~A"
-               (list (strerror err))
-               (list err))))))
+    (lambda* (data #:optional (options ""))
+      (let-values (((ret err)
+                    (proc (bytevector->pointer data)
+                          (bytevector-length data)
+                          (string->pointer options))))
+        (unless (zero? ret)
+          (throw 'system-error "load-linux-module" "~A"
+                 (list (strerror err))
+                 (list err)))))))
 
 (define (kernel? pid)
   "Return #t if PID designates a \"kernel thread\" rather than a normal
@@ -871,7 +883,7 @@ fdatasync(2) on the underlying file descriptor."
      (ST_NODEV      => MS_NODEV)
      (ST_NOEXEC     => MS_NOEXEC)
      (ST_NOATIME    => MS_NOATIME)
-     (ST_NODIRATIME => 0)                         ;FIXME
+     (ST_NODIRATIME => MS_NODIRATIME)
      (ST_RELATIME   => MS_RELATIME))))
 
 (define-c-struct %statfs                          ;<bits/statfs.h>
@@ -958,7 +970,10 @@ backend device."
                           (string->pointer key)
                           (string->pointer "")
                           0)))
-        (cond ((< size 0) #f)
+        (cond ((< size 0)
+               (throw 'system-error "getxattr" "~S: ~A"
+                      (list file key (strerror err))
+                      (list err)))
               ((zero? size) "")
               ;; Get VALUE in buffer of SIZE.  XXX actual size can race.
               (else (let*-values (((buf) (make-bytevector size))
@@ -1388,7 +1403,8 @@ exception if it's already taken."
       thunk
       (lambda ()
         (when port
-          (unlock-file port))))))
+          (unlock-file port)
+          (delete-file file))))))
 
 (define (call-with-file-lock/no-wait file thunk handler)
   (let ((port #f))
@@ -1416,7 +1432,8 @@ exception if it's already taken."
       thunk
       (lambda ()
         (when port
-          (unlock-file port))))))
+          (unlock-file port)
+          (delete-file file))))))
 
 (define-syntax-rule (with-file-lock file exp ...)
   "Wait to acquire a lock on FILE and evaluate EXP in that context."

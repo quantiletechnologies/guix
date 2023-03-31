@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013, 2014, 2020 Eric Bavier <bavier@posteo.net>
 ;;; Copyright © 2015 Mark H Weaver <mhw@netris.org>
-;;; Copyright © 2015, 2016, 2017, 2018, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2015-2018, 2020-2023 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016 Pjotr Prins <pjotr.guix@thebird.nl>
 ;;; Copyright © 2016 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2016, 2020, 2021, 2022 Ricardo Wurmus <rekado@elephly.net>
@@ -45,6 +45,7 @@
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages check)
+  #:use-module (gnu packages documentation)
   #:use-module (gnu packages flex)
   #:use-module (gnu packages freeipmi)
   #:use-module (gnu packages linux)
@@ -63,20 +64,25 @@
 (define-public parallel
   (package
     (name "parallel")
-    (version "20220722")
+    (version "20230322")
     (source
      (origin
       (method url-fetch)
       (uri (string-append "mirror://gnu/parallel/parallel-"
                           version ".tar.bz2"))
       (sha256
-       (base32 "06gh7bj274qzxdlr5bx36b4jrpdnyfcbzpy6k12l63451nn86h0f"))
+       (base32 "1jkv5c0ddnwbmx7ay3zxn14sxibhi4ff58waqm6rvg0cdnxb3iz5"))
       (snippet
        '(begin
           (use-modules (guix build utils))
           ;; Delete pre-generated manpages and documents.
-          ;; TODO: Add pod2pdf for pdfs, generate rst files.
-          (for-each delete-file (find-files "src" "\\.(1|7|html)$"))))))
+          ;; TODO: generate rst files.
+          ;; parallel_cheat_bw.pdf uses libreoffice to be generated.
+          (rename-file "src/parallel_cheat_bw.pdf"
+                       "src/parallel_cheat_bw.pdf-keep")
+          (for-each delete-file (find-files "src" "\\.(1|7|html|pdf)$"))
+          (rename-file "src/parallel_cheat_bw.pdf-keep"
+                       "src/parallel_cheat_bw.pdf")))))
     (build-system gnu-build-system)
     (arguments
      `(#:phases
@@ -111,7 +117,7 @@
                      "echo"
                      ":::" "1" "2" "3"))))))
     (native-inputs
-     (list perl))
+     (list perl pod2pdf))
     (inputs
      (list bash-minimal perl procps))
     (home-page "https://www.gnu.org/software/parallel/")
@@ -166,7 +172,7 @@ execution is also possible.")
     (arguments `(#:tests? #f)) ;; No tests
     (native-inputs
      (list flex which))
-    (home-page "http://www.maier-komor.de/xjobs.html")
+    (home-page "https://www.maier-komor.de/xjobs.html")
     (properties `((release-monitoring-url . ,home-page)))
     (synopsis
      "Parallel execution of jobs with several useful options")

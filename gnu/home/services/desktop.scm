@@ -1,5 +1,8 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2022 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2022 ( <paren@disroot.org>
+;;; Copyright © 2023 conses <contact@conses.eu>
+;;; Copyright © 2023 Janneke Nieuwenhuizen <janneke@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -20,15 +23,25 @@
   #:use-module (gnu home services)
   #:use-module (gnu home services shepherd)
   #:use-module (gnu services configuration)
-  #:autoload   (gnu packages xdisorg) (redshift)
+  #:autoload   (gnu packages glib)    (dbus)
+  #:autoload   (gnu packages xdisorg) (redshift unclutter)
+  #:autoload   (gnu packages xorg) (setxkbmap xmodmap)
   #:use-module (guix records)
   #:use-module (guix gexp)
   #:use-module (srfi srfi-1)
   #:use-module (ice-9 match)
   #:export (home-redshift-configuration
             home-redshift-configuration?
+            home-redshift-service-type
 
-            home-redshift-service-type))
+            home-dbus-configuration
+            home-dbus-service-type
+
+            home-unclutter-configuration
+            home-unclutter-service-type
+
+            home-xmodmap-configuration
+            home-xmodmap-service-type))
 
 
 ;;;
@@ -161,7 +174,8 @@ format."))
          (start #~(make-forkexec-constructor
                    (list #$(file-append redshift "/bin/redshift")
                          "-c" #$config-file)))
-         (stop #~(make-kill-destructor)))))
+         (stop #~(make-kill-destructor))
+         (actions (list (shepherd-configuration-action config-file))))))
 
 (define home-redshift-service-type
   (service-type
@@ -172,3 +186,153 @@ format."))
    (description
     "Run Redshift, a program that adjusts the color temperature of display
 according to time of day.")))
+
+
+;;;
+;;; D-Bus.
+;;;
+
+(define-record-type* <home-dbus-configuration>
+  home-dbus-configuration make-home-dbus-configuration
+  home-dbus-configuration?
+  (dbus home-dbus-dbus                  ;file-like
+        (default dbus)))
+
+(define (home-dbus-shepherd-services config)
+  (list (shepherd-service
+         (documentation "Run the D-Bus daemon in session-specific mode.")
+         (provision '(dbus))
+         (start #~(make-forkexec-constructor
+                   (list #$(file-append (home-dbus-dbus config)
+                                        "/bin/dbus-daemon")
+                         "--nofork" "--session"
+                         (format #f "--address=unix:path=~a/bus"
+                                 (or (getenv "XDG_RUNTIME_DIR")
+                                     (format #f "/run/user/~a"
+                                             (getuid)))))
+                   #:environment-variables
+                   (cons "DBUS_VERBOSE=1"
+                         (default-environment-variables))
+                   #:log-file
+                   (format #f "~a/dbus.log"
+                           (or (getenv "XDG_LOG_HOME")
+                               (format #f "~a/.local/var/log"
+                                       (getenv "HOME"))))))
+         (stop #~(make-kill-destructor)))))
+
+(define (home-dbus-environment-variables config)
+  '(("DBUS_SESSION_BUS_ADDRESS"
+     . "unix:path=${XDG_RUNTIME_DIR:-/run/user/$UID}/bus")))
+
+(define home-dbus-service-type
+  (service-type
+   (name 'home-dbus)
+   (extensions
+    (list (service-extension home-shepherd-service-type
+                             home-dbus-shepherd-services)
+          (service-extension home-environment-variables-service-type
+                             home-dbus-environment-variables)))
+   (default-value (home-dbus-configuration))
+   (description
+    "Run the session-specific D-Bus inter-process message bus.")))
+
+
+;;;
+;;; Unclutter.
+;;;
+
+(define-configuration/no-serialization home-unclutter-configuration
+  (unclutter
+   (file-like unclutter)
+   "The @code{unclutter} package to use.")
+  (idle-timeout
+   (integer 5)
+   "Timeout in seconds after which to hide the cursor."))
+
+(define (home-unclutter-shepherd-service config)
+  (list
+   (shepherd-service
+    (provision '(unclutter))
+    (requirement '())
+    (one-shot? #t)
+    (start #~(make-forkexec-constructor
+              (list
+               #$(file-append
+                  (home-unclutter-configuration-unclutter config)
+                  "/bin/unclutter")
+               "-idle"
+               (number->string
+                #$(home-unclutter-configuration-idle-timeout config)))
+              #:log-file (string-append
+                          (or (getenv "XDG_LOG_HOME")
+                              (format #f "~a/.local/var/log"
+                                      (getenv "HOME")))
+                          "/unclutter.log"))))))
+
+(define home-unclutter-service-type
+  (service-type
+   (name 'home-unclutter)
+   (extensions
+    (list
+     (service-extension home-shepherd-service-type
+                        home-unclutter-shepherd-service)))
+   (default-value (home-unclutter-configuration))
+   (description "Run the @code{unclutter} daemon, which, on systems using the
+Xorg graphical display server, automatically hides the cursor after a
+user-defined timeout has expired.")))
+
+
+;;;
+;;; Xmodmap.
+;;;
+
+(define-configuration/no-serialization home-xmodmap-configuration
+  (xmodmap
+   (file-like xmodmap)
+   "The @code{xmodmap} package to use.")
+  (key-map
+   (list '())
+   "List of expressions to be read by @code{xmodmap} on service startup."))
+
+(define (serialize-xmodmap-configuration field-name val)
+  (define serialize-field
+    (match-lambda
+      ((key . value)
+       (format #f "~a = ~a" key value))
+      (e e)))
+
+  #~(string-append
+     #$@(interpose (map serialize-field val) "\n" 'suffix)))
+
+(define (xmodmap-shepherd-service config)
+  (define config-file
+    (mixed-text-file
+     "config"
+     (serialize-xmodmap-configuration
+      #f (home-xmodmap-configuration-key-map config))))
+
+  (list
+   (shepherd-service
+    (provision '(xmodmap))
+    (start #~(make-system-constructor
+              (string-join
+               (list #$(file-append
+                        (home-xmodmap-configuration-xmodmap config)
+                        "/bin/xmodmap")
+                     #$config-file))))
+    (stop #~(make-system-constructor
+             #$(file-append setxkbmap "/bin/setxkbmap")))
+    (documentation "On startup, run @code{xmodmap} and read the expressions in
+the configuration file.  On stop, reset all the mappings back to the
+defaults."))))
+
+(define home-xmodmap-service-type
+  (service-type
+   (name 'home-xmodmap)
+   (extensions
+    (list
+     (service-extension home-shepherd-service-type
+                        xmodmap-shepherd-service)))
+   (default-value (home-xmodmap-configuration))
+   (description "Run the @code{xmodmap} utility to modify keymaps and pointer
+buttons under the Xorg display server via user-defined expressions.")))

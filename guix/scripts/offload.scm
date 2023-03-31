@@ -25,7 +25,7 @@
   #:autoload   (ssh auth) (userauth-public-key!)
   #:autoload   (ssh session) (make-session
                               connect! get-error
-                              disconnect! session-set!)
+                              disconnect! session-set! session-get)
   #:autoload   (ssh version) (zlib-support?)
   #:use-module (guix config)
   #:use-module (guix records)
@@ -34,11 +34,11 @@
                            send-files retrieve-files retrieve-files*
                            remote-inferior report-guile-error)
   #:use-module (guix store)
-  #:autoload   (guix inferior) (inferior-eval close-inferior inferior?)
+  #:autoload   (guix inferior) (inferior-eval close-inferior
+                                inferior? inferior-protocol-error?)
   #:autoload   (guix derivations) (read-derivation-from-file
                                    derivation-file-name
                                    build-derivations)
-  #:autoload   (guix serialization) (nar-error? nar-error-file)
   #:autoload   (guix nar) (restore-file-set)
   #:use-module ((guix utils) #:select (%current-system))
   #:use-module ((guix build syscalls)
@@ -111,7 +111,7 @@
   ;; A #f value tells the offload scheduler to disregard the load of the build
   ;; machine when selecting the best offload machine.
   (overload-threshold build-machine-overload-threshold ; inexact real between
-                      (default 0.6))                   ; 0.0 and 1.0 | #f
+                      (default 0.8))                   ; 0.0 and 1.0 | #f
   (parallel-builds build-machine-parallel-builds  ; number
                    (default 1))
   (speed           build-machine-speed            ; inexact real
@@ -219,7 +219,12 @@ number of seconds after which the connection times out."
         (session (make-session #:user (build-machine-user machine)
                                #:host (build-machine-name machine)
                                #:port (build-machine-port machine)
-                               #:timeout 10       ;initial timeout (seconds)
+                               ;; Multiple derivations may be offloaded in
+                               ;; parallel, and when there is a large amount
+                               ;; of data to be sent, it can choke lower
+                               ;; bandwidth connections and cause timeouts, so
+                               ;; set it to a large enough value.
+                               #:timeout 30 ;initial timeout (seconds)
                                ;; #:log-verbosity 'protocol
                                #:identity (build-machine-private-key machine)
 
@@ -473,6 +478,15 @@ logical cores available, to give a rough estimation of CPU usage.  Return
               (vector-set! vec j (vector-ref vec (- i 1)))
               (loop (cons val result) (- i 1))))))))
 
+(define (remote-inferior* session)
+  "Like 'remote-inferior', but upon error return #f."
+  (or (guard (c ((inferior-protocol-error? c) #f))
+        (remote-inferior session))
+      (begin
+        (warning (G_ "failed to run 'guix repl' on machine '~a'~%")
+                 (session-get session 'host))
+        #f)))
+
 (define (choose-build-machine machines)
   "Return two values: the best machine among MACHINES and its build
 slot (which must later be released with 'release-build-slot'), or #f and #f."
@@ -511,7 +525,7 @@ slot (which must later be released with 'release-build-slot'), or #f and #f."
        ;; too costly to call it once for every machine.
        (let* ((session (false-if-exception (open-ssh-session best
                                                              %short-timeout)))
-              (node    (and session (remote-inferior session)))
+              (node    (and session (remote-inferior* session)))
               (load    (and node (node-load node)))
               (threshold (build-machine-overload-threshold best))
               (space   (and node (node-free-disk-space node))))
@@ -708,6 +722,11 @@ machine."
     (and (string=? (build-machine-name m1) (build-machine-name m2))
          (= (build-machine-port m1) (build-machine-port m2))))
 
+  (define (if-true proc)
+    (lambda args
+      (when (every ->bool args)
+        (apply proc args))))
+
   ;; A given build machine may appear several times (e.g., once for
   ;; "x86_64-linux" and a second time for "i686-linux"); test them only once.
   (let ((machines (filter pred
@@ -718,12 +737,12 @@ machine."
     (let* ((names    (map build-machine-name machines))
            (sockets  (map build-machine-daemon-socket machines))
            (sessions (map (cut open-ssh-session <> %short-timeout) machines))
-           (nodes    (map remote-inferior sessions)))
-      (for-each assert-node-has-guix nodes names)
-      (for-each assert-node-repl nodes names)
-      (for-each assert-node-can-import sessions nodes names sockets)
-      (for-each assert-node-can-export sessions nodes names sockets)
-      (for-each close-inferior nodes)
+           (nodes    (map remote-inferior* sessions)))
+      (for-each (if-true assert-node-has-guix) nodes names)
+      (for-each (if-true assert-node-repl) nodes names)
+      (for-each (if-true assert-node-can-import) sessions nodes names sockets)
+      (for-each (if-true assert-node-can-export) sessions nodes names sockets)
+      (for-each (if-true close-inferior) nodes)
       (for-each disconnect! sessions))))
 
 (define (check-machine-status machine-file pred)
@@ -743,10 +762,9 @@ machine."
                 (define session
                   (open-ssh-session machine %short-timeout))
 
-                (match (remote-inferior session)
+                (match (remote-inferior* session)
                   (#f
-                   (warning (G_ "failed to run 'guix repl' on machine '~a'~%")
-                            (build-machine-name machine)))
+                   #f)
                   ((? inferior? inferior)
                    (let ((now (car (gettimeofday))))
                      (match (inferior-eval '(list (uname)

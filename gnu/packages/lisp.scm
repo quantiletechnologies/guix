@@ -14,13 +14,15 @@
 ;;; Copyright © 2018, 2019 Pierre Langlois <pierre.langlois@gmx.com>
 ;;; Copyright © 2019, 2020 Katherine Cox-Buday <cox.katherine.e@gmail.com>
 ;;; Copyright © 2019 Jesse Gildersleve <jessejohngildersleve@protonmail.com>
-;;; Copyright © 2019, 2020, 2021, 2022 Guillaume Le Vaillant <glv@posteo.net>
+;;; Copyright © 2019-2023 Guillaume Le Vaillant <glv@posteo.net>
 ;;; Copyright © 2020 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2020 Zhu Zihao <all_but_last@163.com>
 ;;; Copyright © 2021 Sharlatan Hellseher <sharlatanus@gmail.com>
 ;;; Copyright © 2021 Paul A. Patience <paul@apatience.com>
 ;;; Copyright © 2021 Charles Jackson <charles.b.jackson@protonmail.com>
-;;; Copyright © 2021 jgart <jgart@dismail.de>
+;;; Copyright © 2022 Joeke de Graaf <joeke@posteo.net>
+;;; Copyright © 2021, 2022 jgart <jgart@dismail.de>
+;;; Copyright © 2022 ( <paren@disroot.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -52,14 +54,15 @@
   #:use-module (guix utils)
   #:use-module (guix build-system copy)
   #:use-module (guix build-system gnu)
-  #:use-module (guix build-system ant)
-  #:use-module (guix build-system asdf)
+  #:use-module (guix build-system haskell)
   #:use-module (guix build-system trivial)
   #:use-module (gnu packages admin)
   #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages bdw-gc)
+  #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages dbm)
   #:use-module (gnu packages ed)
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages gcc)
@@ -68,10 +71,14 @@
   #:use-module (gnu packages gl)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages groff)
+  #:use-module (gnu packages haskell-check)
+  #:use-module (gnu packages haskell-web)
+  #:use-module (gnu packages haskell-xyz)
   #:use-module (gnu packages libffcall)
   #:use-module (gnu packages libffi)
   #:use-module (gnu packages libsigsegv)
   #:use-module (gnu packages linux)
+  #:use-module (gnu packages llvm)
   #:use-module (gnu packages m4)
   #:use-module (gnu packages maths)
   #:use-module (gnu packages multiprecision)
@@ -80,6 +87,7 @@
   #:use-module (gnu packages perl)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages sdl)
+  #:use-module (gnu packages tcl)
   #:use-module (gnu packages tex)
   #:use-module (gnu packages texinfo)
   #:use-module (gnu packages tls)
@@ -131,117 +139,124 @@ Definition Facility.")
     (license license:expat)))
 
 (define-public gcl
-  (let ((commit "ff7ef981765cc0efdb4b1db27c292f5c11a72753")
-        (revision "3")) ;Guix package revision
-    (package
-      (name "gcl")
-      (version (git-version "2.6.12" revision commit))
-      (source
-       (origin
-         (method git-fetch)
-         (uri (git-reference
-               (url "https://git.savannah.gnu.org/r/gcl.git")
-               (commit commit)))
-         (file-name (git-file-name name version))
-         (sha256
-          (base32 "0z64fxxcaial2i1s1hms8r095dm1ff3wd8ivwdx894a3yln9c0an"))))
-      (build-system gnu-build-system)
-      (arguments
-       `(#:parallel-build? #f  ; The build system seems not to be thread safe.
-         #:test-target "ansi-tests/test_results"
-         #:configure-flags ,#~(list
-                               "--enable-ansi" ; required by the maxima package
-                               (string-append "CFLAGS=-I"
-                                              #$(this-package-input "libtirpc")
-                                              "/include/tirpc")
-                               (string-append "LDFLAGS=-L"
-                                              #$(this-package-input "libtirpc")
-                                              "/lib")
-                               "LIBS=-ltirpc")
-         #:make-flags ,#~(let ((gcc (search-input-file %build-inputs "/bin/gcc")))
-                           (list (string-append "GCL_CC=" gcc)
-                                 (string-append "CC=" gcc)))
-         #:phases
-         (modify-phases %standard-phases
-           (add-after 'unpack 'realpath-workaround
-             ;; Calls to the realpath function can set errno even if the return
-             ;; value of the function indicates that there is no error, which
-             ;; make massert consider that there was an error.
-             (lambda _
-               (substitute* "gcl/o/main.c"
-                 (("massert\\(realpath\\(s,o\\)\\);" all)
-                  "massert((realpath(s, o) != NULL) && ((errno = 0) == 0));"))))
-           (add-after 'unpack 'fix-makefile
-             ;; The "final" target doesn't exist.
-             (lambda _
-               (substitute* "gcl/makefile"
-                 (("\\$\\(MAKE\\) -C \\$\\(PORTDIR\\) final")
-                  "$(MAKE) -C $(PORTDIR)"))))
-           (add-before 'configure 'pre-conf
-             (lambda* (#:key inputs #:allow-other-keys)
-               (chdir "gcl")
-               (substitute*
-                   (append
-                    '("pcl/impl/kcl/makefile.akcl"
-                      "add-defs"
-                      "unixport/makefile.dos"
-                      "add-defs.bat"
-                      "gcl-tk/makefile.prev"
-                      "add-defs1")
-                    (find-files "h" "\\.defs"))
-                 (("SHELL=/bin/bash")
-                  (string-append "SHELL=" (which "bash")))
-                 (("SHELL=/bin/sh")
-                  (string-append "SHELL=" (which "sh"))))
-               (substitute* "h/linux.defs"
-                 (("#CC") "CC")
-                 (("-fwritable-strings") "")
-                 (("-Werror") ""))
-               (substitute* "lsp/gcl_top.lsp"
-                 (("\"cc\"")
-                  (string-append "\"" (assoc-ref %build-inputs "gcc")
-                                 "/bin/gcc\""))
-                 (("\\(or \\(get-path \\*cc\\*\\) \\*cc\\*\\)") "*cc*")
-                 (("\"ld\"")
-                  (string-append "\"" (assoc-ref %build-inputs "binutils")
-                                 "/bin/ld\""))
-                 (("\\(or \\(get-path \\*ld\\*\\) \\*ld\\*\\)") "*ld*")
-                 (("\\(get-path \"objdump --source \"\\)")
-                  (string-append "\"" (assoc-ref %build-inputs "binutils")
-                                 "/bin/objdump --source \"")))
-               #t))
-           (add-after 'install 'wrap
-             (lambda* (#:key inputs outputs #:allow-other-keys)
-               (let* ((gcl (assoc-ref outputs "out"))
-                      (input-path (lambda (lib path)
-                                    (string-append
-                                     (assoc-ref inputs lib) path)))
-                      (binaries '("binutils")))
-                 ;; GCC and the GNU binutils are necessary for GCL to be
-                 ;; able to compile Lisp functions and programs (this is
-                 ;; a standard feature in Common Lisp). While the
-                 ;; the location of GCC is specified in the make-flags,
-                 ;; the GNU binutils must be available in GCL's $PATH.
-                 (wrap-program (string-append gcl "/bin/gcl")
-                   `("PATH" prefix ,(map (lambda (binary)
-                                           (input-path binary "/bin"))
-                                         binaries))))
-               #t))
-           ;; drop strip phase to make maxima build, see
-           ;; https://www.ma.utexas.edu/pipermail/maxima/2008/009769.html
-           (delete 'strip))))
-      (inputs
-       (list bash-minimal gmp libtirpc readline))
-      (native-inputs
-       (list m4 texinfo))
-      (home-page "https://www.gnu.org/software/gcl/")
-      (synopsis "Common Lisp implementation")
-      (description "GCL is an implementation of the Common Lisp language.  It
+  (package
+    (name "gcl")
+    (version "2.6.14")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://git.savannah.gnu.org/r/gcl.git")
+             (commit (string-append "Version_"
+                                    (string-map (lambda (c)
+                                                  (if (char=? c #\.) #\_ c))
+                                                version)))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "1b9m02rfnyflsr8n57v7llxz5m3mi7ip3ypwdww4pdhbgh0lzyg7"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:parallel-build? #f  ; The build system seems not to be thread safe.
+      #:test-target "ansi-tests/test_results"
+      #:configure-flags #~(list
+                           "--enable-ansi" ; required by the maxima package
+                           (string-append "CFLAGS=-I"
+                                          #$(this-package-input "libtirpc")
+                                          "/include/tirpc")
+                           (string-append "LDFLAGS=-L"
+                                          #$(this-package-input "libtirpc")
+                                          "/lib")
+                           "LIBS=-ltirpc")
+      #:make-flags #~(let ((gcc (search-input-file %build-inputs "/bin/gcc")))
+                       (list (string-append "GCL_CC=" gcc)
+                             (string-append "CC=" gcc)))
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'realpath-workaround
+            ;; Calls to the realpath function can set errno even if the return
+            ;; value of the function indicates that there is no error, which
+            ;; make massert consider that there was an error.
+            (lambda _
+              (substitute* "gcl/o/main.c"
+                (("massert\\(realpath\\(s,o\\)\\);" all)
+                 "massert((realpath(s, o) != NULL) && ((errno = 0) == 0));"))))
+          (add-after 'unpack 'fix-missing-enum
+            (lambda _
+              ;; The 'disassembler_style' enum is not defined anywhere,
+              ;; and the parameter is not used...
+              (substitute* "gcl/o/main.c"
+                (("my_fprintf_styled\\(void \\*v,enum disassembler_style,")
+                 "my_fprintf_styled(void *v,int disassembler_style,"))))
+          (add-after 'unpack 'fix-makefile
+            ;; The "final" target doesn't exist.
+            (lambda _
+              (substitute* "gcl/makefile"
+                (("\\$\\(MAKE\\) -C \\$\\(PORTDIR\\) final")
+                 "$(MAKE) -C $(PORTDIR)"))))
+          (add-before 'configure 'pre-conf
+            (lambda* (#:key inputs #:allow-other-keys)
+              (chdir "gcl")
+              (substitute*
+                  (append
+                   '("pcl/impl/kcl/makefile.akcl"
+                     "add-defs"
+                     "unixport/makefile.dos"
+                     "add-defs.bat"
+                     "gcl-tk/makefile.prev"
+                     "add-defs1")
+                   (find-files "h" "\\.defs"))
+                (("SHELL=/bin/bash")
+                 (string-append "SHELL=" (which "bash")))
+                (("SHELL=/bin/sh")
+                 (string-append "SHELL=" (which "sh"))))
+              (substitute* "h/linux.defs"
+                (("#CC") "CC")
+                (("-fwritable-strings") "")
+                (("-Werror") ""))
+              (substitute* "lsp/gcl_top.lsp"
+                (("\"cc\"")
+                 (string-append "\"" (assoc-ref %build-inputs "gcc")
+                                "/bin/gcc\""))
+                (("\\(or \\(get-path \\*cc\\*\\) \\*cc\\*\\)") "*cc*")
+                (("\"ld\"")
+                 (string-append "\"" (assoc-ref %build-inputs "binutils")
+                                "/bin/ld\""))
+                (("\\(or \\(get-path \\*ld\\*\\) \\*ld\\*\\)") "*ld*")
+                (("\\(get-path \"objdump --source \"\\)")
+                 (string-append "\"" (assoc-ref %build-inputs "binutils")
+                                "/bin/objdump --source \"")))))
+          (add-after 'install 'wrap
+            (lambda* (#:key inputs outputs #:allow-other-keys)
+              (let* ((gcl #$output)
+                     (input-path (lambda (lib path)
+                                   (string-append
+                                    (assoc-ref inputs lib) path)))
+                     (binaries '("binutils")))
+                ;; GCC and the GNU binutils are necessary for GCL to be
+                ;; able to compile Lisp functions and programs (this is
+                ;; a standard feature in Common Lisp). While the
+                ;; the location of GCC is specified in the make-flags,
+                ;; the GNU binutils must be available in GCL's $PATH.
+                (wrap-program (string-append gcl "/bin/gcl")
+                  `("PATH" prefix ,(map (lambda (binary)
+                                          (input-path binary "/bin"))
+                                        binaries))))))
+          ;; drop strip phase to make maxima build, see
+          ;; https://www.ma.utexas.edu/pipermail/maxima/2008/009769.html
+          (delete 'strip))))
+    (inputs
+     (list bash-minimal gmp libtirpc readline))
+    (native-inputs
+     (list m4 texinfo))
+    (home-page "https://www.gnu.org/software/gcl/")
+    (synopsis "Common Lisp implementation")
+    (description "GCL is an implementation of the Common Lisp language.  It
 features the ability to compile to native object code and to load native
 object code modules directly into its lisp core.  It also features a
 stratified garbage collection strategy, a source-level debugger and a built-in
 interface to the Tk widget system.")
-      (license license:lgpl2.0+))))
+    (license license:lgpl2.0+)))
 
 (define-public ecl
   (package
@@ -413,14 +428,14 @@ an interpreter, a compiler, a debugger, and much more.")
 (define-public sbcl
   (package
     (name "sbcl")
-    (version "2.2.6")
+    (version "2.3.2")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "mirror://sourceforge/sbcl/sbcl/" version "/sbcl-"
                            version "-source.tar.bz2"))
        (sha256
-        (base32 "18044dqx37mkipnrzs7jrp0cbnwp6snb5gi06a8zn9m8iy6088ry"))))
+        (base32 "1ahyrc3p9cf7y5zbgzvb9yxa8a480ccis4ksijlajck3z8n1dk24"))))
     (build-system gnu-build-system)
     (outputs '("out" "doc"))
     (native-inputs
@@ -548,11 +563,6 @@ an interpreter, a compiler, a debugger, and much more.")
                  (("\\(deftest grent\\.[12]" all)
                   (string-append "#+nil ;disabled by Guix\n" all))))
              #t))
-         (add-before 'build 'fix-shared-library-makefile
-           (lambda _
-             (substitute* '("src/runtime/GNUmakefile")
-               (("	cc") "	$(CC)"))
-             #t))
          (add-before 'build 'fix-contrib-library-path
            (lambda* (#:key inputs #:allow-other-keys)
              (let ((gmp (assoc-ref inputs "gmp"))
@@ -580,8 +590,7 @@ an interpreter, a compiler, a debugger, and much more.")
                      "--with-sb-xref-for-internals"
                      ;; SB-SIMD will only be built on x86_64 CPUs supporting
                      ;; AVX2 instructions. Some x86_64 CPUs don't, so for reproducibility
-                     ;; we disable it and we don't build its documentation (see the
-                     ;; 'build-doc' phase).
+                     ;; we disable it.
                      "--without-sb-simd")))
          (add-after 'build 'build-shared-library
            (lambda* (#:key outputs #:allow-other-keys)
@@ -592,11 +601,6 @@ an interpreter, a compiler, a debugger, and much more.")
              (invoke "sh" "install.sh")))
          (add-after 'build 'build-doc
            (lambda _
-             ;; Don't build the documentation for SB-SIMD as it is disabled in
-             ;; the 'build' phase.
-             (substitute* "doc/manual/generate-texinfo.lisp"
-               (("exclude '\\(\"asdf\"\\)")
-                "exclude '(\"asdf\" \"sb-simd\")"))
              (with-directory-excursion "doc/manual"
                (and  (invoke "make" "info")
                      (invoke "make" "dist")))))
@@ -657,7 +661,7 @@ an interpreter, a compiler, a debugger, and much more.")
            (search-path-specification
             (variable "XDG_CONFIG_DIRS")
             (files '("etc")))))
-    (home-page "http://www.sbcl.org/")
+    (home-page "https://www.sbcl.org/")
     (synopsis "Common Lisp implementation")
     (description "Steel Bank Common Lisp (SBCL) is a high performance Common
 Lisp compiler.  In addition to the compiler and runtime system for ANSI Common
@@ -880,7 +884,7 @@ libraries such as OpenGL, SDL, Video4Linux, and ALSA (video/audio
 grabbing), and others.  Lush is an ideal frontend script language for
 programming projects written in C or other languages.  Lush also has
 libraries for Machine Learning, Neural Nets and statistical estimation.")
-    (home-page "http://lush.sourceforge.net/")
+    (home-page "https://lush.sourceforge.net/")
     (license license:lgpl2.1+)))
 
 (define-public confusion-mdl
@@ -974,7 +978,7 @@ enough to play the original mainframe Zork all the way through.")
                (invoke "./configure" "+lang" "en" "+fhs"
                        (string-append "-prefix=" (assoc-ref outputs "out")))
                #t)))))
-      (home-page "http://www.kylheku.com/cgit/man/")
+      (home-page "https://www.kylheku.com/cgit/man/")
       (synopsis "Modifications to the man utilities, specifically man2html")
       (description
        "This is a fork of the man utilities intended specifically for building
@@ -984,7 +988,7 @@ the HTML documentation of TXR.")
 (define-public txr
   (package
     (name "txr")
-    (version "280")
+    (version "284")
     (source
      (origin
        (method git-fetch)
@@ -993,7 +997,7 @@ the HTML documentation of TXR.")
              (commit (string-append "txr-" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1ni2yb9dggldgizfp13mvrw5vzk13pg74dpk2lyn9dijqvs293s4"))))
+        (base32 "1v6dq1q98v3jdx7g67k15njkpp49iwf30n29rrhwng3b3njqm75g"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags
@@ -1232,7 +1236,7 @@ including a built-in database engine and a GUI system.")
 (define-public janet
   (package
     (name "janet")
-    (version "1.24.0")
+    (version "1.26.0")
     (source
      (origin
        (method git-fetch)
@@ -1241,7 +1245,7 @@ including a built-in database engine and a GUI system.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "07kyjzbj5g197008n9qwpdnagylzlv8x4zbsf2d233mpskv3dixi"))))
+        (base32 "1ghxchyxhcjs0vfzisafc27v05im4kya1jg827l4q2h92ras17x3"))))
     (build-system gnu-build-system)
     (arguments
      (list #:make-flags
@@ -1264,6 +1268,75 @@ platforms.  The entire language (core library, interpreter, compiler,
 assembler, PEG) is less than 1MB.")
     (license license:expat)))
 
+(define-public carp
+  ;; Release 0.5.5 does not support GHC 9.2.
+  (let ((commit "339722325ec607091f6035866ebedea2b69080fe")
+        (revision "1"))
+    (package
+      (name "carp")
+      (version (git-version "0.5.5" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/carp-lang/Carp")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "0w0j3imi4270dsmrh96spsc9xllsk5rrh817l80q1nyay9p53xwd"))))
+      (build-system haskell-build-system)
+      (arguments
+       (list #:phases
+             #~(modify-phases %standard-phases
+                 ;; Carp looks inside the sources checkout to know where to
+                 ;; find its core libraries and other files.
+                 ;; Carp emits C code and tries to compile it with an external
+                 ;; C compiler. On Linux it defaults to Clang.
+                 (add-after 'install 'wrap-programs
+                   (lambda* (#:key inputs #:allow-other-keys)
+                     (define (wrap-carp-program program)
+                       (wrap-program (string-append
+                                      #$output "/bin/" program)
+                         `("CARP_DIR" prefix
+                           (#$(package-source this-package)))
+                         `("PATH" prefix
+                           ,(list (dirname
+                                   (search-input-file inputs "bin/clang"))
+                                  (dirname
+                                   (search-input-file inputs "bin/ld"))))
+                         `("C_INCLUDE_PATH" prefix
+                           ,(list (dirname
+                                   (search-input-directory
+                                    inputs "include/linux"))
+                                  (dirname
+                                   (search-input-file
+                                    inputs "include/stdlib.h"))))))
+  
+                     (for-each wrap-carp-program
+                               (list "carp"
+                                     "carp-header-parse")))))))
+      (inputs
+       (list bash-minimal
+             clang
+             ghc-blaze-markup
+             ghc-blaze-html
+             ghc-split
+             ghc-ansi-terminal
+             ghc-cmark
+             ghc-edit-distance
+             ghc-hashable
+             ghc-open-browser
+             ghc-optparse-applicative))
+      (native-inputs
+       (list ghc-hunit))
+      (home-page "https://carp-lang.org/")
+      (synopsis "Statically typed Lisp without a garbage collector")
+      (description
+       "@code{carp} is a Lisp-like programming language that compiles to
+C.  It features inferred static typing, macros, automatic memory
+management without a garbage collector, a REPL, and straightforward
+integration with code written in C.")
+      (license license:asl2.0))))
 (define-public lisp-repl-core-dumper
   (package
     (name "lisp-repl-core-dumper")
@@ -1351,3 +1424,58 @@ and make for REPLs that start blazing fast.
      "Buildapp is an application for SBCL or CCL that configures and saves an
 executable Common Lisp image.  It is similar to cl-launch and hu.dwim.build.")
     (license license:bsd-2)))
+
+(define-public eisl
+  (package
+    (name "eisl")
+    (version "2.72")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/sasagawa888/eisl")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "12dc6b70dcfalyq3h5i7lmz39xh310k5p83x5q6j18knd6ql9ik9"))))
+    (build-system gnu-build-system)
+    (inputs
+     (list bash-minimal freeglut gdbm libiconv ncurses tcl tk))
+    (native-inputs
+     (list cppcheck))
+    (arguments
+     (list #:make-flags
+           #~(list (string-append "PREFIX=" #$output)
+                   (string-append "CC=" #$(cc-for-target)))
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'fix-paths
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (substitute* "library/compiler.lsp"
+                     (("\"cc ")
+                      "\"gcc "))
+                   (substitute* "library/tcltk.lsp"
+                     (("include <tcl/tcl\\.h>")
+                      "include <tcl.h>")
+                     (("c-option \"-ltcl -ltk\" linux")
+                      "c-option \"-ltcl8.6 -ltk8.6\" linux"))))
+               (delete 'configure)
+               (add-after 'install 'wrap
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (wrap-program (string-append #$output "/bin/eisl")
+                     `("PATH" prefix
+                       ,(map (lambda (bin)
+                               (string-append (assoc-ref inputs bin) "/bin"))
+                             '("binutils" "coreutils" "gcc" "ld-wrapper")))
+                     `("LIBRARY_PATH" suffix
+                       ,(map (lambda (lib)
+                               (string-append (assoc-ref inputs lib) "/lib"))
+                             '("libc")))))))))
+    (home-page "https://github.com/sasagawa888/eisl")
+    (synopsis "Implementation of ISLisp")
+    (description "Easy ISLISP (eisl) is an implementation of ISLisp which
+includes a compiler as well as an interpreter.")
+    (license (list license:bsd-2 ;; documents/license.txt
+                   license:expat ;; cii/LICENSE
+                   license:gpl2+ ;; nana/gdb/test.c and others under nana/
+                   license:bsd-3)))) ;; bench/*

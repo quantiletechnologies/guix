@@ -68,6 +68,7 @@
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-build)
+  #:use-module (gnu packages python-check)
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages ruby)
@@ -78,25 +79,24 @@
 (define-public dos2unix
   (package
     (name "dos2unix")
-    (version "7.4.3")
+    (version "7.4.4")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://waterlan.home.xs4all.nl/dos2unix/"
                            "dos2unix-" version ".tar.gz"))
        (sha256
-        (base32 "0wnacvz99rnlx0ayf5jrxwljvh801r8k1ai3hj137yfsaqcv93dn"))))
+        (base32 "0vj3wix17vl7a85hg673qqyrhw9sbq0xiadbbij7v0nm1gdl3a18"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:make-flags
-       (list (string-append "CC=" ,(cc-for-target))
-             (string-append "prefix=" (assoc-ref %outputs "out")))
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)))) ; no configure script
+     (list #:make-flags
+           #~(list (string-append "CC=" #$(cc-for-target))
+                   (string-append "prefix=" #$output))
+           #:phases
+           #~(modify-phases %standard-phases
+               (delete 'configure)))) ; no configure script
     (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("perl" ,perl)))
+     (list gettext-minimal perl))
     (home-page "https://waterlan.home.xs4all.nl/dos2unix.html")
     (synopsis "DOS/Mac to Unix and vice versa text file format converter")
     (description
@@ -209,11 +209,11 @@ normalization, case-folding, and other operations for data in the UTF-8
 encoding, supporting Unicode version 9.0.0.")
     (license license:expat)))
 
-(define-public utf8proc-2.6.1
+(define-public utf8proc-2.7.0
   (package
     (inherit utf8proc)
     (name "utf8proc")
-    (version "2.6.1")
+    (version "2.7.0")
     (source
      (origin
        (method git-fetch)
@@ -222,7 +222,7 @@ encoding, supporting Unicode version 9.0.0.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1zqc6airkzkssbjxanx5v8blfk90180gc9id0dx8ncs54f1ib8w7"))))
+        (base32 "1wrsmnaigal94gc3xbzdrrm080zjhihjfdla5admllq2w5dladjj"))))
     (arguments
      (substitute-keyword-arguments (package-arguments utf8proc)
        ((#:phases phases)
@@ -238,14 +238,14 @@ encoding, supporting Unicode version 9.0.0.")
     (native-inputs
      (append
       (package-native-inputs utf8proc)
-      (let ((UNICODE_VERSION "13.0.0"))
+      (let ((UNICODE_VERSION "14.0.0"))
         `(("DerivedCoreProperties.txt"
            ,(origin
               (method url-fetch)
               (uri (string-append "https://www.unicode.org/Public/"
                                   UNICODE_VERSION "/ucd/DerivedCoreProperties.txt"))
               (sha256
-               (base32 "0j12x112cd8fpgazkc8izxnhhpia44p1m36ff8yapslxndcmzm55"))))
+               (base32 "1g77s8g9443dd92f82pbkim7rk51s7xdwa3mxpzb1lcw8ryxvvg3"))))
           ;; For tests
           ("ruby" ,ruby)))))))
 
@@ -711,7 +711,8 @@ in a portable way.")
                            "dbacl-" version ".tar.gz"))
        (sha256
         (base32 "1gas0112wqjvwn9qg3hxnawk7h3prr0w9b2h68f3p1ifd1kzn3gz"))
-       (patches (search-patches "dbacl-include-locale.h.patch"))))
+       (patches (search-patches "dbacl-include-locale.h.patch"
+                                "dbacl-icheck-multiple-definitions.patch"))))
     (build-system gnu-build-system)
     (arguments
      `(#:make-flags
@@ -851,7 +852,7 @@ categories.")
                             (invoke "sh" "test_all.sh")))))))))
     (native-inputs (list which)) ;for tests
     (inputs (list pcre))
-    (home-page "http://drmtools.sourceforge.net/")
+    (home-page "https://drmtools.sourceforge.net/")
     (synopsis "Utilities to manipulate text and binary files")
     (description "The drm_tools package contains the following commands:
 @table @command
@@ -972,6 +973,25 @@ source code.")
 and Cython.")
       (license license:expat))))
 
+(define-public txt2tags
+  (package
+    (name "txt2tags")
+    (version "3.7")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "txt2tags" version))
+              (sha256
+               (base32
+                "12hpnvdy7dgarq6ini9jp7dp2zcmvpax04zbl3jb84kd423r75i7"))))
+    (build-system python-build-system)
+    (native-inputs (list python-tox))
+    (home-page "https://txt2tags.org")
+    (synopsis "Convert between markup languages")
+    (description
+     "txt2tags is a document generator.  It reads a text file with minimal
+markup and converts it to multiple formats.")
+    (license license:gpl2)))
+
 (define-public go-github.com-mattn-go-runewidth
   (let ((commit "703b5e6b11ae25aeb2af9ebb5d5fdf8fa2575211")
         (version "0.0.4")
@@ -1062,7 +1082,7 @@ names like Euro.
 @item Handling (bullet, decimal, letter, roman) lists along with (attempt at)
 indentation.
 @end itemize\n")
-    (home-page "http://docx2txt.sourceforge.net")
+    (home-page "https://docx2txt.sourceforge.net")
     (license license:gpl3+)))
 
 (define-public html2text

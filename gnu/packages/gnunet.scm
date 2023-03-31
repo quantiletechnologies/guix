@@ -2,7 +2,7 @@
 ;;; Copyright © 2013, 2014, 2015 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2014 Sree Harsha Totakura <sreeharsha@totakura.in>
 ;;; Copyright © 2015, 2017, 2018, 2019, 2020 Ludovic Courtès <ludo@gnu.org>
-;;; Copyright © 2015, 2017, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2015, 2017, 2019-2021, 2023 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2016 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2016 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2016, 2017, 2018, 2019, 2020 Nikita <nikita@n0.is>
@@ -12,6 +12,7 @@
 ;;; Copyright © 2020 Tanguy Le Carrour <tanguy@bioneland.org>
 ;;; Copyright © 2020 Michael Rohleder <mike@rohleder.de>
 ;;; Copyright © 2022 Maxime Devos <maximedevos@telenet.be>
+;;; Copyright © 2023 Adam Faiz <adam.faiz@disroot.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -33,6 +34,7 @@
   #:use-module (gnu packages file)
   #:use-module (gnu packages aidc)
   #:use-module (gnu packages autotools)
+  #:use-module (gnu packages check)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages crypto)
   #:use-module (gnu packages curl)
@@ -59,6 +61,7 @@
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pulseaudio)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages sphinx)
   #:use-module (gnu packages sqlite)
   #:use-module (gnu packages text-editors)
   #:use-module (gnu packages tls)
@@ -99,7 +102,7 @@
     `(("exiv2" ,exiv2)
       ("bzip2" ,bzip2)
       ("flac" ,flac)
-      ("ffmpeg" ,ffmpeg)
+      ("ffmpeg" ,ffmpeg-4)
       ("file" ,file)                           ;libmagic, for the MIME plug-in
       ("glib" ,glib)
       ("giflib" ,giflib)
@@ -162,14 +165,14 @@ tool to extract metadata from a file and print the results.")
 (define-public libmicrohttpd
   (package
    (name "libmicrohttpd")
-   (version "0.9.75")
+   (version "0.9.76")
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnu/libmicrohttpd/libmicrohttpd-"
                                 version ".tar.gz"))
             (sha256
              (base32
-              "1fz3ljqfvfyfb5inzihy66bys22id9jgsi4nmcd3j6spdxx90y4j"))))
+              "0k7b3h0ka3ckp60dgrwmnigw7i79bk5w3qg84kvw19j2b9xm9cgh"))))
    (build-system gnu-build-system)
    (arguments
     (list #:configure-flags
@@ -257,7 +260,7 @@ supports HTTP, HTTPS and GnuTLS.")
 (define-public gnunet
   (package
    (name "gnunet")
-   (version "0.16.3")
+   (version "0.19.3")
    (source
     (origin
       (method url-fetch)
@@ -265,12 +268,19 @@ supports HTTP, HTTPS and GnuTLS.")
                           ".tar.gz"))
       (sha256
        (base32
-        "12n33r9nnkl5xwx8pwf571l2zvnvfllc8vm6mamrlyjk2cphaf9j"))))
+        "09bspbjl6cll8wcrl1vnb56jwp30pcrg1yyj6xy3i0fl2bzdbdw2"))
+      (modules '((guix build utils)))
+      (snippet
+       #~(begin
+           ;; This is fixed in the upstream repository but the fix
+           ;; has not been released.
+           (substitute* "src/gns/test_proxy.sh"
+             (("test_gnunet_proxy.conf") "test_gns_proxy.conf"))))))
    (build-system gnu-build-system)
    (inputs
     (list bluez
           glpk
-          gnurl
+          curl
           gnutls/dane
           gstreamer
           jansson
@@ -290,7 +300,13 @@ supports HTTP, HTTPS and GnuTLS.")
           zbar
           zlib))
    (native-inputs
-    (list curl openssl pkg-config python xxd
+    (list curl
+          openssl
+          pkg-config
+          python
+          python-sphinx
+          python-sphinx-rtd-theme
+          xxd
           (@ (gnu packages base) which)))
    (arguments
     '(#:parallel-tests? #f ; Parallel tests aren't supported.
@@ -349,29 +365,35 @@ services.")
 (define-public gnunet-scheme
   (package
     (name "gnunet-scheme")
-    (version "0.2")
+    (version "0.3")
     (source (origin
               (method git-fetch)
               (uri (git-reference
                     (url "https://git.gnunet.org/git/gnunet-scheme.git")
-                    (commit (string-append "v" version))))
+                    ;; Go three commits beyond the v0.3 tag, as these three
+                    ;; commits work-around
+                    ;; <https://debbugs.gnu.org/cgi/bugreport.cgi?bug=49623>.
+                    (commit "f5dc44e66373c29f1c84ea89d8080939a8dfbfd2")))
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0a11n58m346vs2khns2hfnxv8lbscf8aaqzhmq0d7nwdpn808nrp"))
+                "0kvqbqijfyp3fhsqjyzwd7b3cm5khwv557wq196mv6rx47aaivgd"))
               (modules '((guix build utils)))
-              ;; XXX: Work-around
-              ;; <https://debbugs.gnu.org/cgi/bugreport.cgi?bug=49623>,
-              ;; this can be removed once Guile > 3.0.7 is released.
-              (snippet '(substitute* '("gnu/gnunet/config/parser.scm"
-                                       "tests/config-parser.scm")
-                          (("#\\{\\$\\{\\}\\}#") "#{${;};}#")
-                          (("#\\{\\$\\{:-\\}\\}#") "#{${;:-};}#")
-                          (("#\\{\\$\\{\\}\\}# #\\{\\$\\{:-\\}\\}#")
-                           "#{$\\x7b;\\x7d;}# #{$\\x7b;:-\\x7d;}#")
-                          (("'#\\{\\$\\{\\}\\}# '#\\{\\$\\{:-\\}\\}#")
-                           "'#{$\\x7b;\\x7d;}# '#{$\\x7b;:-\\x7d;}#")))))
+              (snippet
+               ;; Unbundle dependencies.  TODO: build-aux/test-driver.scm
+               ;; is bundled too, but it's not yet automatically copied by
+               ;; autoreconf -i.
+               #~(delete-file "build-aux/config.rpath"))))
     (build-system gnu-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               ;; For reproducibility, do not insert real timestamps in the PDF.
+               (add-after 'unpack 'reproducible-timestamp
+                 (lambda _
+                   (substitute* "Makefile.am"
+                     (("\\$\\(TEXMACS_CONVERT\\)")
+                      "faketime -m -f '1970-01-01 00:00:00' $(TEXMACS_CONVERT)")))))))
     (inputs (list guile-3.0)) ;for pkg-config
     (propagated-inputs (list guile-bytestructures guile-gcrypt guile-pfds
                              guile-fibers-1.1))
@@ -382,6 +404,7 @@ services.")
                          guile-gcrypt
                          guile-pfds
                          guile-fibers-1.1
+                         libfaketime
                          automake
                          autoconf
                          pkg-config
@@ -390,11 +413,19 @@ services.")
                          guile-quickcheck)) ;for tests
     (synopsis "Guile implementation of GNUnet client libraries")
     (description
-     "This package provides Guile modules for connecting to the NSE (network
-size estimation) and DHT (distributed hash table) services of GNUnet.  It also
-has infrastructure for writing new GNUnet services and connecting to them and
-can be used from multi-threaded environments.  It is not to be confused with
-@code{guile-gnunet} -- @code{guile-gnunet} supports a different set of services.")
+     "This package provides Guile modules for connecting to various
+GNUnet services. It also has infrastructure for writing new GNUnet services and
+connecting to them and can be used from multi-threaded environments.  It is not
+to be confused with @code{guile-gnunet} -- @code{guile-gnunet} supports a different
+set of services.
+
+The following services are supported:
+
+@itemize
+@item NSE (network size estimation)
+@item DHT (distributed hash table)
+@item CADET (secure end-to-end communication between arbitrary peers)
+@end itemize")
     ;; Most code is licensed as AGPL and a few modules are licensed as LGPL
     ;; or GPL.  Documentation is licensed as GFDL.
     (license (list license:agpl3+ license:gpl3+ license:fdl1.3+ license:lgpl3+))
@@ -406,29 +437,30 @@ can be used from multi-threaded environments.  It is not to be confused with
 (define-public gnunet-gtk
   (package (inherit gnunet)
     (name "gnunet-gtk")
-    (version "0.13.1")
+    (version "0.19.0")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://gnu/gnunet/gnunet-gtk-"
                                   version ".tar.gz"))
               (sha256
                (base32
-                "1zdzgq16h77w6ybwg3lqjsjr965np6iqvncqvkbj07glqd4wss0j"))))
+                "0z2731l69vnfsa0cdsw8wh8g1d08wz15y5n0a58qjpf7baric01k"))))
     (arguments
-     `(#:configure-flags
-       (list "--with-libunique"
-             "--with-qrencode"
-             (string-append "--with-gnunet="
-                            (assoc-ref %build-inputs "gnunet")))))
+     (list #:configure-flags
+           #~(list "--with-libunique"
+                   "--with-qrencode"
+                   (string-append "--with-gnunet="
+                                  #$(this-package-input "gnunet")))))
     (inputs
-     `(("glade3" ,glade3)
-       ("gnunet" ,gnunet)
-       ("gnutls" ,gnutls/dane)
-       ("gtk+" ,gtk+)
-       ("libextractor" ,libextractor)
-       ("libgcrypt" ,libgcrypt)
-       ("libunique" ,libunique)
-       ("qrencode" ,qrencode)))
+     (list glade3
+           gnunet
+           gnutls/dane
+           gtk+
+           libextractor
+           libgcrypt
+           libsodium
+           libunique
+           qrencode))
     (native-inputs
      (list pkg-config libglade))
     (synopsis "Graphical front-end tools for GNUnet")

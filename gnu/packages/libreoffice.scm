@@ -1,7 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2014 John Darrington <jmd@gnu.org>
 ;;; Copyright © 2015 Andreas Enge <andreas@enge.fr>
-;;; Copyright © 2016, 2018, 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016, 2018-2021, 2023 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2017 Alex Griffin <a@ajgrf.com>
 ;;; Copyright © 2017 Thomas Danckaert <post@thomasdanckaert.be>
 ;;; Copyright © 2017–2021 Tobias Geerinckx-Rice <me@tobias.gr>
@@ -9,7 +9,7 @@
 ;;; Copyright © 2017, 2018, 2019, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2017, 2018, 2019, 2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2017 Rutger Helling <rhelling@mykolab.com>
-;;; Copyright © 2018, 2019 Ricardo Wurmus <rekado@elephly.net>
+;;; Copyright © 2018, 2019, 2022 Ricardo Wurmus <rekado@elephly.net>
 ;;; Copyright © 2018, 2020 Jonathan Brielmaier <jonathan.brielmaier@web.de>
 ;;; Copyright © 2019 Chris Marusich <cmmarusich@gmail.com>
 ;;; Copyright © 2020 Marcin Karpezo <sirmacik@wioo.waw.pl>
@@ -30,10 +30,10 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages libreoffice)
+  #:use-module (guix build-system cmake)
   #:use-module (guix build-system glib-or-gtk)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system python)
-  #:use-module (guix build-system trivial)
   #:use-module (guix gexp)
   #:use-module (guix download)
   #:use-module (guix git-download)
@@ -66,13 +66,16 @@
   #:use-module (gnu packages gnome)
   #:use-module (gnu packages gperf)
   #:use-module (gnu packages gnupg)
+  #:use-module (gnu packages graphics)
   #:use-module (gnu packages gstreamer)
   #:use-module (gnu packages gtk)
+  #:use-module (gnu packages hunspell)
   #:use-module (gnu packages icu4c)
   #:use-module (gnu packages image)
   #:use-module (gnu packages java)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages logging)
+  #:use-module (gnu packages m4)
   #:use-module (gnu packages maths)
   #:use-module (gnu packages nss)
   #:use-module (gnu packages openldap)
@@ -83,6 +86,7 @@
   #:use-module (gnu packages python)
   #:use-module (gnu packages rdf)
   #:use-module (gnu packages scanner)
+  #:use-module (gnu packages textutils)
   #:use-module (gnu packages tls)
   #:use-module (gnu packages version-control)
   #:use-module (gnu packages xml)
@@ -249,7 +253,7 @@ spreadsheets and presentations.")
      (list librevenge)) ; in Requires field of .pkg
     (inputs
      (list zlib))
-    (home-page "http://libwpd.sourceforge.net/")
+    (home-page "https://libwpd.sourceforge.net/")
     (synopsis "Library for importing WordPerfect documents")
     (description "Libwpd is a C++ library designed to help process
 WordPerfect documents.  It is most commonly used to import such documents
@@ -340,7 +344,7 @@ way--presentation and vector drawing interfaces.")
      (list libwpd)) ; in Requires field of .pkg
     (inputs
      (list perl zlib))
-    (home-page "http://libwpg.sourceforge.net/")
+    (home-page "https://libwpg.sourceforge.net/")
     (synopsis "Library and tools for the WordPerfect Graphics format")
     (description "The libwpg project provides a library and tools for
 working with graphics in the WPG (WordPerfect Graphics) format.")
@@ -479,14 +483,14 @@ Apple Keynote documents.  It currently supports Keynote versions 2 to 5.")
 (define-public liblangtag
   (package
     (name "liblangtag")
-    (version "0.6.3")
+    (version "0.6.4")
     (source
       (origin
         (method url-fetch)
         (uri (string-append "https://bitbucket.org/tagoh/liblangtag/downloads/"
                             "liblangtag-" version ".tar.bz2"))
         (sha256
-         (base32 "1g9kwxx60q0hpwvs66ys1cb9qg54hfvbivadwli8sfpc085a44hz"))))
+         (base32 "0r55r30ih8dgq1hwbpl834igilj7bpxcnmlrlkd3vryk2wn0c0ap"))))
     (build-system gnu-build-system)
     (native-inputs
      (list libtool pkg-config))
@@ -694,14 +698,14 @@ text documents, vector drawings, presentations and spreadsheets.")
 (define-public libmwaw
   (package
     (name "libmwaw")
-    (version "0.3.19")
+    (version "0.3.21")
     (source
      (origin
       (method url-fetch)
       (uri (string-append "mirror://sourceforge/libmwaw/libmwaw/libmwaw-"
                           version "/libmwaw-" version ".tar.xz"))
       (sha256
-       (base32 "1bx5xnw8sk5h26x2z7hfac7hfbm68zqg0jilp15qr0pwxqsf4wmj"))))
+       (base32 "07629xwvlkqj08j13aj9lsq0pwm7r0v7g2zprr1vjqcdlwih2xg8"))))
     (build-system gnu-build-system)
     (native-inputs
      (list doxygen pkg-config))
@@ -741,14 +745,14 @@ from the old StarOffice (.sdc, .sdw, ...).")
 (define-public libwps
   (package
     (name "libwps")
-    (version "0.4.12")
+    (version "0.4.13")
     (source
      (origin
       (method url-fetch)
       (uri (string-append "mirror://sourceforge/" name "/" name "/"
                           name "-" version "/" name "-" version ".tar.xz"))
       (sha256 (base32
-               "1nsfacqp5sfkyayw7q0wp68lidksd1wjdix8qmsbf0vdl19gn6p2"))))
+               "03y4aslp5lfqc14agn0hgkifwrknh8s4hfjll9wrfs1hq3kaz5ff"))))
     (build-system gnu-build-system)
     (native-inputs
      (list doxygen pkg-config))
@@ -756,7 +760,7 @@ from the old StarOffice (.sdc, .sdw, ...).")
      (list librevenge))
     (inputs
      (list boost zlib))
-    (home-page "http://libwps.sourceforge.net/")
+    (home-page "https://libwps.sourceforge.net/")
     (synopsis "Import library for Microsoft Works text documents")
     (description "Libwps is a library for importing files in the Microsoft
 Works word processor file format.")
@@ -788,191 +792,6 @@ Callisto/Draw documents.  Currently it only understands documents created by
 Zoner Draw version 4 and 5.")
     (license license:mpl2.0)))
 
-(define-public hunspell
-  (package
-    (name "hunspell")
-    (version "1.7.0")
-    (source
-      (origin
-        (method git-fetch)
-        (uri (git-reference
-               (url "https://github.com/hunspell/hunspell")
-               (commit (string-append "v" version))))
-        (file-name (git-file-name name version))
-        (sha256
-         (base32
-          "0qxlkd012r45ppd21kldbq9k5ac5nmxz290z6m2kch9l56v768k1"))))
-    (build-system gnu-build-system)
-    (native-inputs
-     (list autoconf automake libtool))
-    (inputs
-     (list perl))
-    (native-search-paths (list (search-path-specification
-                                (variable "DICPATH")
-                                (files '("share/hunspell")))))
-    (home-page "https://hunspell.github.io/")
-    (synopsis "Spell checker")
-    (description "Hunspell is a spell checker and morphological analyzer
-library and program designed for languages with rich morphology and complex
-word compounding or character encoding.")
-    ;; Triple license, including "mpl1.1 or later".
-    (license (list license:mpl1.1 license:gpl2+ license:lgpl2.1+))))
-
-(define (dicollecte-french-dictionary variant synopsis)
-  ;; Return a French dictionary package from dicollecte.org, for the given
-  ;; VARIANT.
-  (package
-    (name (match variant
-            ("classique" "hunspell-dict-fr")
-            (_ (string-append "hunspell-dict-fr-" variant))))
-    (version "6.2")
-    (source (origin
-              (uri (string-append
-                    "http://www.dicollecte.org/download/fr/hunspell-french-dictionaries-v"
-                    version ".zip"))
-              (method url-fetch)
-              (sha256
-               (base32
-                "139hfrn5p87sl8hqmgkf6sgvnxrk2mm8vd8xsm8sm98qjnwlg0f9"))))
-    (build-system trivial-build-system)
-    (native-inputs (list unzip))
-    (arguments
-     `(#:modules ((guix build utils))
-       #:builder (begin
-                   (use-modules (guix build utils)
-                                (srfi srfi-26))
-
-                   (let* ((out      (assoc-ref %outputs "out"))
-                          (hunspell (string-append out "/share/hunspell"))
-                          (myspell  (string-append out "/share/myspell"))
-                          (doc      (string-append out "/share/doc/"
-                                                   ,name))
-                          (unzip    (assoc-ref %build-inputs "unzip")))
-                     (invoke (string-append unzip "/bin/unzip")
-                             (assoc-ref %build-inputs "source"))
-                     (for-each (cut install-file <> hunspell)
-                               (find-files "."
-                                           ,(string-append variant
-                                                           "\\.(dic|aff)$")))
-                     (mkdir-p myspell)
-                     (symlink hunspell (string-append myspell "/dicts"))
-                     (for-each (cut install-file <> doc)
-                               (find-files "." "\\.(txt|org|md)$"))
-                     #t))))
-    (synopsis synopsis)
-    (description
-     "This package provides a dictionary for the Hunspell spell-checking
-library.")
-    (home-page "https://www.dicollecte.org/home.php?prj=fr")
-    (license license:mpl2.0)))
-
-(define-syntax define-french-dictionary
-  (syntax-rules (synopsis)
-    ((_ name variant (synopsis text))
-     (define-public name
-       (dicollecte-french-dictionary variant text)))))
-
-(define-french-dictionary hunspell-dict-fr-classique
-  "classique"
-  ;; TRANSLATORS: In French, this is "Français classique".
-  (synopsis "Hunspell dictionary for ``classic'' French (recommended)"))
-
-(define-french-dictionary hunspell-dict-fr-moderne
-  "moderne"
-  ;; TRANSLATORS: In French, this is "Français moderne".
-  (synopsis "Hunspell dictionary for ``modern'' French"))
-
-(define-french-dictionary hunspell-dict-fr-réforme-1990
-  "reforme1990"
-  (synopsis "Hunspell dictionary for the post @dfn{1990 réforme} French"))
-
-(define-french-dictionary hunspell-dict-fr-toutes-variantes
-  "toutesvariantes"
-  (synopsis "Hunspell dictionary for all variants of French"))
-
-(define-public hunspell-dict-pl
-  (package
-    (name "hunspell-dict-pl")
-    (version "20200327")
-    (source
-     (origin
-       (method url-fetch)
-       ;; Since creators of dictionary host only the latest daily release,
-       ;; we're using version mirrored by Arch Linux, which seems good
-       ;; enough. They're mirroring hunspell-pl releases since 2011.
-       (uri (string-append "https://sources.archlinux.org/other/community/"
-                           "hunspell-pl/sjp-myspell-pl-"
-                           version ".zip"))
-       (sha256 (base32
-                "14mzf8glxkp2775dcqisb1zv6r8ncm3bvzl46q352rwyl2dg1c59"))))
-
-    (build-system trivial-build-system)
-    (native-inputs (list unzip))
-    (arguments
-     `(#:modules ((guix build utils))
-       #:builder (begin
-                   (use-modules (guix build utils)
-                                (srfi srfi-26))
-
-                   (let* ((out      (assoc-ref %outputs "out"))
-                          (hunspell (string-append out "/share/hunspell"))
-                          (myspell  (string-append out "/share/myspell"))
-                          (doc      (string-append out "/share/doc/"
-                                                   ,name))
-                          (unzip (search-input-file %build-inputs
-                                                    "/bin/unzip")))
-                     (invoke unzip "-j" "-o" (assoc-ref %build-inputs "source"))
-                     (invoke unzip "-j" "-o" "pl_PL.zip")
-                     (for-each (cut install-file <> hunspell)
-                               (find-files "."
-                                           ,(string-append "pl_PL"
-                                                           "\\.(dic|aff)$")))
-                     (mkdir-p myspell)
-                     (symlink hunspell (string-append myspell "/dicts"))
-                     (for-each (cut install-file <> doc)
-                               (find-files "." "\\.(txt|org|md)$"))
-                     #t))))
-    (synopsis "Hunspell dictionary for Polish")
-    (description
-     "This package provides a dictionary for the Hunspell spell-checking
-library.")
-    (home-page "https://sjp.pl/slownik/ort/")
-    (license
-     (list license:gpl2 license:mpl1.1 license:cc-by4.0 license:lgpl2.1 license:asl2.0))))
-
-(define-public hunspell-dict-de
-  (package
-    (name "hunspell-dict-de")
-    (version "20161207")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "https://www.j3e.de/ispell/igerman98/dict/"
-                           "igerman98-" version ".tar.bz2"))
-       (sha256
-        (base32 "1a3055hp2bc4q4nlg3gmg0147p3a1zlfnc65xiv2v9pyql1nya8p"))))
-    (build-system gnu-build-system)
-    (arguments
-     `(#:make-flags '("hunspell/de_DE.dic")
-       #:phases
-       (modify-phases %standard-phases
-         (delete 'configure)
-         (replace 'install              ;no install target
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (share (string-append out "/share/hunspell/")))
-               (install-file "hunspell/de_DE.aff" share)
-               (install-file "hunspell/de_DE.dic" share)
-               #t))))
-       #:tests? #f))        ; no tests
-    (native-inputs
-     (list hunspell ispell perl))
-    (synopsis "Hunspell dictionary for German (de_DE)")
-    (description "This package provides a dictionary for the Hunspell
-spell-checking library.")
-    (home-page "https://www.j3e.de/ispell/igerman98/")
-    (license (list license:gpl2 license:gpl3))))
-
 (define-public hyphen
   (package
     (name "hyphen")
@@ -988,7 +807,7 @@ spell-checking library.")
     (build-system gnu-build-system)
     (inputs
      (list perl))
-    (home-page "http://hunspell.sourceforge.net/")
+    (home-page "https://hunspell.github.io/")
     (synopsis "Hyphenation library")
     (description "Hyphen is a hyphenation library using TeX hyphenation
 patterns, which are pre-processed by a perl script.")
@@ -999,20 +818,20 @@ patterns, which are pre-processed by a perl script.")
 (define-public mythes
   (package
     (name "mythes")
-    (version "1.2.4")
+    (version "1.2.5")
     (source
      (origin
       (method url-fetch)
-      (uri (string-append "mirror://sourceforge/hunspell/MyThes/" version "/"
-                          name "-" version ".tar.gz"))
-      (sha256 (base32
-               "0prh19wy1c74kmzkkavm9qslk99gz8h8wmjvwzjc6lf8v2az708y"))))
+      (uri (string-append "https://github.com/hunspell/mythes/releases/"
+                          "download/v" version "/mythes-" version ".tar.xz"))
+      (sha256
+       (base32 "07ajdyyif19k445dqffkm32c1kl8z0cw6bczc7x5zgkvf1q9y9qr"))))
     (build-system gnu-build-system)
     (native-inputs
      (list pkg-config))
     (inputs
      (list hunspell perl))
-    (home-page "http://hunspell.sourceforge.net/")
+    (home-page "https://hunspell.github.io/")
     (synopsis "Thesaurus")
     (description "MyThes is a simple thesaurus that uses a structured text
 data file and an index file with binary search to look up words and phrases
@@ -1044,6 +863,30 @@ and to return information on pronunciations, meanings and synonyms.")
 converting QuarkXPress file format.  It supports versions 3.1 to 4.1.")
     (license license:mpl2.0)))
 
+(define-public dragonbox
+  (package
+    (name "dragonbox")
+    (version "1.1.3")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/jk-jeon/dragonbox")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0qxx94s2kfgnlnyl1gwmbxkksr3dipvb99zdyi5skw3z2bq563sa"))))
+    (build-system cmake-build-system)
+    (arguments (list #:tests? #false)) ;no test target
+    (home-page "https://github.com/jk-jeon/dragonbox")
+    (synopsis "Float-to-string conversion algorithm")
+    (description "Dragonbox generates a pair of integers from a floating-point
+number: the decimal significand and the decimal exponent of the input
+floating-point number.  These integers can then be used for string generation
+of decimal representation of the input floating-point number, the procedure
+commonly called @code{ftoa} or @code{dtoa}.")
+    (license license:asl2.0)))
+
 (define dtoa
   (origin
     (method url-fetch)
@@ -1056,7 +899,7 @@ converting QuarkXPress file format.  It supports versions 3.1 to 4.1.")
 (define-public libreoffice
   (package
     (name "libreoffice")
-    (version "7.3.5.2")
+    (version "7.5.1.2")
     (source
      (origin
        (method url-fetch)
@@ -1065,8 +908,151 @@ converting QuarkXPress file format.  It supports versions 3.1 to 4.1.")
          "https://download.documentfoundation.org/libreoffice/src/"
          (version-prefix version 3) "/libreoffice-" version ".tar.xz"))
        (sha256
-        (base32 "14g9873x8m5yakpq7v9f7lhc5fkxh6yhjhgh0pm30cqmxsqhsglv"))))
+        (base32 "1dy0lvrvgkr7mbmiag26a38pivcddav8piph7jin1kw4phaxs3cj"))))
     (build-system glib-or-gtk-build-system)
+    (arguments
+     (list
+      #:tests? #f                       ; Building the tests already fails.
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'insert-external-tarballs
+            (lambda _
+              (mkdir-p "external/tarballs")
+              (copy-file #$dtoa "external/tarballs/dtoa-20180411.tgz")))
+          (add-after 'unpack 'augment-LD_LIBRARY_PATH
+            ;; Without this, the nsscrypto_initialize procedure in
+            ;; nssinitializer.cxx silently fails to load libnssckbi.so, which
+            ;; causes password encryption to also silently fail (see:
+            ;; https://bugs.documentfoundation.org/show_bug.cgi?id=153714).
+            (lambda* (#:key inputs #:allow-other-keys)
+              (substitute* "desktop/scripts/soffice.sh"
+                (("^exec .*oosplash.*" anchor)
+                 (string-append "export LD_LIBRARY_PATH="
+                                (search-input-directory inputs "lib/nss")
+                                "${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\n"
+                                anchor)))))
+          (add-before 'configure 'prepare-src
+            (lambda* (#:key inputs #:allow-other-keys)
+              (substitute*
+                  (list "sysui/CustomTarget_share.mk"
+                        "solenv/gbuild/gbuild.mk"
+                        "solenv/gbuild/platform/unxgcc.mk")
+                (("/bin/sh") (which "sh")))
+
+              ;; Use store references for strictly necessary commands,
+              ;; but not for optional tools like ‘gdb’ and ‘valgrind’.
+              (for-each (lambda (command)
+                          (substitute* "desktop/scripts/soffice.sh"
+                            (((format #f "~a " command))
+                             (format #f "~a " (which command)))))
+                        (list "dirname" "grep" "uname"))
+
+              ;; GPGME++ headers are installed in a gpgme++ subdirectory, but
+              ;; configure is hardcoded to use FHS directories.
+              (substitute* "configure"
+                (("GPGMEPP_CFLAGS=-I/usr/include/gpgme\\+\\+")
+                 (string-append "GPGMEPP_CFLAGS=-I"
+                                (search-input-directory inputs
+                                                        "include/gpgme++")))
+                (("DRAGONBOX_CFLAGS=-I/usr/include/dragonbox-1\\.1\\.3")
+                 (string-append "DRAGONBOX_CFLAGS=-I"
+                                (search-input-directory inputs
+                                                        "include/dragonbox-1.1.3"))))
+
+              ;; /usr/bin/xdg-open doesn't exist on Guix System.
+              (substitute* '("shell/source/unix/exec/shellexec.cxx"
+                             "shell/source/unix/misc/senddoc.sh")
+                (("/usr/bin/xdg-open")
+                 (search-input-file inputs "/bin/xdg-open")))
+              (setenv "CPPFLAGS" "-std=c++17")))
+          (add-after 'install 'reset-zip-timestamps
+            (lambda _
+              (for-each (lambda (file)
+                          (invoke "ziptime" file))
+                        ;; So many different extensions for .zip files.
+                        (find-files #$output "\\.(bau|dat|otg|otp|ott|zip)$"))))
+          (add-after 'install 'bin-and-desktop-install
+            ;; Create 'soffice' and 'libreoffice' symlinks to the executable
+            ;; script.
+            (lambda _
+              (let ((out #$output))
+                (define (symlink-output src dst)
+                  (mkdir-p (dirname (string-append out dst)))
+                  (symlink (string-append out src) (string-append out dst)))
+                (define (install src dst)
+                  (let ((dst (string-append out dst)))
+                    (mkdir-p (dirname dst))
+                    (copy-file src dst)))
+                (define (install-desktop-file app)
+                  (let ((src (string-append "/lib/libreoffice/share/xdg/"
+                                            app ".desktop"))
+                        (dst (string-append "/share/applications/libreoffice-"
+                                            app ".desktop")))
+                    (substitute* (string-append out src)
+                      (("Exec=libreoffice[0-9]+\\.[0-9]+ ")
+                       (string-append "Exec=" out "/bin/libreoffice "))
+                      (("Icon=libreoffice.*")
+                       (string-append "Icon=" app "\n"))
+                      (("LibreOffice [0-9]+\\.[0-9]+")
+                       "LibreOffice"))
+                    (symlink-output src dst)))
+                (define (install-appdata app)
+                  (install-file (string-append
+                                 "sysui/desktop/appstream-appdata/"
+                                 "libreoffice-" app ".appdata.xml")
+                                (string-append out "/share/appdata")))
+                (symlink-output "/lib/libreoffice/program/soffice"
+                                "/bin/soffice")
+                (symlink-output "/lib/libreoffice/program/soffice"
+                                "/bin/libreoffice")
+                (install
+                 "workdir/CustomTarget/sysui/share/libreoffice/openoffice.org.xml"
+                 "/share/mime/packages/libreoffice.xml")
+                (for-each install-desktop-file
+                          '("base" "calc" "draw" "impress" "writer"
+                            "math" "startcenter"))
+                (for-each install-appdata
+                          '("base" "calc" "draw" "impress" "writer"))
+                (mkdir-p (string-append out "/share/icons/hicolor"))
+                (copy-recursively "sysui/desktop/icons/hicolor"
+                                  (string-append out "/share/icons/hicolor"))))))
+      #:configure-flags
+      #~(list
+         "--enable-release-build"
+         "--with-vendor=GNU Guix"
+         ;; Without the SAL logging system enabled, LibreOffice is utterly
+         ;; silent.  Setting the environment variable 'SAL_INFO=+INFO' can be
+         ;; useful to debug problems.
+         "--enable-sal-log"
+         ;; Avoid using all cpu cores by default
+         (format #f "--with-parallelism=~d" (parallel-job-count))
+         "--disable-fetch-external"     ; disable downloads
+         "--with-system-libs"           ; enable all --with-system-* flags
+         (string-append "--with-boost-libdir="
+                        (dirname
+                         (search-input-file %build-inputs
+                                            "lib/libboost_system.so")))
+         ;; The fonts require an external tarball (crosextrafonts).
+         ;; They should not be needed when system fonts are available.
+         "--without-fonts"
+         ;; With java, the build fails since sac.jar is missing.
+         "--without-java"
+         ;; FIXME: Enable once the corresponding inputs are packaged.
+         "--disable-coinmp"
+         "--disable-skia"
+         ;; This could (Debian does this) be a separate output containing only
+         ;; program/libfirebird_sdbclo.so, if there's a way to point to it.
+         "--enable-firebird-sdbc"
+         ;; XXX: PDFium support requires fetching an external tarball and
+         ;; patching the build scripts to work with GCC5.  Try enabling this
+         ;; when our default compiler is >=GCC 6.
+         "--disable-pdfium"
+         "--without-doxygen"
+         ;; Avoid linker errors about non-virtual thunks on i686-linux.
+         "--enable-lto"
+         ;; Avoid errors rebuilding the Gtk icon cache, at least on i686-linux.
+         "--without-galleries"
+         "--enable-build-opensymbol")))
     (native-inputs
      (list bison
            cppunit
@@ -1082,6 +1068,7 @@ converting QuarkXPress file format.  It supports versions 3.1 to 4.1.")
            clucene
            cups
            dbus-glib
+           dragonbox
            firebird
            fontconfig
            fontforge
@@ -1095,13 +1082,14 @@ converting QuarkXPress file format.  It supports versions 3.1 to 4.1.")
            graphite2
            gst-plugins-base
            gtk+
-           harfbuzz
+           harfbuzz-5
            hunspell
            hyphen
            libabw
            libcdr
            libcmis
            libcuckoo
+           libfixmath
            libjpeg-turbo
            libe-book
            libepubgen
@@ -1118,7 +1106,9 @@ converting QuarkXPress file format.  It supports versions 3.1 to 4.1.")
            libpagemaker
            libqxp
            libstaroffice
+           libtiff
            libvisio
+           libwebp
            libwpg
            libwps
            libxrandr
@@ -1152,131 +1142,14 @@ converting QuarkXPress file format.  It supports versions 3.1 to 4.1.")
            xmlsec-nss
            zip
            zxing-cpp))
-    (arguments
-     (list
-      #:tests? #f                       ; Building the tests already fails.
-      #:phases
-      #~(modify-phases %standard-phases
-          (add-after 'unpack 'insert-external-tarballs
-            (lambda _
-              (mkdir-p "external/tarballs")
-              (copy-file #$dtoa "external/tarballs/dtoa-20180411.tgz")))
-          (add-before 'configure 'prepare-src
-            (lambda* (#:key inputs #:allow-other-keys)
-              (substitute*
-                  (list "sysui/CustomTarget_share.mk"
-                        "solenv/gbuild/gbuild.mk"
-                        "solenv/gbuild/platform/unxgcc.mk")
-                (("/bin/sh") (which "sh")))
-
-              ;; Use store references for strictly necessary commands,
-              ;; but not for optional tools like ‘gdb’ and ‘valgrind’.
-              (for-each (lambda (command)
-                          (substitute* "desktop/scripts/soffice.sh"
-                            (((format #f "~a " command))
-                             (format #f "~a " (which command)))))
-                        (list "dirname" "grep" "uname"))
-
-              ;; GPGME++ headers are installed in a gpgme++ subdirectory, but
-              ;; configure is hardcoded to use FHS directories.
-              (substitute* "configure"
-                (("GPGMEPP_CFLAGS=-I/usr/include/gpgme\\+\\+")
-                 (string-append "GPGMEPP_CFLAGS=-I"
-                                (search-input-directory inputs
-                                                        "include/gpgme++"))))
-
-              ;; /usr/bin/xdg-open doesn't exist on Guix System.
-              (substitute* '("shell/source/unix/exec/shellexec.cxx"
-                             "shell/source/unix/misc/senddoc.sh")
-                (("/usr/bin/xdg-open")
-                 (search-input-file inputs "/bin/xdg-open")))))
-          (add-after 'install 'reset-zip-timestamps
-            (lambda _
-              (for-each (lambda (file)
-                          (invoke "ziptime" file))
-                        ;; So many different extensions for .zip files.
-                        (find-files #$output "\\.(bau|dat|otp|ott|zip)$"))))
-      (add-after 'install 'bin-and-desktop-install
-        ;; Create 'soffice' and 'libreoffice' symlinks to the executable
-        ;; script.
-        (lambda _
-          (let ((out #$output))
-            (define (symlink-output src dst)
-              (mkdir-p (dirname (string-append out dst)))
-              (symlink (string-append out src) (string-append out dst)))
-            (define (install src dst)
-              (let ((dst (string-append out dst)))
-                (mkdir-p (dirname dst))
-                (copy-file src dst)))
-            (define (install-desktop-file app)
-              (let ((src (string-append "/lib/libreoffice/share/xdg/"
-                                        app ".desktop"))
-                    (dst (string-append "/share/applications/libreoffice-"
-                                        app ".desktop")))
-                (substitute* (string-append out src)
-                  (("Exec=libreoffice[0-9]+\\.[0-9]+ ")
-                   (string-append "Exec=" out "/bin/libreoffice "))
-                  (("Icon=libreoffice.*")
-                   (string-append "Icon=" app "\n"))
-                  (("LibreOffice [0-9]+\\.[0-9]+")
-                   "LibreOffice"))
-                (symlink-output src dst)))
-            (define (install-appdata app)
-              (install-file (string-append
-                             "sysui/desktop/appstream-appdata/"
-                             "libreoffice-" app ".appdata.xml")
-                            (string-append out "/share/appdata")))
-            (symlink-output "/lib/libreoffice/program/soffice"
-                            "/bin/soffice")
-            (symlink-output "/lib/libreoffice/program/soffice"
-                            "/bin/libreoffice")
-            (install
-             "workdir/CustomTarget/sysui/share/libreoffice/openoffice.org.xml"
-             "/share/mime/packages/libreoffice.xml")
-            (for-each install-desktop-file
-                      '("base" "calc" "draw" "impress" "writer"
-                        "math" "startcenter"))
-            (for-each install-appdata
-                      '("base" "calc" "draw" "impress" "writer"))
-            (mkdir-p (string-append out "/share/icons/hicolor"))
-            (copy-recursively "sysui/desktop/icons/hicolor"
-                              (string-append out "/share/icons/hicolor"))))))
-     #:configure-flags
-     #~(list
-        "--enable-release-build"
-        "--with-vendor=GNU Guix"
-        ;; Avoid using all cpu cores by default
-        (format #f "--with-parallelism=~d" (parallel-job-count))
-        "--disable-fetch-external"      ; disable downloads
-        "--with-system-libs"            ; enable all --with-system-* flags
-        (string-append "--with-boost-libdir="
-                       (dirname
-                        (search-input-file %build-inputs
-                                           "lib/libboost_system.so")))
-        ;; Avoid a dependency on ucpp.
-        "--with-idlc-cpp=cpp"
-        ;; The fonts require an external tarball (crosextrafonts).
-        ;; They should not be needed when system fonts are available.
-        "--without-fonts"
-        ;; With java, the build fails since sac.jar is missing.
-        "--without-java"
-        ;; FIXME: Enable once the corresponding inputs are packaged.
-        "--disable-coinmp"
-        "--disable-skia"
-        ;; This could (Debian does this) be a separate output containing only
-        ;; program/libfirebird_sdbclo.so, if there's a way to point to it.
-        "--enable-firebird-sdbc"
-        ;; XXX: PDFium support requires fetching an external tarball and
-        ;; patching the build scripts to work with GCC5.  Try enabling this
-        ;; when our default compiler is >=GCC 6.
-        "--disable-pdfium"
-        "--without-doxygen"
-        "--enable-build-opensymbol")))
-  (home-page "https://www.libreoffice.org/")
-  (synopsis "Office suite")
-  (description "LibreOffice is a comprehensive office suite.  It contains
+    (home-page "https://www.libreoffice.org/")
+    (synopsis "Office suite")
+    (description "LibreOffice is a comprehensive office suite.  It contains
 a number of components: Writer, a word processor; Calc, a spreadsheet
 application; Impress, a presentation engine; Draw, a drawing and
 flowcharting application; Base, a database and database frontend;
 Math for editing mathematics.")
-  (license license:mpl2.0)))
+    (properties
+     '((release-monitoring-url
+        . "https://www.libreoffice.org/download/download-libreoffice/")))
+    (license license:mpl2.0)))

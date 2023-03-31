@@ -5,6 +5,8 @@
 ;;; Copyright © 2020, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2020 Martin Becze <mjbecze@riseup.net>
 ;;; Copyright © 2021 Sarah Morgensen <iskarian@mgsn.dev>
+;;; Copyright © 2022 Taiju HIGASHI <higashi@taiju.info>
+;;; Copyright © 2022 Hartmut Goebel <h.goebel@crazy-compilers.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -25,7 +27,6 @@
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
   #:use-module (json)
-  #:use-module ((guix download) #:prefix download:)
   #:use-module (guix import utils)
   #:use-module (guix import json)
   #:use-module (guix packages)
@@ -81,10 +82,12 @@
   (requirements  gem-dependency-requirements))    ;string
 
 
-(define (rubygems-fetch name)
-  "Return a <gem> record for the package NAME, or #f on failure."
+(define* (rubygems-fetch name #:optional version)
+  "Return a <gem> record for the package NAME and VERSION, or #f on failure.  If VERSION is #f or missing, return the latest version gem."
   (and=> (json-fetch
-          (string-append "https://rubygems.org/api/v1/gems/" name ".json"))
+          (if version
+              (string-append "https://rubygems.org/api/v2/rubygems/" name "/versions/" version ".json")
+              (string-append "https://rubygems.org/api/v1/gems/" name ".json")))
          json->gem))
 
 (define (ruby-package-name name)
@@ -120,10 +123,14 @@ VERSION, HASH, HOME-PAGE, DESCRIPTION, DEPENDENCIES, and LICENSES."
                  ((license) (license->symbol license))
                  (_ `(list ,@(map license->symbol licenses)))))))
 
-(define* (gem->guix-package package-name #:key (repo 'rubygems) version)
+(define* (gem->guix-package package-name #:key (repo 'rubygems) version
+                            #:allow-other-keys)
   "Fetch the metadata for PACKAGE-NAME from rubygems.org, and return the
-`package' s-expression corresponding to that package, or #f on failure."
-  (let ((gem (rubygems-fetch package-name)))
+`package' s-expression corresponding to that package, or #f on failure.
+Optionally include a VERSION string to fetch a specific version gem."
+  (let ((gem (if version
+                 (rubygems-fetch package-name version)
+                 (rubygems-fetch package-name))))
     (if gem
         (let* ((dependencies-names (map gem-dependency-name
                                         (gem-dependencies-runtime
@@ -167,11 +174,11 @@ package on RubyGems."
 (define gem-package?
   (url-prefix-predicate "https://rubygems.org/downloads/"))
 
-(define (latest-release package)
+(define* (import-release package #:key (version #f))
   "Return an <upstream-source> for the latest release of PACKAGE."
   (let* ((gem-name (guix-package->gem-name package))
          (gem      (rubygems-fetch gem-name))
-         (version  (gem-version gem))
+         (version  (or version (gem-version gem)))
          (url      (rubygems-uri gem-name version)))
     (upstream-source
      (package (package-name package))
@@ -183,10 +190,11 @@ package on RubyGems."
    (name 'gem)
    (description "Updater for RubyGem packages")
    (pred gem-package?)
-   (latest latest-release)))
+   (import import-release)))
 
 (define* (gem-recursive-import package-name #:optional version)
   (recursive-import package-name
                     #:repo '()
                     #:repo->guix-package gem->guix-package
-                    #:guix-name ruby-package-name))
+                    #:guix-name ruby-package-name
+                    #:version version))

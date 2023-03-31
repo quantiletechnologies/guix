@@ -15,7 +15,7 @@
 ;;; Copyright © 2019, 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2020 Brice Waegeneire <brice@waegenei.re>
 ;;; Copyright © 2020 Ryan Prior <rprior@protonmail.com>
-;;; Copyright © 2020 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2020, 2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2020, 2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2021, 2022 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2021, 2022 Felix Gruber <felgru@posteo.net>
@@ -84,14 +84,14 @@
 (define-public dash
   (package
     (name "dash")
-    (version "0.5.11.5")
+    (version "0.5.12")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "http://gondor.apana.org.au/~herbert/dash/files/"
                            "dash-" version ".tar.gz"))
        (sha256
-        (base32 "1g93w4lpn3jfwn2gaq17a1lxdig11x0j7gr9byc3fy8zi4882xyv"))
+        (base32 "12pjm2j0q0q88nvqbcyqjwr8s1c29ilxyq2cdj8k42wbdv24liva"))
        (modules '((guix build utils)))
        (snippet
         '(begin
@@ -99,8 +99,7 @@
            ;; This isn't the case on Guix or indeed most other GNU systems.
            (substitute* "src/dash.1"
              (("the standard command interpreter for the system")
-              "a command interpreter based on the original Bourne shell"))
-           #t))))
+              "a command interpreter based on the original Bourne shell"))))))
     (build-system gnu-build-system)
     (inputs
      (list libedit))
@@ -109,9 +108,9 @@
     (home-page "http://gondor.apana.org.au/~herbert/dash")
     (synopsis "POSIX-compliant shell optimised for size")
     (description
-     "dash is a POSIX-compliant @command{/bin/sh} implementation that aims to be
+     "Dash is a POSIX-compliant @command{/bin/sh} implementation that aims to be
 as small as possible, often without sacrificing speed.  It is faster than the
-GNU Bourne-Again Shell (@command{bash}) at most scripted tasks.  dash is a
+GNU Bourne-Again Shell (@command{bash}) at most scripted tasks.  Dash is a
 direct descendant of NetBSD's Almquist Shell (@command{ash}).")
     (license (list license:bsd-3
                    license:gpl2+))))    ; mksignames.c
@@ -119,7 +118,7 @@ direct descendant of NetBSD's Almquist Shell (@command{ash}).")
 (define-public fish
   (package
     (name "fish")
-    (version "3.5.1")
+    (version "3.6.0")
     (source
      (origin
        (method url-fetch)
@@ -127,15 +126,10 @@ direct descendant of NetBSD's Almquist Shell (@command{ash}).")
                            "releases/download/" version "/"
                            "fish-" version ".tar.xz"))
        (sha256
-        (base32 "0a39vf0wqq6asw5xcrwgdsc67h5bxkgxzy77f8bx6pd4qlympm56"))
-       (modules '((guix build utils)))
-       (snippet
-        '(begin
-           ;; Remove bundled software.
-           (delete-file-recursively "pcre2")))))
+        (base32 "10b1xa1hpmi62rzh3qgxlw7xrhyigs8kssagccawmrryfxbls14p"))))
     (build-system cmake-build-system)
     (inputs
-     (list fish-foreign-env ncurses pcre2 ; don't use the bundled PCRE2
+     (list fish-foreign-env ncurses pcre2
            python))  ; for fish_config and manpage completions
     (native-inputs
      (list doxygen groff ; for 'fish --help'
@@ -540,13 +534,14 @@ ksh, and tcsh.")
 (define-public xonsh
   (package
     (name "xonsh")
-    (version "0.13.0")
+    (version "0.13.4")
     (source
       (origin
         (method url-fetch)
         (uri (pypi-uri "xonsh" version))
         (sha256
-          (base32 "12ayz1kw2ag3r407j0lng2kfp75im8xqap1nvpmpa0lmsx8wk7ll"))
+          (base32
+           "19r1g8i8k6ds7ncvqdh58vkm4m5hz4w9zbglmg1mi7xcdqp4ax8h"))
         (modules '((guix build utils)))
         (snippet
          #~(begin
@@ -612,7 +607,8 @@ use of experts and novices alike.")
          (file-name (string-append name "-" version "-checkout"))
          (sha256
           (base32
-           "1ghk08akiz7hff1pndi8rmgamgcrn2mv9asbss9l79d3c2iaav3q"))))
+           "1ghk08akiz7hff1pndi8rmgamgcrn2mv9asbss9l79d3c2iaav3q"))
+         (patches (search-patches "scsh-nonstring-search-path.patch"))))
       (build-system gnu-build-system)
       (arguments
        `(#:test-target "test"
@@ -631,6 +627,11 @@ use of experts and novices alike.")
        (list scheme48 scheme48-rx))
       (native-inputs
        (list autoconf automake))
+      (native-search-paths
+       (list (search-path-specification
+               (variable "SCSH_LIB_DIRS")
+               (separator " ")
+               (files '("share/scsh-0.7")))))
       (home-page "https://github.com/scheme/scsh")
       (synopsis "Unix shell embedded in Scheme")
       (description
@@ -848,7 +849,7 @@ Shell (pdksh).")
 (define-public oil
   (package
     (name "oil")
-    (version "0.12.0")
+    (version "0.14.2")
     (source
      ;; oil's sources contain a modified version of CPython 2.7.13.
      ;; According to https://www.oilshell.org/blog/2017/05/05.html
@@ -861,7 +862,7 @@ Shell (pdksh).")
        (uri (string-append "https://www.oilshell.org/download/oil-"
                            version ".tar.gz"))
        (sha256
-        (base32 "1sz5xb88773ass6ip5yxmnby9p6h0bz1d02n6n0cna3hdzqn7bpv"))))
+        (base32 "0qsfkav6a70nvp27ilab7zilmihw4ygga48a0dkxa14q9giwlgwr"))))
     (build-system gnu-build-system)
     (arguments
      (list #:strip-binaries? #f         ; strip breaks the binary

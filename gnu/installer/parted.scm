@@ -2,6 +2,7 @@
 ;;; Copyright © 2018, 2019 Mathieu Othacehe <m.othacehe@gmail.com>
 ;;; Copyright © 2019, 2020, 2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2020 Tobias Geerinckx-Rice <me@tobias.gr>
+;;; Copyright © 2022 Josselin Poiret <dev@jpoiret.xyz>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -147,7 +148,7 @@
                         (default #f))
   (crypt-label          user-partition-crypt-label
                         (default #f))
-  (crypt-password       user-partition-crypt-password
+  (crypt-password       user-partition-crypt-password ; <secret>
                         (default #f))
   (fs-type              user-partition-fs-type
                         (default 'ext4))
@@ -318,6 +319,25 @@ PARTED-OBJECT field equals PARTITION, return #f if not found."
                   partition))
         user-partitions))
 
+(define (read-partition-uuid/retry file-name)
+  "Call READ-PARTITION-UUID with 5 retries spaced by 1 second.  This is useful
+if the partition table is updated by the kernel at the time this function is
+called, causing the underlying /dev to be absent."
+  (define max-retries 5)
+
+  (let loop ((retry max-retries))
+    (catch #t
+      (lambda ()
+        (read-partition-uuid file-name))
+      (lambda _
+        (if (> retry 0)
+            (begin
+              (sleep 1)
+              (loop (- retry 1)))
+            (error
+             (format #f (G_ "Could not open ~a after ~a retries~%.")
+                     file-name max-retries)))))))
+
 
 ;;
 ;; Devices
@@ -359,12 +379,44 @@ fail. See rereadpt function in wipefs.c of util-linux for an explanation."
 (define %min-device-size
   (* 2 GIBIBYTE-SIZE)) ;2GiB
 
+(define (mapped-device? device)
+  "Return #true if DEVICE is a mapped device, false otherwise."
+  (string-prefix? "/dev/dm-" device))
+
+;; TODO: Use DM_TABLE_DEPS ioctl instead of dmsetup.
+(define (mapped-device-parent-partition device)
+  "Return the parent partition path of the mapped DEVICE."
+  (let* ((command `("dmsetup" "deps" ,device "-o" "devname"))
+         (parent #f)
+         (handler
+          (lambda (input)
+            ;; We are parsing an output that should look like:
+            ;; 1 dependencies  : (sda2)
+            (let ((result
+                   (string-match "\\(([^\\)]+)\\)"
+                                 (get-string-all input))))
+              (and result
+                   (set! parent
+                         (format #f "/dev/~a"
+                                 (match:substring result 1))))))))
+    (run-external-command-with-handler handler command)
+    parent))
+
 (define (eligible-devices)
   "Return all the available devices except the install device and the devices
 which are smaller than %MIN-DEVICE-SIZE."
 
   (define the-installer-root-partition-path
-    (installer-root-partition-path))
+    (let ((root (installer-root-partition-path)))
+      (cond
+       ((mapped-device? root)
+        ;; If the partition is a mapped device (/dev/dm-X), locate the parent
+        ;; partition.  It is the case when Ventoy is used to host the
+        ;; installation image.
+        (let ((parent (mapped-device-parent-partition root)))
+          (installer-log-line "mapped device ~a -> ~a" parent root)
+          parent))
+       (else root))))
 
   (define (small-device? device)
     (let ((length (device-length device))
@@ -983,6 +1035,11 @@ exists."
     (for-each
      (lambda (partition)
        (and (data-partition? partition)
+            ;; Do not remove logical partitions ourselves, since
+            ;; disk-remove-partition* will remove all the logical partitions
+            ;; residing on an extended partition, which would lead to a
+            ;; double-remove and ensuing SEGFAULT.
+            (not (logical-partition? partition))
             (disk-remove-partition* disk partition)))
      non-boot-partitions)
 
@@ -1102,7 +1159,7 @@ Return #t if all the statements are valid."
                (need-formatting?
                 (user-partition-need-formatting? user-partition)))
            (or need-formatting?
-               (read-partition-uuid file-name)
+               (read-partition-uuid/retry file-name)
                (raise
                 (condition
                  (&cannot-read-uuid
@@ -1177,7 +1234,7 @@ USER-PARTITION if it is encrypted, or the plain file-name otherwise."
   "Format and open the encrypted partition pointed by USER-PARTITION."
   (let* ((file-name (user-partition-file-name user-partition))
          (label (user-partition-crypt-label user-partition))
-         (password (user-partition-crypt-password user-partition)))
+         (password (secret-content (user-partition-crypt-password user-partition))))
     (call-with-luks-key-file
      password
      (lambda (key-file)
@@ -1187,6 +1244,20 @@ USER-PARTITION if it is encrypted, or the plain file-name otherwise."
         file-name key-file)
        ((run-command-in-installer) "cryptsetup" "open" "--type" "luks"
         "--key-file" key-file file-name label)))))
+
+(define (luks-ensure-open user-partition)
+  "Ensure partition pointed by USER-PARTITION is opened."
+  (unless (file-exists? (user-partition-upper-file-name user-partition))
+    (let* ((file-name (user-partition-file-name user-partition))
+           (label (user-partition-crypt-label user-partition))
+           (password (secret-content (user-partition-crypt-password user-partition))))
+      (call-with-luks-key-file
+       password
+       (lambda (key-file)
+         (installer-log-line "opening LUKS entry ~s at ~s"
+                             label file-name)
+         ((run-command-in-installer) "cryptsetup" "open" "--type" "luks"
+          "--key-file" key-file file-name label))))))
 
 (define (luks-close user-partition)
   "Close the encrypted partition pointed by USER-PARTITION."
@@ -1272,6 +1343,8 @@ respective mount-points."
                         (user-fs-type->mount-type fs-type))
                        (file-name
                         (user-partition-upper-file-name user-partition)))
+                  (when crypt-label
+                    (luks-ensure-open user-partition))
                   (mkdir-p target)
                   (installer-log-line "mounting ~s on ~s" file-name target)
                   (mount file-name target mount-type)))

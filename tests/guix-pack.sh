@@ -1,6 +1,6 @@
 # GNU Guix --- Functional package management for GNU
 # Copyright © 2018 Chris Marusich <cmmarusich@gmail.com>
-# Copyright © 2018, 2019, 2020, 2022 Ludovic Courtès <ludo@gnu.org>
+# Copyright © 2018, 2019, 2020, 2022, 2023 Ludovic Courtès <ludo@gnu.org>
 #
 # This file is part of GNU Guix.
 #
@@ -103,7 +103,7 @@ fi
 guix pack --dry-run --bootstrap -f docker guile-bootstrap
 
 # Build a Docker image with a symlink.
-guix pack --dry-run --bootstrap -f docker -S /opt/gnu=/ guile-bootstrap
+guix pack --dry-run --bootstrap -f docker -S /opt/gnu= guile-bootstrap
 
 # Build a tarball pack of cross-compiled software.  Use coreutils because
 # guile-bootstrap is not intended to be cross-compiled.
@@ -114,7 +114,8 @@ guix pack --dry-run --bootstrap --target=arm-linux-gnueabihf coreutils
 guix pack -R --dry-run --bootstrap -S /mybin=bin guile-bootstrap
 
 # Make sure package transformation options are honored.
-mkdir -p "$test_directory"
+chmod -Rf +w "$test_directory"; rm -r "$test_directory"
+mkdir -p "$test_directory" -m 755
 drv1="`guix pack --no-grafts -n guile 2>&1 | grep pack.*\.drv`"
 drv2="`guix pack --no-grafts -n --with-source=guile=$test_directory guile 2>&1 | grep pack.*\.drv`"
 test -n "$drv1"

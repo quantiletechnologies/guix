@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012-2021 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2017, 2020 Jan (janneke) Nieuwenhuizen <janneke@gnu.org>
 ;;; Copyright © 2018, 2019 Clément Lassieur <clement@lassieur.org>
 ;;; Copyright © 2020 Julien Lepiller <julien@lepiller.eu>
@@ -25,7 +25,6 @@
   #:use-module (guix config)
   #:autoload   (guix describe) (package-channels)
   #:use-module (guix store)
-  #:use-module (guix grafts)
   #:use-module (guix profiles)
   #:use-module (guix packages)
   #:autoload   (guix transformations) (tunable-package? tuned-package)
@@ -38,10 +37,12 @@
   #:use-module ((guix licenses)
                 #:select (gpl3+ license? license-name))
   #:use-module ((guix utils) #:select (%current-system))
+  #:use-module ((guix scripts system) #:select (read-operating-system))
   #:use-module ((guix scripts pack)
-                #:select (lookup-compressor self-contained-tarball))
+                #:select (self-contained-tarball))
   #:use-module (gnu bootloader)
   #:use-module (gnu bootloader u-boot)
+  #:use-module (gnu compression)
   #:use-module (gnu image)
   #:use-module (gnu packages)
   #:use-module (gnu packages gcc)
@@ -250,7 +251,7 @@ otherwise use the IMAGE name."
          (drv (run-with-store store
                 (mbegin %store-monad
                   (set-guile-for-build (default-guile))
-                  (lower-object (system-image image))))))
+                  (lower-object (system-image image) system)))))
     (parameterize ((%graft? #f))
       (derivation->job name drv))))
 

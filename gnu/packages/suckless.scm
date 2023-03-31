@@ -4,7 +4,7 @@
 ;;; Copyright © 2016 Al McElrath <hello@yrns.org>
 ;;; Copyright © 2016, 2017 Nikita <nikita@n0.is>
 ;;; Copyright © 2015 Dmitry Bogatov <KAction@gnu.org>
-;;; Copyright © 2015 Leo Famulari <leo@famulari.name>
+;;; Copyright © 2015, 2023 Leo Famulari <leo@famulari.name>
 ;;; Copyright © 2016 Eric Bavier <bavier@member.fsf.org>
 ;;; Copyright © 2017 Alex Griffin <a@ajgrf.com>
 ;;; Copyright © 2018–2021 Tobias Geerinckx-Rice <me@tobias.gr>
@@ -33,6 +33,7 @@
 (define-module (gnu packages suckless)
   #:use-module (gnu packages)
   #:use-module (gnu packages base)
+  #:use-module (gnu packages crates-io)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages cups)
   #:use-module (gnu packages fonts)
@@ -47,8 +48,10 @@
   #:use-module (gnu packages mpd)
   #:use-module (gnu packages ncurses)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages shells)
   #:use-module (gnu packages webkit)
   #:use-module (gnu packages xorg)
+  #:use-module (guix build-system cargo)
   #:use-module (guix build-system glib-or-gtk)
   #:use-module (guix build-system gnu)
   #:use-module (guix download)
@@ -277,14 +280,14 @@ optimising the environment for the application in use and the task performed.")
 (define-public dmenu
   (package
     (name "dmenu")
-    (version "5.1")
+    (version "5.2")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://dl.suckless.org/tools/dmenu-"
                                   version ".tar.gz"))
               (sha256
                (base32
-                "1mcg6i5g2c4wsyq9ap739si4zghk1xg6c3msdqrbfzm3pfg70k8z"))))
+                "14ipsirsfqbyqlnna0k8yla5j6mrbgh3gd9d4xrg4h4inmvwmm6l"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f                      ; no tests
@@ -335,14 +338,14 @@ numbers of user-defined menu items efficiently.")
 (define-public slock
   (package
     (name "slock")
-    (version "1.4")
+    (version "1.5")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://dl.suckless.org/tools/slock-"
                                   version ".tar.gz"))
               (sha256
                (base32
-                "0sif752303dg33f14k6pgwq2jp1hjyhqv6x4sy3sj281qvdljf5m"))))
+                "0k8fvf9g27yyaqpyhk6apbkq6r4vjwxhff1qb9ignxx2yvxy7qdf"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f                      ; no tests
@@ -545,7 +548,13 @@ point surf to another URI by setting its XProperties.")
                   (add-before 'build 'patch-farbfeld
                     (lambda* (#:key inputs #:allow-other-keys)
                       (substitute* "config.def.h"
-                        (("2ff") (search-input-file inputs "/bin/2ff"))))))
+                        (("2ff") (search-input-file inputs "/bin/2ff")))))
+                  (add-after 'install 'install-doc
+                    (lambda* (#:key outputs #:allow-other-keys)
+                      (let* ((out (assoc-ref outputs "out"))
+                             (doc (string-append out "/share/doc/" ,name "-"
+                                                 ,(package-version this-package))))
+                        (install-file "README.md" doc)))))
        #:tests? #f                                ;no test suite
        #:make-flags
        (let ((pkg-config (lambda (flag)
@@ -1106,7 +1115,7 @@ support.")
 (define-public sfeed
   (package
     (name "sfeed")
-    (version "1.5")
+    (version "1.6")
     (source
      (origin
        (method git-fetch)
@@ -1116,7 +1125,7 @@ support.")
          (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1w3xk00nv502q2nr23y1sig7bkqa7f431f4fcaybfcfk7dbv2piq"))))
+        (base32 "1ax603xxcwvmgizf6ia820fc7fliinx86zv6ggiqj5p59kz75x0r"))))
     (build-system gnu-build-system)
     (arguments
      (list
@@ -1182,6 +1191,33 @@ pipe and compress.")
       (home-page "https://git.suckless.org/farbfeld/")
       (license license:isc))))
 
+(define-public snafu
+  (let ((commit "e436fb4f61ca93a4ec85122506b2c2d4fec30eb6")
+        (revision "0"))
+    (package
+      (name "snafu")
+      (version (git-version "0.0.0" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+                (url "https://github.com/jsbmg/snafu")
+                (commit commit)))
+         (file-name (git-file-name name version))
+         (sha256
+          (base32 "1c6ahxw0qz0703my28k2z0kgi0am5bp5d02l4rgyphgvjk1jfv8h"))))
+      (arguments
+       `(#:cargo-inputs
+         (("rust-chrono" ,rust-chrono-0.4))
+         #:tests? #f)) ; There are no tests.
+      (build-system cargo-build-system)
+      (home-page "https://github.com/jsbmg/snafu")
+      (synopsis "Status text for DWM window manager")
+      (description "@code{snafu} provides status text for DWM's builtin bar.  It
+shows battery status, battery capacity, current WiFi connection, and the time in
+a nice format.")
+      (license license:isc))))
+
 (define-public svkbd
   (package
     (name "svkbd")
@@ -1217,3 +1253,142 @@ pipe and compress.")
     (description "svkbd is a simple virtual keyboard, intended to be used in
 environments, where no keyboard is available.")
     (license license:expat)))
+
+(define-public lib9
+  ;; no release since 2010
+  (let ((commit "63916da7bd6d73d9a405ce83fc4ca34845667cce")
+        (revision "0"))
+    (package
+      (name "lib9")
+      (version (git-version "7" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://git.suckless.org/9base/")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "04j8js4s3jmlzi3m46q81bq76rn41an58ffhkbj9p5wwr5hvplh8"))))
+      (build-system gnu-build-system)
+      (arguments
+       (list #:tests? #f ;no tests
+             #:phases #~(modify-phases %standard-phases
+                          (add-after 'unpack 'patch
+                            (lambda _
+                              (substitute* "config.mk"
+                                (("^PREFIX.*=.*$")
+                                 (string-append "PREFIX=\"" #$output "\"\n"))
+                                (("^OBJTYPE.*=.*$")
+                                 #$@(cond
+                                     ((target-x86-64?)
+                                      #~(string-append "OBJTYPE=x86_64\n"))
+                                     ((target-x86?)
+                                      #~(string-append "OBJTYPE=386\n"))
+                                     ((target-powerpc?)
+                                      #~(string-append "OBJTYPE=power\n"))
+                                     ((target-arm32?)
+                                      #~(string-append "OBJTYPE=arm\n"))))
+                                (("^CFLAGS.*+=.*$")
+                                 (string-append
+                                  "CFLAGS+=-O2 -g -I. -fPIC -c -DPLAN9PORT "
+                                  "-DPREFIX=\\\"" #$output "\\\"\n"))
+                                (("^LDFLAGS.*+=.*$")
+                                 "LDFLAGS+=\n")
+                                (("^CC.*=.*$")
+                                 (string-append "CC=" #$(cc-for-target) "\n")))
+                              (substitute* "lib9/libc.h"
+                                (("#define main.*p9main")
+                                 ""))
+                              (substitute* "lib9/main.c"
+                                (("p9main\\(argc, argv\\);")
+                                 "")
+                                (("extern void p9main\\(int, char\\*\\*\\);")
+                                 ""))
+                              (substitute* "lib9/Makefile"
+                                (("lib9.a")
+                                 "lib9.so")
+                                (("LIB9OFILES=\\\\")
+                                 "LIB9OFILES=convM2D.o \\")
+                                (("@\\$\\{AR\\} \\$\\{LIB\\} \\$\\{OFILES\\}")
+                                 "gcc -shared  ${OFILES} -o lib9.so"))))
+                          (add-after 'patch 'chdir
+                            (lambda _
+                              (chdir "lib9")))
+                          (delete 'configure)))) ;no configure script
+      (home-page "https://tools.suckless.org/9base/")
+      (supported-systems '("x86_64-linux" "i686-linux" "armhf-linux"
+                           "powerpc-linux"))
+      (synopsis "Unix port of Plan 9's formatted I/O C library")
+      (description
+       "This package provides a ported version of the Plan 9 lib9 C library.
+It also contains the Plan 9 libbio, libregexp, libfmt and libutf libraries.")
+      (license (list license:expat ;modifications
+                     license:lpl1.02))))) ;original plan9 code
+
+(define-public 9yacc
+  (package
+    (inherit lib9)
+    (name "9yacc")
+    (arguments
+     (substitute-keyword-arguments (package-arguments lib9)
+       ((#:phases phases)
+        #~(modify-phases #$phases
+            (add-after 'patch 'patch-for-9yacc
+              (lambda _
+                (substitute* "yacc/yacc.c"
+                  (("#9/yacc")
+                   (string-append #$output "/lib")))
+                (substitute* "config.mk"
+                  (("^CFLAGS.*+=.*$")
+                   (string-append "CFLAGS+=-O2 -g -c -DPLAN9PORT "
+                                  "-DPREFIX=\\\"" #$output "\\\"\n")))))
+            (replace 'chdir
+              (lambda _
+                (chdir "yacc")))
+            (delete 'install-include)
+            (add-after 'install 'install-yaccpar
+              (lambda _
+                (install-file "yaccpar" (string-append #$output "/lib"))
+                (install-file "yaccpars" (string-append #$output "/lib"))))))))
+    (inputs (list lib9))
+    (synopsis "Port of Plan 9's yacc parser generator for Unix")
+    (description
+     "This package provides a ported version of the Plan 9 yacc parser
+generator.")))
+
+(define-public 9base
+  (package
+    (inherit 9yacc)
+    (name "9base")
+    (arguments
+     (substitute-keyword-arguments (package-arguments 9yacc)
+       ((#:phases phases)
+        #~(modify-phases #$phases
+            (add-after 'patch-for-9yacc 'patch-for-9base
+              (lambda _
+                (substitute* "Makefile"
+                  (("SUBDIRS  = lib9\\\\")
+                   "SUBDIRS = \\")
+                  (("@chmod 755 yacc/9yacc")
+                   ""))
+                (for-each (lambda (x)
+                            (substitute* "Makefile"
+                              (((string-append x "\\\\")) "\\")))
+                          '("yacc" "diff" "hoc" "rc"))
+                (substitute* "sam/Makefile"
+                  (("\\$\\{CFLAGS\\}")
+                   "${CFLAGS} -I."))
+                (substitute* "config.mk"
+                  (("^YACC.*=.*$")
+                   (string-append "YACC=" #$(this-package-native-input "9yacc")
+                                  "/bin/yacc\n")))))
+            (delete 'chdir)
+            (delete 'install-yaccpar)))))
+    (native-inputs (list 9yacc))
+    (inputs (list lib9))
+    (propagated-inputs (list rc))
+    (synopsis "Port of various Plan 9 tools for Unix")
+    (description
+     "This package provides ported versions of various Plan 9 userland tools
+for Unix.")))

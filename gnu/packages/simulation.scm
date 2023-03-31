@@ -2,6 +2,7 @@
 ;;; Copyright © 2017, 2018, 2019, 2020, 2021 Paul Garlick <pgarlick@tourbillion-technology.com>
 ;;; Copyright © 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2022 Eric Bavier <bavier@posteo.net>
+;;; Copyright © 2022 Liliana Marie Prikler <liliana.prikler@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -29,12 +30,17 @@
   #:use-module (gnu packages check)
   #:use-module (gnu packages cmake)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages cpp)
   #:use-module (gnu packages flex)
+  #:use-module (gnu packages fontutils)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages gcc)
+  #:use-module (gnu packages geo)
   #:use-module (gnu packages gl)
   #:use-module (gnu packages graphics)
   #:use-module (gnu packages gtk)
+  #:use-module (gnu packages image)
+  #:use-module (gnu packages iso-codes)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages m4)
   #:use-module (gnu packages maths)
@@ -42,6 +48,7 @@
   #:use-module (gnu packages multiprecision)
   #:use-module (gnu packages ncurses)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages protobuf)
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-science)
@@ -49,6 +56,7 @@
   #:use-module (gnu packages readline)
   #:use-module (gnu packages tls)
   #:use-module (gnu packages version-control)
+  #:use-module (gnu packages video)
   #:use-module (gnu packages xml)
   #:use-module (gnu packages xorg)
   #:use-module (guix download)
@@ -57,9 +65,11 @@
   #:use-module (guix svn-download)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system gnu)
+  #:use-module (guix build-system pyproject)
   #:use-module (guix build-system python)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
+  #:use-module (guix gexp)
   #:use-module (guix utils)
   #:use-module (ice-9 ftw)
   #:use-module (ice-9 regex)
@@ -243,6 +253,113 @@ with gas/liquid interfaces.  Large problems may be split into smaller, connected
 problems for efficient solution on parallel systems.")
     (license license:gpl3+)
     (home-page "https://openfoam.org")))
+
+(define-public open-simulation-interface
+  (package
+    (name "open-simulation-interface")
+    (version "3.5.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url (string-append "https://github.com/"
+                                        "OpenSimulationInterface/"
+                                        "open-simulation-interface"))
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "09vclrvsawx608kk0vnzywr71xn11qzwxzh2j508zjfn0kvhyx7q"))))
+    (build-system cmake-build-system)
+    (arguments (list #:tests? #f         ; tests are for the python package
+                     #:phases
+                     #~(modify-phases %standard-phases
+                         (add-after 'unpack 'fix-cmake
+                           (lambda _
+                             (substitute* "CMakeLists.txt"
+                               (("-targets\\.cmake") "_targets.cmake")))))))
+    (native-inputs (list protobuf))
+    (home-page
+     "https://github.com/OpenSimulationInterface/open-simulation-interface")
+    (synopsis "Generic interface for environmental perception")
+    (description "The Open Simulation Interface is a generic interface based on
+Google's protocol buffers for the environmental perception of automated driving
+functions in virtual scenarios.")
+    (license license:mpl2.0)))
+
+(define-public python-open-simulation-interface
+  (package/inherit open-simulation-interface
+    (build-system python-build-system)
+    (arguments '())))
+
+(define-public esmini
+  (package
+    (name "esmini")
+    (version "2.27.1")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/esmini/esmini")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (patches (search-patches "esmini-use-pkgconfig.patch"
+                                       "esmini-no-clutter-log.patch"))
+              (modules '((guix build utils) (ice-9 ftw)))
+              (snippet
+               #~(with-directory-excursion "externals"
+                   (for-each
+                    (lambda (dir) (unless (member dir '("." ".." "expr"))
+                               (delete-file-recursively dir)))
+                    (scandir "."))))
+              (sha256
+               (base32
+                "07ccydz7kxy5jc52f8fmxg4nkr1spshfnpzcv0wgd5lqz9ghjahz"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      #:configure-flags #~(list "-DDYN_PROTOBUF=TRUE")
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'fix-cmake
+            (lambda* (#:key inputs outputs #:allow-other-keys)
+              (substitute* "CMakeLists.txt"
+                (("\\$\\{CMAKE_HOME_DIRECTORY\\}/bin")
+                 (string-append (assoc-ref outputs "out") "/bin")))
+              (substitute* "EnvironmentSimulator/CMakeLists.txt"
+                (("\\$\\{OSI_DIR\\}/(include|lib)(-dyn)?" all what)
+                 (search-input-directory
+                  inputs
+                  (string-append what "/osi"
+                                 #$(version-major
+                                    (package-version
+                                     (this-package-input
+                                      "open-simulation-interface"))))))
+                (("\\$\\{SUMO_BASE_DIR\\}/\\$\\{EXT_DIR_NAME\\}")
+                 #$(this-package-input "sumo")))))
+          (replace 'check
+            (lambda* (#:key tests? #:allow-other-keys)
+              (with-directory-excursion "EnvironmentSimulator/Unittest/"
+                (for-each invoke (find-files "_test$")))))
+          (add-after 'install 'move-libraries
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let ((out (assoc-ref outputs "out")))
+                (mkdir-p (string-append out "/lib"))
+                (with-directory-excursion (string-append out "/bin")
+                  (for-each
+                   (lambda (f)
+                     (rename-file f (string-append out "/lib/"
+                                                   (basename f))))
+                   (find-files "." "\\.so$")))))))))
+    (inputs (list mesa
+                  openscenegraph `(,openscenegraph "pluginlib")
+                  open-simulation-interface
+                  protobuf pugixml sumo))
+    (native-inputs (list googletest pkg-config))
+    (home-page "https://github.com/esmini/esmini")
+    (synopsis "Basic OpenSCENARIO player")
+    (description "@command{esmini} is a tool to play OpenSCENARIO files.
+It is provided as both a standalone application and a shared library and has
+some support for generating and analysing traffic scenarios..")
+    (license license:mpl2.0)))
 
 (define-public python-fenics-dijitso
   (package
@@ -465,7 +582,7 @@ FFC is part of the FEniCS Project.")
        ("sundials" ,sundials-openmpi)
        ("zlib" ,zlib)))
     (native-inputs
-     `(("catch" ,catch-framework2-1)
+     `(("catch" ,catch2-1)
        ("pkg-config" ,pkg-config)))
     (propagated-inputs
      `(("ffc" ,python-fenics-ffc)
@@ -828,7 +945,7 @@ tools and a collection of Python modules for programmatic use.")
        (sha256
         (base32
          "11flp2c4ynk1fhanf4mqyzrpd0gjbnv6afrwwc7xi3mb6ms69lr0"))))
-    (build-system python-build-system)
+    (build-system pyproject-build-system)
     (arguments
      (list
       #:phases
@@ -838,21 +955,8 @@ tools and a collection of Python modules for programmatic use.")
               ;; Due to lack of metadata, the gmsh Python package is not
               ;; detected although importable.
               (substitute* "pyproject.toml"
-                (("\"gmsh\",") ""))))
-          ;; XXX: PEP 517 manual build copied from python-isort.
-          (replace 'build
-            (lambda _
-              (invoke "python" "-m" "build" "--wheel" "--no-isolation" ".")))
-          (replace 'check
-            (lambda* (#:key tests? #:allow-other-keys)
-              (when tests?
-                (invoke "pytest" "-v" "tests"))))
-          (replace 'install
-            (lambda _
-              (let ((whl (car (find-files "dist" "\\.whl$"))))
-                (invoke "pip" "--no-cache-dir" "--no-input"
-                        "install" "--no-deps" "--prefix" #$output whl)))))))
-    (native-inputs (list python-pypa-build python-flit-core python-pytest))
+                (("\"gmsh\",") "")))))))
+    (native-inputs (list python-flit-core python-pytest))
     (propagated-inputs (list gmsh python-meshio python-numpy))
     (home-page "https://github.com/nschloe/pygmsh")
     (synopsis "Python frontend for Gmsh")
@@ -927,7 +1031,7 @@ command-line utility for mesh optimisation.")
                     (invoke "py.test" "-v" "tests/migration")
                     (invoke "py.test" "-v" "tests/pyadjoint")))
              #t)))))
-    (home-page "http://www.dolfin-adjoint.org")
+    (home-page "https://www.dolfin-adjoint.org")
     (synopsis "Automatic differentiation library")
     (description "@code{python-dolfin-adjoint} is a solver of
 differential equations associated with a governing system and a
@@ -940,3 +1044,167 @@ provides the necessary tools and data structures for cases where the
 forward model is implemented in @code{fenics} or
 @url{https://firedrakeproject.org,firedrake}.")
     (license license:lgpl3)))
+
+(define %commonroad-dont-install-license-at-root
+  #~(substitute* "setup.py"
+      (("data_files=\\[\\('.', \\['LICENSE.txt'\\]\\)\\],")
+       "")))
+
+(define-public python-commonroad-vehicle-models
+  (package
+    (name "python-commonroad-vehicle-models")
+    (version "3.0.2")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "commonroad-vehicle-models" version))
+              (sha256
+               (base32
+                "13jg0cys7y4n7rg548w6mxk9g10gd5qxmj4ynrlriczpffqy6kc7"))))
+    (build-system python-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'fix-setup.py
+                 (lambda _
+                   #$%commonroad-dont-install-license-at-root)))))
+    (propagated-inputs (list python-numpy python-omegaconf))
+    (home-page "https://commonroad.in.tum.de/")
+    (synopsis "CommonRoad vehicle models")
+    (description "This package provides vehicle models used in CommonRoad
+benchmarks.  Varying abstraction levels are used ranging from kinematic single
+track models to multi-body models.")
+    (license license:bsd-3)))
+
+(define-public python-commonroad-io
+  (package
+    (name "python-commonroad-io")
+    (version "2022.3")
+    (source (origin
+              (method url-fetch)
+              (uri (pypi-uri "commonroad-io" version))
+              (sha256
+               (base32
+                "1cj9zj567mca8xb8sx9h3nnl2cccv6vh8h73imgpq61cimk9mvas"))))
+    (build-system python-build-system)
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'fix-setup.py
+                 (lambda _
+                   #$%commonroad-dont-install-license-at-root)))))
+    (propagated-inputs (list python-commonroad-vehicle-models
+                             python-iso3166
+                             python-lxml
+                             python-matplotlib
+                             python-networkx
+                             python-numpy
+                             python-omegaconf
+                             python-pillow
+                             python-protobuf
+                             python-rtree
+                             python-scipy
+                             python-shapely
+                             python-tqdm))
+    (native-inputs (list python-lxml python-pytest))
+    (home-page "https://commonroad.in.tum.de/")
+    (synopsis "Read, write, and visualize CommonRoad scenarios.")
+    (description "This package provides methods to read, write, and visualize
+CommonRoad scenarios and planning problems.  It can be used as a framework for
+implementing motion planning algorithms to solve CommonRoad Benchmarks
+and is the basis for other tools of the CommonRoad Framework.")
+    (license license:bsd-3)))
+
+(define-public python-commonroad-route-planner
+  (package
+    (name "python-commonroad-route-planner")
+    (version "2022.3")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://gitlab.lrz.de/tum-cps/commonroad-route-planner")
+                    (commit version)))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0xn0l7bzmj56d4mlqacvbl8mdvsffkg2fn2lzfmis5jl4vp99ipf"))))
+    (arguments
+     (list #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'fix-setup.py
+                 (lambda _
+                   #$%commonroad-dont-install-license-at-root)))))
+    (build-system python-build-system)
+    (propagated-inputs (list python-commonroad-io
+                             python-matplotlib
+                             python-networkx
+                             python-numpy
+                             python-setuptools
+                             python-shapely))
+    (home-page "https://gitlab.lrz.de/tum-cps/commonroad-route-planner")
+    (synopsis "Route planner for CommonRoad scenarios")
+    (description "This package provides functions for route planning, that is
+finding sequences that lead from a given start lanelet to some goal
+lanelet(s).")
+    (license license:bsd-3)))
+
+(define-public sumo
+  (package
+    (name "sumo")
+    (version "1.14.1")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/eclipse/sumo")
+                    (commit (string-append "v"
+                                           (string-replace-substring version
+                                                                     "." "_")))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1965vrsff0k14z3y3b1c460zdwp9nx6q6plrdyxn496vg6846k1y"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'disable-problematic-tests
+            (lambda _
+              (substitute* "CMakeLists.txt"
+                ;; docs/example appears to be missing
+                (("add_test\\(exampletest .*") ""))
+              (substitute* "src/traci_testclient/CMakeLists.txt"
+                ;; requires network connection (at least to localhost)
+                (("add_test\\(NAME libtracitest .*") "")))))))
+    (inputs (list eigen
+                  freetype
+                  fontconfig
+                  ffmpeg
+                  fox
+                  gdal
+                  glu
+                  gperftools ; tcmalloc
+                  libjpeg-turbo
+                  libtiff
+                  libx11
+                  libxcursor
+                  libxft
+                  libxi
+                  libxrandr
+                  libxrender
+                  openscenegraph
+                  proj
+                  python
+                  xerces-c
+                  zlib))
+    (native-inputs (list googletest python))
+    (home-page "https://eclipse.org/sumo")
+    (synopsis "Traffic simulator")
+    (description "@acronym{SUMO, Simulation of Urban MObility} is a traffic
+simulation package designed to handle large road networks and different modes
+of transportation -- including road vehicles, public transport and pedestrians.
+Included with SUMO is a wealth of supporting tools which automate core tasks
+for the creation, the execution and evaluation of traffic simulations,
+such as network import, route calculations, visualization and emission
+calculation.  SUMO can be enhanced with custom models and provides various
+APIs to remotely control the simulation.")
+    (license (list license:epl2.0 license:gpl2+))))

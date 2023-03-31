@@ -48,6 +48,9 @@
   #:use-module (gnu packages bootloaders)
   #:use-module (gnu packages certs)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages cryptsetup)
+  #:use-module (gnu packages disk)
+  #:use-module (gnu packages file-systems)
   #:use-module (gnu packages fonts)
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages guile)
@@ -281,13 +284,24 @@ templates under @file{/etc/configuration}.")))
 ;; appropriate options.  The GUI installer needs it when the machine does not
 ;; support Kernel Mode Setting.  Otherwise kmscon is missing /dev/fb0.
 (define (uvesafb-shepherd-service _)
+  (define modprobe
+    (program-file "modprobe-wrapper"
+                  #~(begin
+                      ;; Use a wrapper because shepherd 0.9.3 won't let us
+                      ;; pass environment variables to the child process:
+                      ;; <https://issues.guix.gnu.org/60106>.
+                      (setenv "LINUX_MODULE_DIRECTORY"
+                              "/run/booted-system/kernel/lib/modules")
+                      (apply execl #$(file-append kmod "/bin/modprobe")
+                             "modprobe" (cdr (command-line))))))
+
   (list (shepherd-service
          (documentation "Load the uvesafb kernel module if needed.")
          (provision '(maybe-uvesafb))
          (requirement '(file-systems))
          (start #~(lambda ()
                     (or (file-exists? "/dev/fb0")
-                        (invoke #+(file-append kmod "/bin/modprobe")
+                        (invoke #+modprobe
                                 "uvesafb"
                                 (string-append "v86d=" #$v86d "/sbin/v86d")
                                 "mode_option=1024x768"))))
@@ -317,9 +331,10 @@ Using this shell, you can carry out the installation process \"manually.\"
 Access documentation at any time by pressing Alt-F2.\x1b[0m
 ")))
     (define (normal-tty tty)
-      (mingetty-service (mingetty-configuration (tty tty)
-                                                (auto-login "root")
-                                                (login-pause? #t))))
+      (service mingetty-service-type
+               (mingetty-configuration (tty tty)
+                                       (auto-login "root")
+                                       (login-pause? #t))))
 
     (define bare-bones-os
       (load "examples/bare-bones.tmpl"))
@@ -333,8 +348,9 @@ Access documentation at any time by pressing Alt-F2.\x1b[0m
                      (virtual-terminal "tty1")
                      (login-program (installer-program))))
 
-           (login-service (login-configuration
-                           (motd motd)))
+           (service login-service-type
+                    (login-configuration
+                     (motd motd)))
 
            ;; Documentation.  The manual is in UTF-8, but
            ;; 'console-font-service' sets up Unicode support and loads a font
@@ -351,7 +367,7 @@ Access documentation at any time by pressing Alt-F2.\x1b[0m
            (normal-tty "tty6")
 
            ;; The usual services.
-           (syslog-service)
+           (service syslog-service-type)
 
            ;; Use the Avahi daemon to discover substitute servers on the local
            ;; network.  It can be faster than fetching from remote servers.
@@ -372,7 +388,9 @@ Access documentation at any time by pressing Alt-F2.\x1b[0m
            ;; Start udev so that useful device nodes are available.
            ;; Use device-mapper rules for cryptsetup & co; enable the CRDA for
            ;; regulations-compliant WiFi access.
-           (udev-service #:rules (list lvm2 crda))
+           (service udev-service-type
+                    (udev-configuration
+                     (rules (list lvm2 crda))))
 
            ;; Add the 'cow-store' service, which users have to start manually
            ;; since it takes the installation directory as an argument.
@@ -410,8 +428,9 @@ Access documentation at any time by pressing Alt-F2.\x1b[0m
 
            ;; Since this is running on a USB stick with a overlayfs as the root
            ;; file system, use an appropriate cache configuration.
-           (nscd-service (nscd-configuration
-                          (caches %nscd-minimal-caches)))
+           (service nscd-service-type
+                    (nscd-configuration
+                     (caches %nscd-minimal-caches)))
 
            ;; Having /bin/sh is a good idea.  In particular it allows Tramp
            ;; connections to this system to work.
@@ -423,7 +442,7 @@ Access documentation at any time by pressing Alt-F2.\x1b[0m
                     (list %loopback-static-networking))
 
            (service wpa-supplicant-service-type)
-           (dbus-service)
+           (service dbus-root-service-type)
            (service connman-service-type
                     (connman-configuration
                      (disable-vpn? #t)))
@@ -458,6 +477,23 @@ Access documentation at any time by pressing Alt-F2.\x1b[0m
 \x1b[1;33mUse Alt-F2 for documentation.\x1b[0m
 ")
 
+(define %installer-disk-utilities
+  ;; A well-rounded set of packages for interacting with disks, partitions and
+  ;; file systems, included with the Guix installation image.
+  (list parted gptfdisk ddrescue
+        ;; Use the static LVM2 because it's already pulled in by the installer.
+        lvm2-static
+        ;; We used to provide fdisk from GNU fdisk, but as of version 2.0.0a
+        ;; it pulls Guile 1.8, which takes unreasonable space; furthermore
+        ;; util-linux's fdisk is already available, in %base-packages-linux.
+        cryptsetup mdadm
+        dosfstools
+        btrfs-progs
+        e2fsprogs
+        f2fs-tools
+        jfsutils
+        xfsprogs))
+
 (define installation-os
   ;; The operating system used on installation images for USB sticks etc.
   (operating-system
@@ -476,7 +512,7 @@ Access documentation at any time by pressing Alt-F2.\x1b[0m
     ;; non-functional:
     ;; <https://lists.gnu.org/archive/html/guix-devel/2019-03/msg00441.html>.
     ;; Thus, blacklist it.
-    (kernel-arguments '("quiet" "modprobe.blacklist=radeon"))
+    (kernel-arguments '("quiet" "modprobe.blacklist=radeon,amdgpu"))
 
     (file-systems
      ;; Note: the disk image build code overrides this root file system with
@@ -530,7 +566,7 @@ Access documentation at any time by pressing Alt-F2.\x1b[0m
                       font-dejavu font-gnu-unifont
                       grub          ; mostly so xrefs to its manual work
                       nss-certs)    ; To access HTTPS, use git, etc.
-                %base-packages-disk-utilities
+                %installer-disk-utilities
                 %base-packages))))
 
 (define* (os-with-u-boot os board #:key (bootloader-target "/dev/mmcblk0")

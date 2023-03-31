@@ -1,6 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2016-2022 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2018 Chris Marusich <cmmarusich@gmail.com>
+;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -21,18 +22,19 @@
   #:use-module (srfi srfi-9)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-64)
+  #:use-module (srfi srfi-71)
   #:use-module (rnrs io ports)
   #:use-module (ice-9 match)
   #:use-module (ice-9 popen)
   #:use-module (ice-9 regex)
   #:export (marionette?
+            marionette-pid
             make-marionette
             marionette-eval
             wait-for-file
             wait-for-tcp-port
             wait-for-unix-socket
             marionette-control
-            marionette-screen-text
             wait-for-screen-text
             %qwerty-us-keystrokes
             marionette-type
@@ -177,7 +179,18 @@ QEMU monitor and to the guest's backdoor REPL."
     (($ <marionette> command pid monitor (= force repl))
      (write exp repl)
      (newline repl)
-     (read repl))))
+     (with-exception-handler
+         (lambda (exn)
+           (simple-format
+            (current-error-port)
+            "error reading marionette response: ~A
+  remaining response: ~A\n"
+            exn
+            (get-line repl))
+           (raise-exception exn))
+       (lambda ()
+         (read repl))
+       #:unwind? #t))))
 
 (define* (wait-for-file file marionette
                         #:key (timeout 10) (read 'read))
@@ -186,7 +199,14 @@ FILE has not shown up after TIMEOUT seconds, raise an error."
   (match (marionette-eval
           `(let loop ((i ,timeout))
              (cond ((file-exists? ,file)
-                    (cons 'success (call-with-input-file ,file ,read)))
+                    (cons 'success
+                          (let ((content
+                                 (call-with-input-file ,file ,read)))
+                            (if (eof-object? content)
+                                ;; #<eof> can't be read, so convert to the
+                                ;; empty string
+                                ""
+                                content))))
                    ((> i 0)
                     (sleep 1)
                     (loop (- i 1)))
@@ -267,54 +287,87 @@ Monitor\")."
      ;; The "quit" command terminates QEMU immediately, with no output.
      (unless (string=? command "quit") (wait-for-monitor-prompt monitor)))))
 
-(define* (marionette-screen-text marionette
-                                 #:key
-                                 (ocrad "ocrad"))
-  "Take a screenshot of MARIONETTE, perform optical character
-recognition (OCR), and return the text read from the screen as a string.  Do
-this by invoking OCRAD (file name for GNU Ocrad's command)"
-  (define (random-file-name)
-    (string-append "/tmp/marionette-screenshot-"
-                   (number->string (random (expt 2 32)) 16)
-                   ".ppm"))
+(define* (invoke-ocrad-ocr image #:key (ocrad "ocrad"))
+  "Invoke the OCRAD command on image, and return the recognized text."
+  (let* ((pipe (open-pipe* OPEN_READ ocrad "-i" "-s" "10" image))
+         (text (get-string-all pipe)))
+    (unless (zero? (close-pipe pipe))
+      (error "'ocrad' failed" ocrad))
+    text))
 
-  (let ((image (random-file-name)))
+(define* (invoke-tesseract-ocr image #:key (tesseract "tesseract"))
+  "Invoke the TESSERACT command on IMAGE, and return the recognized text."
+  (let* ((output-basename (tmpnam))
+         (output-basename* (string-append output-basename ".txt")))
     (dynamic-wind
       (const #t)
       (lambda ()
-        (marionette-control (string-append "screendump " image)
-                            marionette)
-
-        ;; Tell Ocrad to invert the image colors (make it black on white) and
-        ;; to scale the image up, which significantly improves the quality of
-        ;; the result.  In spite of this, be aware that OCR confuses "y" and
-        ;; "V" and sometimes erroneously introduces white space.
-        (let* ((pipe (open-pipe* OPEN_READ ocrad
-                                 "-i" "-s" "10" image))
-               (text (get-string-all pipe)))
-          (unless (zero? (close-pipe pipe))
-            (error "'ocrad' failed" ocrad))
-          text))
+        (let ((exit-val (status:exit-val
+                         (system* tesseract image output-basename))))
+          (unless (zero? exit-val)
+            (error "'tesseract' failed" tesseract))
+          (call-with-input-file output-basename* get-string-all)))
       (lambda ()
-        (false-if-exception (delete-file image))))))
+        (false-if-exception (delete-file output-basename))
+        (false-if-exception (delete-file output-basename*))))))
+
+(define* (marionette-screen-text marionette #:key (ocr "ocrad"))
+  "Take a screenshot of MARIONETTE, perform optical character
+recognition (OCR), and return the text read from the screen as a string, along
+the screen dump image used.  Do this by invoking OCR, which should be the file
+name of GNU Ocrad's@command{ocrad} or Tesseract OCR's @command{tesseract}
+command.  The screen dump image returned as the second value should be deleted
+if it is not needed."
+  (define image (string-append (tmpnam) ".ppm"))
+  ;; Use the QEMU Monitor to save an image of the screen to the host.
+  (marionette-control (string-append "screendump " image) marionette)
+  ;; Process it via the OCR.
+  (cond
+   ((string-contains ocr "ocrad")
+    (values (invoke-ocrad-ocr image #:ocrad ocr) image))
+   ((string-contains ocr "tesseract")
+    (values (invoke-tesseract-ocr image #:tesseract ocr) image))
+   (else (error "unsupported ocr command"))))
 
 (define* (wait-for-screen-text marionette predicate
-                               #:key (timeout 30) (ocrad "ocrad"))
+                               #:key
+                               (ocr "ocrad")
+                               (timeout 30)
+                               pre-action
+                               post-action)
   "Wait for TIMEOUT seconds or until the screen text on MARIONETTE matches
-PREDICATE, whichever comes first.  Raise an error when TIMEOUT is exceeded."
+PREDICATE, whichever comes first.  Raise an error when TIMEOUT is exceeded.
+The error contains the recognized text along the preserved file name of the
+screen dump, which is relative to the current working directory.  If
+PRE-ACTION is provided, it should be a thunk to call before each OCR attempt.
+Likewise for POST-ACTION, except it runs at the end of a successful OCR."
   (define start
     (car (gettimeofday)))
 
   (define end
     (+ start timeout))
 
-  (let loop ()
+  (let loop ((last-text #f)
+             (last-screendump #f))
     (if (> (car (gettimeofday)) end)
-        (error "'wait-for-screen-text' timeout" predicate)
-        (or (predicate (marionette-screen-text marionette #:ocrad ocrad))
-            (begin
-              (sleep 1)
-              (loop))))))
+        (let ((screendump-backup (string-drop last-screendump 5)))
+          ;; Move the file from /tmp/fileXXXXXX.pmm to the current working
+          ;; directory, so that it is preserved in the test derivation output.
+          (copy-file last-screendump screendump-backup)
+          (delete-file last-screendump)
+          (error "'wait-for-screen-text' timeout"
+                 'ocr-text: last-text
+                 'screendump: screendump-backup))
+        (let* ((_ (and (procedure? pre-action) (pre-action)))
+               (text screendump (marionette-screen-text marionette #:ocr ocr))
+               (_ (and (procedure? post-action) (post-action)))
+               (result (predicate text)))
+          (cond (result
+                 (delete-file screendump)
+                 result)
+                (else
+                 (sleep 1)
+                 (loop text screendump)))))))
 
 (define %qwerty-us-keystrokes
   ;; Maps "special" characters to their keystrokes.
@@ -336,8 +389,10 @@ PREDICATE, whichever comes first.  Raise an error when TIMEOUT is exceeded."
     (#\> . "shift-dot")
     (#\. . "dot")
     (#\, . "comma")
+    (#\: . "shift-semicolon")
     (#\; . "semicolon")
     (#\' . "apostrophe")
+    (#\! . "shift-1")
     (#\" . "shift-apostrophe")
     (#\` . "grave_accent")
     (#\bs . "backspace")

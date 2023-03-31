@@ -7,7 +7,7 @@
 ;;; Copyright © 2017 Roel Janssen <roel@gnu.org>
 ;;; Copyright © 2018–2022 Marius Bakke <mbakke@fastmail.com>
 ;;; Copyright © 2018, 2019 Tobias Geerinckx-Rice <me@tobias.gr>
-;;; Copyright © 2018, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2018, 2021-2023 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2018 Tim Gesthuizen <tim.gesthuizen@yahoo.de>
 ;;; Copyright © 2018 Pierre Neidhardt <mail@ambrevar.xyz>
 ;;; Copyright © 2019 Rutger Helling <rhelling@mykolab.com>
@@ -21,9 +21,11 @@
 ;;; Copyright © 2021 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2021 Lars-Dominik Braun <lars@6xq.net>
 ;;; Copyright © 2021, 2022 Guillaume Le Vaillant <glv@posteo.net>
-;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2021, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2022 Greg Hogan <code@greghogan.com>
 ;;; Copyright © 2022 John Kehayias <john.kehayias@protonmail.com>
+;;; Copyright © 2022 Clément Lassieur <clement@lassieur.org>
+;;; Copyright © 2022 Zhu Zihao <all_but_last@163.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -48,7 +50,6 @@
   #:use-module (guix git-download)
   #:use-module (guix memoization)
   #:use-module (guix utils)
-  #:use-module (guix build-system gnu)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system emacs)
   #:use-module (guix build-system python)
@@ -60,7 +61,6 @@
   #:use-module (gnu packages bootstrap)           ;glibc-dynamic-linker
   #:use-module (gnu packages check)               ;python-lit
   #:use-module (gnu packages compression)
-  #:use-module (gnu packages julia)               ;julia-patch
   #:use-module (gnu packages libedit)
   #:use-module (gnu packages libffi)
   #:use-module (gnu packages lua)
@@ -174,11 +174,14 @@ compiler.  In LLVM this library is called \"compiler-rt\".")
                           (properties
                            (append `((release-monitoring-url
                                       . ,%llvm-release-monitoring-url))
-                                   (clang-properties (package-version llvm)))))
+                                   (clang-properties (package-version llvm))))
+                          (legacy-build-shared-libs? #f))
   "Produce Clang with dependencies on LLVM and CLANG-RUNTIME, and applying the
 given PATCHES.  When TOOLS-EXTRA is given, it must point to the
 'clang-tools-extra' tarball, which contains code for 'clang-tidy', 'pp-trace',
-'modularize', and other tools."
+'modularize', and other tools.  LEGACY-BUILD-SHARED-LIBS? is used to configure
+the package to use the legacy BUILD_SHARED_LIBS CMake option, which was used
+until LLVM/Clang 14."
   (package
     (name "clang")
     (version (package-version llvm))
@@ -219,14 +222,17 @@ given PATCHES.  When TOOLS-EXTRA is given, it must point to the
              (string-append "-DC_INCLUDE_DIRS="
                             (assoc-ref %build-inputs "libc")
                             "/include")
-       ,@(if (target-riscv64?)
-           (list "-DLIBOMP_LIBFLAGS=-latomic"
-                 "-DCMAKE_SHARED_LINKER_FLAGS=-latomic")
-           `()))
+             ,@(if (target-riscv64?)
+                   (list "-DLIBOMP_LIBFLAGS=-latomic"
+                         "-DCMAKE_SHARED_LINKER_FLAGS=-latomic")
+                   `())
+             ,@(if legacy-build-shared-libs?
+                   '()
+                   (list "-DCLANG_LINK_CLANG_DYLIB=ON")))
 
        ,@(if (target-riscv64?)
-           `(#:make-flags '("LDFLAGS=-latomic"))
-           '())
+             `(#:make-flags '("LDFLAGS=-latomic"))
+             '())
 
        ;; Don't use '-g' during the build to save space.
        #:build-type "Release"
@@ -245,9 +251,11 @@ given PATCHES.  When TOOLS-EXTRA is given, it must point to the
                                                (string-delete #\- (package-version llvm))
                                                ".src")
                                              "tools/extra")
-                                ;; Build and link to shared libraries.
-                                (substitute* "cmake/modules/AddClang.cmake"
-                                  (("BUILD_SHARED_LIBS") "True"))
+                                ,@(if legacy-build-shared-libs?
+                                      ;; Build and link to shared libraries.
+                                      '((substitute* "cmake/modules/AddClang.cmake"
+                                          (("BUILD_SHARED_LIBS") "True")))
+                                      '())
                                 #t))))
                         '())
                   (add-after 'unpack 'add-missing-triplets
@@ -321,6 +329,15 @@ given PATCHES.  When TOOLS-EXTRA is given, it must point to the
                                 (("@GLIBC_LIBDIR@")
                                  (string-append libc "/lib"))))))
                         #t)))
+                  ;; Awkwardly, multiple phases added after the same phase,
+                  ;; e.g. unpack, get applied in the reverse order.  In other
+                  ;; words, adding 'change-directory last means it occurs
+                  ;; first after the unpack phase.
+                  ,@(if (version>=? version "14")
+                        '((add-after 'unpack 'change-directory
+                            (lambda _
+                              (chdir "clang"))))
+                        '())
                   ,@(if (version>=? version "10")
                         `((add-after 'install 'adjust-cmake-file
                             (lambda* (#:key outputs #:allow-other-keys)
@@ -543,10 +560,12 @@ output), and Binutils.")
               ("libc-static" ,glibc "static")))))
 
 (define %llvm-monorepo-hashes
-  '(("14.0.6" . "14f8nlvnmdkp9a9a79wv67jbmafvabczhah8rwnqrgd5g3hfxxxx")))
+  '(("14.0.6" . "14f8nlvnmdkp9a9a79wv67jbmafvabczhah8rwnqrgd5g3hfxxxx")
+    ("15.0.7" . "12sggw15sxq1krh1mfk3c1f07h895jlxbcifpwk3pznh4m1rjfy2")))
 
 (define %llvm-patches
-  '(("14.0.6" . ("clang-14.0-libc-search-path.patch"))))
+  '(("14.0.6" . ("clang-14.0-libc-search-path.patch"))
+    ("15.0.7" . ("clang-15.0-libc-search-path.patch"))))
 
 (define (llvm-monorepo version)
   (origin
@@ -558,20 +577,74 @@ output), and Binutils.")
     (sha256 (base32 (assoc-ref %llvm-monorepo-hashes version)))
     (patches (map search-patch (assoc-ref %llvm-patches version)))))
 
-(define-public llvm-14
+;;; TODO: Make the base llvm all other LLVM inherit from on core-updates.
+(define-public llvm-15
   (package
     (name "llvm")
-    (version "14.0.6")
+    (version "15.0.7")
     (source (llvm-monorepo version))
     (build-system cmake-build-system)
     (outputs '("out" "opt-viewer"))
-    (native-inputs
-     `(("python" ,python-wrapper)
-       ("perl"   ,perl)))
-    (inputs
-     (list libffi))
-    (propagated-inputs
-     (list zlib))                       ;to use output from llvm-config
+    (arguments
+     (list
+      #:configure-flags
+      #~(list
+         ;; These options are required for cross-compiling LLVM according
+         ;; to <https://llvm.org/docs/HowToCrossCompileLLVM.html>.
+         #$@(if (%current-target-system)
+                #~((string-append "-DLLVM_TABLEGEN="
+                                  #+(file-append this-package
+                                                 "/bin/llvm-tblgen"))
+                   #$(string-append "-DLLVM_DEFAULT_TARGET_TRIPLE="
+                                    (%current-target-system))
+                   #$(string-append "-DLLVM_TARGET_ARCH="
+                                    (system->llvm-target))
+                   #$(string-append "-DLLVM_TARGETS_TO_BUILD="
+                                    (system->llvm-target)))
+                '())
+         ;; Note: sadly, the build system refuses the use of
+         ;; -DBUILD_SHARED_LIBS=ON and the large static archives are needed to
+         ;; build clang-runtime, so we cannot delete them.
+         "-DLLVM_BUILD_LLVM_DYLIB=ON"
+         "-DLLVM_LINK_LLVM_DYLIB=ON"
+         "-DLLVM_ENABLE_FFI=ON"
+         "-DLLVM_ENABLE_RTTI=ON"        ;for some third-party utilities
+         "-DLLVM_INSTALL_UTILS=ON"      ;needed for rustc
+         "-DLLVM_PARALLEL_LINK_JOBS=1") ;cater to smaller build machines
+      ;; Don't use '-g' during the build, to save space.
+      #:build-type "Release"
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'change-directory
+            (lambda _
+              (chdir "llvm")))
+          (add-after 'install 'install-opt-viewer
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let* ((opt-viewer-share (string-append #$output:opt-viewer
+                                                      "/share")))
+                (mkdir-p opt-viewer-share)
+                (rename-file (string-append #$output "/share/opt-viewer")
+                             opt-viewer-share)))))))
+    (native-inputs (list python-wrapper perl))
+    (inputs (list libffi))
+    (propagated-inputs (list zlib))     ;to use output from llvm-config
+    (home-page "https://www.llvm.org")
+    (synopsis "Optimizing compiler infrastructure")
+    (description
+     "LLVM is a compiler infrastructure designed for compile-time, link-time,
+runtime, and idle-time optimization of programs from arbitrary programming
+languages.  It currently supports compilation of C and C++ programs, using
+front-ends derived from GCC 4.0.1.  A new front-end for the C family of
+languages is in development.  The compiler infrastructure includes mirror sets
+of programming tools as well as libraries with equivalent functionality.")
+    (license license:asl2.0)
+    (properties `((release-monitoring-url . ,%llvm-release-monitoring-url)))))
+
+(define-public llvm-14
+  (package
+    (inherit llvm-15)
+    (version "14.0.6")
+    (source (llvm-monorepo version))
     (arguments
      (list
       #:configure-flags
@@ -611,17 +684,33 @@ output), and Binutils.")
                 (mkdir-p opt-viewer-share-dir)
                 (rename-file (string-append out "/share/opt-viewer")
                              opt-viewer-dir)))))))
-    (home-page "https://www.llvm.org")
-    (synopsis "Optimizing compiler infrastructure")
-    (description
-     "LLVM is a compiler infrastructure designed for compile-time, link-time,
-runtime, and idle-time optimization of programs from arbitrary programming
-languages.  It currently supports compilation of C and C++ programs, using
-front-ends derived from GCC 4.0.1.  A new front-end for the C family of
-languages is in development.  The compiler infrastructure includes mirror sets
-of programming tools as well as libraries with equivalent functionality.")
-    (license license:asl2.0)
-    (properties `((release-monitoring-url . ,%llvm-release-monitoring-url)))))
+
+    (native-inputs
+     `(("python" ,python-wrapper)
+       ("perl"   ,perl)))))
+
+(define-public clang-runtime-15
+  (let ((template (clang-runtime-from-llvm llvm-15)))
+    (package
+      (inherit template)
+      (arguments
+       (substitute-keyword-arguments (package-arguments template)
+         ((#:phases phases '(@ (guix build cmake-build-system) %standard-phases))
+          #~(modify-phases #$phases
+              (add-after 'unpack 'change-directory
+                (lambda _
+                  (chdir "compiler-rt")))
+              (add-after 'install 'delete-static-libraries
+                ;; Reduce size from 33 MiB to 7.4 MiB.
+                (lambda _
+                  (for-each delete-file
+                            (find-files #$output "\\.a(\\.syms)?$"))))))))
+      (native-inputs
+       (modify-inputs (package-native-inputs template)
+         (prepend gcc-12)))             ;libfuzzer fails to build with GCC 11
+      (inputs
+       (modify-inputs (package-inputs template)
+         (append libffi))))))
 
 (define-public clang-runtime-14
   (let ((template (clang-runtime-from-llvm llvm-14)))
@@ -639,30 +728,72 @@ of programming tools as well as libraries with equivalent functionality.")
          ("gcc" ,gcc-11)
          ,@(package-native-inputs template))))))
 
+(define-public clang-15
+  (clang-from-llvm
+   llvm-15 clang-runtime-15
+   #:tools-extra
+   (origin
+     (method url-fetch)
+     (uri (llvm-uri "clang-tools-extra"
+                    (package-version llvm-15)))
+     (sha256
+      (base32
+       "1lagnspm5limxh1cp5jlixnzlhf09905d4rqra1kpgj6dps2x6l0")))))
+
 (define-public clang-14
-  (let ((template
-         (clang-from-llvm llvm-14 clang-runtime-14
-                          #:tools-extra
-                          (origin
-                            (method url-fetch)
-                            (uri (llvm-uri "clang-tools-extra"
-                                           (package-version llvm-14)))
-                            (sha256
-                             (base32
-                              "0rhq4wkmvr369nkk059skzzw7jx6qhzqhmiwmqg4sp66avzviwvw"))))))
-    (package
-      (inherit template)
-      (arguments
-       (substitute-keyword-arguments (package-arguments template)
-         ((#:phases phases '(@ (guix build cmake-build-system) %standard-phases))
-          #~(modify-phases #$phases
-              (add-after 'unpack 'change-directory
-                (lambda _
-                  (chdir "clang"))))))))))
+  (clang-from-llvm
+   llvm-14 clang-runtime-14
+   #:legacy-build-shared-libs? #t
+   #:tools-extra
+   (origin
+     (method url-fetch)
+     (uri (llvm-uri "clang-tools-extra"
+                    (package-version llvm-14)))
+     (sha256
+      (base32
+       "0rhq4wkmvr369nkk059skzzw7jx6qhzqhmiwmqg4sp66avzviwvw")))))
+
+(define-public libomp-15
+  (package
+    (name "libomp")
+    (version (package-version llvm-15))
+    (source (llvm-monorepo version))
+    (build-system cmake-build-system)
+    ;; XXX: Note this gets built with GCC because building with Clang itself
+    ;; fails (missing <atomic>, even when libcxx is added as an input.)
+    (arguments
+     (list
+      #:configure-flags
+      #~(list "-DLIBOMP_USE_HWLOC=ON"
+              "-DOPENMP_TEST_C_COMPILER=clang"
+              "-DOPENMP_TEST_CXX_COMPILER=clang++")
+      #:test-target "check-libomp"
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'chdir-to-source-and-install-license
+            (lambda _
+              (chdir "openmp")
+              (install-file "LICENSE.TXT"
+                            (string-append #$output "/share/doc")))))))
+    (native-inputs (list clang-15 llvm-15 perl pkg-config python))
+    (inputs (list `(,hwloc "lib")))
+    (home-page "https://openmp.llvm.org")
+    (synopsis "OpenMP run-time support library")
+    (description "This package provides the run-time support library developed
+by the LLVM project for the OpenMP multi-theaded programming extension.  This
+package notably provides @file{libgomp.so}, which is has a binary interface
+compatible with that of libgomp, the GNU Offloading and Multi Processing
+Library.")
+    (properties `((release-monitoring-url . ,%llvm-release-monitoring-url)
+                  (upstream-name . "openmp")))
+    (license license:expat)))
+
+(define-public clang-toolchain-15
+  (make-clang-toolchain clang-15 libomp-15))
 
 (define-public libomp-14
   (package
-    (name "libomp")
+    (inherit libomp-15)
     (version (package-version llvm-14))
     (source (origin
               (method url-fetch)
@@ -671,36 +802,19 @@ of programming tools as well as libraries with equivalent functionality.")
                (base32
                 "07zby3gwy5c8jssabrhjk3nsxlwipnm6sk4dsvck1l5d0br1ywsg"))
               (file-name (string-append "libomp-" version ".tar.xz"))))
-    (build-system cmake-build-system)
-    ;; XXX: Note this gets built with GCC because building with Clang itself
-    ;; fails (missing <atomic>, even when libcxx is added as an input.)
     (arguments
-     (list
-       #:configure-flags #~(list "-DLIBOMP_USE_HWLOC=ON"
-                                 "-DOPENMP_TEST_C_COMPILER=clang"
-                                 "-DOPENMP_TEST_CXX_COMPILER=clang++")
-       #:test-target "check-libomp"
-       #:phases
-       #~(modify-phases %standard-phases
-         (add-after 'unpack 'chdir-to-source-and-install-license
-           (lambda _
-             (chdir #$(string-append "../openmp-" version ".src"))
-             (install-file "LICENSE.TXT"
-                           (string-append #$output "/share/doc")))))))
+     (substitute-keyword-arguments (package-arguments libomp-15)
+       ((#:phases phases)
+        #~(modify-phases #$phases
+            (replace 'chdir-to-source-and-install-license
+              (lambda _
+                (chdir #$(string-append "../openmp-" version ".src"))
+                (install-file "LICENSE.TXT"
+                              (string-append #$output "/share/doc"))))))))
     (native-inputs
-     (list clang-14 llvm-14 perl pkg-config python))
-    (inputs
-     (list `(,hwloc "lib")))
-    (home-page "https://openmp.llvm.org")
-    (synopsis "OpenMP run-time support library")
-    (description
-     "This package provides the run-time support library developed by the LLVM
-project for the OpenMP multi-theaded programming extension.  This package
-notably provides @file{libgomp.so}, which is has a binary interface compatible
-with that of libgomp, the GNU Offloading and Multi Processing Library.")
-    (properties `((release-monitoring-url . ,%llvm-release-monitoring-url)
-                  (upstream-name . "openmp")))
-    (license license:expat)))
+     (modify-inputs (package-native-inputs libomp-15)
+       (replace "clang" clang-14)
+       (replace "llvm" llvm-14)))))
 
 (define-public clang-toolchain-14
   (make-clang-toolchain clang-14 libomp-14))
@@ -731,6 +845,7 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
 (define-public clang-13
   (clang-from-llvm llvm-13 clang-runtime-13
                    "1j8pr5kk8iqyb4jds3yl7c6x672617h4ngkpl4575j7mk4nrwykq"
+                   #:legacy-build-shared-libs? #t
                    #:patches '("clang-13.0-libc-search-path.patch")
                    #:tools-extra
                    (origin
@@ -845,6 +960,7 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
 (define-public clang-12
   (clang-from-llvm llvm-12 clang-runtime-12
                    "0px4gl27az6cdz6adds89qzdwb1cqpjsfvrldbz9qvpmphrj34bf"
+                   #:legacy-build-shared-libs? #t
                    #:patches '("clang-12.0-libc-search-path.patch")
                    #:tools-extra
                    (origin
@@ -899,6 +1015,7 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
 (define-public clang-11
   (clang-from-llvm llvm-11 clang-runtime-11
                    "02ajkij85966vd150iy246mv16dsaph1kfi0y8wnncp8w6nar5hg"
+                   #:legacy-build-shared-libs? #t
                    #:patches '("clang-11.0-libc-search-path.patch")
                    #:tools-extra
                    (origin
@@ -955,12 +1072,13 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
 (define-public clang-10
   (clang-from-llvm llvm-10 clang-runtime-10
                    "091bvcny2lh32zy8f3m9viayyhb2zannrndni7325rl85cwgr6pr"
+                   #:legacy-build-shared-libs? #t
                    #:patches '("clang-10.0-libc-search-path.patch")
                    #:tools-extra
                    (origin
                      (method url-fetch)
                      (uri (llvm-uri "clang-tools-extra"
-                                             (package-version llvm-10)))
+                                    (package-version llvm-10)))
                      (sha256
                       (base32
                        "06n1yp638rh24xdxv9v2df0qajxbjz4w59b7dd4ky36drwmpi4yh")))))
@@ -1024,6 +1142,7 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
 (define-public clang-9
   (clang-from-llvm llvm-9 clang-runtime-9
                    "0ls2h3iv4finqyflyhry21qhc9cm9ga7g1zq21020p065qmm2y2p"
+                   #:legacy-build-shared-libs? #t
                    #:patches '("clang-9.0-libc-search-path.patch")))
 
 (define-public libomp-9
@@ -1067,6 +1186,7 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
 (define-public clang-8
   (clang-from-llvm llvm-8 clang-runtime-8
                    "0ihnbdl058gvl2wdy45p5am55bq8ifx8m9mhcsgj9ax8yxlzvvvh"
+                   #:legacy-build-shared-libs? #t
                    #:patches '("clang-8.0-libc-search-path.patch")))
 
 (define-public libomp-8
@@ -1109,6 +1229,7 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
 (define-public clang-7
   (clang-from-llvm llvm-7 clang-runtime-7
                    "0vc4i87qwxnw9lci4ayws9spakg0z6w5w670snj9f8g5m9rc8zg9"
+                   #:legacy-build-shared-libs? #t
                    #:patches '("clang-7.0-libc-search-path.patch")))
 
 (define-public libomp-7
@@ -1150,6 +1271,7 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
 (define-public clang-6
   (clang-from-llvm llvm-6 clang-runtime-6
                    "0rxn4rh7rrnsqbdgp4gzc8ishbkryhpl1kd3mpnxzpxxhla3y93w"
+                   #:legacy-build-shared-libs? #t
                    #:patches '("clang-6.0-libc-search-path.patch")))
 
 (define-public libomp-6
@@ -1211,6 +1333,7 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
 (define-public clang-3.9.1
   (clang-from-llvm llvm-3.9.1 clang-runtime-3.9.1
                    "0qsyyb40iwifhhlx9a3drf8z6ni6zwyk3bvh0kx2gs6yjsxwxi76"
+                   #:legacy-build-shared-libs? #t
                    #:patches '("clang-3.8-libc-search-path.patch")))
 
 (define-public llvm-3.8
@@ -1237,6 +1360,7 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
 (define-public clang-3.8
   (clang-from-llvm llvm-3.8 clang-runtime-3.8
                    "1prc72xmkgx8wrzmrr337776676nhsp1qd3mw2bvb22bzdnq7lsc"
+                   #:legacy-build-shared-libs? #t
                    #:patches '("clang-3.8-libc-search-path.patch")))
 
 (define-public llvm-3.7
@@ -1263,6 +1387,7 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
 (define-public clang-3.7
   (clang-from-llvm llvm-3.7 clang-runtime-3.7
                    "0x065d0w9b51xvdjxwfzjxng0gzpbx45fgiaxpap45ragi61dqjn"
+                   #:legacy-build-shared-libs? #t
                    #:patches '("clang-3.5-libc-search-path.patch")))
 
 (define-public llvm-3.6
@@ -1322,6 +1447,7 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
 (define-public clang-3.5
   (clang-from-llvm llvm-3.5 clang-runtime-3.5
                    "0846h8vn3zlc00jkmvrmy88gc6ql6014c02l4jv78fpvfigmgssg"
+                   #:legacy-build-shared-libs? #t
                    #:patches '("clang-3.5-libc-search-path.patch")))
 
 ;; Default LLVM and Clang version.
@@ -1391,14 +1517,14 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
     (properties `((release-monitoring-url . ,%llvm-release-monitoring-url)))
     (license license:asl2.0)))          ;with LLVM exceptions
 
-(define-public lld-14
+(define-public lld-15
   (package
     (name "lld")
-    (version "14.0.6")
+    (version (package-version llvm-15))
     (source (llvm-monorepo version))
     (build-system cmake-build-system)
     (inputs
-     (list llvm-14))
+     (list llvm-15))
     (arguments
      '(#:build-type "Release"
        ;; TODO: Tests require the lit tool, which isn't installed by the LLVM
@@ -1413,6 +1539,14 @@ with that of libgomp, the GNU Offloading and Multi Processing Library.")
     (description "LLD is a high-performance linker, built as a set of reusable
 components which highly leverage existing libraries in the larger LLVM Project.")
     (license license:asl2.0))) ; With LLVM exception
+
+(define-public lld-14
+  (package
+    (inherit lld-15)
+    (version "14.0.6")
+    (source (llvm-monorepo version))
+    (inputs
+     (list llvm-14))))
 
 (define-public lld-13
   (package
@@ -1450,20 +1584,35 @@ components which highly leverage existing libraries in the larger LLVM Project."
     (inputs (modify-inputs (package-inputs lld)
               (replace "llvm" llvm-12)))))
 
+(define-public lld-11
+  (package
+    (inherit lld-12)
+    (version "11.0.0")
+    (source (origin
+              (method url-fetch)
+              (uri (llvm-uri "lld" version))
+              (sha256
+               (base32
+                "077xyh7sij6mhp4dc4kdcmp9whrpz332fa12rwxnzp3wgd5bxrzg"))))
+    (inputs (modify-inputs (package-inputs lld)
+              (replace "llvm" llvm-11)))))
+
 (define-public lld lld-14)
 
 (define* (make-lld-wrapper lld #:key lld-as-ld?)
   "Return a LLD wrapper.  When LLD-AS-LD? is true, create a 'ld' symlink that
 points to 'lld'."
   (package
+    (inherit lld)
     (name (if lld-as-ld? "lld-as-ld-wrapper" "lld-wrapper"))
-    (version "0")
     (source #f)
-    (build-system trivial-build-system)
+    (native-inputs '())
     (inputs (list (make-ld-wrapper "ld.lld-wrapper" #:binutils lld
                                    #:linker "ld.lld")
                   (make-ld-wrapper "lld-wrapper" #:binutils lld #:linker
                                    "lld")))
+    (propagated-inputs '())
+    (build-system trivial-build-system)
     (arguments
      (list #:builder
            #~(let ((ld.lld (string-append #$(this-package-input
@@ -1480,22 +1629,23 @@ points to 'lld'."
     (synopsis "LLD linker wrapper")
     (description "This is a linker wrapper for LLD; like @code{ld-wrapper}, it
 wraps the linker to add any missing @code{-rpath} flags, and to detect any
-misuse of libraries outside of the store.")
-    (home-page "https://www.gnu.org/software/guix/")
-    (license license:gpl3+)))
+misuse of libraries outside of the store.")))
 
 ;;; A LLD wrapper suitable to use with -fuse-ld and GCC or with Clang.
 (define-public lld-wrapper
   (make-lld-wrapper lld))
 
 ;;; A LLD wrapper that can be used as a (near) drop-in replacement to GNU ld.
+(define-public lld-as-ld-wrapper-15
+  (make-lld-wrapper lld-15 #:lld-as-ld? #t))
+
 (define-public lld-as-ld-wrapper
   (make-lld-wrapper lld #:lld-as-ld? #t))
 
 (define-public lldb
   (package
     (name "lldb")
-    (version "14.0.6")
+    (version (package-version llvm-15))
     (source (llvm-monorepo version))
     (build-system cmake-build-system)
     (arguments
@@ -1509,8 +1659,8 @@ misuse of libraries outside of the store.")
     (native-inputs
      (list pkg-config swig))
     (inputs
-     (list clang-14
-           llvm-14
+     (list clang-15
+           llvm-15
            ;; Optional (but recommended) inputs.
            ncurses
            libedit
@@ -1529,34 +1679,43 @@ which highly leverage existing libraries in the larger LLVM project.")
 (define-public libcxx
   (package
     (name "libcxx")
-    (version "9.0.1")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (llvm-uri "libcxx" version))
-       (sha256
-        (base32
-         "0d2bj5i6mk4caq7skd5nsdmz8c2m5w5anximl5wz3x32p08zz089"))))
+    (version (package-version llvm-15))
+    (source (llvm-monorepo version))
     (build-system cmake-build-system)
     (arguments
-     `(#:phases
-       (modify-phases (@ (guix build cmake-build-system) %standard-phases)
-         (add-after 'set-paths 'adjust-CPLUS_INCLUDE_PATH
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let ((gcc (assoc-ref inputs  "gcc")))
-               ;; Hide GCC's C++ headers so that they do not interfere with
-               ;; the ones we are attempting to build.
-               (setenv "CPLUS_INCLUDE_PATH"
-                       (string-join (delete (string-append gcc "/include/c++")
-                                            (string-split (getenv "CPLUS_INCLUDE_PATH")
-                                                          #\:))
-                                    ":"))
-               (format #t
-                       "environment variable `CPLUS_INCLUDE_PATH' changed to ~a~%"
-                       (getenv "CPLUS_INCLUDE_PATH"))
-               #t))))))
+     (list
+      #:tests? #f
+      #:configure-flags
+      #~(list "-DLLVM_ENABLE_RUNTIMES=libcxx;libcxxabi"
+              "-DCMAKE_C_COMPILER=clang"
+              "-DCMAKE_CXX_COMPILER=clang++"
+              ;; libc++.so is actually a GNU ld style linker script, however,
+              ;; CMake still tries to fix the RUNPATH of it during the install
+              ;; step. This argument tells CMake to use the install directory
+              ;; as RUNPATH and don't attempt to patch it.
+              ;; See also: https://gitlab.kitware.com/cmake/cmake/-/issues/22963
+              "-DCMAKE_BUILD_WITH_INSTALL_RPATH=TRUE")
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'enter-subdirectory
+            (lambda _
+              (chdir "runtimes")))
+          (add-after 'set-paths 'adjust-CPLUS_INCLUDE_PATH
+            (lambda* (#:key inputs #:allow-other-keys)
+              (let ((gcc (assoc-ref inputs  "gcc")))
+                ;; Hide GCC's C++ headers so that they do not interfere with
+                ;; the ones we are attempting to build.
+                (setenv "CPLUS_INCLUDE_PATH"
+                        (string-join (delete (string-append gcc "/include/c++")
+                                             (string-split (getenv "CPLUS_INCLUDE_PATH")
+                                                           #\:))
+                                     ":"))
+                (format #t
+                        "environment variable `CPLUS_INCLUDE_PATH' changed to ~a~%"
+                        (getenv "CPLUS_INCLUDE_PATH"))
+                #t))))))
     (native-inputs
-     (list clang llvm))
+     (list clang llvm python))
     (home-page "https://libcxx.llvm.org")
     (synopsis "C++ standard library")
     (description
@@ -1572,11 +1731,29 @@ use with Clang, targeting C++11, C++14 and above.")
     (version (package-version llvm-6))
     (source
      (origin
-       (inherit (package-source libcxx))
+       (method url-fetch)
        (uri (llvm-uri "libcxx" version))
        (sha256
         (base32
          "0rzw4qvxp6qx4l4h9amrq02gp7hbg8lw4m0sy3k60f50234gnm3n"))))
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'set-paths 'adjust-CPLUS_INCLUDE_PATH
+            (lambda* (#:key inputs #:allow-other-keys)
+              (let ((gcc (assoc-ref inputs  "gcc")))
+                ;; Hide GCC's C++ headers so that they do not interfere with
+                ;; the ones we are attempting to build.
+                (setenv "CPLUS_INCLUDE_PATH"
+                        (string-join (delete (string-append gcc "/include/c++")
+                                             (string-split (getenv "CPLUS_INCLUDE_PATH")
+                                                           #\:))
+                                     ":"))
+                (format #t
+                        "environment variable `CPLUS_INCLUDE_PATH' changed to ~a~%"
+                        (getenv "CPLUS_INCLUDE_PATH"))
+                #t))))))
     (native-inputs
      (list clang-6 llvm-6))))
 
@@ -1596,38 +1773,43 @@ use with Clang, targeting C++11, C++14 and above.")
          "0ki6796b5z08kh3a3rbysr5wwb2dkl6wal5dzd03i4li5xfkvx1g"))))
     (build-system cmake-build-system)
     (arguments
-     `(#:configure-flags
-       (list (string-append "-DLIBCXXABI_LIBCXX_INCLUDES="
-                            (assoc-ref %build-inputs "libcxx")
-                            "/include")
-             "-DCMAKE_C_COMPILER=clang"
-             "-DCMAKE_CXX_COMPILER=clang++")
-       #:phases
-       (modify-phases (@ (guix build cmake-build-system) %standard-phases)
-         (add-after 'unpack 'chdir
-           (lambda _ (chdir "libcxxabi")))
-         (add-after 'set-paths 'adjust-CPLUS_INCLUDE_PATH
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let ((gcc (assoc-ref inputs  "gcc")))
-               ;; Hide GCC's C++ headers so that they do not interfere with
-               ;; the ones we are attempting to build.
-               (setenv "CPLUS_INCLUDE_PATH"
-                       (string-join
-                        (cons (string-append
-                               (assoc-ref inputs "libcxx") "/include/c++/v1")
-                              (delete (string-append gcc "/include/c++")
-                                      (string-split (getenv "CPLUS_INCLUDE_PATH")
-                                                    #\:)))
-                        ":"))
-               (format #true
-                       "environment variable `CPLUS_INCLUDE_PATH' changed to ~a~%"
-                       (getenv "CPLUS_INCLUDE_PATH")))))
-         (add-after 'install 'install-headers
-           (lambda* (#:key outputs #:allow-other-keys)
-             (let ((include-dir (string-append
-                                 (assoc-ref outputs "out") "/include")))
-               (install-file "../libcxxabi/include/__cxxabi_config.h" include-dir)
-               (install-file "../libcxxabi/include/cxxabi.h" include-dir)))))))
+     (list
+      #:configure-flags
+      #~(list (string-append "-DLIBCXXABI_LIBCXX_INCLUDES="
+                             #$(this-package-native-input "libcxx")
+                             "/include")
+              "-DCMAKE_C_COMPILER=clang"
+              "-DCMAKE_CXX_COMPILER=clang++")
+      #:phases
+      #~(modify-phases (@ (guix build cmake-build-system) %standard-phases)
+          (add-after 'unpack 'chdir
+            (lambda _ (chdir "libcxxabi")))
+          (add-after 'set-paths 'adjust-CPLUS_INCLUDE_PATH
+            (lambda* (#:key inputs #:allow-other-keys)
+              (let ((gcc (assoc-ref inputs  "gcc")))
+                ;; Hide GCC's C++ headers so that they do not interfere with
+                ;; the ones we are attempting to build.
+                (setenv "CPLUS_INCLUDE_PATH"
+                        (string-join
+                         (cons (string-append
+                                (assoc-ref inputs "libcxx") "/include/c++/v1")
+                               (delete (string-append gcc "/include/c++")
+                                       (string-split
+                                        (getenv "CPLUS_INCLUDE_PATH")
+                                        #\:)))
+                         ":"))
+                (format
+                 #true
+                 "environment variable `CPLUS_INCLUDE_PATH' changed to ~a~%"
+                 (getenv "CPLUS_INCLUDE_PATH")))))
+          (add-after 'install 'install-headers
+            (lambda* (#:key outputs #:allow-other-keys)
+              (let ((include-dir (string-append
+                                  (assoc-ref outputs "out") "/include")))
+                (install-file "../libcxxabi/include/__cxxabi_config.h"
+                              include-dir)
+                (install-file "../libcxxabi/include/cxxabi.h"
+                              include-dir)))))))
     (native-inputs
      (list clang-6 llvm-6 libcxx-6))
     (home-page "https://libcxxabi.llvm.org")
@@ -1643,27 +1825,29 @@ standard C++ library.")
     (name "libcxx+libcxxabi")
     (version (package-version libcxx-6))
     (arguments
-     `(#:configure-flags
-       (list "-DLIBCXX_CXX_ABI=libcxxabi"
-             (string-append "-DLIBCXX_CXX_ABI_INCLUDE_PATHS="
-                            (assoc-ref %build-inputs "libcxxabi")
-                            "/include"))
-       #:phases
-       (modify-phases (@ (guix build cmake-build-system) %standard-phases)
-         (add-after 'set-paths 'adjust-CPLUS_INCLUDE_PATH
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let ((gcc (assoc-ref inputs  "gcc")))
-               ;; Hide GCC's C++ headers so that they do not interfere with
-               ;; the ones we are attempting to build.
-               (setenv "CPLUS_INCLUDE_PATH"
-                       (string-join
-                        (delete (string-append gcc "/include/c++")
-                                (string-split (getenv "CPLUS_INCLUDE_PATH")
-                                              #\:))
-                        ":"))
-               (format #true
-                       "environment variable `CPLUS_INCLUDE_PATH' changed to ~a~%"
-                       (getenv "CPLUS_INCLUDE_PATH"))))))))
+     (list
+      #:configure-flags
+      #~(list "-DLIBCXX_CXX_ABI=libcxxabi"
+              (string-append "-DLIBCXX_CXX_ABI_INCLUDE_PATHS="
+                             #$(this-package-native-input "libcxxabi")
+                             "/include"))
+      #:phases
+      #~(modify-phases (@ (guix build cmake-build-system) %standard-phases)
+          (add-after 'set-paths 'adjust-CPLUS_INCLUDE_PATH
+            (lambda* (#:key inputs #:allow-other-keys)
+              (let ((gcc (assoc-ref inputs  "gcc")))
+                ;; Hide GCC's C++ headers so that they do not interfere with
+                ;; the ones we are attempting to build.
+                (setenv "CPLUS_INCLUDE_PATH"
+                        (string-join
+                         (delete (string-append gcc "/include/c++")
+                                 (string-split (getenv "CPLUS_INCLUDE_PATH")
+                                               #\:))
+                         ":"))
+                (format
+                 #true
+                 "environment variable `CPLUS_INCLUDE_PATH' changed to ~a~%"
+                 (getenv "CPLUS_INCLUDE_PATH"))))))))
     (native-inputs
      (list clang-6 llvm-6 libcxxabi-6))))
 
@@ -1842,6 +2026,7 @@ setup(name=\"clang\", packages=[\"clang\"])\n")))))
     (build-system emacs-build-system)
     (inputs
      (list clang))
+    (propagated-inputs '())
     (arguments
      `(#:phases
        (modify-phases %standard-phases
@@ -1926,126 +2111,20 @@ LLVM."))))
 
 (define-public llvm-julia
   (package
-    (inherit llvm-11)
-    (name "llvm-julia")
-    (properties `((hidden? . #t)
-                  ,@(package-properties llvm-11)))
-    (source (origin
-              (inherit (package-source llvm-11))
-              ;; Those patches are inside the Julia source repo.
-              ;; They are _not_ Julia specific (https://github.com/julialang/julia#llvm)
-              ;; but they are required to build Julia.
-              ;; Discussion: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=919628
-              (patches
-               (map (match-lambda
-                      ((name hash)
-                       (julia-patch name hash)))
-                    (list
-                     '("llvm-D27629-AArch64-large_model_6.0.1"
-                       "1qrshmlqvnasdyc158vfn3hnbigqph3lsq7acb9w8lwkpnnm2j4z")
-                     '("llvm8-D34078-vectorize-fdiv"
-                       "19spqc3xsazn1xs9gpcgv9ldadfkv49rmc5khl7sf1dlmhgi4602")
-                     '("llvm-7.0-D44650"
-                       "1h55kkmkiisfj6sk956if2bcj9s0v6n5czn8dxb870vp5nccj3ir")
-                     '("llvm7-symver-jlprefix"
-                       "00ng32x6xhm9czczirn5r1q1mc1myad44fqhi061hwh1vb46dwgm")
-                     '("llvm-6.0-DISABLE_ABI_CHECKS"
-                       "014fawd1ba7yckalypfld22zgic87x9nx3cim42zrwygywd36pyg")
-                     '("llvm9-D50010-VNCoercion-ni"
-                       "1s1d3sjsiq4vxg7ncy5cz56zgy5vcq6ls3iqaiqkvr23wyryqmdx")
-                     '("llvm7-revert-D44485"
-                       "0f59kq3p3mpwsbmskypbi4zn01l6ig0x7v2rjp08k2r8z8m6fa8n")
-                     '("llvm-11-D75072-SCEV-add-type"
-                       "176xi1lnbnv2rcs05ywhyb7pd0xgmibayvwzksksg44wg2dh8mbx")
-                     '("llvm-julia-tsan-custom-as"
-                       "0awh40kf6lm4wn1nsjd1bmhfwq7rqj811szanp2xkpspykw9hg9s")
-                     '("llvm-D80101"
-                       "1gsdwmgmpbignvqyxcnlprj899259p3dvdznlncd84ss445qgq3j")
-                     '("llvm-D84031"
-                       "0nks9sbk7p0r5gyr0idrmm93a5fmdai8kihz9532dx4zhcvvqbjc")
-                     '("llvm-10-D85553"
-                       "1zjq7j9q2qp56hwkc8yc8f0z7kvam3j7hj8sb7qyd77r255ff78l")
-                     '("llvm-10-unique_function_clang-sa"
-                       "1jys9w2zqk3dasnxqh0qz5ij7rxi6mkgq9pqjsclmamr5169zyan")
-                     ;'("llvm-D88630-clang-cmake"
-                     ;  "0rs6s71nqnjkny7i69gqazhqj5jqfdr0bkxs2v5a55sfx8fa1k54")
-                     '("llvm-11-D85313-debuginfo-empty-arange"
-                       "1f672d5385xpgb8yrim8d3b7wg2z1l81agnshm1q61kdvjixqx32")
-                     '("llvm-11-D90722-rtdyld-absolute-relocs"
-                       "0kmnai229yyxkmpk9lxd180mcnhk2i8d87k2sg89gc8as18w10r6")
-                     '("llvm-invalid-addrspacecast-sink"
-                       "1n1b7j4s80vj7x5377aj9vyphmxx1q6bm0chhkxp6zsy3mx3g2ry")
-                     '("llvm-11-D92906-ppc-setjmp"
-                       "0cmd4dsblp7a8m03j16dqxws0ijh55zf4jzzxmj341qxa1gamdp9")
-                     '("llvm-11-PR48458-X86ISelDAGToDAG"
-                       "0vwzvlhsdazhxg4gj8g2f00a4f8qc5cgac23w575xk3pgba1jh6y")
-                     '("llvm-11-D93092-ppc-knownbits"
-                       "1748bypsc7c9lbs3fnkv0kwvch6bn85kj98j4jdaz254ig0wa6xj")
-                     '("llvm-11-D93154-globalisel-as"
-                       "1k5wd4z3pa7zj0gyjkif7viqj906dhqlbb7dc95gig40nbxv6zpj")
-                     '("llvm-11-ppc-half-ctr"
-                       "0piywisfz6cmw3133kz7vzhiqflq2y7igakqxlym0gi8pqylv7w9")
-                     '("llvm-11-ppc-sp-from-bp"
-                       "1wmg3485cx5f9pbykyl3jibk1wwv4w1x30hl4jyfndzr2yh8azf9")
-                     '("llvm-rGb498303066a6-gcc11-header-fix"
-                       "0hkd4rwhvh8g2yh13g29wiwnjpv2yd1hdyiv1ryw8izl25bz9c67")
-                     '("llvm-11-D94813-mergeicmps"
-                       "0cmy0ywkgyrdcvr9bd6pd912lyd4gcsrib4z0v05dwgcdxhk7y29")
-                     '("llvm-11-D94980-CTR-half"
-                       "1yf8cxib3z8hz7zi9n6v2g2c6vpfr4slq9hpx8m8yq8f1jbyw3fw")
-                     '("llvm-11-D94058-sext-atomic-ops"
-                       "1x6p6k6q651z5jcqxx8vj17cxnv196mka7mwn7dpp6c23lwgfdpb")
-                     '("llvm-11-D96283-dagcombine-half"
-                       "0lv4iq2f8qrcz1xyxfic3bcr5p0aqam3a7c6pp6fnw3riixm096k"))))
-              (patch-flags '("-p1"))))
+    (inherit llvm-13)
     (arguments
-     (substitute-keyword-arguments (package-arguments llvm-11)
-       ((#:phases phases)
-        `(modify-phases ,phases
-           (add-after 'unpack 'patch-round-two
-             ;; We have to do the patching in two rounds because we can't
-             ;; pass '-p1' and '-p2' in the source field.
-             (lambda* (#:key inputs #:allow-other-keys)
-               (map (lambda (patchname)
-                      (invoke "patch" patchname "-p2"))
-                    (list "llvm-11-AArch64-FastIsel-bug"
-                          "llvm-11-D97435-AArch64-movaddrreg"
-                          "llvm-11-D97571-AArch64-loh"
-                          "llvm-11-aarch64-addrspace"))))))
-       ((#:build-type _) "Release")
-       ((#:configure-flags flags)
-        `(list
-           ;; Build a native compiler and the NVPTX backend (NVIDIA) since
-           ;; Julia insists on it, nothing more.  This reduces build times and
-           ;; disk usage.
-           ,(string-append "-DLLVM_TARGETS_TO_BUILD=" (system->llvm-target))
-           "-DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=NVPTX"
-
-           "-DLLVM_INSTALL_UTILS=ON"
-           "-DLLVM_BUILD_TESTS=ON"
-           "-DLLVM_ENABLE_FFI=ON"
-           "-DLLVM_ENABLE_RTTI=ON"
-           ;; "-DLLVM_HOST_TRIPLE=${stdenv.hostPlatform.config}"
-           ;; "-DLLVM_DEFAULT_TARGET_TRIPLE=${stdenv.hostPlatform.config}"
-           ;; "-DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=WebAssembly"
-           "-DLLVM_ENABLE_DUMP=ON"
-           "-DLLVM_LINK_LLVM_DYLIB=ON"
-           "-DLLVM_VERSION_SUFFIX:STRING=jl"))))
-    (inputs
-     (append
-       (package-inputs llvm-11)
-       `(("llvm-11-AArch64-FastIsel-bug"
-          ,(julia-patch "llvm-11-AArch64-FastIsel-bug"
-                        "1m2vddj1mw4kbij8hbrx82piyy6bvr2x7wwdnlxfaqcm72ipzyh9"))
-         ("llvm-11-D97435-AArch64-movaddrreg"
-          ,(julia-patch "llvm-11-D97435-AArch64-movaddrreg"
-                        "10jnavq9ljkj7j2gqj2zd1pwqpqb5zs3zp9h96pmz0djbmxwa86y"))
-         ("llvm-11-D97571-AArch64-loh"
-          ,(julia-patch "llvm-11-D97571-AArch64-loh"
-                        "128zcbg1w1j7hngsf7z1a7alc6lig6l2rqgjp6i8nk3k3f842v6n"))
-         ("llvm-11-aarch64-addrspace"
-          ,(julia-patch "llvm-11-aarch64-addrspace"
-                        "0ckbzgfirxrf2d5bpinpngp7gnilbjrk0cbdfyl3h6f5v6i6xj6m")))))))
+     (substitute-keyword-arguments (package-arguments llvm-13)
+       ((#:configure-flags flags ''())
+        #~(cons* "-DLLVM_BUILD_LLVM_DYLIB=ON"
+                 "-DLLVM_LINK_LLVM_DYLIB=ON"
+                 ;; "-DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=NVPTX"
+                 "-DLLVM_VERSION_SUFFIX:STRING=jl"  ; Perhaps not needed.
+                 #$(string-append "-DLLVM_TARGETS_TO_BUILD="
+                                  (system->llvm-target))
+                 (delete "-DBUILD_SHARED_LIBS:BOOL=TRUE" #$flags)))
+       ((#:build-type _) "Release")))
+    (properties `((hidden? . #t)
+                  ,@(package-properties llvm-13)))))
 
 (define %cling-version "0.9")
 
@@ -2156,65 +2235,64 @@ LLVM."))))
                 (patches (search-patches "cling-use-shared-library.patch"))))
       (build-system cmake-build-system)
       (arguments
-       `(#:build-type "Release"         ;keep the build as lean as possible
-         #:tests? #f                    ;FIXME: 78 tests fail (out of ~200)
-         #:test-target "check-cling"
-         #:configure-flags
-         (list (string-append "-DCLING_CXX_PATH="
-                              (assoc-ref %build-inputs "gcc") "/bin/g++")
-               ;; XXX: The AddLLVM.cmake module expects LLVM_EXTERNAL_LIT to
-               ;; be a Python script, not a shell executable.
-               (string-append "-DLLVM_EXTERNAL_LIT="
-                              (assoc-ref %build-inputs "python-lit")
-                              "/bin/.lit-real"))
-         #:phases
-         (modify-phases %standard-phases
-           (add-after 'unpack 'set-version
-             (lambda _
-               (make-file-writable "VERSION")
-               (call-with-output-file "VERSION"
-                 (lambda (port)
-                   (format port "~a~%" ,version)))))
-           (add-after 'unpack 'patch-paths
-             (lambda* (#:key inputs #:allow-other-keys)
-               (substitute* "lib/Interpreter/CIFactory.cpp"
-                 (("\bsed\b")
-                  (which "sed"))
-                 ;; This ensures that the default C++ library used by Cling is
-                 ;; that of the compiler that was used to build it, rather
-                 ;; than that of whatever g++ happens to be on PATH.
-                 (("ReadCompilerIncludePaths\\(CLING_CXX_RLTV")
-                  (string-append "ReadCompilerIncludePaths(\""
-                                 (assoc-ref inputs "gcc") "/bin/g++\""))
-                 ;; Cling uses libclang's CompilerInvocation::GetResourcesPath
-                 ;; to resolve Clang's library prefix, but this fails on Guix
-                 ;; because it is relative to the output of cling rather than
-                 ;; clang (see:
-                 ;; https://github.com/root-project/cling/issues/434).  Fully
-                 ;; shortcut the logic in this method to return the correct
-                 ;; static location.
-                 (("static std::string getResourceDir.*" all)
-                  (string-append all
-                                 "    return std::string(\""
-                                 (assoc-ref inputs "clang-cling")
-                                 "/lib/clang/" ,(package-version clang-cling)
-                                 "\");")))
-               ;; Check for the 'lit' command for the tests, not 'lit.py'
-               ;; (see: https://github.com/root-project/cling/issues/432).
-               (substitute* "CMakeLists.txt"
-                 (("lit.py")
-                  "lit"))))
-           (add-after 'unpack 'adjust-lit.cfg
-             ;; See: https://github.com/root-project/cling/issues/435.
-             (lambda _
-               (substitute* "test/lit.cfg"
-                 (("config.llvm_tools_dir \\+ '")
-                  "config.cling_obj_root + '/bin"))))
-           (add-after 'install 'delete-static-libraries
-             ;; This reduces the size from 17 MiB to 5.4 MiB.
-             (lambda* (#:key outputs #:allow-other-keys)
-               (let ((out (assoc-ref outputs "out")))
-                 (for-each delete-file (find-files out "\\.a$"))))))))
+       (list
+        #:build-type "Release"          ;keep the build as lean as possible
+        #:tests? #f                     ;FIXME: 78 tests fail (out of ~200)
+        #:test-target "check-cling"
+        #:configure-flags
+        #~(list (string-append "-DCLING_CXX_PATH="
+                               (search-input-file %build-inputs "bin/g++"))
+                ;; XXX: The AddLLVM.cmake module expects LLVM_EXTERNAL_LIT to
+                ;; be a Python script, not a shell executable.
+                (string-append "-DLLVM_EXTERNAL_LIT="
+                               (search-input-file %build-inputs "bin/.lit-real")))
+        #:phases
+        #~(modify-phases %standard-phases
+            (add-after 'unpack 'set-version
+              (lambda _
+                (make-file-writable "VERSION")
+                (call-with-output-file "VERSION"
+                  (lambda (port)
+                    (format port "~a~%" #$version)))))
+            (add-after 'unpack 'patch-paths
+              (lambda* (#:key inputs #:allow-other-keys)
+                (substitute* "lib/Interpreter/CIFactory.cpp"
+                  (("\\bsed\\b")
+                   (which "sed"))
+                  ;; This ensures that the default C++ library used by Cling is
+                  ;; that of the compiler that was used to build it, rather
+                  ;; than that of whatever g++ happens to be on PATH.
+                  (("ReadCompilerIncludePaths\\(CLING_CXX_RLTV")
+                   (format #f "ReadCompilerIncludePaths(~s"
+                           (search-input-file inputs "bin/g++")))
+                  ;; Cling uses libclang's CompilerInvocation::GetResourcesPath
+                  ;; to resolve Clang's library prefix, but this fails on Guix
+                  ;; because it is relative to the output of cling rather than
+                  ;; clang (see:
+                  ;; https://github.com/root-project/cling/issues/434).  Fully
+                  ;; shortcut the logic in this method to return the correct
+                  ;; static location.
+                  (("static std::string getResourceDir.*" all)
+                   (string-append all
+                                  "    return std::string(\""
+                                  #$(this-package-input "clang-cling")
+                                  "/lib/clang/" #$(package-version clang-cling)
+                                  "\");")))
+                ;; Check for the 'lit' command for the tests, not 'lit.py'
+                ;; (see: https://github.com/root-project/cling/issues/432).
+                (substitute* "CMakeLists.txt"
+                  (("lit.py")
+                   "lit"))))
+            (add-after 'unpack 'adjust-lit.cfg
+              ;; See: https://github.com/root-project/cling/issues/435.
+              (lambda _
+                (substitute* "test/lit.cfg"
+                  (("config.llvm_tools_dir \\+ '")
+                   "config.cling_obj_root + '/bin"))))
+            (add-after 'install 'delete-static-libraries
+              ;; This reduces the size from 17 MiB to 5.4 MiB.
+              (lambda _
+                (for-each delete-file (find-files #$output "\\.a$")))))))
       (native-inputs
        (list python python-lit))
       (inputs

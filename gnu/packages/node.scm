@@ -224,6 +224,8 @@
                                          "x64")
                                         ((? (cut string-prefix? "powerpc64" <>))
                                          "ppc64")
+                                        ((? (cut string-prefix? "riscv64" <>))
+                                         "riscv64")
                                         (_ "unsupported"))))
                                  ''()))
                     (flags (cons (string-append "--prefix=" prefix)
@@ -290,7 +292,7 @@
            icu4c
            libuv
            `(,nghttp2 "lib")
-           openssl
+           openssl-1.1
            zlib
            ;; Regular build-time dependencies.
            perl
@@ -867,7 +869,7 @@ source files.")
            icu4c-71
            libuv-for-node
            `(,nghttp2 "lib")
-           openssl
+           openssl-1.1
            zlib
            ;; Regular build-time dependencies.
            perl
@@ -884,8 +886,7 @@ source files.")
            llhttp-bootstrap
            brotli
            `(,nghttp2 "lib")
-           openssl
-           python-wrapper ;; for node-gyp (supports python3)
+           openssl-1.1
            zlib))))
 
 (define-public libnode

@@ -2,7 +2,7 @@
 ;;; Copyright © 2013, 2015, 2018, 2020, 2021 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013, 2015 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2015, 2018 Ricardo Wurmus <rekado@elephly.net>
-;;; Copyright © 2016, 2017, 2019, 2020, 2021, 2022 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2016, 2017, 2019-2023 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2017, 2018, 2019, 2020 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2017, 2018 Clément Lassieur <clement@lassieur.org>
 ;;; Copyright © 2017 Andy Wingo <wingo@igalia.com>
@@ -12,10 +12,11 @@
 ;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2019 Hartmut Goebel <h.goebel@goebel-consult.de>
 ;;; Copyright © 2020, 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
-;;; Copyright © 2020, 2021 Marius Bakke <marius@gnu.org>
+;;; Copyright © 2020, 2021, 2023 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2020 Julien Lepiller <julien@lepiller.eu>
 ;;; Copyright © 2021 lu hui <luhuins@163.com>
 ;;; Copyright © 2021, 2022 Foo Chuan Wei <chuanwei.foo@hotmail.com>
+;;; Copyright © 2022 Michael Rohleder <mike@rohleder.de>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -57,6 +58,7 @@
   #:use-module (gnu packages emacs)
   #:use-module (gnu packages flex)
   #:use-module (gnu packages gcc)
+  #:use-module (gnu packages golang)
   #:use-module (gnu packages graphviz)
   #:use-module (gnu packages llvm)
   #:use-module (gnu packages linux)
@@ -78,6 +80,44 @@
   #:use-module (gnu packages xml))
 
 ;;; Tools to deal with source code: metrics, cross-references, etc.
+
+(define-public automatic-component-toolkit
+  (package
+    (name "automatic-component-toolkit")
+    (version "1.6.0")
+    (home-page "https://github.com/Autodesk/AutomaticComponentToolkit")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference (url home-page)
+                                  (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "1r0sbw82cf9dbcj3vgnbd4sc1lklzvijic2z5wgkvs21azcm0yzh"))))
+    (build-system gnu-build-system)
+    (arguments
+     (list #:tests? #false              ;no tests
+           #:phases
+           #~(modify-phases %standard-phases
+               (delete 'configure)
+               (replace 'build
+                 (lambda _
+                   (setenv "HOME" "/tmp")
+                   (invoke "bash" "Build/build.sh")))
+               (replace 'install
+                 (lambda _
+                   (let ((bin (string-append #$output "/bin")))
+                     (mkdir-p bin)
+                     (copy-file "act.linux"
+                                (string-append #$output "/bin/act"))))))))
+    (native-inputs (list go))
+    (synopsis "Automatically generate software components")
+    (description
+     "The Automatic Component Toolkit (@dfn{ACT}) is a code generator that
+takes an instance of an Interface Description Language (@dfn{IDL}) file and
+generates a thin C89-API, implementation stubs, and language bindings of your
+desired software component.")
+    (license license:bsd-2)))
 
 (define-public cflow
   (package
@@ -142,14 +182,14 @@ highlighting your own code that seemed comprehensible when you wrote it.")
 (define-public global                             ; a global variable
   (package
     (name "global")
-    (version "6.6.8")
+    (version "6.6.9")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnu/global/global-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "1kaphc3gml89p8dpdgh2is8hj46wj05689kxj0bmh5q759rxk4vg"))))
+               "1mgss7ch4izz7ibb23xah6h4iva77g9dq4pkc9g69jk0ipxa1jxa"))))
     (build-system gnu-build-system)
     (arguments
      (list #:configure-flags
@@ -283,7 +323,7 @@ COCOMO model or user-provided parameters.")
 (define-public cloc
   (package
     (name "cloc")
-    (version "1.92")
+    (version "1.96.1")
     (source
      (origin
        (method git-fetch)
@@ -292,7 +332,7 @@ COCOMO model or user-provided parameters.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1hy1hskiw02b7xaxn2qz0v7znj14l49w1anx20z6rkcps7212l5l"))))
+        (base32 "0j7qwc5n1y05jl3rq83mf1d0pavkz9z0waqi8dxblkgw4pwwnjyv"))))
     (build-system gnu-build-system)
     (inputs
      (list coreutils
@@ -390,7 +430,7 @@ features that are not supported by the standard @code{stdio} implementation.")
 (define-public universal-ctags
   (package
     (name "universal-ctags")
-    (version "5.9.20220807.0")
+    (version "6.0.20230212.0")
     (source
      (origin
        (method git-fetch)
@@ -400,7 +440,7 @@ features that are not supported by the standard @code{stdio} implementation.")
        (file-name (git-file-name name version))
        (sha256
         (base32
-         "1wjj6hlda7xyjm8yrl2zz74ks7azymm9yyrpz36zxxpx2scf6lsk"))
+         "0616y8sqbydh4baixs1fndknjvhfpf57p7a0yr1l5n732lknk2pm"))
        (modules '((guix build utils)))
        (snippet
         '(begin
@@ -435,7 +475,7 @@ features that are not supported by the standard @code{stdio} implementation.")
                       (substitute* "Tmain/utils.sh"
                         (("/bin/echo") (which "echo"))))))))
     (native-inputs
-     (list autoconf automake packcc perl pkg-config))
+     (list autoconf automake packcc perl pkg-config python-docutils))
     (inputs
      (list jansson libseccomp libxml2 libyaml pcre2))
     (home-page "https://ctags.io/")
@@ -540,7 +580,7 @@ stack traces.")
                  `("PERL5LIB" ":" prefix (,(getenv "PERL5LIB")))))
              #t)))))
     (inputs (list perl perl-io-compress perl-json))
-    (home-page "http://ltp.sourceforge.net/coverage/lcov.php")
+    (home-page "https://ltp.sourceforge.net/coverage/lcov.php")
     (synopsis "Code coverage tool that enhances GNU gcov")
     (description "LCOV is an extension of @command{gcov}, a tool part of the
 GNU@tie{}Binutils, which provides information about what parts of a program
@@ -744,7 +784,7 @@ independent targets.")
 (define-public uncrustify
   (package
     (name "uncrustify")
-    (version "0.74.0")
+    (version "0.75.1")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -753,7 +793,7 @@ independent targets.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0v48vhmzxjzysbf0vhxzayl2pkassvbabvwg84xd6b8n5i74ijxd"))))
+                "1mzzzd4alajjdshbjd2a5mddqcpag8yyss72n09mfpialzyf7g60"))))
     (build-system cmake-build-system)
     (native-inputs
      `(("python" ,python-wrapper)))
@@ -769,7 +809,7 @@ independent targets.")
                            (install-file l etcdir))
                          (find-files "etc" "\\.cfg$")))
              #t)))))
-    (home-page "http://uncrustify.sourceforge.net/")
+    (home-page "https://uncrustify.sourceforge.net/")
     (synopsis "Code formatter for C and other related languages")
     (description
      "Beautify source code in many languages of the C family (C, C++, C#,
@@ -835,7 +875,7 @@ Objective@tie{}C, D, Java, Pawn, and Vala).  Features:
                   (make-so-link sofile "(\\.[0-9]){2}$")) ;; link .so.3
                 (find-files libdir "lib.*\\.so\\..*")))
              #t)))))
-    (home-page "http://astyle.sourceforge.net/")
+    (home-page "https://astyle.sourceforge.net/")
     (synopsis "Source code indenter, formatter, and beautifier")
     (description
      "Artistic Style is a source code indenter, formatter, and beautifier for
@@ -1036,7 +1076,7 @@ Readline library.")
        ;; on SysV curses.
        (list (string-append "--with-ncurses="
                             (assoc-ref %build-inputs "ncurses")))))
-    (home-page "http://cscope.sourceforge.net")
+    (home-page "https://cscope.sourceforge.net")
     (synopsis "Tool for browsing source code")
     (description
      "Cscope is a text screen based source browsing tool. Although it is

@@ -3,10 +3,10 @@
 ;;; Copyright © 2015 Paul van der Walt <paul@denknerd.org>
 ;;; Copyright © 2015, 2016, 2021 Sou Bunnbu <iyzsong@member.fsf.org>
 ;;; Copyright © 2015, 2016 Taylan Ulrich Bayırlı/Kammer <taylanbayirli@gmail.com>
-;;; Copyright © 2015, 2018 David Thompson <dthompson2@worcester.edu>
+;;; Copyright © 2015, 2018, 2023 David Thompson <dthompson2@worcester.edu>
 ;;; Copyright © 2016 Manolis Fragkiskos Ragkousis <manolis837@gmail.com>
 ;;; Copyright © 2016, 2017, 2018, 2020 Efraim Flashner <efraim@flashner.co.il>
-;;; Copyright © 2017-2022 Nicolas Goaziou <mail@nicolasgoaziou.fr>
+;;; Copyright © 2017-2023 Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;;; Copyright © 2017, 2020, 2021 Tobias Geerinckx-Rice <me@tobias.gr>
 ;;; Copyright © 2017, 2018, 2019 Rutger Helling <rhelling@mykolab.com>
 ;;; Copyright © 2019 Pierre Neidhardt <mail@ambrevar.xyz>
@@ -17,6 +17,7 @@
 ;;; Copyright © 2021 Felix Gruber <felgru@posteo.net>
 ;;; Copyright © 2021 Maxim Cournoyer <maxim.cournoyer@gmail.com>
 ;;; Copyright © 2021 Guillaume Le Vaillant <glv@posteo.net>
+;;; Copyright © 2023 c4droid <c4droid@foxmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -74,6 +75,7 @@
   #:use-module (gnu packages gl)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gnome)
+  #:use-module (gnu packages graphics)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages image)
   #:use-module (gnu packages libedit)
@@ -323,7 +325,7 @@ console.")
              bluez
              curl
              eudev
-             ffmpeg
+             ffmpeg-4
              font-wqy-microhei
              freetype
              glew
@@ -397,7 +399,7 @@ older games.")
   ;; This is not a patch staging area for DOSBox, but an unaffiliated fork.
   (package
     (name "dosbox-staging")
-    (version "0.78.1")
+    (version "0.79.1")
     (source
      (origin
        (method git-fetch)
@@ -406,7 +408,7 @@ older games.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "16byip1j9ckq0ik7ilrj0fc9dal3495s48xd21drpbb8q9jwb342"))))
+        (base32 "0wdnkz3djjc514hn945fr9g9mnpnvk16fan84ny9g5wxak6dvsqp"))))
     (build-system meson-build-system)
     (arguments
      (list #:configure-flags
@@ -420,19 +422,23 @@ older games.")
            #~(modify-phases %standard-phases
                (add-after 'unpack 'fix-includes
                  (lambda _
+                   ;; This unnecessary file has an encoding error.
+                   (delete-file "./src/libs/sdlcd/macosx/SDLOSXCAGuard.h")
                    (substitute* (find-files "." "\\.(cpp|h)")
                      (("^(#include <)(SDL[_.])" _ include file)
                       (string-append include "SDL2/" file))))))))
     (native-inputs
      (list pkg-config))
     (inputs
-     `(("alsa-lib" ,alsa-lib)
-       ("fluidsynth" ,fluidsynth)
-       ("libpng" ,libpng)
-       ("mesa" ,mesa)
-       ("opusfile" ,opusfile)
-       ("sdl2" ,(sdl-union (list sdl2 sdl2-net)))
-       ("zlib" ,zlib)))
+     (list alsa-lib
+           fluidsynth
+           iir
+           libpng
+           mesa
+           opusfile
+           (sdl-union (list sdl2 sdl2-net))
+           speexdsp
+           zlib))
     (home-page "https://dosbox-staging.github.io")
     (synopsis "DOS/x86 PC emulator focusing on ease of use")
     (description
@@ -718,7 +724,7 @@ The following systems are supported:
 (define-public mgba
   (package
     (name "mgba")
-    (version "0.9.3")
+    (version "0.10.1")
     (source
      (origin
        (method git-fetch)
@@ -727,7 +733,7 @@ The following systems are supported:
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1bg4ax5gjkr6d4cpzsgzv3bpa3i2c2b1ckwrjklqiy835b5ni6yi"))
+        (base32 "0pqfjsr9q61a3mgmvqxxkalxb838k46q9ilz31frpcvvndif0sm1"))
        (modules '((guix build utils)))
        (snippet
         ;; Make sure we don't use the bundled software.
@@ -773,7 +779,7 @@ and Game Boy Color games.")
 (define-public sameboy
   (package
     (name "sameboy")
-    (version "0.15")
+    (version "0.15.8")
     (source
      (origin
        (method git-fetch)
@@ -782,7 +788,7 @@ and Game Boy Color games.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0rhl9khc5pxbikjsq4aha5cpqfxf3bnxalc94idd4haw0zf892q9"))))
+        (base32 "11qz5lamwxgvlh4dc95xd4m8hrypjj3bvha51zg9l454hxlvw4j8"))))
     (build-system gnu-build-system)
     (native-inputs
      (list rgbds pkg-config))
@@ -1415,7 +1421,7 @@ as RetroArch.")
 (define-public retroarch
   (package
     (name "retroarch")
-    (version "1.9.11")
+    (version "1.15.0")
     (source
      (origin
        (method git-fetch)
@@ -1424,9 +1430,7 @@ as RetroArch.")
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0hd77kw1f655s40qcz1righdhd9czqyy40rf7gigdag1bkchdx6z"))
-       (patches
-        (search-patches "retroarch-LIBRETRO_DIRECTORY.patch"))))
+        (base32 "1ii31mc7wfd386rzyxqk8nmx5a13f9iqz47991z4zx0d8gqcchzg"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f                      ; no tests
@@ -1444,13 +1448,6 @@ as RetroArch.")
                (substitute* "gfx/common/wayland/generate_wayland_protos.sh"
                  (("/usr/local/share/wayland-protocols")
                  (string-append wayland-protocols "/share/wayland-protocols")))
-               (substitute* "qb/qb.libs.sh"
-                 (("/bin/true") (which "true")))
-
-               ;; Use shared zlib.
-               (substitute* '("libretro-common/file/archive_file_zlib.c"
-                              "libretro-common/streams/trans_stream_zlib.c")
-                 (("<compat/zlib.h>") "<zlib.h>"))
 
                ;; The configure script does not yet accept the extra arguments
                ;; (like ‘CONFIG_SHELL=’) passed by the default configure phase.
@@ -1464,10 +1461,10 @@ as RetroArch.")
                  ;; Non-free software are available through the core updater,
                  ;; disable it.  See <https://issues.guix.gnu.org/38360>.
                  "--disable-update_cores"
-                 "--disable-builtinminiupnpc")))))))
+                 "--disable-builtinzlib")))))))
     (inputs
      `(("alsa-lib" ,alsa-lib)
-       ("ffmpeg" ,ffmpeg)
+       ("ffmpeg" ,ffmpeg-4)
        ("freetype" ,freetype)
        ("libxinerama" ,libxinerama)
        ("libxkbcommon" ,libxkbcommon)
@@ -1475,7 +1472,6 @@ as RetroArch.")
        ("libxrandr" ,libxrandr)
        ("libxv" ,libxv)
        ("mesa" ,mesa)
-       ("miniupnpc" ,miniupnpc)
        ("openal" ,openal)
        ("pulseaudio" ,pulseaudio)
        ("python" ,python)
@@ -1502,34 +1498,85 @@ reference frontend for the libretro API, currently used by most as a modular
 multi-system game/emulator system.")
     (license license:gpl3+)))
 
+(define-public wasm4
+  (package
+    (name "wasm4")
+    (version "2.5.4")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/aduros/wasm4")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0ycnznwy4i4fw6l507y5xm986rxqvnpl971725q8xinsnq2swpnl"))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      #:tests? #f ; no check target
+      #:configure-flags
+      #~(list (string-append "-DCMAKE_C_FLAGS="
+                             "-I" #$minifb "/include "
+                             "-I" #$wasm3 "/include"))
+      #:phases
+      '(modify-phases %standard-phases
+         ;; WASM4's source is a combination of multiple runtimes.  We want to
+         ;; build the native one.
+         (add-after 'unpack 'chdir-to-native-runtime
+           (lambda _
+             (chdir "runtimes/native")))
+         ;; WASM4 uses git submodules to bundle several dependencies, which we
+         ;; have instead made dedicated packages for.  This phase hacks the
+         ;; build system to use our own stuff.
+         (add-after 'chdir-to-native-runtime 'unbundle
+           (lambda _
+             (substitute* "CMakeLists.txt"
+               ;; These directories do not exist because we aren't pulling in
+               ;; submodules.
+               (("add_subdirectory\\(vendor/minifb\\)") "")
+               (("add_subdirectory\\(vendor/cubeb\\)") "")
+               ;; Add additional libraries needed to successfully link the
+               ;; wasm4 executable using the unbundled dependencies.
+               (("target_link_libraries\\(wasm4 minifb cubeb\\)")
+                "target_link_libraries(wasm4 m GL X11 xkbcommon minifb cubeb m3)")))))))
+    (inputs (list cubeb minifb wasm3))
+    (synopsis "WebAssembly fantasy console")
+    (description "WASM-4 is a low-level fantasy game console for building
+small games with WebAssembly.  Game cartridges (ROMs) are small,
+self-contained .wasm files that can be built with any programming language
+that compiles to WebAssembly.")
+    (home-page "https://wasm4.org")
+    (license license:isc)))
+
 (define-public scummvm
   (package
     (name "scummvm")
-    (version "2.6.0")
+    (version "2.7.0")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://downloads.scummvm.org/frs/scummvm/" version
                            "/scummvm-" version ".tar.xz"))
        (sha256
-        (base32 "05zw9xqdix88f8p3py2rfnyiaxr2sbifkqi9s5gy3nf9s3l3h50w"))))
+        (base32 "14wrrzai25mh8qra3lsfibx8z6f96cqbnmsfh9kyhkvpc7yiyjs4"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:tests? #f                                 ;require "git"
-       #:configure-flags (list "--enable-release") ;for optimizations
-       #:phases
-       (modify-phases %standard-phases
-         (replace 'configure
-           ;; configure does not work followed by both "SHELL=..." and
-           ;; "CONFIG_SHELL=..."; set environment variables instead
-           (lambda* (#:key inputs outputs configure-flags #:allow-other-keys)
-             (let* ((out (assoc-ref outputs "out"))
-                    (bash (search-input-file inputs "/bin/bash"))
-                    (flags `(,(string-append "--prefix=" out)
+     (list
+      #:tests? #f                                   ;require "git"
+      #:configure-flags #~(list "--enable-release") ;for optimizations
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'configure
+            ;; configure does not work followed by both "SHELL=..." and
+            ;; "CONFIG_SHELL=..."; set environment variables instead
+            (lambda* (#:key inputs configure-flags #:allow-other-keys)
+              (let ((bash (search-input-file inputs "/bin/bash"))
+                    (flags `(,(string-append "--prefix=" #$output)
                              ,@configure-flags)))
-               (setenv "SHELL" bash)
-               (setenv "CONFIG_SHELL" bash)
-               (apply invoke "./configure" flags)))))))
+                (setenv "SHELL" bash)
+                (setenv "CONFIG_SHELL" bash)
+                (apply invoke "./configure" flags)))))))
     (native-inputs
      (list nasm pkg-config))
     (inputs
@@ -1712,7 +1759,7 @@ This is a part of the TiLP project.")
 (define-public mame
   (package
     (name "mame")
-    (version "0.245")
+    (version "0.252")
     (source
      (origin
        (method git-fetch)
@@ -1721,7 +1768,7 @@ This is a part of the TiLP project.")
              (commit (apply string-append "mame" (string-split version #\.)))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1w34hcvnibnz0xaydh2kdciffng07zins9lnrv041fmzlk4318qb"))
+        (base32 "07qhcm1v47sy2wj30nx3cbhvcbgki0cl83gabr0miiw60fhgyn6j"))
        (modules '((guix build utils)))
        (snippet
         ;; Remove bundled libraries.
@@ -2031,7 +2078,7 @@ assembler, and debugger for the Intel 8085 microprocessor.
        (list libcdio
              sdl2
              gtk+
-             ffmpeg
+             ffmpeg-4
              libxv
              libarchive
              pulseaudio))
@@ -2318,7 +2365,7 @@ elseif(FALSE)"))
     (native-inputs (list pkg-config python))
     (inputs (list bash
                   cityhash
-                  ffmpeg
+                  ffmpeg-4
                   glew
                   glslang
                   libpng
@@ -2490,3 +2537,86 @@ on a Commodore C64, C128 etc.")
     (description "This package provides a development environment for 6502 systems, including macro assembler, C compiler, linker, librarian and several other tools.")
     (home-page "https://cc65.github.io/")
     (license license:zlib)))
+
+(define-public uxn
+  (let ((commit "1b2049e238df96f32335edf1c6db35bd09f8b42d")
+        (revision "1"))
+    (package
+      (name "uxn")
+      (version (git-version "0.1.0" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://git.sr.ht/~rabbits/uxn")
+                      (commit commit)))
+                (file-name (string-append name "-" version))
+                (sha256
+                 (base32
+                  "0d3hy1db1mfk2l7q7wdxvp1z0vkmyyb9pdp81d9zm58ylpxaq2cp"))))
+      (build-system gnu-build-system)
+      (arguments
+       (list #:tests? #f ;no tests
+             #:phases #~(modify-phases %standard-phases
+                          (delete 'configure)
+                          (replace 'build
+                            (lambda _
+                              (setenv "CC" #$(cc-for-target))
+                              (invoke "./build.sh" "--no-run")))
+                          (replace 'install
+                            (lambda _
+                              (let ((bin (string-append #$output "/bin"))
+                                    (share (string-append #$output
+                                                          "/share/uxn")))
+                                (with-directory-excursion "bin"
+                                  (for-each (lambda (x)
+                                              (install-file x bin))
+                                            '("uxnasm" "uxncli" "uxnemu"))
+                                  (for-each (lambda (x)
+                                              (install-file x share))
+                                            '("asma.rom" "launcher.rom")))))))))
+      (inputs (list sdl2))
+      (home-page "https://100r.co/site/uxn.html")
+      (synopsis "Assembler and emulator for the Uxn stack-machine")
+      (description
+       "This package provides an assembler and emulator for the Uxn
+stack-machine, written in ANSI C.  Graphical output is implemented using SDL2.")
+      (license license:expat))))
+
+(define-public emu8051
+  (let ((commit "5dc681275151c4a5d7b85ec9ff4ceb1b25abd5a8")
+        (revision "1"))
+    (package
+      (name "emu8051")
+      (version (git-version "0.1" revision commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "https://github.com/jarikomppa/emu8051")
+                      (commit commit)))
+                (file-name (git-file-name name version))
+                (sha256
+                 (base32
+                  "1xxmkcwvd5fjnhwbricafg4xvxvr8dxhfanyfp4rbksw37dgk2fx"))
+                (modules '((guix build utils)))
+                (snippet #~(begin
+                             ;; Replace LDFLAGS -lcurses to -lncurses
+                             (substitute* "Makefile"
+                               (("-lcurses") "-lncurses"))))))
+      (build-system gnu-build-system)
+      (arguments
+       (list #:tests? #f ;No test suite
+             #:make-flags #~(list (string-append "CC="
+                                                 #$(cc-for-target)))
+             #:phases
+             #~(modify-phases %standard-phases
+                 (delete 'configure)    ;No ./configure script
+                 (replace 'install
+                   ;; No installation procedure
+                   (lambda _
+                     (install-file "emu"
+                                   (string-append #$output "/bin")))))))
+      (inputs (list ncurses))
+      (home-page "https://github.com/jarikomppa/emu8051")
+      (synopsis "8051/8052 emulator with curses-based UI")
+      (description "emu8051 is a simulator of the 8051/8052 microcontrollers.")
+      (license license:expat))))

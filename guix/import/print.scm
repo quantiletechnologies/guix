@@ -19,9 +19,9 @@
 
 (define-module (guix import print)
   #:use-module (guix base32)
-  #:use-module (guix utils)
   #:use-module (guix licenses)
   #:use-module (guix packages)
+  #:use-module ((guix diagnostics) #:select (location-file))
   #:use-module (guix search-paths)
   #:use-module (guix build-system)
   #:use-module (guix git)
@@ -216,7 +216,8 @@ when evaluated."
          (source ,(source->code source version))
          ,@(match properties
              (() '())
-             (_  `((properties ,properties))))
+             (_  `((properties
+                    ,(list 'quasiquote (object->code properties #t))))))
          ,@(if replacement
                `((replacement ,replacement))
                '())

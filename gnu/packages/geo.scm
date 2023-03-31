@@ -7,18 +7,20 @@
 ;;; Copyright © 2018, 2019 Arun Isaac <arunisaac@systemreboot.net>
 ;;; Copyright © 2018 Joshua Sierles, Nextjournal <joshua@nextjournal.com>
 ;;; Copyright © 2018, 2019, 2020, 2021 Julien Lepiller <julien@lepiller.eu>
-;;; Copyright © 2019, 2020, 2021, 2022 Guillaume Le Vaillant <glv@posteo.net>
-;;; Copyright © 2019, 2020, 2021 Efraim Flashner <efraim@flashner.co.il>
+;;; Copyright © 2019-2023 Guillaume Le Vaillant <glv@posteo.net>
+;;; Copyright © 2019-2022 Efraim Flashner <efraim@flashner.co.il>
 ;;; Copyright © 2019, 2021 Wiktor Żelazny <wzelazny@vurv.cz>
 ;;; Copyright © 2019, 2020 Hartmut Goebel <h.goebel@crazy-compilers.com>
 ;;; Copyright © 2020, 2022 Marius Bakke <marius@gnu.org>
 ;;; Copyright © 2020 Christopher Baines <mail@cbaines.net>
 ;;; Copyright © 2020, 2021, 2022 Felix Gruber <felgru@posteo.net>
 ;;; Copyright © 2021 Sharlatan Hellseher <sharlatanus@gmail.com>
-;;; Copyright © 2021 Vinicius Monego <monego@posteo.net>
+;;; Copyright © 2021, 2023 Vinicius Monego <monego@posteo.net>
 ;;; Copyright © 2021 Clément Lassieur <clement@lassieur.org>
 ;;; Copyright © 2021, 2022 Nikolay Korotkiy <sikmir@disroot.org>
 ;;; Copyright © 2022 Roman Scherer <roman.scherer@burningswell.com>
+;;; Copyright © 2022 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+;;; Copyright © 2022 Denis 'GNUtoo' Carikli <GNUtoo@cyberdimension.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -44,8 +46,6 @@
   #:use-module (guix build-system meson)
   #:use-module (guix build-system python)
   #:use-module (guix build-system qt)
-  #:use-module (guix build-system scons)
-  #:use-module (guix build-system r)
   #:use-module (guix gexp)
   #:use-module (guix download)
   #:use-module (guix git-download)
@@ -63,7 +63,9 @@
   #:use-module (gnu packages bison)
   #:use-module (gnu packages boost)
   #:use-module (gnu packages build-tools)
+  #:use-module (gnu packages c)
   #:use-module (gnu packages check)
+  #:use-module (gnu packages cmake)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages cpp)
   #:use-module (gnu packages cups)
@@ -76,6 +78,7 @@
   #:use-module (gnu packages flex)
   #:use-module (gnu packages fonts)
   #:use-module (gnu packages fontutils)
+  #:use-module (gnu packages gcc)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages gl)
   #:use-module (gnu packages glib)
@@ -112,6 +115,8 @@
   #:use-module (gnu packages python-xyz)
   #:use-module (gnu packages qt)
   #:use-module (gnu packages readline)
+  #:use-module (gnu packages sdl)
+  #:use-module (gnu packages speech)
   #:use-module (gnu packages swig)
   #:use-module (gnu packages sqlite)
   #:use-module (gnu packages textutils)
@@ -123,25 +128,94 @@
   #:use-module (gnu packages xml)
   #:use-module (gnu packages xorg))
 
+(define-public libaec
+  (package
+    (name "libaec")
+    (version "1.0.6")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://gitlab.dkrz.de/k202009/libaec")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "14myrmmiz9z6wgxqywf3a63cq514vrzsd6z4zvpwigvawlk30iip"))))
+    (build-system cmake-build-system)
+    (home-page "https://gitlab.dkrz.de/k202009/libaec")
+    (synopsis "Adaptive Entropy Coding library")
+    (description "Libaec provides fast lossless compression of 1 up to 32 bit
+wide signed or unsigned integers (samples).  The library achieves best results
+for low entropy data as often encountered in space imaging instrument data or
+numerical model output from weather or climate simulations.  While floating
+point representations are not directly supported, they can also be efficiently
+coded by grouping exponents and mantissa.")
+    (license license:bsd-2)))
+
+(define-public eccodes
+  (package
+    (name "eccodes")
+    (version "2.27.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append
+             "https://confluence.ecmwf.int/download/attachments/45757960/"
+             "eccodes-" version "-Source.tar.gz"))
+       (sha256
+        (base32 "16cw4v2d0kjq6gq04paqny0sh5jymn70w449mig7m5h3spzv7rgd"))))
+    (build-system cmake-build-system)
+    (arguments
+     `(#:configure-flags '("-DENABLE_MEMFS=ON" "-DENABLE_PNG=ON")
+       #:validate-runpath? #f))
+    (inputs
+     (list jasper libaec libjpeg-turbo libpng netcdf openjpeg))
+    (native-inputs
+     (list gfortran perl pkg-config python))
+    (home-page "https://confluence.ecmwf.int/display/ECC")
+    (synopsis "Library for handling the GRIB, BUFR and GTS file formats")
+    (description "ecCodes is a package developed by @acronym{ECMWF, European
+Centre for Medium-Range Weather Forecasts} which provides an application
+programming interface and a set of tools for decoding and encoding messages in
+the @acronym{WMO, World Meteorological Organization} FM-92 GRIB, WMO FM-94
+BUFR and WMO GTS abbreviated header formats.")
+    (license license:asl2.0)))
+
 (define-public cdo
   (package
     (name "cdo")
-    (version "2.0.5")
-    (source (origin
-              (method url-fetch)
-              (uri (string-append
-                    "https://code.mpimet.mpg.de/attachments/download/26823/cdo-"
-                     version ".tar.gz"))
-              (sha256
-               (base32
-                "1khdbd5cmnn7qm6hcqg4md5wbq14fs6brrns8b3g18diqgqvpvpd"))))
+    (version "2.1.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append
+             "https://code.mpimet.mpg.de/attachments/download/27481/cdo-"
+             version ".tar.gz"))
+       (sha256
+        (base32 "1k18llghpf3jnjn0xcnhmbg7arb1fiy854qqn9m5c1abjin38wdq"))))
     (build-system gnu-build-system)
     (arguments
      (list #:configure-flags
-           #~(list (string-append "--with-netcdf="
-                                  #$(this-package-input "netcdf")))))
+           #~(list (string-append "--with-curl="
+                                  #$(this-package-input "curl"))
+                   (string-append "--with-eccodes="
+                                  #$(this-package-input "eccodes"))
+                   (string-append "--with-fftw3="
+                                  #$(this-package-input "fftw"))
+                   (string-append "--with-hdf5="
+                                  #$(this-package-input "hdf5"))
+                   (string-append "--with-netcdf="
+                                  #$(this-package-input "netcdf"))
+                   (string-append "--with-proj="
+                                  #$(this-package-input "proj"))
+                   (string-append "--with-udunits2="
+                                  #$(this-package-input "udunits"))
+                   (string-append "--with-libxml2="
+                                  #$(this-package-input "libxml2")))
+           ;; Some tests can fail on machines with many threads.
+           #:parallel-tests? #f))
     (inputs
-     (list netcdf))
+     (list curl eccodes fftw hdf5 libxml2 netcdf proj udunits))
     (native-inputs
      (list pkg-config))
     (home-page "https://code.mpimet.mpg.de/projects/cdo")
@@ -217,7 +291,7 @@ OpenStreetMap written in C using eXpat, Cairo and GLib.")
 (define-public geos
   (package
     (name "geos")
-    (version "3.11.0")
+    (version "3.11.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "http://download.osgeo.org/geos/geos-"
@@ -225,7 +299,7 @@ OpenStreetMap written in C using eXpat, Cairo and GLib.")
                                   ".tar.bz2"))
               (sha256
                (base32
-                "12l59pxawyizmc4wn20dvjn7aifqwkim4ysmc78h91mayjmqravr"))))
+                "1qhbirv1rbznv99ha0pa0zybvcsn0dsz2xfc65vr8bgrm77v63kd"))))
     (build-system cmake-build-system)
     (arguments `(#:phases
                  (modify-phases %standard-phases
@@ -253,7 +327,7 @@ topology functions.")
 (define-public gnome-maps
   (package
     (name "gnome-maps")
-    (version "41.2")
+    (version "43.0")                    ;for libsoup 3 support
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://gnome/sources/" name "/"
@@ -261,77 +335,62 @@ topology functions.")
                                   name "-" version ".tar.xz"))
               (sha256
                (base32
-                "037xmkmcmcw87vb1c1s3y225m8757k331cvk1m8cshf6mx61p0l1"))))
+                "1r1l6ajs6zz316m8zac5r0l3qgdv616xh376bfn2fflcnz7wys08"))))
     (build-system meson-build-system)
     (arguments
-     `(#:glib-or-gtk? #t
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'skip-gtk-update-icon-cache
-           ;; Don't create 'icon-theme.cache'.
-           (lambda _
-             (substitute* "meson_post_install.py"
-               (("gtk-update-icon-cache") "true"))))
-         (add-after 'unpack 'patch-dbus-service
-           (lambda* (#:key outputs #:allow-other-keys)
-             (substitute* "data/org.gnome.Maps.service.in"
-               (("@pkgdatadir@/org.gnome.Maps")
-                (string-append  (assoc-ref outputs "out")
-                                "/bin/gnome-maps")))))
-         (add-after 'install 'wrap
-           (lambda* (#:key inputs outputs #:allow-other-keys)
-             (let ((out (assoc-ref outputs "out"))
-                   (gi-typelib-path (getenv "GI_TYPELIB_PATH"))
-                   (geocode-glib-path (string-append
-                                       (assoc-ref inputs "geocode-glib")
-                                       "/lib"))
-                   (goa-path (string-append
-                              (assoc-ref inputs "gnome-online-accounts:lib")
-                              "/lib"))
-                   (gdk-pixbuf-path (string-append
-                                     (assoc-ref inputs "gdk-pixbuf")
-                                     "/lib"))
-                   (webkitgtk-path (string-append
-                                    (assoc-ref inputs "webkitgtk")
-                                    "/lib")))
-               (wrap-program (string-append out "/bin/gnome-maps")
-                 `("GI_TYPELIB_PATH" ":" prefix (,gi-typelib-path))
-
-                 ;; There seems to be no way to embed the path of
-                 ;; libgoa-1.0.so.0, libwebkit2gtk-4.0.so.37,
-                 ;; libgdk_pixbuf-2.0.so, libjavascriptcoregtk-4.0.so.18, and
-                 ;; libgeocode-glib.so.0
-                 `("LD_LIBRARY_PATH" ":" prefix (,goa-path
-                                                 ,webkitgtk-path
-                                                 ,gdk-pixbuf-path
-                                                 ,geocode-glib-path)))
-               #t))))))
+     (list
+      #:glib-or-gtk? #t
+      #:meson meson-0.63
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'skip-cache-and-database-updates
+            (lambda _
+              (substitute* "meson.build"
+                (("([a-z_]*): true" all option)
+                 (cond                ; cond rather than match saves an import
+                  ((member option '("gtk_update_icon_cache"
+                                    "update_desktop_database"))
+                   (string-append option ": false"))
+                  (else all))))))
+          (add-after 'install 'wrap
+            (lambda _
+              (let ((gi-typelib-path (getenv "GI_TYPELIB_PATH")))
+                (substitute* (string-append #$output "/share/gnome-maps/"
+                                            "org.gnome.Maps")
+                  (("imports\\.package\\.init" all)
+                   (string-append "'" gi-typelib-path "'.split(':').forEach("
+                                  "path => imports.gi.GIRepository.Repository."
+                                  "prepend_search_path(path));\n"
+                                  all)))))))))
     (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("gobject-introspection" ,gobject-introspection)
-       ("pkg-config" ,pkg-config)))
+     (list gettext-minimal
+           `(,glib "bin")
+           gobject-introspection
+           pkg-config))
     (inputs
-     `(("evolution-data-server" ,evolution-data-server)
-       ("folks" ,folks)
-       ("libchamplain" ,libchamplain)
-       ("libgee" ,libgee)
-       ("libhandy" ,libhandy)
-       ("libsecret" ,libsecret)
-       ("libsoup" ,libsoup-minimal-2)
-       ("libgweather" ,libgweather)
-       ("libxml2" ,libxml2)
-       ("librsvg" ,librsvg)
-       ("glib-networking" ,glib-networking)
-       ("geoclue" ,geoclue)
-       ("geocode-glib" ,geocode-glib)
-       ("gfbgraph" ,gfbgraph)
-       ("gjs" ,gjs)
-       ("glib" ,glib)
-       ("gnome-online-accounts:lib" ,gnome-online-accounts "lib")
-       ("gsettings-desktop-schemas" ,gsettings-desktop-schemas)
-       ("gtk+" ,gtk+)
-       ("rest" ,rest)
-       ("webkitgtk" ,webkitgtk-with-libsoup2)))
+     (list folks
+           evolution-data-server
+           geoclue
+           geocode-glib
+           gfbgraph
+           gjs
+           glib
+           glib-networking
+           gnome-online-accounts
+           gsettings-desktop-schemas
+           gtk+
+           libadwaita
+           libgee
+           libgweather4
+           libhandy
+           librsvg
+           libsecret
+           libshumate
+           libsoup
+           libxml2
+           pango-next                   ;TODO: remove when it's the default
+           rest-next
+           webkitgtk))
     (synopsis "Graphical map viewer and wayfinding program")
     (description "GNOME Maps is a graphical map viewer.  It uses map data from
 the OpenStreetMap project.  It can provide directions for walking, bicycling,
@@ -348,6 +407,7 @@ and driving.")
        (method url-fetch)
        (uri (string-append "http://download.osgeo.org/geotiff/libgeotiff/libgeotiff-"
                            version ".tar.gz"))
+       (patches (search-patches "libgeotiff-fix-tests-with-proj-9.1.1.patch"))
        (sha256
         (base32 "1mjmgv48x51ppax5dnb6lq7z600czxll53bx6jbzqwd4m93i7aq5"))
        (modules '((guix build utils)))
@@ -510,6 +570,8 @@ coverages using a SpatiaLite DBMS.")
     (arguments
      `(#:configure-flags
        '("--enable-rttopo=yes")
+       ;; FIXME: Several tests fail with Proj 9.
+       #:tests? #f
        #:phases
        (modify-phases %standard-phases
          ;; 1 test is failing, ignore it:
@@ -536,7 +598,7 @@ fully fledged Spatial SQL capabilities.")
 (define-public proj
   (package
     (name "proj")
-    (version "7.2.1")
+    (version "9.1.1")
     (source
      (origin
        (method url-fetch)
@@ -544,20 +606,10 @@ fully fledged Spatial SQL capabilities.")
                            version ".tar.gz"))
        (sha256
         (base32
-         "050apzdn0isxpsblys1shrl9ccli5vd32kgswlgx1imrbwpg915k"))))
+         "0fbd1vj4cj19kwh03vdn0a4hr0xaacvi876yyyw5xfsj1q0x8g00"))))
     (build-system cmake-build-system)
-    (arguments
-     `(#:configure-flags '("-DUSE_EXTERNAL_GTEST=ON")
-       #:phases
-       (modify-phases %standard-phases
-         (add-after 'unpack 'fix-version
-           (lambda _
-             (substitute* "CMakeLists.txt"
-               (("MAJOR 7 MINOR 2 PATCH 0") "MAJOR 7 MINOR 2 PATCH 1")))))))
-    (inputs
-     (list curl libjpeg-turbo libtiff sqlite))
-    (native-inputs
-     (list googletest pkg-config))
+    (native-inputs (list googletest pkg-config))
+    (propagated-inputs (list curl libtiff sqlite)) ;required by proj.pc
     (home-page "https://proj.org/")
     (synopsis "Coordinate transformation software")
     (description
@@ -573,6 +625,27 @@ lets developers use the functionality of Proj in their own software.")
                    license:asl2.0
                    ;; src/geodesic.*, src/tests/geodtest.cpp
                    license:x11))))
+
+; This is the last version of proj that provides the old proj.4 API.
+(define-public proj-7
+  (package (inherit proj)
+    (version "7.2.1")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "http://download.osgeo.org/proj/proj-"
+                           version ".tar.gz"))
+       (sha256
+        (base32
+         "050apzdn0isxpsblys1shrl9ccli5vd32kgswlgx1imrbwpg915k"))))
+    (arguments
+     `(#:configure-flags '("-DUSE_EXTERNAL_GTEST=ON")
+       #:phases
+       (modify-phases %standard-phases
+         (add-after 'unpack 'fix-version
+           (lambda _
+             (substitute* "CMakeLists.txt"
+               (("MAJOR 7 MINOR 2 PATCH 0") "MAJOR 7 MINOR 2 PATCH 1")))))))))
 
 (define-public proj.4
   (package
@@ -627,14 +700,14 @@ projections.")
 (define-public python-pyproj
   (package
     (name "python-pyproj")
-    (version "3.2.1")
+    (version "3.4.0")
     (source
       (origin
         (method url-fetch)
         (uri (pypi-uri "pyproj" version))
         (sha256
           (base32
-            "0xrqpy708qlyd7nqjra0dl7nvkqzaj9w0v7wq4j5pxazha9n14sa"))))
+            "0czbfl5dd7jckbwvinfwiwdb99sxj796gfn3a9zqbsdc4xcl8257"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
@@ -757,7 +830,7 @@ pyproj, Rtree, and Shapely.")
       (list python-fiona python-pandas python-pyproj python-shapely))
     (native-inputs
       (list python-pytest))
-    (home-page "http://geopandas.org")
+    (home-page "https://geopandas.org")
     (synopsis "Geographic pandas extensions")
     (description "The goal of GeoPandas is to make working with
 geospatial data in Python easier.  It combines the capabilities of
@@ -833,42 +906,72 @@ street bearings/orientations, and speed/travel time.")
     (license license:expat)))
 
 (define-public mapnik
-  (package
-    (name "mapnik")
-    (version "3.1.0")
-    (source
-     (origin
-       (method url-fetch)
-       (uri (string-append "https://github.com/mapnik/mapnik/releases/download/v"
-                           version "/mapnik-v" version ".tar.bz2"))
-       (sha256
-        (base32
-         "0qb2irykja5qhr9apz9r230pcxap9v3j85fi98mj2xd9sa163ms3"))))
-    (build-system scons-build-system)
-    (inputs
-     (list boost
-           cairo
-           freetype
-           harfbuzz
-           icu4c
-           libjpeg-turbo
-           libpng
-           libtiff
-           libwebp
-           libxml2
-           proj.4
-           sqlite
-           zlib))
-    (native-inputs
-     (list pkg-config postgresql))
-    (arguments
-     `(#:scons-flags
-       (list "CC=gcc"
-             (string-append "PREFIX=" %output)
-             (string-append "CUSTOM_LDFLAGS=-Wl,-rpath=" %output "/lib"))))
-    (home-page "https://mapnik.org/")
-    (synopsis "Toolkit for developing mapping applications")
-    (description "Mapnik is a toolkit for developing mapping applications.  It
+  ;; There hasn't been a release since early 2021, and it fails to build with
+  ;; Boost 1.77+.
+  (let ((commit "81103491b467e17218140f50bc0bb9dc8c1f0317")
+        (revision "0"))
+    (package
+      (name "mapnik")
+      (version (git-version "3.1.0" revision commit))
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://github.com/mapnik/mapnik")
+               (commit commit)
+               ;; TODO: Un-bundle mapbox dependencies (not yet packaged).
+               (recursive? #t)))        ;for mapbox dependencies and test data
+         (file-name (git-file-name name version))
+         (sha256
+          (base32 "094nam57bdd5nak88qy33z2p3kjahk3vk2nk56m5jkcr5d3hlnx2"))))
+      (build-system qt-build-system)
+      (arguments
+       (list
+        #:cmake cmake                   ;for FIND_PACKAGE_ARGS
+        #:configure-flags
+        #~(list (string-append "-DCMAKE_CXX_FLAGS=-I"
+                               #$(this-package-native-input "catch2")
+                               "/include/catch2"))
+        #:phases
+        #~(modify-phases %standard-phases
+            (add-after 'unpack 'use-system-catch2
+              (lambda _
+                (substitute* "test/CMakeLists.txt"
+                  (("GIT_TAG.*v2.13.7" all)
+                   (string-append all "\n"
+                                  "  FIND_PACKAGE_ARGS NAMES Catch2"))
+                  (("^include.*Catch2_SOURCE_DIR.*contrib/Catch.cmake.*")
+                   "include(Catch)\n"))))
+            (add-after 'unpack 'disable-problematic-tests
+              (lambda _
+                ;; The 'ogr' test fails for unknown reasons.  Mark it as
+                ;; expected to fail (see:
+                ;; https://github.com/mapnik/mapnik/issues/4329).
+                (substitute* "test/unit/datasource/ogr.cpp"
+                  (("TEST_CASE\\(\"ogr\"" all)
+                   (string-append all ", \"[!shouldfail]\""))))))))
+      (native-inputs
+       (list catch2
+             pkg-config
+             postgresql))
+      (inputs
+       (list boost
+             cairo
+             freetype
+             gdal
+             harfbuzz
+             icu4c
+             libjpeg-turbo
+             libpng
+             libtiff
+             libwebp
+             libxml2
+             proj
+             sqlite
+             zlib))
+      (home-page "https://mapnik.org/")
+      (synopsis "Toolkit for developing mapping applications")
+      (description "Mapnik is a toolkit for developing mapping applications.  It
 is basically a collection of geographic objects like maps, layers,
 datasources, features, and geometries.  At its core is a C++ shared library
 providing algorithms and patterns for spatial data access and visualization.
@@ -876,15 +979,15 @@ The library does not rely on any specific windowing system and can be deployed
 to any server environment.  It is intended to play fair in a multi-threaded
 environment and is aimed primarily, but not exclusively, at web-based
 development.")
-    (license (list license:lgpl2.1+
-                   ;; demo/viewer, demo/python/rundemo.py
-                   license:gpl2+
-                   ;; deps/boost, deps/mapbox, deps/agg/include/agg_conv_offset.h
-                   license:boost1.0
-                   ;; deps/mapnik/sparsehash
-                   license:bsd-3
-                   ;; deps/agg
-                   (license:non-copyleft "file://deps/agg/copying")))))
+      (license (list license:lgpl2.1+
+                     ;; demo/viewer, demo/python/rundemo.py
+                     license:gpl2+
+                     ;; deps/boost, deps/mapbox, deps/agg/include/agg_conv_offset.h
+                     license:boost1.0
+                     ;; deps/mapnik/sparsehash
+                     license:bsd-3
+                     ;; deps/agg
+                     (license:non-copyleft "file://deps/agg/copying"))))))
 
 (define-public spatialite-gui
   (package
@@ -941,7 +1044,7 @@ development.")
 (define-public gdal
   (package
     (name "gdal")
-    (version "3.5.1")
+    (version "3.6.1")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -949,7 +1052,7 @@ development.")
                      version ".tar.gz"))
               (sha256
                (base32
-                "1l93q7xf6qx9ck5axfkf3ygmvclxkvrjd8x00ckn7j0d0750ci3w"))
+                "1qckwnygszxkkq40bf87s3m1sab6jj9jyakdvskh0qf7dq8zjarf"))
               (modules '((guix build utils)))
               (snippet
                 `(begin
@@ -979,19 +1082,27 @@ development.")
            json-c
            libgeotiff
            libjpeg-turbo
+           libjxl
            libpng
            libtiff
            libwebp
+           lz4
            netcdf
            openssl
+           openjpeg
            pcre2
            postgresql ; libpq
            proj
            qhull
            sqlite
-           zlib))
+           swig
+           zlib
+           zstd))
     (native-inputs
-     (list pkg-config))
+     (list pkg-config
+           python))
+    (propagated-inputs
+     (list python-numpy))
     (home-page "https://gdal.org/")
     (synopsis "Raster and vector geospatial data format library")
     (description "GDAL is a translator library for raster and vector geospatial
@@ -1019,25 +1130,6 @@ utilities for data translation and processing.")
                (license:non-copyleft "file://alg/internal_libqhull/COPYING.txt")
                ;; frmts/mrf/libLERC
                license:asl2.0))))
-
-(define-public python-gdal
-  (package (inherit gdal)
-    (name "python-gdal")
-    (build-system python-build-system)
-    (arguments
-     '(#:tests? #f                      ; no tests
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'chdir
-           (lambda _
-             (chdir "swig/python")
-             #t)))))
-    (native-inputs '())
-    (propagated-inputs
-     (list python-numpy))
-    (inputs
-     (list gdal))
-    (synopsis "GDAL (Geospatial Data Abstraction Library) python bindings")))
 
 (define-public python-pyshp
   (package
@@ -1073,13 +1165,13 @@ utilities for data translation and processing.")
   (package
     (name "python-cartopy")
     ;; This is a post-release fix that adds build_ext to setup.py.
-    (version "0.19.0.post1")
+    (version "0.21.1")
     (source
      (origin
        (method url-fetch)
        (uri (pypi-uri "Cartopy" version))
        (sha256
-        (base32 "0xnm8z3as3hriivdfd26s6vn5b63gb46x6vxw6gh1mwfm5rlg2sb"))))
+        (base32 "02i5rjhvrsi3vgj8kfsdx77g1xl59jh2a671qqqj4n682abn9mc9"))))
     (build-system python-build-system)
     (arguments
      `(#:phases
@@ -1097,13 +1189,17 @@ utilities for data translation and processing.")
      (list python-matplotlib
            python-numpy
            python-pykdtree
+           python-pyproj
            python-pyshp
            python-scipy
            python-shapely))
     (inputs
-     (list geos proj))
+     (list geos))
     (native-inputs
-     (list python-cython python-flufl-lock python-pytest))
+     (list python-cython
+           python-flufl-lock
+           python-pytest
+           python-pytest-mpl))
     (home-page "https://scitools.org.uk/cartopy/docs/latest/")
     (synopsis "Cartographic library for visualisation")
     (description
@@ -1183,29 +1279,22 @@ extension.")
 (define-public tegola
   (package
     (name "tegola")
-    (version "0.7.0")
+    (version "0.16.0")
     (source (origin
-              (method url-fetch)
-              (uri (string-append
-                     "https://github.com/go-spatial/tegola/archive/v"
-                     version ".tar.gz"))
-              (file-name (string-append name "-" version ".tar.gz"))
+              (method git-fetch)
+              (uri (git-reference
+                     (url "https://github.com/go-spatial/tegola")
+                     (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
               (sha256
                (base32
-                "09vnzxfn0r70kmd776kcdfqxhzdj11syxa0b27z4ci1k367v7viw"))))
+                "1mjfn0izf1lj402845mx0cv9fald8s5443q35y16d9crqf3i6mav"))))
     (build-system go-build-system)
     (arguments
      `(#:import-path "github.com/go-spatial/tegola/cmd/tegola"
        #:unpack-path "github.com/go-spatial/tegola"
-       #:phases
-       (modify-phases %standard-phases
-         (add-before 'build 'set-version
-           (lambda _
-             (with-directory-excursion "src/github.com/go-spatial/tegola"
-               (substitute* '("cmd/tegola/cmd/root.go"
-                              "cmd/tegola_lambda/main.go")
-                 (("version not set") ,version)))
-             #t)))))
+       #:build-flags '(,(string-append "-ldflags=-X github.com/go-spatial/tegola/internal/build.Version=" version))
+       #:install-source? #f))
     (home-page "https://tegola.io")
     (synopsis "Vector tile server for maps")
     (description "Tegola is a free vector tile server written in Go.  Tegola
@@ -1225,13 +1314,14 @@ delivered to any client.")
     (version "0.11.1")
     (source
       (origin
-        (method url-fetch)
-        (uri (string-append "https://github.com/omniscale/imposm3/archive/v"
-                            version ".tar.gz"))
-    (file-name (string-append name "-" version ".tar.gz"))
+        (method git-fetch)
+        (uri (git-reference
+              (url "https://github.com/omniscale/imposm3")
+              (commit (string-append "v" version))))
+        (file-name (git-file-name name version))
         (sha256
          (base32
-          "1w7b221z5k9254zn01imycxkyw62xigqizhwvrgxqmq1m9r5410l"))))
+          "1ifniw57l3s0sl7nb3zwxxm86i46451yrhfqnnkxr46cnpbzmwxr"))))
     (build-system go-build-system)
     (arguments
      `(#:import-path "github.com/omniscale/imposm3/cmd/imposm"
@@ -1323,7 +1413,7 @@ based on the Osmium library.")
 (define-public osm2pgsql
   (package
     (name "osm2pgsql")
-    (version "1.7.0")
+    (version "1.8.0")
     (source
      (origin
        (method git-fetch)
@@ -1332,7 +1422,7 @@ based on the Osmium library.")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "15fxr4xq7siy237763l7nswx7v0swr3qzs2h3zkjzgvajw4p6qii"))
+        (base32 "0ssz7ny4wx8dzl3027p37xc5h7m1aj6bzxzdc6g8fbp7q57ykvxz"))
        (modules '((guix build utils)))
        (snippet
         ;; Remove bundled libraries.
@@ -1343,19 +1433,17 @@ based on the Osmium library.")
        #:configure-flags
        (list "-DEXTERNAL_LIBOSMIUM=ON"
              "-DEXTERNAL_PROTOZERO=ON"
-             "-DEXTERNAL_FMT=ON"
-             "-DEXTERNAL_RAPIDJSON=ON")))
+             "-DEXTERNAL_FMT=ON")))
     (inputs
      (list boost
            bzip2
            expat
-           fmt
+           fmt-8
            libosmium
            lua
            postgresql
            proj
            protozero
-           rapidjson
            zlib))
     (native-inputs
      (list python python-psycopg2))
@@ -1369,16 +1457,16 @@ map, geocoding with Nominatim, or general analysis.")
 (define-public tippecanoe
   (package
     (name "tippecanoe")
-    (version "1.36.0")
+    (version "2.17.0")
     (source
      (origin
        (method git-fetch)
        (uri (git-reference
-             (url "https://github.com/mapbox/tippecanoe")
+             (url "https://github.com/felt/tippecanoe")
              (commit version)))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0lbmhly4ivnqc6qk1k3sdqvsg6x3nfd8gnjx846bhqj4wag3f88m"))))
+        (base32 "1q2snvsbs10l9pjydid3zxkidlha5hav8gvb0p731m2pwg3xw0qr"))))
     (build-system gnu-build-system)
     (arguments
      `(#:phases
@@ -1501,7 +1589,7 @@ map display.  Downloads map data from a number of websites, including
            libnova
            libpng
            openjpeg
-           proj
+           proj-7
            qtbase-5
            zlib))
     (native-search-paths
@@ -1629,7 +1717,7 @@ an independent project by the JOSM team.")
 (define-public java-opening-hours-parser
   (package
     (name "java-opening-hours-parser")
-    (version "0.23.0")
+    (version "0.27.0")
     (source (origin
               (method git-fetch)
               (uri (git-reference
@@ -1638,11 +1726,12 @@ an independent project by the JOSM team.")
               (file-name (git-file-name name version))
               (sha256
                (base32
-                "0yhbd2ix6h506aljh0jkrnp28m4xcqdcdpnqm30fn08kawdgxgsh"))))
+                "1sw5ccxqw4ly5hzxnnljjqx4876gyvagi10sg8r9w25n211lq0x4"))))
     (build-system ant-build-system)
     (arguments
      `(#:jar-name "java-opening-hours-parser.jar"
        #:source-dir "src/main/java"
+       #:test-exclude (list "**/IndividualTest.java")
        #:phases
        (modify-phases %standard-phases
          (add-before 'build 'copy-resources
@@ -1657,8 +1746,7 @@ an independent project by the JOSM team.")
                        "-DEBUG_TOKEN_MANAGER=false" "-JDK_VERSION=1.8"
                        "-GRAMMAR_ENCODING=UTF-8"
                        (string-append "-OUTPUT_DIRECTORY=" dir)
-                       file))
-             #t)))))
+                       file)))))))
     (inputs
      (list java-jetbrains-annotations))
     (native-inputs
@@ -1672,7 +1760,7 @@ to the OSM opening hours specification.")
 (define-public josm
   (package
     (name "josm")
-    (version "18360")
+    (version "18646")
     (source (origin
               (method svn-fetch)
               (uri (svn-reference
@@ -1681,7 +1769,7 @@ to the OSM opening hours specification.")
                      (recursive? #f)))
               (sha256
                (base32
-                "0j7fhzh6hs2b5r1a3d1xpy6f5r6q1kh79bck28raang8ldd754c6"))
+                "0zr3p1i39wi0f29lgb3xrnv6lijrq5ia8jxn4wnq1yz0xdlbg98i"))
               (file-name (string-append name "-" version "-checkout"))
               (modules '((guix build utils)))
             (snippet
@@ -1720,15 +1808,6 @@ to the OSM opening hours specification.")
                    (string-append "<info><entry><commit revision=\"" ,version "\">"
                                   "<date>1970-01-01 00:00:00 +0000</date>"
                                   "</commit></entry></info>"))))
-             #t))
-         (add-before 'build 'fix-jcs
-           (lambda _
-             ;; This version of JOSM uses an unreleased version of commons-jcs,
-             ;; which has renamed its classes to another namespace.  Rename them
-             ;; back so they can be used with our version of jcs.
-             (substitute* (find-files "." ".*.java$")
-               (("jcs3") "jcs")
-               (("ICache.NAME_COMPONENT_DELIMITER") "\":\""))
              #t))
          (add-before 'build 'fix-classpath
            (lambda* (#:key inputs #:allow-other-keys)
@@ -1953,7 +2032,8 @@ using the dataset of topographical information collected by
     (native-inputs
      (list pkg-config qttools-5))
     (inputs
-     (list gdal
+     (list curl
+           gdal
            libjpeg-turbo
            proj
            qtbase-5
@@ -2092,7 +2172,7 @@ exchanged form one Spatial DBMS and the other.")
 (define-public opencpn
   (package
     (name "opencpn")
-    (version "5.6.0")
+    (version "5.6.2")
     (source
      (origin
        (method git-fetch)
@@ -2101,11 +2181,10 @@ exchanged form one Spatial DBMS and the other.")
              (commit (string-append "Release_" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0g5x45wv3djfjmigk6kgs0i63yp8rs1fbmm4pb15wb3z6dml624y"))))
+        (base32 "16hb0ycp0kbx2h8fx08rqkgrlz48kaym0d6wqvpjrcfa2r4myss8"))))
     (build-system cmake-build-system)
     (native-inputs
-     `(("gettext" ,gettext-minimal)
-       ("pkg-config" ,pkg-config)))
+     (list gettext-minimal pkg-config))
     (inputs
      (list alsa-utils
            bzip2
@@ -2128,7 +2207,7 @@ exchanged form one Spatial DBMS and the other.")
            sqlite
            tinyxml
            wxsvg
-           wxwidgets
+           wxwidgets-3.0
            xz
            zlib))
     (arguments
@@ -2189,6 +2268,7 @@ track your position right from your laptop.")
     (inputs
      `(("clipper" ,clipper)
        ("cups" ,cups)
+       ("curl" ,curl)
        ("gdal" ,gdal)
        ("proj" ,proj)
        ("qtbase" ,qtbase-5)
@@ -2338,7 +2418,14 @@ visualization.")
                            (version-major version) "/SAGA%20-%20" version
                            "/saga-" version ".tar.gz"))
        (sha256
-        (base32 "008izjs6gvj09abxf16ssl1xy0ay3ljq4jswbggp6wiiq459minv"))))
+        (base32 "008izjs6gvj09abxf16ssl1xy0ay3ljq4jswbggp6wiiq459minv"))
+       (modules '((guix build utils)))
+       (snippet
+        '(substitute* "saga-gis/src/tools/docs/docs_pdf/doc_pdf.cpp"
+           (("^#include <hpdf\\.h>\n" all)
+            (string-append all "#include <hpdf_version.h>\n"))
+           (("\\bHPDF_PROJECTING_SCUARE_END\\b")
+            "HPDF_PROJECTING_SQUARE_END")))))
     (build-system cmake-build-system)
     (native-inputs
      (list pkg-config swig))
@@ -2371,20 +2458,20 @@ visualization.")
 Information System (GIS) software.  It has been designed for an easy and
 effective implementation of spatial algorithms and it offers a comprehensive,
 growing set of geoscientific methods.")
-    (home-page "http://www.saga-gis.org")
+    (home-page "https://www.saga-gis.org")
     (license (list license:gpl2+ license:lgpl2.1+))))
 
 (define-public qgis
   (package
     (name "qgis")
-    (version "3.16.3")
+    (version "3.26.2")
     (source
      (origin
        (method url-fetch)
        (uri (string-append "https://qgis.org/downloads/qgis-"
                            version ".tar.bz2"))
        (sha256
-        (base32 "012dv8dcg7w4lf6k37i41wialwhi0kpkxw2dnq19yqqk35632mzx"))))
+        (base32 "1hsq3wchsf7db7134fgg9xzzap35q1s4r6649d0krbw80xw5asca"))))
     (build-system cmake-build-system)
     (arguments
      `(#:modules ((guix build cmake-build-system)
@@ -2405,7 +2492,7 @@ growing set of geoscientific methods.")
                (("sip_dir = cfg.default_sip_dir")
                 (string-append "sip_dir = \""
                                (assoc-ref inputs "python-pyqt+qscintilla")
-                               "/share/sip\""))
+                               "/share/sip\"")))
                ;; Fix building with python-sip@5.
                ;;
                ;; The reason for this is that python-sip@5 introduces some
@@ -2416,31 +2503,15 @@ growing set of geoscientific methods.")
                ;; are, messing up the build. The long term solution is to fully
                ;; upgrade SIP, use sip-build and fix all failing packages, but
                ;; for now I just want to get the build working.
-               ((".pyqt_sip_dir...os.path.join.*,")
-                (string-append "'pyqt_sip_dir': \""
+             (substitute* "cmake/FindPyQt5.cmake"
+               (("SET\\(PYQT5_SIP_DIR \"\\$\\{Python_SITEARCH\\}/PyQt5/bindings\"\\)")
+                (string-append "SET(PYQT5_SIP_DIR \""
                                (assoc-ref inputs "python-pyqt+qscintilla")
-                               "/share/sip"  "\",")))
-             (substitute* (list "scripts/prepare_commit.sh"
-                                "scripts/qstringfixup.sh"
-                                "scripts/release.pl"
-                                "scripts/runtests_local_travis_config.sh"
-                                "scripts/sip_include.sh"
-                                "scripts/sipdiff"
-                                "scripts/sipify_all.sh"
-                                "scripts/spell_check/check_spelling.sh"
-                                "scripts/spell_check/spell_test.sh"
-                                "scripts/verify_indentation.sh"
-                                "tests/code_layout/test_banned_keywords.sh"
-                                "tests/code_layout/test_licenses.sh"
-                                "tests/code_layout/test_shellcheck.sh"
-                                "tests/code_layout/test_sip_include.sh"
-                                "tests/code_layout/test_sipfiles.sh"
-                                "tests/code_layout/test_sipify.sh")
+                               "/share/sip\")")))
+             (substitute* (list "tests/code_layout/test_qt_imports.sh"
+                                "tests/code_layout/test_qgsscrollarea.sh")
                (("\\$\\(git rev-parse --show-toplevel\\)")
-                (getcwd)))
-             (substitute* "tests/code_layout/test_sip_include.sh"
-               (("^REV=.*") "REV=currentrev\n"))
-             #t))
+                (getcwd)))))
          (replace 'check
            (lambda* (#:key inputs tests? #:allow-other-keys)
              (when tests?
@@ -2454,113 +2525,88 @@ growing set of geoscientific methods.")
                            '(;; Disable tests that require network access
                              "qgis_filedownloader"
                              ;; TODO: Find why the following tests fail
-                             "ProcessingGdalAlgorithmsRasterTest"
-                             "ProcessingGdalAlgorithmsVectorTest"
-                             "ProcessingGrass7AlgorithmsImageryTest"
-                             "ProcessingGrass7AlgorithmsRasterTest"
-                             "ProcessingGrass7AlgorithmsVectorTest"
-                             "ProcessingOtbAlgorithmsTest"
                              "ProcessingQgisAlgorithmsTestPt1"
                              "ProcessingQgisAlgorithmsTestPt2"
                              "ProcessingQgisAlgorithmsTestPt3"
                              "ProcessingQgisAlgorithmsTestPt4"
-                             "PyCoreAdittions"
+                             "ProcessingGdalAlgorithmsRasterTest"
+                             "ProcessingGdalAlgorithmsVectorTest"
+                             "ProcessingGrass7AlgorithmsImageryTest"
+                             "ProcessingGrass7AlgorithmsRasterTestPt1"
+                             "ProcessingGrass7AlgorithmsRasterTestPt2"
+                             "ProcessingGrass7AlgorithmsVectorTest"
+                             "ProcessingOtbAlgorithmsTest"
+                             "test_core_authmanager"
+                             "test_core_compositionconverter"
+                             "test_core_coordinatereferencesystem"
+                             "test_core_gdalutils"
+                             "test_core_labelingengine"
+                             "test_core_layout"
+                             "test_core_layouthtml"
+                             "test_core_layoutlabel"
+                             "test_core_layoutmultiframe"
+                             "test_core_layoutpicture"
+                             "test_core_legendrenderer"
+                             "test_core_networkaccessmanager"
+                             "test_core_rasterfilewriter"
+                             "test_core_tiledownloadmanager"
+                             "test_gui_dualview"
+                             "test_gui_htmlwidgetwrapper"
+                             "test_gui_filedownloader"
+                             "test_gui_queryresultwidget"
+                             "test_analysis_processingalgspt2"
+                             "test_analysis_processing"
+                             "test_provider_wcsprovider"
+                             "qgis_grassprovidertest7"
+                             "test_app_gpsinformationwidget"
                              "PyQgsAnnotation"
-                             "PyQgsAppStartup"
-                             "PyQgsAuthBasicMethod"
+                             "PyQgsAttributeTableModel"
                              "PyQgsAuthenticationSystem"
-                             "PyQgsAuxiliaryStorage"
-                             "PyQgsDBManagerGpkg"
-                             "PyQgsDBManagerSpatialite"
-                             "PyQgsDataItem"
-                             "PyQgsFieldValidator"
+                             "PyQgsExternalStorageWebDAV"
+                             "PyQgsFieldFormattersTest"
                              "PyQgsFileUtils"
                              "PyQgsGeometryTest"
-                             "PyQgsImageCache"
-                             "PyQgsImportIntoPostGIS"
-                             "PyQgsLayerDependencies"
-                             "PyQgsLayerMetadata"
-                             "PyQgsLayout"
+                             "PyQgsGoogleMapsGeocoder"
+                             "PyQgsHashLineSymbolLayer"
                              "PyQgsLayoutExporter"
                              "PyQgsLayoutHtml"
-                             "PyQgsLayoutLegend"
-                             "PyQgsLayoutMapGrid"
-                             "PyQgsMapClippingUtils"
+                             "PyQgsLineSymbolLayers"
                              "PyQgsMapLayer"
-                             "PyQgsMetadataBase"
-                             "PyQgsOGRProvider"
+                             "PyQgsNetworkContentFetcherRegistry"
                              "PyQgsOGRProviderGpkg"
-                             "PyQgsOapifProvider"
+                             "PyQgsOGRProviderSqlite"
+                             "PyQgsPalLabelingCanvas"
                              "PyQgsPalLabelingLayout"
-                             "PyQgsProcessingInPlace"
-                             "PyQgsProject"
+                             "PyQgsPalLabelingPlacement"
+                             "PyQgsProcessExecutable"
                              "PyQgsProviderConnectionGpkg"
-                             "PyQgsProviderConnectionPostgres"
                              "PyQgsProviderConnectionSpatialite"
-                             "PyQgsPythonProvider"
-                             "PyQgsRasterLayer"
-                             "PyQgsRasterResampler"
-                             "PyQgsRulebasedRenderer"
-                             "PyQgsSelectiveMasking"
-                             "PyQgsSettings"
-                             "PyQgsShapefileProvider"
+                             "PyQgsOGRProvider"
                              "PyQgsSpatialiteProvider"
-                             "PyQgsSvgCache"
-                             "PyQgsSymbolExpressionVariables"
-                             "PyQgsTextRenderer"
                              "PyQgsVectorFileWriter"
-                             "PyQgsVectorLayer"
-                             "PyQgsVectorLayerUtils"
+                             "PyQgsVectorLayerEditBuffer"
+                             "PyQgsVectorLayerEditBufferGroup"
+                             "PyQgsVectorLayerProfileGenerator"
                              "PyQgsVirtualLayerProvider"
                              "PyQgsWFSProvider"
-                             "qgis_arcgisrestutilstest"
-                             "qgis_authmanagertest"
-                             "qgis_compositionconvertertest"
-                             "qgis_coordinatereferencesystemtest"
-                             "qgis_expressiontest"
-                             "qgis_fontmarkertest"
-                             "qgis_geometrycheckstest"
-                             "qgis_geometrytest"
-                             "qgis_gpsinformationwidget"
-                             "qgis_grassprovidertest7"
-                             "qgis_imagecachetest"
-                             "qgis_labelingenginetest"
-                             "qgis_layouthtmltest"
-                             "qgis_layoutlabeltest"
-                             "qgis_layoutmanualtabletest"
-                             "qgis_layoutmapgridtest"
-                             "qgis_layoutmapoverviewtest"
-                             "qgis_layoutmaptest"
-                             "qgis_layoutmultiframetest"
-                             "qgis_layoutpicturetest"
-                             "qgis_layouttabletest"
-                             "qgis_layouttest"
-                             "qgis_mapdevicepixelratiotest"
-                             "qgis_maprendererjobtest"
-                             "qgis_meshcontourstest"
-                             "qgis_ogrproviderguitest"
-                             "qgis_painteffecttest"
-                             "qgis_pallabelingtest"
-                             "qgis_processingtest"
-                             "qgis_rasterlayertest"
+                             "PyQgsWFSProviderGUI"
+                             "PyQgsOapifProvider"
+                             "PyQgsLayerDependencies"
+                             "PyQgsDBManagerGpkg"
+                             "PyQgsDBManagerSpatialite"
+                             "PyQgsAuxiliaryStorage"
+                             "PyQgsSelectiveMasking"
                              "qgis_shellcheck"
-                             "qgis_sip_include"
-                             "qgis_sip_uptodate"
                              "qgis_sipify"
-                             "qgis_styletest"
-                             "qgis_svgmarkertest"
-                             "qgis_taskmanagertest"
-                             "qgis_wcsprovidertest"
-                             "qgis_ziplayertest"
-                             "TestQgsRandomMarkerSymbolLayer")
+                             "qgis_sip_include"
+                             "qgis_sip_uptodate")
                            "|")))))
          (add-after 'install 'wrap-python
            (assoc-ref python:%standard-phases 'wrap))
          (add-after 'wrap-python 'wrap-qt
            (lambda* (#:key outputs inputs #:allow-other-keys)
              (let ((out (assoc-ref outputs "out")))
-               (wrap-qt-program "qgis" #:output out #:inputs inputs))
-             #t))
+               (wrap-qt-program "qgis" #:output out #:inputs inputs))))
          (add-after 'wrap-qt 'wrap-gis
            (lambda* (#:key inputs outputs #:allow-other-keys)
              ;; TODO: Find if there is a way to get SAGA to work.
@@ -2578,10 +2624,10 @@ growing set of geoscientific methods.")
                (wrap-program (string-append out "/bin/qgis")
                  ;;`("PATH" ":" prefix (,saga))
                  `("QGIS_PREFIX_PATH" = (,out))
-                 `("GISBASE" = (,grass))))
-             #t)))))
+                 `("GISBASE" = (,grass)))))))))
     (inputs
-     (list exiv2
+     (list bash-minimal
+           exiv2
            expat
            gdal
            geos
@@ -2601,7 +2647,6 @@ growing set of geoscientific methods.")
            python-chardet
            python-dateutil
            python-future
-           python-gdal
            python-jinja2
            python-numpy
            python-owslib
@@ -2623,8 +2668,9 @@ growing set of geoscientific methods.")
            qtserialport
            qtsvg-5
            qwt
-           ;;("saga" ,saga)
-           sqlite))
+           ;; saga
+           sqlite
+           (list zstd "lib")))
     (native-inputs
      (list bison
            flex
@@ -2633,6 +2679,7 @@ growing set of geoscientific methods.")
            pkg-config
            python-mock
            python-nose2
+           python-pyqt-builder
            qttools-5
            shellcheck
            xorg-server-for-tests))
@@ -2680,6 +2727,51 @@ architecture.")
       license:opl1.0+
       license:public-domain
       license:qwt1.0))))
+
+(define-public splat
+  (package
+    (name "splat")
+    (version "1.5.0b3")
+    (source
+     (origin
+       (method git-fetch)
+       (uri (git-reference
+             (url "https://github.com/hoche/splat")
+             (commit (string-append "v" version))))
+       (file-name (git-file-name name version))
+       (sha256
+        (base32 "10djwjwb1pvznr0fjwnxdm5d961f3yngispb4zj9hyzdgq1xh217"))
+       (modules '((guix build utils)))
+       (snippet
+        '(begin
+           ;; Delete pre-compiled libraries.
+           (delete-file-recursively "vstudio")))))
+    (build-system gnu-build-system)
+    (inputs
+     (list bzip2 libjpeg-turbo libpng zlib))
+    (arguments
+     (list #:tests? #f ; No test suite.
+           #:phases
+           #~(modify-phases %standard-phases
+               (add-after 'unpack 'fix-installation-scripts
+                 (lambda _
+                   (substitute* (list "install" "utils/install")
+                     (("/usr/local")
+                      #$output)
+                     (("whoami=`whoami`")
+                      "whoami=root"))))
+               (delete 'configure)
+               (add-before 'install 'create-bin-directory
+                 (lambda _
+                   (mkdir-p (string-append #$output "/bin")))))))
+    (synopsis "Signal propagation and coverage analysis tool")
+    (description
+     "The SPLAT (Signal Propagation, Loss, And Terrain) program can use the
+Longley-Rice path loss and coverage prediction using the Irregular Terrain
+Model to predict the behaviour and reliability of radio links, and to predict
+path loss.")
+    (home-page "https://www.qsl.net/kd2bd/splat.html")
+    (license license:gpl2+)))
 
 (define-public python-geographiclib
   (package
@@ -2730,6 +2822,36 @@ coordinates of addresses, cities, countries, and landmarks across the globe
 using third-party geocoders and other data sources.")
     (license license:expat)))
 
+(define-public python-haversine
+  (package
+    (name "python-haversine")
+    (version "2.7.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    ;; There are no tests in the PyPi archive.
+                    (url "https://github.com/mapado/haversine")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0inxyj5n4jzgg5xiadqx9sk83gdx5ff989l9s04smdzbd3b8c0c8"))))
+    (build-system python-build-system)
+    (native-inputs (list python-pytest python-numpy))
+    (arguments
+      (list #:phases
+            #~(modify-phases %standard-phases
+                (replace 'check
+                  (lambda* (#:key tests? inputs #:allow-other-keys)
+                    (when tests?
+                      (invoke "pytest")))))))
+    (home-page "https://github.com/mapado/haversine")
+    (synopsis "Calculate the distance between 2 points on Earth")
+    (description "This package provides functions to calculate the
+distance in various units between two points on Earth using their
+latitude and longitude.")
+    (license license:expat)))
+
 (define-public gplates
   (package
     (name "gplates")
@@ -2753,6 +2875,7 @@ using third-party geocoders and other data sources.")
     (inputs
      (list boost
            cgal
+           curl
            gdal
            glew
            glu
@@ -2773,3 +2896,106 @@ using third-party geocoders and other data sources.")
 reconstructions of geological and paleogeographic features through geological
 time.  Interactively visualize vector, raster and volume data.")
     (license license:gpl2+)))
+
+(define-public navit
+  (package
+    (name "navit")
+    (version "0.5.6")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/navit-gps/navit")
+                    (commit (string-append "v" version))))
+              (sha256
+               (base32
+                "1jhlif0sc5m8wqb5j985g1xba2ki7b7mm14pkvzdghjd0q0gf15s"))
+              (file-name (git-file-name name version))))
+    (build-system cmake-build-system)
+    (arguments
+     (list
+      ;; There are no tests
+      #:tests? #f
+      ;; With -DSAMPLE_MAP=TRUE (the default), it tries to download a
+      ;; map during the build process.
+      #:configure-flags #~(list "-DSAMPLE_MAP=FALSE")
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after
+              'unpack 'patch-navit-config
+            (lambda _
+              ;; For now this package only supports SDL, so if we keep
+              ;; the configuration as-is, Navit doesn't start.
+              (substitute*
+                  "navit/navit_shipped.xml"
+                (("<graphics type=\"gtk_drawing_area\"/>")
+                 "<graphics type=\"sdl\"/>"))
+              ;; Users are expected to be able to add XML files inside
+              ;; $NAVIT_SHAREDIR, however that directory is in the store.
+              (substitute*
+                  "navit/navit_shipped.xml"
+                (("<xi:include href=\"\\$NAVIT_SHAREDIR/maps/\\*\\.xml\"/>")
+                 "<xi:include href=\"$NAVIT_USER_DATADIR/maps/*.xml\"/>"))
+              ;; Navit also works without GPS but in that case there is
+              ;; no automatic zooming, so we need zoom buttons to be able
+              ;; to manually zoom in or out.
+              (substitute*
+                  "navit/navit_shipped.xml"
+                (((string-append
+                   "<osd enabled=\"no\" type=\"button\" x=\"-96\" y=\"-96\" "
+                   "command=\"zoom_in()"))
+                 (string-append
+                  "<osd enabled=\"yes\" type=\"button\" x=\"-96\" y=\"-96\" "
+                  "command=\"zoom_in()"))
+                (((string-append
+                   "<osd enabled=\"no\" type=\"button\" x=\"0\" y=\"-96\" "
+                   "command=\"zoom_out()"))
+                 (string-append
+                  "<osd enabled=\"yes\" type=\"button\" x=\"0\" y=\"-96\" "
+                  "command=\"zoom_out()\" src=\"zoom_out.png\"/>")))))
+          (add-before
+              'build 'set-cache
+            ;; During the build, svg icons are converted in different
+            ;; formats, and this needs XDG_CACHE_HOME to work.
+            (lambda _
+              (setenv "XDG_CACHE_HOME" "/tmp/xdg-cache"))))))
+    (inputs (list dbus-glib
+                  espeak
+                  freeglut
+                  freeimage
+                  freetype
+                  glib
+                  gettext-minimal
+                  gpsd
+                  gdk-pixbuf
+                  imlib2
+                  python
+                  sdl
+                  sdl-image))
+    (native-inputs (list fontconfig
+                         (librsvg-for-system)
+                         pkg-config))
+    (home-page "https://www.navit-project.org")
+    (synopsis "Car navigation system with routing engine that uses vector maps data")
+    (description "Navit is a car navigation system with a routing engine.
+
+It is meant to work with touchscreen devices, but it also works
+without a touchscreen.  It also supports text to speech.
+
+It can be configured extensively through its own configuration file
+format.  For instance we can configure the graphical interface, and
+which map data is to be displayed at which zoom level.
+
+It supports different routing profiles: bike, car, car_avoid_toll,
+car_pedantic, car_shortest, horse, pedestrian, truck.
+
+It can use gpsd or NMEA GPS directly to get position data.  It also
+works without GPS: in this case users can also enter position data
+directly.
+
+It can also be used to log GPS data to files using the GPX or NMEA
+formats, or to replay NMEA data.
+
+For maps, it can uses its own \"binfile\" map format, or Garmin map
+file format, and data from OpenStreetMap, Garmin maps, Marco Polo
+Grosser Reiseplaner, Routeplaner Europa 2007, Map + Route.")
+    (license license:gpl2)))
